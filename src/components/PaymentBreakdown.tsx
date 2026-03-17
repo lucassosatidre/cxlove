@@ -108,31 +108,6 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     });
   }, [scenario, totalAmount]);
 
-  // Auto-save valid breakdowns on blur/enter
-  const pendingSaveRef = useRef(false);
-
-  useEffect(() => {
-    if (pendingSaveRef.current && isValid && !saving && !isCompleted) {
-      pendingSaveRef.current = false;
-      saveBreakdowns();
-    }
-  }, [isValid, saving, isCompleted, saveBreakdowns]);
-
-  const handleCommit = useCallback(() => {
-    if (isValid && !saving && !isCompleted) {
-      saveBreakdowns();
-    } else if (!isValid) {
-      pendingSaveRef.current = true;
-    }
-  }, [isValid, saving, isCompleted, saveBreakdowns]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      (e.target as HTMLElement).blur();
-    }
-  }, []);
-
   const saveBreakdowns = useCallback(async () => {
     if (!isValid) {
       toast.error('A soma dos valores não corresponde ao total do pedido.');
@@ -168,6 +143,31 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     }
     setSaving(false);
   }, [orderId, rows, isValid, onSaved]);
+
+  // Auto-save valid breakdowns on blur/enter
+  const pendingSaveRef = useRef(false);
+
+  useEffect(() => {
+    if (pendingSaveRef.current && isValid && !saving && !isCompleted) {
+      pendingSaveRef.current = false;
+      saveBreakdowns();
+    }
+  }, [isValid, saving, isCompleted, saveBreakdowns]);
+
+  const handleCommit = useCallback(() => {
+    if (isValid && !saving && !isCompleted) {
+      saveBreakdowns();
+    } else if (!isValid) {
+      pendingSaveRef.current = true;
+    }
+  }, [isValid, saving, isCompleted, saveBreakdowns]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (e.target as HTMLElement).blur();
+    }
+  }, []);
 
   if (loading) {
     return (
