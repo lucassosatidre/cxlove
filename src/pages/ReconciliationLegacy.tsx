@@ -263,7 +263,7 @@ function SortableHeader({ field, label, currentField, currentDirection, onSort, 
 }
 
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
-  return <div className="bg-secondary rounded-lg p-3"><div className="flex items-center gap-1.5 mb-1"><span className={color}>{icon}</span><p className="text-xs text-muted-foreground">{label}</p></div><p className={`text-2xl font-semibold font-mono-tabular ${color}`}>{value}</p></div>;
+  return <div className="bg-muted rounded-xl p-3 border border-border"><div className="flex items-center gap-1.5 mb-1"><span className={color}>{icon}</span><p className="text-xs text-muted-foreground">{label}</p></div><p className={`text-2xl font-semibold font-mono-tabular ${color}`}>{value}</p></div>;
 }
 
 function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakdownValid?: boolean }) {
