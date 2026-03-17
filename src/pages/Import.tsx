@@ -183,18 +183,18 @@ export default function Import() {
         }
       }
 
-      if (deliveryUpdates.size > 0) {
-        const deliveryUpdateResults = await Promise.all(
-          Array.from(deliveryUpdates.entries()).map(([id, deliveryPerson]) =>
+      if (fieldUpdates.size > 0) {
+        const updateResults = await Promise.all(
+          Array.from(fieldUpdates.entries()).map(([id, updates]) =>
             supabase
               .from('imported_orders')
-              .update({ delivery_person: deliveryPerson })
+              .update(updates)
               .eq('id', id)
           )
         );
 
-        const deliveryUpdateError = deliveryUpdateResults.find((result) => result.error)?.error;
-        if (deliveryUpdateError) throw deliveryUpdateError;
+        const updateError = updateResults.find((result) => result.error)?.error;
+        if (updateError) throw updateError;
       }
 
       // Get total accumulated
