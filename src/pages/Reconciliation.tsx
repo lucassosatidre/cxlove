@@ -547,13 +547,13 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
   return (
     <>
       <tr
         className={`border-b border-border/50 row-transition cursor-pointer ${
           order.is_confirmed
-            ? 'bg-muted/50 opacity-60'
+            ? isAutoOnline ? 'bg-blue-50/50 dark:bg-blue-950/20 opacity-70' : 'bg-muted/50 opacity-60'
             : 'hover:bg-primary/5'
         }`}
         onClick={onRowClick}
@@ -562,12 +562,14 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
           <div
             className={`h-5 w-5 rounded border-2 flex items-center justify-center row-transition ${
               order.is_confirmed
-                ? 'bg-success border-success'
+                ? isAutoOnline
+                  ? 'bg-blue-500 border-blue-500'
+                  : 'bg-success border-success'
                 : 'border-border'
             }`}
             onClick={onCheckboxClick}
           >
-            {order.is_confirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success-foreground" />}
+            {order.is_confirmed && <CheckCircle2 className={`h-3.5 w-3.5 ${isAutoOnline ? 'text-white' : 'text-success-foreground'}`} />}
           </div>
         </td>
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
