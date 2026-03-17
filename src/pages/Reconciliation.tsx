@@ -478,6 +478,11 @@ export default function Reconciliation() {
                         if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
                       }}
                       onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
+                      onBreakdownSaved={() => {
+                        if (!order.is_confirmed) {
+                          toggleConfirm(order.id, false);
+                        }
+                      }}
                     />
                   );
                 })}
@@ -593,6 +598,7 @@ interface OrderRowProps {
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
+  onBreakdownSaved?: () => void;
 }
 
 function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakdownValid?: boolean }) {
@@ -624,7 +630,7 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved }: OrderRowProps) {
   const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
@@ -700,6 +706,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               totalAmount={order.total_amount}
               isCompleted={isCompleted}
               onBreakdownValid={onBreakdownValid}
+              onSaved={onBreakdownSaved}
             />
           </td>
         </tr>

@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { CheckCircle2, AlertTriangle, Wifi, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -26,9 +25,10 @@ interface Props {
   totalAmount: number;
   isCompleted: boolean;
   onBreakdownValid: (valid: boolean) => void;
+  onSaved?: () => void;
 }
 
-export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, isCompleted, onBreakdownValid }: Props) {
+export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, isCompleted, onBreakdownValid, onSaved }: Props) {
   const [rows, setRows] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -138,9 +138,35 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
       toast.error('Erro ao salvar detalhamento.');
     } else {
       toast.success('Detalhamento salvo com sucesso!');
+      onSaved?.();
     }
     setSaving(false);
-  }, [orderId, rows, isValid]);
+  }, [orderId, rows, isValid, onSaved]);
+
+  // Auto-save valid breakdowns on blur/enter
+  const pendingSaveRef = useRef(false);
+
+  useEffect(() => {
+    if (pendingSaveRef.current && isValid && !saving && !isCompleted) {
+      pendingSaveRef.current = false;
+      saveBreakdowns();
+    }
+  }, [isValid, saving, isCompleted, saveBreakdowns]);
+
+  const handleCommit = useCallback(() => {
+    if (isValid && !saving && !isCompleted) {
+      saveBreakdowns();
+    } else if (!isValid) {
+      pendingSaveRef.current = true;
+    }
+  }, [isValid, saving, isCompleted, saveBreakdowns]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      (e.target as HTMLElement).blur();
+    }
+  }, []);
 
   if (loading) {
     return (
@@ -182,6 +208,8 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
                 className="h-8 text-right font-mono-tabular text-sm"
                 value={row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : ''}
                 onChange={(e) => handleAmountChange(idx, e.target.value)}
+                onBlur={handleCommit}
+                onKeyDown={handleKeyDown}
                 disabled={isCompleted || (row.is_auto_calculated && scenario === 'one_physical_one_online')}
               />
             </div>
@@ -214,16 +242,9 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
         </div>
       </div>
 
-      {!isCompleted && (
+      {saving && (
         <div className="flex justify-end pt-1">
-          <Button
-            size="sm"
-            onClick={saveBreakdowns}
-            disabled={!isValid || saving}
-            className="bg-success hover:bg-success/90 text-success-foreground"
-          >
-            {saving ? 'Salvando...' : 'Salvar Detalhamento'}
-          </Button>
+          <span className="text-xs text-muted-foreground animate-pulse">Salvando...</span>
         </div>
       )}
     </div>
