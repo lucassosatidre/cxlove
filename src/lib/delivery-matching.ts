@@ -24,9 +24,11 @@ interface TransactionForMatching {
 export interface MatchResult {
   transactionId: string;
   orderId: string;
-  matchType: 'exact' | 'approximate';
+  matchType: 'exact' | 'approximate' | 'combined';
   confidence: 'high' | 'medium' | 'low';
   amountDiff: number;
+  /** For combined matches, the ID of the other transaction in the pair */
+  combinedWithTransactionId?: string;
 }
 
 // Payment methods that are offline and should be reconciled (excluding cash)
