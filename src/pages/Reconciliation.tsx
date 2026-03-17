@@ -107,6 +107,17 @@ export default function Reconciliation() {
     setBreakdownValidity(prev => ({ ...prev, [orderId]: valid }));
   }, []);
 
+  const toggleSort = useCallback((field: SortField) => {
+    setSortField(prev => {
+      if (prev === field) {
+        setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+        return field;
+      }
+      setSortDirection('asc');
+      return field;
+    });
+  }, []);
+
   const bulkUpdate = useCallback(async (confirm: boolean) => {
     if (!user || !id) return;
 
@@ -167,7 +178,7 @@ export default function Reconciliation() {
   const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
 
   const filtered = useMemo(() => {
-    return orders.filter(o => {
+    const result = orders.filter(o => {
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterPayment !== 'all' && o.payment_method !== filterPayment) return false;
       if (filterDelivery !== 'all' && o.delivery_person !== filterDelivery) return false;
