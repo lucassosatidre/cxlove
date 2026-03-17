@@ -29,35 +29,40 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     onClose?.();
   };
 
+  const userName = user?.email?.split('@')[0] || 'Usuário';
+
   return (
     <aside
       className={`fixed left-0 top-0 bottom-0 w-56 bg-sidebar flex flex-col z-30 transition-transform duration-200 ${
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      {/* Logo + close on mobile */}
-      <div className="px-5 py-6 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-sidebar-primary flex items-center justify-center">
-            <ClipboardCheck className="h-5 w-5 text-sidebar-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-sm font-bold text-sidebar-accent-foreground leading-tight">Conferência</h1>
-            <p className="text-[10px] text-sidebar-foreground leading-tight">Saipos · Fechamento</p>
+      {/* Header: Dev + Client hierarchy */}
+      <div className="px-5 pt-5 pb-2 flex items-start justify-between">
+        <div>
+          <p className="text-[9px] uppercase tracking-widest text-sidebar-foreground/50 font-medium">Propósito Soluções</p>
+          <div className="flex items-center gap-2.5 mt-2">
+            <div className="h-9 w-9 rounded-xl bg-sidebar-primary flex items-center justify-center shrink-0">
+              <ClipboardCheck className="h-5 w-5 text-sidebar-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-sidebar-accent-foreground leading-tight">Pizzaria Estrela</h1>
+              <p className="text-[10px] text-sidebar-foreground leading-tight">da Ilha</p>
+            </div>
           </div>
         </div>
         {isMobile && (
-          <button onClick={onClose} className="text-sidebar-foreground">
+          <button onClick={onClose} className="text-sidebar-foreground mt-1">
             <X className="h-5 w-5" />
           </button>
         )}
       </div>
 
       {/* User badge */}
-      <div className="mx-3 mb-4 px-3 py-2.5 bg-sidebar-accent rounded-lg">
-        <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground font-medium">Usuário ativo</p>
+      <div className="mx-3 mt-3 mb-4 px-3 py-2.5 bg-sidebar-accent rounded-lg">
+        <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground font-medium">Usuário</p>
         <p className="text-xs font-semibold text-sidebar-accent-foreground truncate mt-0.5">
-          {user?.email?.split('@')[0]}
+          {userName}
         </p>
       </div>
 
@@ -82,8 +87,8 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         })}
       </nav>
 
-      {/* Logout */}
-      <div className="px-3 pb-5">
+      {/* Footer */}
+      <div className="px-3 pb-4 space-y-1">
         <button
           onClick={signOut}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground row-transition"
@@ -91,6 +96,9 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
           <LogOut className="h-4 w-4" />
           Sair
         </button>
+        <p className="text-[9px] text-center text-sidebar-foreground/30 pt-1">
+          Propósito Soluções
+        </p>
       </div>
     </aside>
   );
