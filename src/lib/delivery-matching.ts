@@ -191,5 +191,79 @@ export function matchTransactionsToOrders(
     }
   }
 
+  // Phase 3: Combined matches — two unmatched transactions that sum to an unmatched order
+  const COMBINED_TOLERANCE = 0.50; // cents tolerance
+
+  for (const order of eligibleOrders) {
+    if (matchedOrderIds.has(order.id)) continue;
+
+    const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
+    if (remainingTxs.length < 2) break;
+
+    let bestPair: {
+      tx1: TransactionForMatching;
+      tx2: TransactionForMatching;
+      confidence: 'high' | 'medium' | 'low';
+      diff: number;
+    } | null = null;
+
+    for (let i = 0; i < remainingTxs.length; i++) {
+      for (let j = i + 1; j < remainingTxs.length; j++) {
+        const tx1 = remainingTxs[i];
+        const tx2 = remainingTxs[j];
+        const sum = tx1.gross_amount + tx2.gross_amount;
+        const diff = Math.abs(sum - order.total_amount);
+
+        if (diff > COMBINED_TOLERANCE) continue;
+
+        // Calculate confidence based on serial, delivery person, and time
+        let score = 0;
+
+        // Same serial = likely same delivery person's machine
+        if (tx1.machine_serial && tx1.machine_serial === tx2.machine_serial) score++;
+
+        // Check time proximity between transactions (should be close to each other)
+        const tx1Min = parseTimeToMinutes(tx1.sale_time);
+        const tx2Min = parseTimeToMinutes(tx2.sale_time);
+        if (tx1Min >= 0 && tx2Min >= 0 && Math.abs(tx1Min - tx2Min) <= 10) score++;
+
+        // Check time proximity to order
+        const orderMin = parseTimeToMinutes(order.sale_time || '');
+        if (orderMin >= 0) {
+          const avgTxMin = (tx1Min + tx2Min) / 2;
+          if (Math.abs(avgTxMin - orderMin) <= 30) score++;
+        }
+
+        const confidence: 'high' | 'medium' | 'low' = score >= 2 ? 'high' : score === 1 ? 'medium' : 'low';
+
+        if (!bestPair || score > (bestPair.confidence === 'high' ? 2 : bestPair.confidence === 'medium' ? 1 : 0) || (diff < bestPair.diff)) {
+          bestPair = { tx1, tx2, confidence, diff };
+        }
+      }
+    }
+
+    if (bestPair) {
+      results.push({
+        transactionId: bestPair.tx1.id,
+        orderId: order.id,
+        matchType: 'combined',
+        confidence: bestPair.confidence,
+        amountDiff: bestPair.diff,
+        combinedWithTransactionId: bestPair.tx2.id,
+      });
+      results.push({
+        transactionId: bestPair.tx2.id,
+        orderId: order.id,
+        matchType: 'combined',
+        confidence: bestPair.confidence,
+        amountDiff: bestPair.diff,
+        combinedWithTransactionId: bestPair.tx1.id,
+      });
+      matchedTxIds.add(bestPair.tx1.id);
+      matchedTxIds.add(bestPair.tx2.id);
+      matchedOrderIds.add(order.id);
+    }
+  }
+
   return results;
 }
