@@ -301,9 +301,28 @@ export default function Reconciliation() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider w-12">✓</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pedido</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pagamento</th>
+                  <SortableHeader
+                    field="is_confirmed"
+                    label="✓"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={toggleSort}
+                    className="w-12"
+                  />
+                  <SortableHeader
+                    field="order_number"
+                    label="Pedido"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    field="payment_method"
+                    label="Pagamento"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={toggleSort}
+                  />
                   <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                   <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                 </tr>
