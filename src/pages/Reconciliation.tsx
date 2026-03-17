@@ -353,6 +353,7 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
 interface OrderRowProps {
   order: Order;
   hasMultiple: boolean;
+  badgeType: PaymentBadgeType;
   isExpanded: boolean;
   breakdownValid: boolean;
   isCompleted: boolean;
@@ -361,7 +362,37 @@ interface OrderRowProps {
   onBreakdownValid: (valid: boolean) => void;
 }
 
-function OrderRow({ order, hasMultiple, isExpanded, breakdownValid, isCompleted, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakdownValid?: boolean }) {
+  if (type === 'online') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-primary/10 text-primary">
+        <Wifi className="h-3 w-3" />
+        Pagamento Online
+      </span>
+    );
+  }
+  if (type === 'fisico') {
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground">
+        <CreditCard className="h-3 w-3" />
+        Pagamento no ato
+      </span>
+    );
+  }
+  // rateio
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+      breakdownValid
+        ? 'bg-success/10 text-success'
+        : 'bg-warning/10 text-warning'
+    }`}>
+      <SplitSquareHorizontal className="h-3 w-3" />
+      {breakdownValid ? 'Rateio OK' : 'Rateio necessário'}
+    </span>
+  );
+}
+
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
   return (
     <>
       <tr
@@ -390,16 +421,7 @@ function OrderRow({ order, hasMultiple, isExpanded, breakdownValid, isCompleted,
         <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
           <div className="flex items-center gap-2">
             <span className="truncate">{order.payment_method}</span>
-            {hasMultiple && (
-              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
-                breakdownValid
-                  ? 'bg-success/10 text-success'
-                  : 'bg-warning/10 text-warning'
-              }`}>
-                <SplitSquareHorizontal className="h-3 w-3" />
-                {breakdownValid ? 'Rateio OK' : 'Rateio'}
-              </span>
-            )}
+            <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
             {hasMultiple && (
               isExpanded
                 ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
