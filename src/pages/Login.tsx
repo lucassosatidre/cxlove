@@ -4,7 +4,7 @@ import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ClipboardCheck } from 'lucide-react';
+import propositoLogo from '@/assets/proposito-logo.png';
 
 export default function Login() {
   const { user, loading, signIn } = useAuth();
@@ -39,18 +39,14 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[hsl(20,10%,8%)] px-4">
       <div className="w-full max-w-sm">
-        {/* Hierarchy header */}
-        <div className="flex flex-col items-center mb-6">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium">Desenvolvimento</p>
-          <p className="text-xs font-semibold text-primary mt-0.5">Propósito Soluções</p>
+        {/* Propósito Soluções logo */}
+        <div className="flex justify-center mb-6">
+          <img src={propositoLogo} alt="Propósito Soluções" className="h-16 object-contain" />
         </div>
 
+        {/* Client name */}
         <div className="flex flex-col items-center mb-8">
-          <div className="h-14 w-14 rounded-2xl bg-primary flex items-center justify-center mb-5 shadow-lg shadow-primary/30">
-            <ClipboardCheck className="h-7 w-7 text-primary-foreground" />
-          </div>
-          <p className="text-[10px] uppercase tracking-widest text-white/30 font-medium">Cliente</p>
-          <h1 className="text-2xl font-bold text-white mt-0.5">Pizzaria Estrela da Ilha</h1>
+          <h1 className="text-2xl font-bold text-white">Pizzaria Estrela da Ilha</h1>
           <p className="text-sm text-white/50 mt-1">Fechamento de caixa rápido e confiável</p>
         </div>
 
@@ -89,7 +85,6 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Footer branding */}
       <p className="mt-8 text-[10px] text-white/20">
         Desenvolvido por Propósito Soluções
       </p>
