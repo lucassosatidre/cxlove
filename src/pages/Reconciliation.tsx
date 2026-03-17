@@ -5,10 +5,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, SplitSquareHorizontal, Wifi, CreditCard } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, type PaymentBadgeType } from '@/lib/payment-utils';
+
+type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
+type SortDirection = 'asc' | 'desc';
+
+function extractOrderNumber(orderNumber: string): number {
+  const num = parseInt(orderNumber.replace(/\D/g, ''), 10);
+  return isNaN(num) ? 0 : num;
+}
 
 interface Order {
   id: string;
@@ -33,6 +41,8 @@ export default function Reconciliation() {
   const [completing, setCompleting] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [breakdownValidity, setBreakdownValidity] = useState<Record<string, boolean>>({});
+  const [sortField, setSortField] = useState<SortField>('order_number');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
     if (!id) return;
@@ -97,6 +107,17 @@ export default function Reconciliation() {
     setBreakdownValidity(prev => ({ ...prev, [orderId]: valid }));
   }, []);
 
+  const toggleSort = useCallback((field: SortField) => {
+    setSortField(prev => {
+      if (prev === field) {
+        setSortDirection(d => d === 'asc' ? 'desc' : 'asc');
+        return field;
+      }
+      setSortDirection('asc');
+      return field;
+    });
+  }, []);
+
   const bulkUpdate = useCallback(async (confirm: boolean) => {
     if (!user || !id) return;
 
@@ -157,7 +178,7 @@ export default function Reconciliation() {
   const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
 
   const filtered = useMemo(() => {
-    return orders.filter(o => {
+    const result = orders.filter(o => {
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterPayment !== 'all' && o.payment_method !== filterPayment) return false;
       if (filterDelivery !== 'all' && o.delivery_person !== filterDelivery) return false;
@@ -165,7 +186,28 @@ export default function Reconciliation() {
       if (filterStatus === 'pending' && o.is_confirmed) return false;
       return true;
     });
-  }, [orders, search, filterPayment, filterDelivery, filterStatus]);
+
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    result.sort((a, b) => {
+      if (sortField === 'order_number') {
+        const diff = extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
+        return diff * dir;
+      }
+      if (sortField === 'payment_method') {
+        const cmp = a.payment_method.localeCompare(b.payment_method, 'pt-BR');
+        if (cmp !== 0) return cmp * dir;
+        return extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
+      }
+      // is_confirmed
+      const aVal = a.is_confirmed ? 1 : 0;
+      const bVal = b.is_confirmed ? 1 : 0;
+      if (aVal !== bVal) return (aVal - bVal) * dir;
+      return extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
+    });
+
+    return result;
+  }, [orders, search, filterPayment, filterDelivery, filterStatus, sortField, sortDirection]);
 
   if (loading) {
     return (
@@ -259,9 +301,28 @@ export default function Reconciliation() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider w-12">✓</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pedido</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pagamento</th>
+                  <SortableHeader
+                    field="is_confirmed"
+                    label="✓"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={toggleSort}
+                    className="w-12"
+                  />
+                  <SortableHeader
+                    field="order_number"
+                    label="Pedido"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={toggleSort}
+                  />
+                  <SortableHeader
+                    field="payment_method"
+                    label="Pagamento"
+                    currentField={sortField}
+                    currentDirection={sortDirection}
+                    onSort={toggleSort}
+                  />
                   <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                   <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                 </tr>
@@ -337,6 +398,41 @@ export default function Reconciliation() {
 }
 
 // --- Sub-components ---
+
+interface SortableHeaderProps {
+  field: SortField;
+  label: string;
+  currentField: SortField;
+  currentDirection: SortDirection;
+  onSort: (field: SortField) => void;
+  className?: string;
+}
+
+function SortableHeader({ field, label, currentField, currentDirection, onSort, className }: SortableHeaderProps) {
+  const isActive = currentField === field;
+  return (
+    <th
+      className={`text-left p-3 text-xs font-medium uppercase tracking-wider cursor-pointer select-none hover:bg-muted/50 transition-colors ${
+        isActive ? 'text-primary' : 'text-muted-foreground'
+      } ${className || ''}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        {isActive ? (
+          currentDirection === 'asc' ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </div>
+    </th>
+  );
+}
+
 
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
