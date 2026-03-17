@@ -387,7 +387,7 @@ export default function Reconciliation() {
           <Select value={filterDelivery} onValueChange={setFilterDelivery}>
             <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos entregadores</SelectItem>
+              <SelectItem value="all">Todos os entregadores</SelectItem>
               {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
             </SelectContent>
           </Select>
