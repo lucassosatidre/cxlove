@@ -551,9 +551,6 @@ export default function DeliveryReconciliation() {
                         )}
                       </div>
                     )}
-                        </Button>
-                      </div>
-                    )}
                   </div>
                 );
               })}
