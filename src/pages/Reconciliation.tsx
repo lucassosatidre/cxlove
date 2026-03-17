@@ -63,6 +63,17 @@ export default function Reconciliation() {
   const [sortField, setSortField] = useState<SortField>('order_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showImportHistory, setShowImportHistory] = useState(false);
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({
+    sale_date: false,
+    sale_time: false,
+    sales_channel: false,
+    partner_order_number: false,
+  });
+
+  const toggleColumn = (col: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
+  };
 
   useEffect(() => {
     if (!id) return;
