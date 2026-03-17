@@ -5,10 +5,18 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, SplitSquareHorizontal, Wifi, CreditCard } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, type PaymentBadgeType } from '@/lib/payment-utils';
+
+type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
+type SortDirection = 'asc' | 'desc';
+
+function extractOrderNumber(orderNumber: string): number {
+  const num = parseInt(orderNumber.replace(/\D/g, ''), 10);
+  return isNaN(num) ? 0 : num;
+}
 
 interface Order {
   id: string;
