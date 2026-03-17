@@ -85,6 +85,47 @@ export type Database = {
         }
         Relationships: []
       }
+      order_payment_breakdowns: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          imported_order_id: string
+          is_auto_calculated: boolean
+          payment_method_name: string
+          payment_type: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          imported_order_id: string
+          is_auto_calculated?: boolean
+          payment_method_name: string
+          payment_type?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          imported_order_id?: string
+          is_auto_calculated?: boolean
+          payment_method_name?: string
+          payment_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_payment_breakdowns_imported_order_id_fkey"
+            columns: ["imported_order_id"]
+            isOneToOne: false
+            referencedRelation: "imported_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
