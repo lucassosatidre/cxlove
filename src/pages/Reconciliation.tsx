@@ -186,7 +186,28 @@ export default function Reconciliation() {
       if (filterStatus === 'pending' && o.is_confirmed) return false;
       return true;
     });
-  }, [orders, search, filterPayment, filterDelivery, filterStatus]);
+
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    result.sort((a, b) => {
+      if (sortField === 'order_number') {
+        const diff = extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
+        return diff * dir;
+      }
+      if (sortField === 'payment_method') {
+        const cmp = a.payment_method.localeCompare(b.payment_method, 'pt-BR');
+        if (cmp !== 0) return cmp * dir;
+        return extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
+      }
+      // is_confirmed
+      const aVal = a.is_confirmed ? 1 : 0;
+      const bVal = b.is_confirmed ? 1 : 0;
+      if (aVal !== bVal) return (aVal - bVal) * dir;
+      return extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
+    });
+
+    return result;
+  }, [orders, search, filterPayment, filterDelivery, filterStatus, sortField, sortDirection]);
 
   if (loading) {
     return (
