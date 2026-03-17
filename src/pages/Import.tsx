@@ -288,7 +288,9 @@ export default function Import() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {[
                   { col: 'A', name: 'Pedido' },
-                  { col: 'I', name: 'Data Venda' },
+                  { col: 'F', name: 'Canal de Venda' },
+                  { col: 'H', name: 'Nº Pedido Parceiro' },
+                  { col: 'I', name: 'Data/Hora Venda' },
                   { col: 'L', name: 'Pagamento' },
                   { col: 'R', name: 'Entregador' },
                   { col: 'Y', name: 'Total' },
