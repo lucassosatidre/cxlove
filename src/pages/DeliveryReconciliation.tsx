@@ -124,8 +124,8 @@ export default function DeliveryReconciliation() {
     const total = offlineOrders.length;
     const matched = offlineOrders.filter(o => matchedOrderIds.has(o.id)).length;
     const highConf = offlineOrders.filter(o => {
-      const tx = matchedOrderIds.get(o.id);
-      return tx?.match_confidence === 'high';
+      const txs = matchedOrderIds.get(o.id);
+      return txs?.[0]?.match_confidence === 'high';
     }).length;
     return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
   }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
