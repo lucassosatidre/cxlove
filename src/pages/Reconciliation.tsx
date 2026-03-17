@@ -375,7 +375,7 @@ export default function Reconciliation() {
             <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
           </div>
           <Select value={filterPayment} onValueChange={setFilterPayment}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
+            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos pagamentos</SelectItem>
               <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
