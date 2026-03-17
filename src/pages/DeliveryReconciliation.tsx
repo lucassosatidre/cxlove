@@ -90,8 +90,13 @@ export default function DeliveryReconciliation() {
     return orders.filter(o => {
       const methods = o.payment_method.split(',').map(m => m.trim().toLowerCase());
       const hasOfflineCard = methods.some(m => {
+        // Exclude online/pre-paid methods
         if (m.includes('online') || m.includes('(pago)') || m.includes('anotaai')) return false;
+        // Exclude cash
         if (m === 'dinheiro') return false;
+        // "Voucher Parceiro Desconto" is an iFood discount, not a physical payment
+        if (m.includes('voucher parceiro desconto')) return false;
+        // Keep physical card/pix/voucher payments
         return m.includes('crédit') || m.includes('credit') || m.includes('débit') || m.includes('debit') || m.includes('pix') || m.includes('voucher');
       });
       return hasOfflineCard;
