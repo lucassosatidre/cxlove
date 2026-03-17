@@ -380,6 +380,7 @@ export default function Reconciliation() {
               <SelectItem value="all">Todos pagamentos</SelectItem>
               <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
               <SelectItem value="only_online">Somente pagamentos online</SelectItem>
+              <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
               {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
