@@ -243,16 +243,9 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
         </div>
       </div>
 
-      {!isCompleted && (
+      {saving && (
         <div className="flex justify-end pt-1">
-          <Button
-            size="sm"
-            onClick={saveBreakdowns}
-            disabled={!isValid || saving}
-            className="bg-success hover:bg-success/90 text-success-foreground"
-          >
-            {saving ? 'Salvando...' : 'Salvar Detalhamento'}
-          </Button>
+          <span className="text-xs text-muted-foreground animate-pulse">Salvando...</span>
         </div>
       )}
     </div>
