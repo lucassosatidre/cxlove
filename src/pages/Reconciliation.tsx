@@ -394,7 +394,7 @@ export default function Reconciliation() {
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="confirmed">Confirmados</SelectItem>
               <SelectItem value="pending">Pendentes</SelectItem>
             </SelectContent>
