@@ -218,10 +218,6 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
-  const confirmed = useMemo(() => orders.filter(o => o.is_confirmed).length, [orders]);
-  const pending = useMemo(() => orders.length - confirmed, [orders, confirmed]);
-  const percent = useMemo(() => orders.length ? Math.round((confirmed / orders.length) * 100) : 0, [orders, confirmed]);
-
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
 
@@ -257,6 +253,10 @@ export default function Reconciliation() {
 
     return result;
   }, [orders, search, filterPayment, filterDelivery, filterStatus, sortField, sortDirection]);
+
+  const confirmed = useMemo(() => filtered.filter(o => o.is_confirmed).length, [filtered]);
+  const pending = useMemo(() => filtered.length - confirmed, [filtered, confirmed]);
+  const percent = useMemo(() => filtered.length ? Math.round((confirmed / filtered.length) * 100) : 0, [filtered, confirmed]);
 
   const formatDate = (dateStr: string) => {
     const [y, m, d] = dateStr.split('-');
@@ -313,7 +313,7 @@ export default function Reconciliation() {
       {/* Stats */}
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total" value={orders.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
+          <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
           <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
           <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
           <div className="bg-secondary rounded-lg p-3">
