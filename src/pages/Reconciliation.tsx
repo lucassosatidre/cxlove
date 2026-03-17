@@ -399,6 +399,41 @@ export default function Reconciliation() {
 
 // --- Sub-components ---
 
+interface SortableHeaderProps {
+  field: SortField;
+  label: string;
+  currentField: SortField;
+  currentDirection: SortDirection;
+  onSort: (field: SortField) => void;
+  className?: string;
+}
+
+function SortableHeader({ field, label, currentField, currentDirection, onSort, className }: SortableHeaderProps) {
+  const isActive = currentField === field;
+  return (
+    <th
+      className={`text-left p-3 text-xs font-medium uppercase tracking-wider cursor-pointer select-none hover:bg-muted/50 transition-colors ${
+        isActive ? 'text-primary' : 'text-muted-foreground'
+      } ${className || ''}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        {isActive ? (
+          currentDirection === 'asc' ? (
+            <ChevronUp className="h-3.5 w-3.5" />
+          ) : (
+            <ChevronDown className="h-3.5 w-3.5" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-40" />
+        )}
+      </div>
+    </th>
+  );
+}
+
+
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
     <div className="bg-secondary rounded-lg p-3">
