@@ -478,6 +478,11 @@ export default function Reconciliation() {
                         if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
                       }}
                       onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
+                      onBreakdownSaved={() => {
+                        if (!order.is_confirmed) {
+                          toggleConfirm(order.id, false);
+                        }
+                      }}
                     />
                   );
                 })}
