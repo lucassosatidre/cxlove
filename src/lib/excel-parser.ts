@@ -43,7 +43,7 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { header: 1 }) as unknown[][];
+        const jsonData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
 
         if (jsonData.length < 2) {
           reject(new Error('Arquivo vazio ou sem dados suficientes.'));
