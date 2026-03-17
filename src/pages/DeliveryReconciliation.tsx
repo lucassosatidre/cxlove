@@ -103,10 +103,15 @@ export default function DeliveryReconciliation() {
     });
   }, [orders]);
 
+  // Map order ID → all matched transactions (supports combined matches with 2 txs per order)
   const matchedOrderIds = useMemo(() => {
-    const map = new Map<string, CardTransaction>();
+    const map = new Map<string, CardTransaction[]>();
     transactions.forEach(tx => {
-      if (tx.matched_order_id) map.set(tx.matched_order_id, tx);
+      if (tx.matched_order_id) {
+        const arr = map.get(tx.matched_order_id) || [];
+        arr.push(tx);
+        map.set(tx.matched_order_id, arr);
+      }
     });
     return map;
   }, [transactions]);
