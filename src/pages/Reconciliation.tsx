@@ -313,7 +313,7 @@ export default function Reconciliation() {
       {/* Stats */}
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total" value={orders.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
+          <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
           <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
           <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
           <div className="bg-secondary rounded-lg p-3">
