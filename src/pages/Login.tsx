@@ -10,10 +10,8 @@ export default function Login() {
   const { user, loading, signIn, signUp } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [signUpSuccess, setSignUpSuccess] = useState(false);
 
   if (loading) {
     return (
