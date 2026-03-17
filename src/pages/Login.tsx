@@ -7,13 +7,11 @@ import { Label } from '@/components/ui/label';
 import { ClipboardCheck } from 'lucide-react';
 
 export default function Login() {
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [signUpSuccess, setSignUpSuccess] = useState(false);
 
   if (loading) {
     return (
@@ -30,14 +28,9 @@ export default function Login() {
     setError('');
     setSubmitting(true);
     try {
-      if (isSignUp) {
-        await signUp(email, password);
-        setSignUpSuccess(true);
-      } else {
-        await signIn(email, password);
-      }
+      await signIn(email, password);
     } catch (err: any) {
-      setError(err.message || 'Erro ao autenticar.');
+      setError(err.message || 'Usuário ou senha inválidos.');
     } finally {
       setSubmitting(false);
     }
@@ -55,36 +48,20 @@ export default function Login() {
         </div>
 
         <div className="bg-card rounded-lg shadow-card p-6">
-          {signUpSuccess ? (
-            <div className="text-center py-4">
-              <p className="text-success font-medium">Conta criada com sucesso!</p>
-              <p className="text-sm text-muted-foreground mt-2">Verifique seu email para confirmar.</p>
-              <Button className="mt-4 w-full" onClick={() => { setIsSignUp(false); setSignUpSuccess(false); }}>
-                Voltar ao login
-              </Button>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Usuário</Label>
+              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" required />
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" required />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              <Button type="submit" className="w-full" disabled={submitting}>
-                {submitting ? 'Carregando...' : isSignUp ? 'Criar conta' : 'Entrar'}
-              </Button>
-              <p className="text-center text-sm text-muted-foreground">
-                {isSignUp ? 'Já tem conta?' : 'Não tem conta?'}{' '}
-                <button type="button" className="text-primary hover:underline font-medium" onClick={() => { setIsSignUp(!isSignUp); setError(''); }}>
-                  {isSignUp ? 'Entrar' : 'Criar conta'}
-                </button>
-              </p>
-            </form>
-          )}
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha</Label>
+              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={submitting}>
+              {submitting ? 'Entrando...' : 'Entrar'}
+            </Button>
+          </form>
         </div>
       </div>
     </div>
