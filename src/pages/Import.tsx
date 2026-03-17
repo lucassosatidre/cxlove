@@ -80,12 +80,20 @@ export default function Import() {
       // Get existing orders in this closing for deduplication and field backfill
       const { data: existingOrders, error: existingOrdersError } = await supabase
         .from('imported_orders')
-        .select('id, sale_date, total_amount, delivery_person')
+        .select('id, sale_date, total_amount, delivery_person, sale_time, sales_channel, partner_order_number')
         .eq('daily_closing_id', dailyClosingId);
 
       if (existingOrdersError) throw existingOrdersError;
 
-      const existingOrdersByKey = new Map<string, { id: string; delivery_person: string | null }>();
+      interface ExistingOrderInfo {
+        id: string;
+        delivery_person: string | null;
+        sale_time: string | null;
+        sales_channel: string | null;
+        partner_order_number: string | null;
+      }
+
+      const existingOrdersByKey = new Map<string, ExistingOrderInfo>();
 
       (existingOrders || []).forEach((order) => {
         const key = buildOrderKey(order.sale_date ?? '', order.total_amount);
@@ -93,6 +101,9 @@ export default function Import() {
           existingOrdersByKey.set(key, {
             id: order.id,
             delivery_person: order.delivery_person,
+            sale_time: order.sale_time,
+            sales_channel: order.sales_channel,
+            partner_order_number: order.partner_order_number,
           });
         }
       });
@@ -105,17 +116,29 @@ export default function Import() {
 
       const duplicateCount = ordersForDate.length - newOrders.length;
 
-      // Complement missing delivery person on existing duplicate orders
-      const deliveryUpdates = new Map<string, string>();
+      // Complement missing fields on existing duplicate orders
+      const fieldUpdates = new Map<string, Record<string, string>>();
       ordersForDate.forEach((order) => {
         const existingOrder = existingOrdersByKey.get(buildOrderKey(order.sale_date, order.total_amount));
         if (!existingOrder) return;
 
-        const existingDelivery = existingOrder.delivery_person?.trim() ?? '';
-        const incomingDelivery = order.delivery_person.trim();
+        const updates: Record<string, string> = {};
 
-        if (!existingDelivery && incomingDelivery) {
-          deliveryUpdates.set(existingOrder.id, incomingDelivery);
+        if (!existingOrder.delivery_person?.trim() && order.delivery_person.trim()) {
+          updates.delivery_person = order.delivery_person.trim();
+        }
+        if (!existingOrder.sale_time?.trim() && order.sale_time.trim()) {
+          updates.sale_time = order.sale_time.trim();
+        }
+        if (!existingOrder.sales_channel?.trim() && order.sales_channel.trim()) {
+          updates.sales_channel = order.sales_channel.trim();
+        }
+        if (!existingOrder.partner_order_number?.trim() && order.partner_order_number.trim()) {
+          updates.partner_order_number = order.partner_order_number.trim();
+        }
+
+        if (Object.keys(updates).length > 0) {
+          fieldUpdates.set(existingOrder.id, updates);
         }
       });
 
@@ -160,18 +183,18 @@ export default function Import() {
         }
       }
 
-      if (deliveryUpdates.size > 0) {
-        const deliveryUpdateResults = await Promise.all(
-          Array.from(deliveryUpdates.entries()).map(([id, deliveryPerson]) =>
+      if (fieldUpdates.size > 0) {
+        const updateResults = await Promise.all(
+          Array.from(fieldUpdates.entries()).map(([id, updates]) =>
             supabase
               .from('imported_orders')
-              .update({ delivery_person: deliveryPerson })
+              .update(updates)
               .eq('id', id)
           )
         );
 
-        const deliveryUpdateError = deliveryUpdateResults.find((result) => result.error)?.error;
-        if (deliveryUpdateError) throw deliveryUpdateError;
+        const updateError = updateResults.find((result) => result.error)?.error;
+        if (updateError) throw updateError;
       }
 
       // Get total accumulated
