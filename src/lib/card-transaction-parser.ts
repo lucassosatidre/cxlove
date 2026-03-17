@@ -77,11 +77,23 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
         let sheet: XLSX.WorkSheet | null = null;
         let sheetName = '';
         for (const name of workbook.SheetNames) {
-          const norm = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          if (norm.includes('transac')) {
+          const norm = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+          // Prefer exact "transacoes" sheet, skip "resumo das transacoes"
+          if (norm === 'transacoes') {
             sheet = workbook.Sheets[name];
             sheetName = name;
             break;
+          }
+        }
+        // Second pass: any sheet containing "transac" but NOT "resumo"
+        if (!sheet) {
+          for (const name of workbook.SheetNames) {
+            const norm = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+            if (norm.includes('transac') && !norm.includes('resumo')) {
+              sheet = workbook.Sheets[name];
+              sheetName = name;
+              break;
+            }
           }
         }
         // Fallback: use second sheet if available, else first
