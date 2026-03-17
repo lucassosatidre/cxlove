@@ -5,8 +5,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, SplitSquareHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
+import PaymentBreakdown from '@/components/PaymentBreakdown';
+import { needsBreakdown, formatCurrency } from '@/lib/payment-utils';
 
 interface Order {
   id: string;
@@ -29,6 +31,8 @@ export default function Reconciliation() {
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [completing, setCompleting] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [breakdownValidity, setBreakdownValidity] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -47,8 +51,20 @@ export default function Reconciliation() {
 
   const toggleConfirm = useCallback(async (orderId: string, current: boolean) => {
     if (!user) return;
+
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+
+    // If trying to confirm and needs breakdown, check validity
+    if (!current && needsBreakdown(order.payment_method)) {
+      if (!breakdownValidity[orderId]) {
+        toast.error('Preencha o detalhamento das formas de pagamento antes de confirmar.');
+        setExpandedOrderId(orderId);
+        return;
+      }
+    }
+
     const newVal = !current;
-    // Optimistic update
     setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_confirmed: newVal } : o));
 
     const { error } = await supabase
@@ -64,10 +80,36 @@ export default function Reconciliation() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_confirmed: current } : o));
       toast.error('Erro ao atualizar pedido.');
     }
-  }, [user]);
+  }, [user, orders, breakdownValidity]);
+
+  const handleRowClick = useCallback((order: Order) => {
+    if (needsBreakdown(order.payment_method)) {
+      setExpandedOrderId(prev => prev === order.id ? null : order.id);
+    } else {
+      const isCompleted = importData?.status === 'completed';
+      if (!isCompleted) {
+        toggleConfirm(order.id, order.is_confirmed);
+      }
+    }
+  }, [toggleConfirm, importData]);
+
+  const handleBreakdownValid = useCallback((orderId: string, valid: boolean) => {
+    setBreakdownValidity(prev => ({ ...prev, [orderId]: valid }));
+  }, []);
 
   const bulkUpdate = useCallback(async (confirm: boolean) => {
     if (!user || !id) return;
+
+    // If confirming, check that all multi-payment orders have valid breakdowns
+    if (confirm) {
+      const multiPaymentOrders = orders.filter(o => needsBreakdown(o.payment_method));
+      const invalidOrders = multiPaymentOrders.filter(o => !breakdownValidity[o.id]);
+      if (invalidOrders.length > 0) {
+        toast.error(`${invalidOrders.length} pedido(s) com múltiplas formas de pagamento precisam de detalhamento antes de confirmar.`);
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from('imported_orders')
       .update({
@@ -83,10 +125,19 @@ export default function Reconciliation() {
     }
     setOrders(prev => prev.map(o => ({ ...o, is_confirmed: confirm })));
     toast.success(confirm ? 'Todos marcados como conferidos.' : 'Todos desmarcados.');
-  }, [user, id]);
+  }, [user, id, orders, breakdownValidity]);
 
   const finalize = useCallback(async () => {
     if (!id) return;
+
+    // Check all multi-payment orders have valid breakdowns
+    const multiPaymentOrders = orders.filter(o => needsBreakdown(o.payment_method));
+    const invalidOrders = multiPaymentOrders.filter(o => !breakdownValidity[o.id]);
+    if (invalidOrders.length > 0) {
+      toast.error(`${invalidOrders.length} pedido(s) com rateio pendente. Preencha o detalhamento antes de finalizar.`);
+      return;
+    }
+
     setCompleting(true);
     const { error } = await supabase.from('imports').update({ status: 'completed' }).eq('id', id);
     if (error) {
@@ -96,7 +147,7 @@ export default function Reconciliation() {
       toast.success('Fechamento concluído com sucesso!');
     }
     setCompleting(false);
-  }, [id]);
+  }, [id, orders, breakdownValidity]);
 
   const confirmed = useMemo(() => orders.filter(o => o.is_confirmed).length, [orders]);
   const pending = useMemo(() => orders.length - confirmed, [orders, confirmed]);
@@ -115,8 +166,6 @@ export default function Reconciliation() {
       return true;
     });
   }, [orders, search, filterPayment, filterDelivery, filterStatus]);
-
-  const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   if (loading) {
     return (
@@ -218,39 +267,28 @@ export default function Reconciliation() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order) => (
-                  <tr
-                    key={order.id}
-                    className={`border-b border-border/50 row-transition cursor-pointer ${
-                      order.is_confirmed
-                        ? 'bg-muted/50 opacity-60'
-                        : 'hover:bg-primary/5'
-                    }`}
-                    onClick={() => !isCompleted && toggleConfirm(order.id, order.is_confirmed)}
-                  >
-                    <td className="p-3">
-                      <div className={`h-5 w-5 rounded border-2 flex items-center justify-center row-transition ${
-                        order.is_confirmed
-                          ? 'bg-success border-success animate-check-pop'
-                          : 'border-border'
-                      }`}>
-                        {order.is_confirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success-foreground" />}
-                      </div>
-                    </td>
-                    <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
-                      #{order.order_number}
-                    </td>
-                    <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
-                      {order.payment_method}
-                    </td>
-                    <td className={`p-3 text-right font-mono-tabular text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
-                      {formatCurrency(order.total_amount)}
-                    </td>
-                    <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
-                      {order.delivery_person || '—'}
-                    </td>
-                  </tr>
-                ))}
+                {filtered.map((order) => {
+                  const hasMultiple = needsBreakdown(order.payment_method);
+                  const isExpanded = expandedOrderId === order.id;
+                  const breakdownValid = breakdownValidity[order.id];
+
+                  return (
+                    <OrderRow
+                      key={order.id}
+                      order={order}
+                      hasMultiple={hasMultiple}
+                      isExpanded={isExpanded}
+                      breakdownValid={breakdownValid}
+                      isCompleted={isCompleted}
+                      onRowClick={() => handleRowClick(order)}
+                      onCheckboxClick={(e) => {
+                        e.stopPropagation();
+                        if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
+                      }}
+                      onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
+                    />
+                  );
+                })}
               </tbody>
             </table>
             {filtered.length === 0 && (
@@ -296,6 +334,8 @@ export default function Reconciliation() {
   );
 }
 
+// --- Sub-components ---
+
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
     <div className="bg-secondary rounded-lg p-3">
@@ -305,5 +345,86 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
       </div>
       <p className={`text-2xl font-semibold font-mono-tabular ${color}`}>{value}</p>
     </div>
+  );
+}
+
+interface OrderRowProps {
+  order: Order;
+  hasMultiple: boolean;
+  isExpanded: boolean;
+  breakdownValid: boolean;
+  isCompleted: boolean;
+  onRowClick: () => void;
+  onCheckboxClick: (e: React.MouseEvent) => void;
+  onBreakdownValid: (valid: boolean) => void;
+}
+
+function OrderRow({ order, hasMultiple, isExpanded, breakdownValid, isCompleted, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+  return (
+    <>
+      <tr
+        className={`border-b border-border/50 row-transition cursor-pointer ${
+          order.is_confirmed
+            ? 'bg-muted/50 opacity-60'
+            : 'hover:bg-primary/5'
+        }`}
+        onClick={onRowClick}
+      >
+        <td className="p-3">
+          <div
+            className={`h-5 w-5 rounded border-2 flex items-center justify-center row-transition ${
+              order.is_confirmed
+                ? 'bg-success border-success'
+                : 'border-border'
+            }`}
+            onClick={onCheckboxClick}
+          >
+            {order.is_confirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success-foreground" />}
+          </div>
+        </td>
+        <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+          #{order.order_number}
+        </td>
+        <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+          <div className="flex items-center gap-2">
+            <span className="truncate">{order.payment_method}</span>
+            {hasMultiple && (
+              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                breakdownValid
+                  ? 'bg-success/10 text-success'
+                  : 'bg-warning/10 text-warning'
+              }`}>
+                <SplitSquareHorizontal className="h-3 w-3" />
+                {breakdownValid ? 'Rateio OK' : 'Rateio'}
+              </span>
+            )}
+            {hasMultiple && (
+              isExpanded
+                ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
+          </div>
+        </td>
+        <td className={`p-3 text-right font-mono-tabular text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+          {formatCurrency(order.total_amount)}
+        </td>
+        <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+          {order.delivery_person || '—'}
+        </td>
+      </tr>
+      {hasMultiple && isExpanded && (
+        <tr>
+          <td colSpan={5} className="p-0">
+            <PaymentBreakdown
+              orderId={order.id}
+              paymentMethod={order.payment_method}
+              totalAmount={order.total_amount}
+              isCompleted={isCompleted}
+              onBreakdownValid={onBreakdownValid}
+            />
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
