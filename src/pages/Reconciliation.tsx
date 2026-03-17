@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, type PaymentBadgeType } from '@/lib/payment-utils';
@@ -25,6 +25,10 @@ interface Order {
   total_amount: number;
   delivery_person: string | null;
   is_confirmed: boolean;
+  sale_date: string | null;
+  sale_time: string | null;
+  sales_channel: string | null;
+  partner_order_number: string | null;
 }
 
 interface ClosingData {
@@ -59,6 +63,17 @@ export default function Reconciliation() {
   const [sortField, setSortField] = useState<SortField>('order_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showImportHistory, setShowImportHistory] = useState(false);
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({
+    sale_date: false,
+    sale_time: false,
+    sales_channel: false,
+    partner_order_number: false,
+  });
+
+  const toggleColumn = (col: keyof typeof visibleColumns) => {
+    setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
+  };
 
   useEffect(() => {
     if (!id) return;
@@ -79,7 +94,7 @@ export default function Reconciliation() {
     const [{ data: ordData }, { data: impData }] = await Promise.all([
       supabase
         .from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed')
+        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed, sale_date, sale_time, sales_channel, partner_order_number')
         .eq('daily_closing_id', id!),
       supabase
         .from('imports')
@@ -370,6 +385,39 @@ export default function Reconciliation() {
               <SelectItem value="pending">Pendentes</SelectItem>
             </SelectContent>
           </Select>
+          <div className="relative">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={() => setShowColumnSettings(!showColumnSettings)}
+            >
+              <Settings2 className="h-4 w-4 mr-1" />
+              Colunas
+            </Button>
+            {showColumnSettings && (
+              <div className="absolute right-0 top-10 z-20 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2 min-w-[200px]">
+                {([
+                  { key: 'sale_date' as const, label: 'Data' },
+                  { key: 'sale_time' as const, label: 'Hora' },
+                  { key: 'sales_channel' as const, label: 'Canal de Venda' },
+                  { key: 'partner_order_number' as const, label: 'Nº Pedido Parceiro' },
+                ]).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => toggleColumn(key)}
+                    className="flex items-center gap-2 w-full text-left text-sm py-1 px-2 rounded hover:bg-muted/50 transition-colors"
+                  >
+                    {visibleColumns[key]
+                      ? <Eye className="h-4 w-4 text-primary" />
+                      : <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    }
+                    <span className={visibleColumns[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -382,6 +430,10 @@ export default function Reconciliation() {
                 <tr className="border-b border-border">
                   <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
                   <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
+                  {visibleColumns.sale_date && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>}
+                  {visibleColumns.sale_time && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>}
+                  {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
+                  {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
                   <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
                   <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                   <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
@@ -405,6 +457,7 @@ export default function Reconciliation() {
                       breakdownValid={breakdownValid}
                       isCompleted={isCompleted}
                       isAutoOnline={autoOnline}
+                      visibleColumns={visibleColumns}
                       onRowClick={() => handleRowClick(order)}
                       onCheckboxClick={(e) => {
                         e.stopPropagation();
@@ -507,6 +560,13 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
   );
 }
 
+type ColumnVisibility = {
+  sale_date: boolean;
+  sale_time: boolean;
+  sales_channel: boolean;
+  partner_order_number: boolean;
+};
+
 interface OrderRowProps {
   order: Order;
   hasMultiple: boolean;
@@ -515,6 +575,7 @@ interface OrderRowProps {
   breakdownValid: boolean;
   isCompleted: boolean;
   isAutoOnline: boolean;
+  visibleColumns: ColumnVisibility;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
@@ -549,7 +610,16 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+  const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
+  const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
+
+  const formatSaleDate = (d: string | null) => {
+    if (!d) return '—';
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  };
+
   return (
     <>
       <tr
@@ -577,7 +647,19 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
           #{order.order_number}
         </td>
-        <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+        {visibleColumns.sale_date && (
+          <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
+        )}
+        {visibleColumns.sale_time && (
+          <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
+        )}
+        {visibleColumns.sales_channel && (
+          <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
+        )}
+        {visibleColumns.partner_order_number && (
+          <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
+        )}
+        <td className={`p-3 text-sm ${cellClass}`}>
           <div className="flex items-center gap-2">
             <span className="truncate">{order.payment_method}</span>
             <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
@@ -588,16 +670,16 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             )}
           </div>
         </td>
-        <td className={`p-3 text-right font-mono-tabular text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+        <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
-        <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+        <td className={`p-3 text-sm ${cellClass}`}>
           {order.delivery_person || '—'}
         </td>
       </tr>
       {hasMultiple && isExpanded && (
         <tr>
-          <td colSpan={5} className="p-0">
+          <td colSpan={colCount} className="p-0">
             <PaymentBreakdown
               orderId={order.id}
               paymentMethod={order.payment_method}

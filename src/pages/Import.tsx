@@ -148,6 +148,9 @@ export default function Import() {
             total_amount: o.total_amount,
             delivery_person: o.delivery_person,
             sale_date: o.sale_date,
+            sale_time: o.sale_time || null,
+            sales_channel: o.sales_channel || null,
+            partner_order_number: o.partner_order_number || null,
             is_confirmed: isAllOnline(o.payment_method),
             confirmed_at: isAllOnline(o.payment_method) ? new Date().toISOString() : null,
           }));
@@ -285,7 +288,9 @@ export default function Import() {
               <div className="grid grid-cols-2 gap-2 text-sm">
                 {[
                   { col: 'A', name: 'Pedido' },
-                  { col: 'I', name: 'Data Venda' },
+                  { col: 'F', name: 'Canal de Venda' },
+                  { col: 'H', name: 'Nº Pedido Parceiro' },
+                  { col: 'I', name: 'Data/Hora Venda' },
                   { col: 'L', name: 'Pagamento' },
                   { col: 'R', name: 'Entregador' },
                   { col: 'Y', name: 'Total' },
