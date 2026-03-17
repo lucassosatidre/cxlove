@@ -290,6 +290,10 @@ export default function Reconciliation() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="default" size="sm" onClick={() => navigate(`/delivery-reconciliation/${id}`)} className="bg-primary">
+              <Truck className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Conciliação Delivery</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
               <Plus className="h-4 w-4 mr-1" />
               <span className="hidden sm:inline">Importar mais</span>
