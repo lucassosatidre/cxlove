@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
-import { needsBreakdown, formatCurrency, getPaymentBadgeType, type PaymentBadgeType } from '@/lib/payment-utils';
+import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, type PaymentBadgeType } from '@/lib/payment-utils';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
@@ -213,7 +213,9 @@ export default function Reconciliation() {
   const filtered = useMemo(() => {
     const result = orders.filter(o => {
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
-      if (filterPayment !== 'all' && o.payment_method !== filterPayment) return false;
+      if (filterPayment === 'only_online' && !isAllOnline(o.payment_method)) return false;
+      if (filterPayment === 'only_offline' && isAllOnline(o.payment_method)) return false;
+      if (filterPayment !== 'all' && filterPayment !== 'only_online' && filterPayment !== 'only_offline' && o.payment_method !== filterPayment) return false;
       if (filterDelivery !== 'all' && o.delivery_person !== filterDelivery) return false;
       if (filterStatus === 'confirmed' && !o.is_confirmed) return false;
       if (filterStatus === 'pending' && o.is_confirmed) return false;
@@ -348,6 +350,8 @@ export default function Reconciliation() {
             <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos pagamentos</SelectItem>
+              <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
+              <SelectItem value="only_online">Somente pagamentos online</SelectItem>
               {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -384,11 +388,12 @@ export default function Reconciliation() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order) => {
+              {filtered.map((order) => {
                   const hasMultiple = needsBreakdown(order.payment_method);
                   const isExpanded = expandedOrderId === order.id;
                   const breakdownValid = breakdownValidity[order.id];
                   const badgeType = getPaymentBadgeType(order.payment_method);
+                  const autoOnline = isAllOnline(order.payment_method);
 
                   return (
                     <OrderRow
@@ -399,6 +404,7 @@ export default function Reconciliation() {
                       isExpanded={isExpanded}
                       breakdownValid={breakdownValid}
                       isCompleted={isCompleted}
+                      isAutoOnline={autoOnline}
                       onRowClick={() => handleRowClick(order)}
                       onCheckboxClick={(e) => {
                         e.stopPropagation();
@@ -508,6 +514,7 @@ interface OrderRowProps {
   isExpanded: boolean;
   breakdownValid: boolean;
   isCompleted: boolean;
+  isAutoOnline: boolean;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
@@ -542,13 +549,13 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
   return (
     <>
       <tr
         className={`border-b border-border/50 row-transition cursor-pointer ${
           order.is_confirmed
-            ? 'bg-muted/50 opacity-60'
+            ? isAutoOnline ? 'bg-blue-50/50 dark:bg-blue-950/20 opacity-70' : 'bg-muted/50 opacity-60'
             : 'hover:bg-primary/5'
         }`}
         onClick={onRowClick}
@@ -557,12 +564,14 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
           <div
             className={`h-5 w-5 rounded border-2 flex items-center justify-center row-transition ${
               order.is_confirmed
-                ? 'bg-success border-success'
+                ? isAutoOnline
+                  ? 'bg-blue-500 border-blue-500'
+                  : 'bg-success border-success'
                 : 'border-border'
             }`}
             onClick={onCheckboxClick}
           >
-            {order.is_confirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success-foreground" />}
+            {order.is_confirmed && <CheckCircle2 className={`h-3.5 w-3.5 ${isAutoOnline ? 'text-white' : 'text-success-foreground'}`} />}
           </div>
         </td>
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
