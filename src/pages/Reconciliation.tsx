@@ -701,6 +701,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               totalAmount={order.total_amount}
               isCompleted={isCompleted}
               onBreakdownValid={onBreakdownValid}
+              onSaved={onBreakdownSaved}
             />
           </td>
         </tr>
