@@ -218,9 +218,9 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
-  const confirmed = useMemo(() => orders.filter(o => o.is_confirmed).length, [orders]);
-  const pending = useMemo(() => orders.length - confirmed, [orders, confirmed]);
-  const percent = useMemo(() => orders.length ? Math.round((confirmed / orders.length) * 100) : 0, [orders, confirmed]);
+  const confirmed = useMemo(() => filtered.filter(o => o.is_confirmed).length, [filtered]);
+  const pending = useMemo(() => filtered.length - confirmed, [filtered, confirmed]);
+  const percent = useMemo(() => filtered.length ? Math.round((confirmed / filtered.length) * 100) : 0, [filtered, confirmed]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
