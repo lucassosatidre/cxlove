@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { parseExcelFile, ParsedOrder } from '@/lib/excel-parser';
+import { isAllOnline } from '@/lib/payment-utils';
 import { Button } from '@/components/ui/button';
 import { Upload, ArrowLeft, AlertCircle, CheckCircle2, FileSpreadsheet, Info } from 'lucide-react';
 import { toast } from 'sonner';
