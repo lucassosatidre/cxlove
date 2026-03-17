@@ -350,6 +350,8 @@ export default function Reconciliation() {
             <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos pagamentos</SelectItem>
+              <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
+              <SelectItem value="only_online">Somente pagamentos online</SelectItem>
               {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
