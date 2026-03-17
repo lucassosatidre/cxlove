@@ -25,6 +25,10 @@ interface Order {
   total_amount: number;
   delivery_person: string | null;
   is_confirmed: boolean;
+  sale_date: string | null;
+  sale_time: string | null;
+  sales_channel: string | null;
+  partner_order_number: string | null;
 }
 
 interface ClosingData {
