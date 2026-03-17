@@ -41,6 +41,8 @@ export default function Reconciliation() {
   const [completing, setCompleting] = useState(false);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [breakdownValidity, setBreakdownValidity] = useState<Record<string, boolean>>({});
+  const [sortField, setSortField] = useState<SortField>('order_number');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
     if (!id) return;
