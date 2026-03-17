@@ -213,7 +213,9 @@ export default function Reconciliation() {
   const filtered = useMemo(() => {
     const result = orders.filter(o => {
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
-      if (filterPayment !== 'all' && o.payment_method !== filterPayment) return false;
+      if (filterPayment === 'only_online' && !isAllOnline(o.payment_method)) return false;
+      if (filterPayment === 'only_offline' && isAllOnline(o.payment_method)) return false;
+      if (filterPayment !== 'all' && filterPayment !== 'only_online' && filterPayment !== 'only_offline' && o.payment_method !== filterPayment) return false;
       if (filterDelivery !== 'all' && o.delivery_person !== filterDelivery) return false;
       if (filterStatus === 'confirmed' && !o.is_confirmed) return false;
       if (filterStatus === 'pending' && o.is_confirmed) return false;
