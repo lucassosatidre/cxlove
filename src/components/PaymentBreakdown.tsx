@@ -139,9 +139,10 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
       toast.error('Erro ao salvar detalhamento.');
     } else {
       toast.success('Detalhamento salvo com sucesso!');
+      onSaved?.();
     }
     setSaving(false);
-  }, [orderId, rows, isValid]);
+  }, [orderId, rows, isValid, onSaved]);
 
   if (loading) {
     return (
