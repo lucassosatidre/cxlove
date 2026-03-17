@@ -392,6 +392,44 @@ export default function DeliveryReconciliation() {
         </div>
       </header>
 
+      {/* Payment Method Summary */}
+      {transactions.length > 0 && (() => {
+        const methodSummary = new Map<string, { total: number; count: number }>();
+        transactions.forEach(tx => {
+          const method = tx.payment_method?.toLowerCase() || 'outro';
+          let label = 'Outro';
+          if (method.includes('débit') || method.includes('debit')) label = 'Débito';
+          else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
+          else if (method.includes('pix')) label = 'Pix';
+          else if (method.includes('voucher')) label = 'Voucher';
+          const entry = methodSummary.get(label) || { total: 0, count: 0 };
+          entry.total += tx.gross_amount;
+          entry.count += 1;
+          methodSummary.set(label, entry);
+        });
+        const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
+        return (
+          <div className="border-b border-border bg-card">
+            <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-4">
+              {sorted.map(([label, { total, count }]) => (
+                <div key={label} className="flex items-center gap-2 bg-secondary rounded-lg px-4 py-2">
+                  <span className="text-sm font-medium text-foreground">{label}:</span>
+                  <span className="text-sm font-semibold text-primary font-mono-tabular">{formatCurrency(total)}</span>
+                  <span className="text-xs text-muted-foreground">({count} {count === 1 ? 'operação' : 'operações'})</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 bg-accent rounded-lg px-4 py-2 ml-auto">
+                <span className="text-sm font-medium text-foreground">Total:</span>
+                <span className="text-sm font-semibold text-foreground font-mono-tabular">
+                  {formatCurrency(transactions.reduce((s, tx) => s + tx.gross_amount, 0))}
+                </span>
+                <span className="text-xs text-muted-foreground">({transactions.length} operações)</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Stats */}
       <div className="border-b border-border bg-card">
         <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
