@@ -94,7 +94,7 @@ export default function Reconciliation() {
     const [{ data: ordData }, { data: impData }] = await Promise.all([
       supabase
         .from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed')
+        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed, sale_date, sale_time, sales_channel, partner_order_number')
         .eq('daily_closing_id', id!),
       supabase
         .from('imports')
