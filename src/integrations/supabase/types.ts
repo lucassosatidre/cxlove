@@ -51,8 +51,11 @@ export type Database = {
           import_id: string
           is_confirmed: boolean
           order_number: string
+          partner_order_number: string | null
           payment_method: string
           sale_date: string | null
+          sale_time: string | null
+          sales_channel: string | null
           total_amount: number
         }
         Insert: {
@@ -64,8 +67,11 @@ export type Database = {
           import_id: string
           is_confirmed?: boolean
           order_number: string
+          partner_order_number?: string | null
           payment_method: string
           sale_date?: string | null
+          sale_time?: string | null
+          sales_channel?: string | null
           total_amount?: number
         }
         Update: {
@@ -77,8 +83,11 @@ export type Database = {
           import_id?: string
           is_confirmed?: boolean
           order_number?: string
+          partner_order_number?: string | null
           payment_method?: string
           sale_date?: string | null
+          sale_time?: string | null
+          sales_channel?: string | null
           total_amount?: number
         }
         Relationships: [
