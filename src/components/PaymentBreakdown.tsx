@@ -26,6 +26,7 @@ interface Props {
   totalAmount: number;
   isCompleted: boolean;
   onBreakdownValid: (valid: boolean) => void;
+  onSaved?: () => void;
 }
 
 export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, isCompleted, onBreakdownValid }: Props) {
