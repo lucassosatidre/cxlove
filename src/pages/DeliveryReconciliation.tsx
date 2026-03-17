@@ -413,7 +413,7 @@ export default function DeliveryReconciliation() {
         const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
         return (
           <div className="border-b border-border bg-card">
-            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <div className="px-6 py-3 flex items-center justify-between gap-4">
               <div className="flex items-center flex-wrap gap-3">
                 {sorted.map(([label, { total, count }]) => (
                   <div key={label} className="flex items-center gap-2 bg-secondary rounded-lg px-4 py-2.5 border border-border">
