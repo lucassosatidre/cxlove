@@ -148,6 +148,8 @@ export default function Import() {
             total_amount: o.total_amount,
             delivery_person: o.delivery_person,
             sale_date: o.sale_date,
+            is_confirmed: isAllOnline(o.payment_method),
+            confirmed_at: isAllOnline(o.payment_method) ? new Date().toISOString() : null,
           }));
 
           const { error: ordersError } = await supabase.from('imported_orders').insert(batch);
