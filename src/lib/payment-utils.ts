@@ -48,7 +48,34 @@ export function getBreakdownScenario(methods: string[]): BreakdownScenario {
  * Checks if the order needs a payment breakdown (has multiple payment methods).
  */
 export function needsBreakdown(paymentMethod: string): boolean {
-  return splitPaymentMethods(paymentMethod).length > 1;
+  const methods = splitPaymentMethods(paymentMethod);
+  if (methods.length <= 1) return false;
+  // If ALL methods are online, no breakdown needed
+  if (methods.every(m => isOnlinePayment(m))) return false;
+  return true;
+}
+
+/**
+ * Checks if all payment methods in the string are online.
+ */
+export function isAllOnline(paymentMethod: string): boolean {
+  const methods = splitPaymentMethods(paymentMethod);
+  return methods.length >= 1 && methods.every(m => isOnlinePayment(m));
+}
+
+/**
+ * Returns the badge type for a payment method string.
+ */
+export type PaymentBadgeType = 'online' | 'fisico' | 'rateio';
+
+export function getPaymentBadgeType(paymentMethod: string): PaymentBadgeType {
+  const methods = splitPaymentMethods(paymentMethod);
+  const allOnline = methods.every(m => isOnlinePayment(m));
+  const allPhysical = methods.every(m => !isOnlinePayment(m));
+
+  if (methods.length > 1 && !allOnline) return 'rateio';
+  if (allOnline) return 'online';
+  return 'fisico';
 }
 
 /**
