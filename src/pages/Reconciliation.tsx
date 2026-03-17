@@ -226,7 +226,16 @@ export default function Reconciliation() {
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterPayment === 'only_online' && !isAllOnline(o.payment_method)) return false;
       if (filterPayment === 'only_offline' && isAllOnline(o.payment_method)) return false;
-      if (filterPayment !== 'all' && filterPayment !== 'only_online' && filterPayment !== 'only_offline' && o.payment_method !== filterPayment) return false;
+      if (filterPayment === 'offline_card_delivery') {
+        const methods = o.payment_method.split(',').map(m => m.trim().toLowerCase());
+        const hasOfflineCard = methods.some(m => {
+          if (m.includes('online') || m.includes('(pago)') || m.includes('anotaai')) return false;
+          if (m === 'dinheiro') return false;
+          if (m.includes('voucher parceiro desconto')) return false;
+          return m.includes('crédit') || m.includes('credit') || m.includes('débit') || m.includes('debit') || m.includes('pix') || m.includes('voucher');
+        });
+        if (!hasOfflineCard) return false;
+      } else if (filterPayment !== 'all' && filterPayment !== 'only_online' && filterPayment !== 'only_offline' && o.payment_method !== filterPayment) return false;
       if (filterDelivery !== 'all' && o.delivery_person !== filterDelivery) return false;
       if (filterStatus === 'confirmed' && !o.is_confirmed) return false;
       if (filterStatus === 'pending' && o.is_confirmed) return false;
@@ -371,6 +380,7 @@ export default function Reconciliation() {
               <SelectItem value="all">Todos pagamentos</SelectItem>
               <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
               <SelectItem value="only_online">Somente pagamentos online</SelectItem>
+              <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
               {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
             </SelectContent>
           </Select>
