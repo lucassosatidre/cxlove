@@ -103,10 +103,15 @@ export default function DeliveryReconciliation() {
     });
   }, [orders]);
 
+  // Map order ID → all matched transactions (supports combined matches with 2 txs per order)
   const matchedOrderIds = useMemo(() => {
-    const map = new Map<string, CardTransaction>();
+    const map = new Map<string, CardTransaction[]>();
     transactions.forEach(tx => {
-      if (tx.matched_order_id) map.set(tx.matched_order_id, tx);
+      if (tx.matched_order_id) {
+        const arr = map.get(tx.matched_order_id) || [];
+        arr.push(tx);
+        map.set(tx.matched_order_id, arr);
+      }
     });
     return map;
   }, [transactions]);
@@ -119,8 +124,8 @@ export default function DeliveryReconciliation() {
     const total = offlineOrders.length;
     const matched = offlineOrders.filter(o => matchedOrderIds.has(o.id)).length;
     const highConf = offlineOrders.filter(o => {
-      const tx = matchedOrderIds.get(o.id);
-      return tx?.match_confidence === 'high';
+      const txs = matchedOrderIds.get(o.id);
+      return txs?.[0]?.match_confidence === 'high';
     }).length;
     return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
   }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
@@ -432,9 +437,11 @@ export default function DeliveryReconciliation() {
             </h3>
             <div className="space-y-2">
               {filtered.map(order => {
-                const matchedTx = matchedOrderIds.get(order.id);
-                const isMatched = !!matchedTx;
-                const confidence = matchedTx?.match_confidence;
+                const matchedTxs = matchedOrderIds.get(order.id);
+                const isMatched = !!matchedTxs && matchedTxs.length > 0;
+                const confidence = matchedTxs?.[0]?.match_confidence;
+                const isCombined = matchedTxs && matchedTxs.length > 1;
+                const totalMatchedAmount = matchedTxs?.reduce((s, t) => s + t.gross_amount, 0) || 0;
 
                 return (
                   <div
@@ -483,47 +490,65 @@ export default function DeliveryReconciliation() {
                       </div>
                     </div>
 
-                    {isMatched && matchedTx && (
-                      <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs">
-                          <Link2 className="h-3 w-3 text-success" />
-                          <span className="text-muted-foreground">
-                            {matchedTx.payment_method} {matchedTx.brand ? `(${matchedTx.brand})` : ''} —{' '}
-                            <span className="font-mono-tabular">{formatCurrency(matchedTx.gross_amount)}</span>
-                          </span>
-                          <Badge
-                            variant="secondary"
-                            className={`text-[9px] ${
-                              confidence === 'high'
-                                ? 'bg-success/10 text-success'
-                                : confidence === 'medium'
-                                  ? 'bg-primary/10 text-primary'
-                                  : 'bg-warning/10 text-warning'
-                            }`}
-                          >
-                            {matchedTx.match_type === 'manual'
-                              ? 'Manual'
-                              : confidence === 'high'
-                                ? 'Match exato'
-                                : confidence === 'medium'
-                                  ? 'Match aproximado'
-                                  : 'Baixa confiança'}
-                          </Badge>
-                          {matchedTx.match_type !== 'exact' && matchedTx.gross_amount !== order.total_amount && (
-                            <span className="text-warning text-[10px]">
-                              Δ {formatCurrency(Math.abs(order.total_amount - matchedTx.gross_amount))}
-                            </span>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                          onClick={() => unmatch(matchedTx.id)}
-                        >
-                          <Unlink className="h-3 w-3 mr-1" />
-                          Desvincular
-                        </Button>
+                    {isMatched && matchedTxs && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        {matchedTxs.map((tx, idx) => (
+                          <div key={tx.id} className={`flex items-center justify-between ${idx > 0 ? 'mt-1.5 pt-1.5 border-t border-border/30' : ''}`}>
+                            <div className="flex items-center gap-2 text-xs">
+                              <Link2 className="h-3 w-3 text-success" />
+                              <span className="text-muted-foreground">
+                                {tx.payment_method} {tx.brand ? `(${tx.brand})` : ''} —{' '}
+                                <span className="font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
+                              </span>
+                              {idx === 0 && (
+                                <Badge
+                                  variant="secondary"
+                                  className={`text-[9px] ${
+                                    confidence === 'high'
+                                      ? 'bg-success/10 text-success'
+                                      : confidence === 'medium'
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'bg-warning/10 text-warning'
+                                  }`}
+                                >
+                                  {tx.match_type === 'manual'
+                                    ? 'Manual'
+                                    : tx.match_type === 'combined'
+                                      ? 'Match combinado'
+                                      : confidence === 'high'
+                                        ? 'Match exato'
+                                        : confidence === 'medium'
+                                          ? 'Match aproximado'
+                                          : 'Baixa confiança'}
+                                </Badge>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+                              onClick={() => unmatch(tx.id)}
+                            >
+                              <Unlink className="h-3 w-3 mr-1" />
+                              Desvincular
+                            </Button>
+                          </div>
+                        ))}
+                        {isCombined && (
+                          <div className="mt-1 text-[10px] text-muted-foreground">
+                            Soma: <span className="font-mono-tabular font-medium">{formatCurrency(totalMatchedAmount)}</span>
+                            {Math.abs(totalMatchedAmount - order.total_amount) > 0.01 && (
+                              <span className="text-warning ml-1">
+                                Δ {formatCurrency(Math.abs(order.total_amount - totalMatchedAmount))}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        {!isCombined && matchedTxs[0].match_type !== 'exact' && matchedTxs[0].gross_amount !== order.total_amount && (
+                          <div className="mt-1 text-warning text-[10px]">
+                            Δ {formatCurrency(Math.abs(order.total_amount - matchedTxs[0].gross_amount))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
