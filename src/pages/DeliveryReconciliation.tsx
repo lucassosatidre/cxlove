@@ -11,6 +11,7 @@ import {
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AppSidebar from '@/components/AppSidebar';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
 import { formatCurrency } from '@/lib/payment-utils';
@@ -346,9 +347,11 @@ export default function DeliveryReconciliation() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <AppSidebar />
+      <div className="ml-56 flex flex-col flex-1">
       {/* Header */}
       <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => navigate(`/reconciliation/${id}`)}>
               <ArrowLeft className="h-4 w-4" />
@@ -373,7 +376,7 @@ export default function DeliveryReconciliation() {
               Desfazer
             </Button>
             <div className="relative">
-              <Button variant="default" size="sm" disabled={importing}>
+              <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90" disabled={importing}>
                 <Upload className="h-4 w-4 mr-1" />
                 {importing ? 'Importando...' : 'Importar Maquininha'}
               </Button>
@@ -410,7 +413,7 @@ export default function DeliveryReconciliation() {
         const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
         return (
           <div className="border-b border-border bg-card">
-            <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <div className="px-6 py-3 flex items-center justify-between gap-4">
               <div className="flex items-center flex-wrap gap-3">
                 {sorted.map(([label, { total, count }]) => (
                   <div key={label} className="flex items-center gap-2 bg-secondary rounded-lg px-4 py-2.5 border border-border">
@@ -434,12 +437,12 @@ export default function DeliveryReconciliation() {
 
       {/* Stats */}
       <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
           <StatCard label="Comandas Offline" value={stats.total} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
           <StatCard label="Conciliadas" value={stats.matched} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
           <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
           <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<Truck className="h-4 w-4" />} color="text-foreground" />
-          <div className="bg-secondary rounded-lg p-3">
+          <div className="bg-muted rounded-xl p-3 border border-border">
             <p className="text-xs text-muted-foreground mb-1">Progresso</p>
             <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
             <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
@@ -451,7 +454,7 @@ export default function DeliveryReconciliation() {
 
       {/* Filters */}
       <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-2">
+        <div className="px-6 py-3 flex flex-wrap gap-2">
           <div className="relative flex-1 min-w-[180px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar comanda..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
@@ -469,7 +472,7 @@ export default function DeliveryReconciliation() {
 
       {/* Main content - split view */}
       <div className="flex-1 overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 py-4 h-full flex gap-4">
+        <div className="px-6 py-4 h-full flex gap-4">
           {/* Left: Orders */}
           <div className="flex-1 overflow-auto">
             <h3 className="text-sm font-medium text-muted-foreground mb-2 uppercase tracking-wider">
@@ -662,13 +665,14 @@ export default function DeliveryReconciliation() {
           </div>
         </div>
       </div>
+      </div>
     </div>
   );
 }
 
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
-    <div className="bg-secondary rounded-lg p-3">
+    <div className="bg-muted rounded-xl p-3 border border-border">
       <div className="flex items-center gap-1.5 mb-1">
         <span className={color}>{icon}</span>
         <p className="text-xs text-muted-foreground">{label}</p>

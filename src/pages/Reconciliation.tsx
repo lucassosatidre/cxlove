@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
+import AppSidebar from '@/components/AppSidebar';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, type PaymentBadgeType } from '@/lib/payment-utils';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
@@ -284,249 +285,252 @@ export default function Reconciliation() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-base font-semibold text-foreground">
-                Fechamento {closingData ? formatDate(closingData.closing_date) : ''}
-              </h1>
-              <p className="text-xs text-muted-foreground">{orders.length} pedidos • {importRecords.length} importação(ões)</p>
+      <div className="ml-56 flex flex-col flex-1">
+        {/* Header */}
+        <header className="border-b border-border bg-card sticky top-0 z-10">
+          <div className="px-6 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-base font-semibold text-foreground">
+                  Fechamento {closingData ? formatDate(closingData.closing_date) : ''}
+                </h1>
+                <p className="text-xs text-muted-foreground">{orders.length} pedidos • {importRecords.length} importação(ões)</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="default" size="sm" onClick={() => navigate(`/delivery-reconciliation/${id}`)} className="bg-primary hover:bg-primary/90">
+                <Truck className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Conciliação Delivery</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
+                <Plus className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Importar mais</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => bulkUpdate(true)} disabled={isCompleted}>
+                <CheckCheck className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Marcar todos</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => bulkUpdate(false)} disabled={isCompleted}>
+                <XCircle className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Desmarcar todos</span>
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="default" size="sm" onClick={() => navigate(`/delivery-reconciliation/${id}`)} className="bg-primary">
-              <Truck className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Conciliação Delivery</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
-              <Plus className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Importar mais</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => bulkUpdate(true)} disabled={isCompleted}>
-              <CheckCheck className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Marcar todos</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => bulkUpdate(false)} disabled={isCompleted}>
-              <XCircle className="h-4 w-4 mr-1" />
-              <span className="hidden sm:inline">Desmarcar todos</span>
-            </Button>
-          </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Stats */}
-      <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
-          <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
-          <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-          <div className="bg-secondary rounded-lg p-3">
-            <p className="text-xs text-muted-foreground mb-1">Progresso</p>
-            <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
-            <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Import History Toggle */}
-      {importRecords.length > 0 && (
+        {/* Stats */}
         <div className="border-b border-border bg-card">
-          <div className="max-w-7xl mx-auto px-4">
-            <button
-              onClick={() => setShowImportHistory(!showImportHistory)}
-              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground row-transition text-left"
-            >
-              {showImportHistory ? '▾' : '▸'} Histórico de importações ({importRecords.length})
-            </button>
-            {showImportHistory && (
-              <div className="pb-3 space-y-1.5">
-                {importRecords.map((imp) => (
-                  <div key={imp.id} className="flex items-center justify-between text-xs bg-secondary/50 rounded-lg px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-foreground font-medium">{imp.file_name}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-muted-foreground">
-                      <span>{imp.total_rows} lidos</span>
-                      <span className="text-success">{imp.new_rows} novos</span>
-                      <span>{imp.duplicate_rows} duplicados</span>
-                      <span>{new Date(imp.created_at).toLocaleString('pt-BR')}</span>
-                    </div>
-                  </div>
-                ))}
+          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
+            <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
+            <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
+            <div className="bg-muted rounded-xl p-3 border border-border">
+              <p className="text-xs text-muted-foreground mb-1">Progresso</p>
+              <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
+              <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
               </div>
-            )}
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Filters */}
-      <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-2">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+        {/* Import History Toggle */}
+        {importRecords.length > 0 && (
+          <div className="border-b border-border bg-card">
+            <div className="px-6">
+              <button
+                onClick={() => setShowImportHistory(!showImportHistory)}
+                className="w-full py-2 text-xs text-muted-foreground hover:text-foreground row-transition text-left"
+              >
+                {showImportHistory ? '▾' : '▸'} Histórico de importações ({importRecords.length})
+              </button>
+              {showImportHistory && (
+                <div className="pb-3 space-y-1.5">
+                  {importRecords.map((imp) => (
+                    <div key={imp.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-foreground font-medium">{imp.file_name}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-muted-foreground">
+                        <span>{imp.total_rows} lidos</span>
+                        <span className="text-success">{imp.new_rows} novos</span>
+                        <span>{imp.duplicate_rows} duplicados</span>
+                        <span>{new Date(imp.created_at).toLocaleString('pt-BR')}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
-          <Select value={filterPayment} onValueChange={setFilterPayment}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as formas de pagamento</SelectItem>
-              <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
-              <SelectItem value="only_online">Somente pagamentos online</SelectItem>
-              <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
-              {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterDelivery} onValueChange={setFilterDelivery}>
-            <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os entregadores</SelectItem>
-              {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="confirmed">Confirmados</SelectItem>
-              <SelectItem value="pending">Pendentes</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="relative">
+        )}
+
+        {/* Filters */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3 flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[180px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+            </div>
+            <Select value={filterPayment} onValueChange={setFilterPayment}>
+              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as formas de pagamento</SelectItem>
+                <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
+                <SelectItem value="only_online">Somente pagamentos online</SelectItem>
+                <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
+                {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterDelivery} onValueChange={setFilterDelivery}>
+              <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os entregadores</SelectItem>
+                {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="confirmed">Confirmados</SelectItem>
+                <SelectItem value="pending">Pendentes</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="relative">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={() => setShowColumnSettings(!showColumnSettings)}
+              >
+                <Settings2 className="h-4 w-4 mr-1" />
+                Colunas
+              </Button>
+              {showColumnSettings && (
+                <div className="absolute right-0 top-10 z-20 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2 min-w-[200px]">
+                  {([
+                    { key: 'sale_date' as const, label: 'Data' },
+                    { key: 'sale_time' as const, label: 'Hora' },
+                    { key: 'sales_channel' as const, label: 'Canal de Venda' },
+                    { key: 'partner_order_number' as const, label: 'Nº Pedido Parceiro' },
+                  ]).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => toggleColumn(key)}
+                      className="flex items-center gap-2 w-full text-left text-sm py-1 px-2 rounded hover:bg-muted/50 transition-colors"
+                    >
+                      {visibleColumns[key]
+                        ? <Eye className="h-4 w-4 text-primary" />
+                        : <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      }
+                      <span className={visibleColumns[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-auto">
+          <div className="px-6 py-4">
+            <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
+                    <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
+                    {visibleColumns.sale_date && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>}
+                    {visibleColumns.sale_time && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>}
+                    {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
+                    {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
+                    <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
+                    <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
+                  </tr>
+                </thead>
+                <tbody>
+                {filtered.map((order) => {
+                    const hasMultiple = needsBreakdown(order.payment_method);
+                    const isExpanded = expandedOrderId === order.id;
+                    const breakdownValid = breakdownValidity[order.id];
+                    const badgeType = getPaymentBadgeType(order.payment_method);
+                    const autoOnline = isAllOnline(order.payment_method);
+
+                    return (
+                      <OrderRow
+                        key={order.id}
+                        order={order}
+                        hasMultiple={hasMultiple}
+                        badgeType={badgeType}
+                        isExpanded={isExpanded}
+                        breakdownValid={breakdownValid}
+                        isCompleted={isCompleted}
+                        isAutoOnline={autoOnline}
+                        visibleColumns={visibleColumns}
+                        onRowClick={() => handleRowClick(order)}
+                        onCheckboxClick={(e) => {
+                          e.stopPropagation();
+                          if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
+                        }}
+                        onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
+                        onBreakdownSaved={() => {
+                          if (!order.is_confirmed) {
+                            toggleConfirm(order.id, false);
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </tbody>
+              </table>
+              {filtered.length === 0 && (
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  Nenhum pedido encontrado com os filtros aplicados.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border bg-card sticky bottom-0">
+          <div className="px-6 py-3 flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              {isCompleted ? (
+                <span className="flex items-center gap-2 text-success font-medium">
+                  <PartyPopper className="h-4 w-4" />
+                  Fechamento concluído
+                </span>
+              ) : pending > 0 ? (
+                <span className="flex items-center gap-2 text-warning">
+                  <AlertTriangle className="h-4 w-4" />
+                  {pending} pedido(s) pendente(s)
+                </span>
+              ) : (
+                <span className="flex items-center gap-2 text-success">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Todos os pedidos conferidos!
+                </span>
+              )}
+            </div>
             <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={() => setShowColumnSettings(!showColumnSettings)}
+              onClick={finalize}
+              disabled={pending > 0 || isCompleted || completing}
+              className="bg-success hover:bg-success/90 text-success-foreground"
             >
-              <Settings2 className="h-4 w-4 mr-1" />
-              Colunas
+              {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
             </Button>
-            {showColumnSettings && (
-              <div className="absolute right-0 top-10 z-20 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2 min-w-[200px]">
-                {([
-                  { key: 'sale_date' as const, label: 'Data' },
-                  { key: 'sale_time' as const, label: 'Hora' },
-                  { key: 'sales_channel' as const, label: 'Canal de Venda' },
-                  { key: 'partner_order_number' as const, label: 'Nº Pedido Parceiro' },
-                ]).map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => toggleColumn(key)}
-                    className="flex items-center gap-2 w-full text-left text-sm py-1 px-2 rounded hover:bg-muted/50 transition-colors"
-                  >
-                    {visibleColumns[key]
-                      ? <Eye className="h-4 w-4 text-primary" />
-                      : <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    }
-                    <span className={visibleColumns[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>
-
-      {/* Table */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="bg-card rounded-lg shadow-card overflow-hidden">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-border">
-                  <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
-                  <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                  {visibleColumns.sale_date && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>}
-                  {visibleColumns.sale_time && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>}
-                  {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
-                  {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
-                  <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                  <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
-                  <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
-                </tr>
-              </thead>
-              <tbody>
-              {filtered.map((order) => {
-                  const hasMultiple = needsBreakdown(order.payment_method);
-                  const isExpanded = expandedOrderId === order.id;
-                  const breakdownValid = breakdownValidity[order.id];
-                  const badgeType = getPaymentBadgeType(order.payment_method);
-                  const autoOnline = isAllOnline(order.payment_method);
-
-                  return (
-                    <OrderRow
-                      key={order.id}
-                      order={order}
-                      hasMultiple={hasMultiple}
-                      badgeType={badgeType}
-                      isExpanded={isExpanded}
-                      breakdownValid={breakdownValid}
-                      isCompleted={isCompleted}
-                      isAutoOnline={autoOnline}
-                      visibleColumns={visibleColumns}
-                      onRowClick={() => handleRowClick(order)}
-                      onCheckboxClick={(e) => {
-                        e.stopPropagation();
-                        if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
-                      }}
-                      onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
-                      onBreakdownSaved={() => {
-                        if (!order.is_confirmed) {
-                          toggleConfirm(order.id, false);
-                        }
-                      }}
-                    />
-                  );
-                })}
-              </tbody>
-            </table>
-            {filtered.length === 0 && (
-              <div className="text-center py-12 text-muted-foreground text-sm">
-                Nenhum pedido encontrado com os filtros aplicados.
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="border-t border-border bg-card sticky bottom-0">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
-            {isCompleted ? (
-              <span className="flex items-center gap-2 text-success font-medium">
-                <PartyPopper className="h-4 w-4" />
-                Fechamento concluído
-              </span>
-            ) : pending > 0 ? (
-              <span className="flex items-center gap-2 text-warning">
-                <AlertTriangle className="h-4 w-4" />
-                {pending} pedido(s) pendente(s)
-              </span>
-            ) : (
-              <span className="flex items-center gap-2 text-success">
-                <CheckCircle2 className="h-4 w-4" />
-                Todos os pedidos conferidos!
-              </span>
-            )}
-          </div>
-          <Button
-            onClick={finalize}
-            disabled={pending > 0 || isCompleted || completing}
-            className="bg-success hover:bg-success/90 text-success-foreground"
-          >
-            {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
-          </Button>
-        </div>
-      </div>
+      <AppSidebar />
     </div>
   );
 }
@@ -569,7 +573,7 @@ function SortableHeader({ field, label, currentField, currentDirection, onSort, 
 
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
-    <div className="bg-secondary rounded-lg p-3">
+    <div className="bg-muted rounded-xl p-3 border border-border">
       <div className="flex items-center gap-1.5 mb-1">
         <span className={color}>{icon}</span>
         <p className="text-xs text-muted-foreground">{label}</p>
