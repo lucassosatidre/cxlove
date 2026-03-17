@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ClipboardCheck, LayoutDashboard, Upload, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, Upload, LogOut, X } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import propositoLogo from '@/assets/proposito-logo.png';
 
 interface AppSidebarProps {
   open?: boolean;
@@ -37,25 +38,19 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      {/* Header: Dev + Client hierarchy */}
-      <div className="px-5 pt-5 pb-2 flex items-start justify-between">
-        <div>
-          <p className="text-[9px] uppercase tracking-widest text-sidebar-foreground/50 font-medium">Propósito Soluções</p>
-          <div className="flex items-center gap-2.5 mt-2">
-            <div className="h-9 w-9 rounded-xl bg-sidebar-primary flex items-center justify-center shrink-0">
-              <ClipboardCheck className="h-5 w-5 text-sidebar-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-sidebar-accent-foreground leading-tight">Pizzaria Estrela</h1>
-              <p className="text-[10px] text-sidebar-foreground leading-tight">da Ilha</p>
-            </div>
-          </div>
-        </div>
+      {/* Propósito logo + close */}
+      <div className="px-4 pt-4 pb-1 flex items-center justify-between">
+        <img src={propositoLogo} alt="Propósito Soluções" className="h-8 object-contain" />
         {isMobile && (
-          <button onClick={onClose} className="text-sidebar-foreground mt-1">
+          <button onClick={onClose} className="text-sidebar-foreground">
             <X className="h-5 w-5" />
           </button>
         )}
+      </div>
+
+      {/* Client name */}
+      <div className="px-4 pb-3 border-b border-white/5">
+        <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight">Pizzaria Estrela da Ilha</p>
       </div>
 
       {/* User badge */}
@@ -96,9 +91,6 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
           <LogOut className="h-4 w-4" />
           Sair
         </button>
-        <p className="text-[9px] text-center text-sidebar-foreground/30 pt-1">
-          Propósito Soluções
-        </p>
       </div>
     </aside>
   );
