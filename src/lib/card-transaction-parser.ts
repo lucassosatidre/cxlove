@@ -30,10 +30,23 @@ const EXCLUDED_SERIALS = new Set([
 function parseBRCurrency(value: unknown): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'string') {
-    const cleaned = value
-      .replace(/R\$\s?/, '')
-      .replace(/\./g, '')
-      .replace(',', '.');
+    let cleaned = value.replace(/R\$\s?/g, '').trim();
+    // Detect format: if has both . and , → determine which is decimal
+    const hasDot = cleaned.includes('.');
+    const hasComma = cleaned.includes(',');
+    if (hasDot && hasComma) {
+      // Whichever comes last is the decimal separator
+      if (cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+        // 1.234,56 → BR format
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+      } else {
+        // 1,234.56 → US format
+        cleaned = cleaned.replace(/,/g, '');
+      }
+    } else if (hasComma) {
+      cleaned = cleaned.replace(',', '.');
+    }
+    // If only dots, leave as-is (could be 111.59 decimal)
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
   }
