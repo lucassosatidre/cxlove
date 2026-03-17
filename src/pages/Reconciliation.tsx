@@ -560,6 +560,13 @@ function StatCard({ label, value, icon, color }: { label: string; value: number;
   );
 }
 
+type ColumnVisibility = {
+  sale_date: boolean;
+  sale_time: boolean;
+  sales_channel: boolean;
+  partner_order_number: boolean;
+};
+
 interface OrderRowProps {
   order: Order;
   hasMultiple: boolean;
@@ -568,6 +575,7 @@ interface OrderRowProps {
   breakdownValid: boolean;
   isCompleted: boolean;
   isAutoOnline: boolean;
+  visibleColumns: ColumnVisibility;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
