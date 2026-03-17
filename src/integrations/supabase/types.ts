@@ -14,41 +14,81 @@ export type Database = {
   }
   public: {
     Tables: {
+      daily_closings: {
+        Row: {
+          closing_date: string
+          created_at: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          closing_date: string
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          closing_date?: string
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       imported_orders: {
         Row: {
           confirmed_at: string | null
           confirmed_by: string | null
+          daily_closing_id: string | null
           delivery_person: string | null
           id: string
           import_id: string
           is_confirmed: boolean
           order_number: string
           payment_method: string
+          sale_date: string | null
           total_amount: number
         }
         Insert: {
           confirmed_at?: string | null
           confirmed_by?: string | null
+          daily_closing_id?: string | null
           delivery_person?: string | null
           id?: string
           import_id: string
           is_confirmed?: boolean
           order_number: string
           payment_method: string
+          sale_date?: string | null
           total_amount?: number
         }
         Update: {
           confirmed_at?: string | null
           confirmed_by?: string | null
+          daily_closing_id?: string | null
           delivery_person?: string | null
           id?: string
           import_id?: string
           is_confirmed?: boolean
           order_number?: string
           payment_method?: string
+          sale_date?: string | null
           total_amount?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "imported_orders_daily_closing_id_fkey"
+            columns: ["daily_closing_id"]
+            isOneToOne: false
+            referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "imported_orders_import_id_fkey"
             columns: ["import_id"]
@@ -61,29 +101,46 @@ export type Database = {
       imports: {
         Row: {
           created_at: string
+          daily_closing_id: string | null
+          duplicate_rows: number
           file_name: string
           id: string
+          new_rows: number
           status: string
           total_rows: number
           user_id: string
         }
         Insert: {
           created_at?: string
+          daily_closing_id?: string | null
+          duplicate_rows?: number
           file_name: string
           id?: string
+          new_rows?: number
           status?: string
           total_rows?: number
           user_id: string
         }
         Update: {
           created_at?: string
+          daily_closing_id?: string | null
+          duplicate_rows?: number
           file_name?: string
           id?: string
+          new_rows?: number
           status?: string
           total_rows?: number
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "imports_daily_closing_id_fkey"
+            columns: ["daily_closing_id"]
+            isOneToOne: false
+            referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       order_payment_breakdowns: {
         Row: {
