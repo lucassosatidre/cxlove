@@ -1,11 +1,18 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { ClipboardCheck, LayoutDashboard, Upload, LogOut } from 'lucide-react';
+import { ClipboardCheck, LayoutDashboard, Upload, LogOut, X } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
-export default function AppSidebar() {
+interface AppSidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -17,10 +24,19 @@ export default function AppSidebar() {
     return location.pathname.startsWith(path);
   };
 
+  const handleNav = (path: string) => {
+    navigate(path);
+    onClose?.();
+  };
+
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-56 bg-sidebar flex flex-col z-30">
-      {/* Logo */}
-      <div className="px-5 py-6">
+    <aside
+      className={`fixed left-0 top-0 bottom-0 w-56 bg-sidebar flex flex-col z-30 transition-transform duration-200 ${
+        open ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      {/* Logo + close on mobile */}
+      <div className="px-5 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-sidebar-primary flex items-center justify-center">
             <ClipboardCheck className="h-5 w-5 text-sidebar-primary-foreground" />
@@ -30,6 +46,11 @@ export default function AppSidebar() {
             <p className="text-[10px] text-sidebar-foreground leading-tight">Saipos · Fechamento</p>
           </div>
         </div>
+        {isMobile && (
+          <button onClick={onClose} className="text-sidebar-foreground">
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* User badge */}
@@ -47,7 +68,7 @@ export default function AppSidebar() {
           return (
             <button
               key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNav(item.path)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
                 active
                   ? 'bg-sidebar-primary text-sidebar-primary-foreground'
