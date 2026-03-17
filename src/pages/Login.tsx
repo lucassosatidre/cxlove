@@ -15,7 +15,7 @@ export default function Login() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[hsl(20,10%,8%)]">
+      <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
       </div>
     );
@@ -37,23 +37,27 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[hsl(20,10%,8%)] px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
-        {/* Propósito Soluções logo */}
-        <div className="flex justify-center mb-6">
-          <img src={propositoLogo} alt="Propósito Soluções" className="h-16 object-contain" />
-        </div>
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-8">
+          {/* Propósito logo */}
+          <div className="flex justify-center mb-5">
+            <div className="h-20 w-20 rounded-2xl bg-muted/50 border border-border flex items-center justify-center p-2">
+              <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
+            </div>
+          </div>
 
-        {/* Client name */}
-        <div className="flex flex-col items-center mb-8">
-          <h1 className="text-2xl font-bold text-white">Pizzaria Estrela da Ilha</h1>
-          <p className="text-sm text-white/50 mt-1">Fechamento de caixa rápido e confiável</p>
-        </div>
+          {/* App name */}
+          <h1 className="text-2xl font-bold text-foreground text-center">CX Love</h1>
 
-        <div className="bg-[hsl(20,10%,12%)] rounded-2xl border border-white/10 p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-white/70 text-xs font-semibold uppercase tracking-wider">Usuário</Label>
+          {/* Subtitle + dev credit */}
+          <p className="text-sm text-primary font-medium text-center mt-1">Fechamento de caixa</p>
+          <p className="text-xs text-muted-foreground text-center mt-0.5">Propósito Soluções</p>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4 mt-6">
+            <div className="space-y-1.5">
+              <Label htmlFor="email" className="text-foreground text-sm">Email</Label>
               <Input
                 id="email"
                 type="email"
@@ -61,11 +65,11 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
                 required
-                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary focus:ring-primary"
+                className="bg-background"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-white/70 text-xs font-semibold uppercase tracking-wider">Senha</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-foreground text-sm">Senha</Label>
               <Input
                 id="password"
                 type="password"
@@ -74,20 +78,16 @@ export default function Login() {
                 placeholder="••••••••"
                 required
                 minLength={6}
-                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 focus:border-primary focus:ring-primary"
+                className="bg-background"
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold" disabled={submitting}>
+            <Button type="submit" className="w-full font-semibold" disabled={submitting}>
               {submitting ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
         </div>
       </div>
-
-      <p className="mt-8 text-[10px] text-white/20">
-        Desenvolvido por Propósito Soluções
-      </p>
     </div>
   );
 }
