@@ -14,6 +14,75 @@ export type Database = {
   }
   public: {
     Tables: {
+      card_transactions: {
+        Row: {
+          brand: string | null
+          created_at: string
+          daily_closing_id: string
+          gross_amount: number
+          id: string
+          machine_serial: string | null
+          match_confidence: string | null
+          match_type: string | null
+          matched_order_id: string | null
+          net_amount: number
+          payment_method: string
+          sale_date: string | null
+          sale_time: string | null
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          daily_closing_id: string
+          gross_amount?: number
+          id?: string
+          machine_serial?: string | null
+          match_confidence?: string | null
+          match_type?: string | null
+          matched_order_id?: string | null
+          net_amount?: number
+          payment_method: string
+          sale_date?: string | null
+          sale_time?: string | null
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          daily_closing_id?: string
+          gross_amount?: number
+          id?: string
+          machine_serial?: string | null
+          match_confidence?: string | null
+          match_type?: string | null
+          matched_order_id?: string | null
+          net_amount?: number
+          payment_method?: string
+          sale_date?: string | null
+          sale_time?: string | null
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_transactions_daily_closing_id_fkey"
+            columns: ["daily_closing_id"]
+            isOneToOne: false
+            referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_transactions_matched_order_id_fkey"
+            columns: ["matched_order_id"]
+            isOneToOne: false
+            referencedRelation: "imported_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_closings: {
         Row: {
           closing_date: string
