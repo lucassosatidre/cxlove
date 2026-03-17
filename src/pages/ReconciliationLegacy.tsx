@@ -159,8 +159,10 @@ export default function ReconciliationLegacy() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <AppSidebar />
+      <div className="ml-56 flex flex-col flex-1">
       <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => navigate('/')}><ArrowLeft className="h-4 w-4" /></Button>
             <div>
@@ -176,11 +178,11 @@ export default function ReconciliationLegacy() {
       </header>
 
       <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard label="Total" value={orders.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
           <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
           <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-          <div className="bg-secondary rounded-lg p-3">
+          <div className="bg-muted rounded-xl p-3 border border-border">
             <p className="text-xs text-muted-foreground mb-1">Progresso</p>
             <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
             <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden"><div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} /></div>
@@ -189,7 +191,7 @@ export default function ReconciliationLegacy() {
       </div>
 
       <div className="border-b border-border bg-card">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-2">
+        <div className="px-6 py-3 flex flex-wrap gap-2">
           <div className="relative flex-1 min-w-[180px]"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" /><Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" /></div>
           <Select value={filterPayment} onValueChange={setFilterPayment}><SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger><SelectContent><SelectItem value="all">Todos pagamentos</SelectItem>{paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select>
           <Select value={filterDelivery} onValueChange={setFilterDelivery}><SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger><SelectContent><SelectItem value="all">Todos entregadores</SelectItem>{deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent></Select>
@@ -198,8 +200,8 @@ export default function ReconciliationLegacy() {
       </div>
 
       <div className="flex-1 overflow-auto">
-        <div className="max-w-7xl mx-auto px-4 py-4">
-          <div className="bg-card rounded-lg shadow-card overflow-hidden">
+        <div className="px-6 py-4">
+          <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
@@ -232,7 +234,7 @@ export default function ReconciliationLegacy() {
       </div>
 
       <div className="border-t border-border bg-card sticky bottom-0">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             {isCompleted ? <span className="flex items-center gap-2 text-success font-medium"><PartyPopper className="h-4 w-4" />Fechamento concluído</span>
               : pending > 0 ? <span className="flex items-center gap-2 text-warning"><AlertTriangle className="h-4 w-4" />{pending} pendente(s)</span>
@@ -242,6 +244,7 @@ export default function ReconciliationLegacy() {
             {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
