@@ -37,6 +37,8 @@ function isOfflineCardPayment(method: string): boolean {
   // Exclude online payments and cash
   if (lower.includes('online') || lower.includes('(pago)') || lower.includes('anotaai')) return false;
   if (lower === 'dinheiro') return false;
+  // "Voucher Parceiro Desconto" is an iFood discount, not a physical payment
+  if (lower.includes('voucher parceiro desconto')) return false;
   return OFFLINE_CARD_METHODS.some(m => lower.includes(m));
 }
 
