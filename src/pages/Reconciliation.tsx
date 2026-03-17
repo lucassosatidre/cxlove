@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, type PaymentBadgeType } from '@/lib/payment-utils';
@@ -27,12 +27,27 @@ interface Order {
   is_confirmed: boolean;
 }
 
+interface ClosingData {
+  closing_date: string;
+  status: string;
+}
+
+interface ImportRecord {
+  id: string;
+  file_name: string;
+  created_at: string;
+  total_rows: number;
+  new_rows: number;
+  duplicate_rows: number;
+}
+
 export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [importData, setImportData] = useState<{ file_name: string; status: string } | null>(null);
+  const [closingData, setClosingData] = useState<ClosingData | null>(null);
+  const [importRecords, setImportRecords] = useState<ImportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterPayment, setFilterPayment] = useState('all');
@@ -43,6 +58,7 @@ export default function Reconciliation() {
   const [breakdownValidity, setBreakdownValidity] = useState<Record<string, boolean>>({});
   const [sortField, setSortField] = useState<SortField>('order_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showImportHistory, setShowImportHistory] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -50,12 +66,30 @@ export default function Reconciliation() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: impData }, { data: ordData }] = await Promise.all([
-      supabase.from('imports').select('file_name, status').eq('id', id!).single(),
-      supabase.from('imported_orders').select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed').eq('import_id', id!),
+    // Load closing data
+    const { data: closing } = await supabase
+      .from('daily_closings')
+      .select('closing_date, status')
+      .eq('id', id!)
+      .single();
+
+    setClosingData(closing);
+
+    // Load orders and imports for this closing
+    const [{ data: ordData }, { data: impData }] = await Promise.all([
+      supabase
+        .from('imported_orders')
+        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed')
+        .eq('daily_closing_id', id!),
+      supabase
+        .from('imports')
+        .select('id, file_name, created_at, total_rows, new_rows, duplicate_rows')
+        .eq('daily_closing_id', id!)
+        .order('created_at', { ascending: false }),
     ]);
-    setImportData(impData);
+
     setOrders(ordData || []);
+    setImportRecords(impData || []);
     setLoading(false);
   };
 
@@ -65,7 +99,6 @@ export default function Reconciliation() {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
-    // If trying to confirm and needs breakdown, check validity
     if (!current && needsBreakdown(order.payment_method)) {
       if (!breakdownValidity[orderId]) {
         toast.error('Preencha o detalhamento das formas de pagamento antes de confirmar.');
@@ -96,12 +129,12 @@ export default function Reconciliation() {
     if (needsBreakdown(order.payment_method)) {
       setExpandedOrderId(prev => prev === order.id ? null : order.id);
     } else {
-      const isCompleted = importData?.status === 'completed';
+      const isCompleted = closingData?.status === 'completed';
       if (!isCompleted) {
         toggleConfirm(order.id, order.is_confirmed);
       }
     }
-  }, [toggleConfirm, importData]);
+  }, [toggleConfirm, closingData]);
 
   const handleBreakdownValid = useCallback((orderId: string, valid: boolean) => {
     setBreakdownValidity(prev => ({ ...prev, [orderId]: valid }));
@@ -121,7 +154,6 @@ export default function Reconciliation() {
   const bulkUpdate = useCallback(async (confirm: boolean) => {
     if (!user || !id) return;
 
-    // If confirming, check that all multi-payment orders have valid breakdowns
     if (confirm) {
       const multiPaymentOrders = orders.filter(o => needsBreakdown(o.payment_method));
       const invalidOrders = multiPaymentOrders.filter(o => !breakdownValidity[o.id]);
@@ -131,6 +163,8 @@ export default function Reconciliation() {
       }
     }
 
+    // Update all orders for this daily closing
+    const orderIds = orders.map(o => o.id);
     const { error } = await supabase
       .from('imported_orders')
       .update({
@@ -138,7 +172,7 @@ export default function Reconciliation() {
         confirmed_at: confirm ? new Date().toISOString() : null,
         confirmed_by: confirm ? user.id : null,
       })
-      .eq('import_id', id);
+      .eq('daily_closing_id', id);
 
     if (error) {
       toast.error('Erro ao atualizar pedidos.');
@@ -151,7 +185,6 @@ export default function Reconciliation() {
   const finalize = useCallback(async () => {
     if (!id) return;
 
-    // Check all multi-payment orders have valid breakdowns
     const multiPaymentOrders = orders.filter(o => needsBreakdown(o.payment_method));
     const invalidOrders = multiPaymentOrders.filter(o => !breakdownValidity[o.id]);
     if (invalidOrders.length > 0) {
@@ -160,11 +193,11 @@ export default function Reconciliation() {
     }
 
     setCompleting(true);
-    const { error } = await supabase.from('imports').update({ status: 'completed' }).eq('id', id);
+    const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
     if (error) {
       toast.error('Erro ao finalizar fechamento.');
     } else {
-      setImportData(prev => prev ? { ...prev, status: 'completed' } : prev);
+      setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
       toast.success('Fechamento concluído com sucesso!');
     }
     setCompleting(false);
@@ -199,7 +232,6 @@ export default function Reconciliation() {
         if (cmp !== 0) return cmp * dir;
         return extractOrderNumber(a.order_number) - extractOrderNumber(b.order_number);
       }
-      // is_confirmed
       const aVal = a.is_confirmed ? 1 : 0;
       const bVal = b.is_confirmed ? 1 : 0;
       if (aVal !== bVal) return (aVal - bVal) * dir;
@@ -209,6 +241,11 @@ export default function Reconciliation() {
     return result;
   }, [orders, search, filterPayment, filterDelivery, filterStatus, sortField, sortDirection]);
 
+  const formatDate = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -217,7 +254,7 @@ export default function Reconciliation() {
     );
   }
 
-  const isCompleted = importData?.status === 'completed';
+  const isCompleted = closingData?.status === 'completed';
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -229,11 +266,17 @@ export default function Reconciliation() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-base font-semibold text-foreground">{importData?.file_name}</h1>
-              <p className="text-xs text-muted-foreground">{orders.length} pedidos</p>
+              <h1 className="text-base font-semibold text-foreground">
+                Fechamento {closingData ? formatDate(closingData.closing_date) : ''}
+              </h1>
+              <p className="text-xs text-muted-foreground">{orders.length} pedidos • {importRecords.length} importação(ões)</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
+              <Plus className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Importar mais</span>
+            </Button>
             <Button variant="outline" size="sm" onClick={() => bulkUpdate(true)} disabled={isCompleted}>
               <CheckCheck className="h-4 w-4 mr-1" />
               <span className="hidden sm:inline">Marcar todos</span>
@@ -261,6 +304,38 @@ export default function Reconciliation() {
           </div>
         </div>
       </div>
+
+      {/* Import History Toggle */}
+      {importRecords.length > 0 && (
+        <div className="border-b border-border bg-card">
+          <div className="max-w-7xl mx-auto px-4">
+            <button
+              onClick={() => setShowImportHistory(!showImportHistory)}
+              className="w-full py-2 text-xs text-muted-foreground hover:text-foreground row-transition text-left"
+            >
+              {showImportHistory ? '▾' : '▸'} Histórico de importações ({importRecords.length})
+            </button>
+            {showImportHistory && (
+              <div className="pb-3 space-y-1.5">
+                {importRecords.map((imp) => (
+                  <div key={imp.id} className="flex items-center justify-between text-xs bg-secondary/50 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-foreground font-medium">{imp.file_name}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      <span>{imp.total_rows} lidos</span>
+                      <span className="text-success">{imp.new_rows} novos</span>
+                      <span>{imp.duplicate_rows} duplicados</span>
+                      <span>{new Date(imp.created_at).toLocaleString('pt-BR')}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="border-b border-border bg-card">
@@ -301,28 +376,9 @@ export default function Reconciliation() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-border">
-                  <SortableHeader
-                    field="is_confirmed"
-                    label="✓"
-                    currentField={sortField}
-                    currentDirection={sortDirection}
-                    onSort={toggleSort}
-                    className="w-12"
-                  />
-                  <SortableHeader
-                    field="order_number"
-                    label="Pedido"
-                    currentField={sortField}
-                    currentDirection={sortDirection}
-                    onSort={toggleSort}
-                  />
-                  <SortableHeader
-                    field="payment_method"
-                    label="Pagamento"
-                    currentField={sortField}
-                    currentDirection={sortDirection}
-                    onSort={toggleSort}
-                  />
+                  <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
+                  <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
+                  <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
                   <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                   <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                 </tr>
@@ -433,7 +489,6 @@ function SortableHeader({ field, label, currentField, currentDirection, onSort, 
   );
 }
 
-
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
     <div className="bg-secondary rounded-lg p-3">
@@ -475,7 +530,6 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
       </span>
     );
   }
-  // rateio
   return (
     <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
       breakdownValid
