@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { CheckCircle2, AlertTriangle, Wifi, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import {
