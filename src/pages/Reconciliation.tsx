@@ -457,6 +457,7 @@ export default function Reconciliation() {
                       breakdownValid={breakdownValid}
                       isCompleted={isCompleted}
                       isAutoOnline={autoOnline}
+                      visibleColumns={visibleColumns}
                       onRowClick={() => handleRowClick(order)}
                       onCheckboxClick={(e) => {
                         e.stopPropagation();
