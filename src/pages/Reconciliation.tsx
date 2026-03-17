@@ -375,9 +375,9 @@ export default function Reconciliation() {
             <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
           </div>
           <Select value={filterPayment} onValueChange={setFilterPayment}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
+            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos pagamentos</SelectItem>
+              <SelectItem value="all">Todas as formas de pagamento</SelectItem>
               <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
               <SelectItem value="only_online">Somente pagamentos online</SelectItem>
               <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
@@ -387,14 +387,14 @@ export default function Reconciliation() {
           <Select value={filterDelivery} onValueChange={setFilterDelivery}>
             <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos entregadores</SelectItem>
+              <SelectItem value="all">Todos os entregadores</SelectItem>
               {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={filterStatus} onValueChange={setFilterStatus}>
             <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="all">Todos os status</SelectItem>
               <SelectItem value="confirmed">Confirmados</SelectItem>
               <SelectItem value="pending">Pendentes</SelectItem>
             </SelectContent>
