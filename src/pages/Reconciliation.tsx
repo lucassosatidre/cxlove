@@ -388,11 +388,12 @@ export default function Reconciliation() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((order) => {
+              {filtered.map((order) => {
                   const hasMultiple = needsBreakdown(order.payment_method);
                   const isExpanded = expandedOrderId === order.id;
                   const breakdownValid = breakdownValidity[order.id];
                   const badgeType = getPaymentBadgeType(order.payment_method);
+                  const autoOnline = isAllOnline(order.payment_method);
 
                   return (
                     <OrderRow
@@ -403,6 +404,7 @@ export default function Reconciliation() {
                       isExpanded={isExpanded}
                       breakdownValid={breakdownValid}
                       isCompleted={isCompleted}
+                      isAutoOnline={autoOnline}
                       onRowClick={() => handleRowClick(order)}
                       onCheckboxClick={(e) => {
                         e.stopPropagation();

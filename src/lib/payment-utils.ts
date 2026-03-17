@@ -2,7 +2,7 @@
  * Utility functions for payment method classification and breakdown logic.
  */
 
-const ONLINE_KEYWORDS = ['online', '(pago)', 'voucher parceiro'];
+const ONLINE_KEYWORDS = ['online', 'voucher parceiro', 'anotaai'];
 
 export function isOnlinePayment(method: string): boolean {
   const lower = method.toLowerCase().trim();
