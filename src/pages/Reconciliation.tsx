@@ -377,7 +377,7 @@ export default function Reconciliation() {
           <Select value={filterPayment} onValueChange={setFilterPayment}>
             <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos pagamentos</SelectItem>
+              <SelectItem value="all">Todas as formas de pagamento</SelectItem>
               <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
               <SelectItem value="only_online">Somente pagamentos online</SelectItem>
               <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
