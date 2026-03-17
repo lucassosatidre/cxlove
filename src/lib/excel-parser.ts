@@ -5,6 +5,7 @@ export interface ParsedOrder {
   payment_method: string;
   total_amount: number;
   delivery_person: string;
+  sale_date: string; // YYYY-MM-DD
 }
 
 const HEADER_NAMES: Record<string, string> = {
@@ -14,13 +15,18 @@ const HEADER_NAMES: Record<string, string> = {
   'Total': 'total_amount',
 };
 
-// Fallback column indices (0-based): A=0, L=11, R=17, Y=24
+// Column I = index 8 for sale date
+const SALE_DATE_HEADER_NAMES = ['Data', 'Data Venda', 'Data da Venda'];
+
+// Fallback column indices (0-based): A=0, I=8, L=11, R=17, Y=24
 const FALLBACK_INDICES: Record<number, string> = {
   0: 'order_number',
   11: 'payment_method',
   17: 'delivery_person',
   24: 'total_amount',
 };
+
+const SALE_DATE_FALLBACK_INDEX = 8; // Column I
 
 function parseCurrency(value: unknown): number {
   if (typeof value === 'number') return value;
@@ -33,6 +39,37 @@ function parseCurrency(value: unknown): number {
     return isNaN(num) ? 0 : num;
   }
   return 0;
+}
+
+function parseDate(value: unknown): string {
+  if (!value) return '';
+  
+  // Excel serial date number
+  if (typeof value === 'number') {
+    const date = XLSX.SSF.parse_date_code(value);
+    if (date) {
+      const y = date.y;
+      const m = String(date.m).padStart(2, '0');
+      const d = String(date.d).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+  
+  if (typeof value === 'string') {
+    const str = value.trim();
+    // Try DD/MM/YYYY
+    const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (brMatch) {
+      return `${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`;
+    }
+    // Try YYYY-MM-DD
+    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    }
+  }
+  
+  return '';
 }
 
 export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
@@ -52,12 +89,16 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
 
         const headerRow = jsonData[0] as string[];
         const columnMap: Record<string, number> = {};
+        let saleDateIndex: number | undefined;
 
         // Try to find columns by header name
         headerRow.forEach((cell, index) => {
           const cellStr = String(cell || '').trim();
           if (HEADER_NAMES[cellStr]) {
             columnMap[HEADER_NAMES[cellStr]] = index;
+          }
+          if (SALE_DATE_HEADER_NAMES.some(h => cellStr.toLowerCase() === h.toLowerCase())) {
+            saleDateIndex = index;
           }
         });
 
@@ -73,6 +114,11 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
               }
             }
           }
+        }
+
+        // Fallback for sale date column
+        if (saleDateIndex === undefined && SALE_DATE_FALLBACK_INDEX < headerRow.length) {
+          saleDateIndex = SALE_DATE_FALLBACK_INDEX;
         }
 
         // Validate all required columns exist
@@ -94,11 +140,14 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
           const orderNumber = String(row[columnMap.order_number] ?? '').trim();
           if (!orderNumber) continue;
 
+          const saleDate = saleDateIndex !== undefined ? parseDate(row[saleDateIndex]) : '';
+
           orders.push({
             order_number: orderNumber,
             payment_method: String(row[columnMap.payment_method] ?? '').trim(),
             total_amount: parseCurrency(row[columnMap.total_amount]),
             delivery_person: String(row[columnMap.delivery_person] ?? '').trim(),
+            sale_date: saleDate,
           });
         }
 
