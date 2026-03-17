@@ -610,7 +610,16 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid }: OrderRowProps) {
+  const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
+  const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
+
+  const formatSaleDate = (d: string | null) => {
+    if (!d) return '—';
+    const [y, m, day] = d.split('-');
+    return `${day}/${m}/${y}`;
+  };
+
   return (
     <>
       <tr
@@ -638,7 +647,19 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
           #{order.order_number}
         </td>
-        <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+        {visibleColumns.sale_date && (
+          <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
+        )}
+        {visibleColumns.sale_time && (
+          <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
+        )}
+        {visibleColumns.sales_channel && (
+          <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
+        )}
+        {visibleColumns.partner_order_number && (
+          <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
+        )}
+        <td className={`p-3 text-sm ${cellClass}`}>
           <div className="flex items-center gap-2">
             <span className="truncate">{order.payment_method}</span>
             <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
@@ -649,16 +670,16 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             )}
           </div>
         </td>
-        <td className={`p-3 text-right font-mono-tabular text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+        <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
-        <td className={`p-3 text-sm ${order.is_confirmed ? 'text-muted-foreground' : 'text-foreground'}`}>
+        <td className={`p-3 text-sm ${cellClass}`}>
           {order.delivery_person || '—'}
         </td>
       </tr>
       {hasMultiple && isExpanded && (
         <tr>
-          <td colSpan={5} className="p-0">
+          <td colSpan={colCount} className="p-0">
             <PaymentBreakdown
               orderId={order.id}
               paymentMethod={order.payment_method}
