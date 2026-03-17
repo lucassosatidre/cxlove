@@ -271,12 +271,14 @@ export default function Reconciliation() {
                   const hasMultiple = needsBreakdown(order.payment_method);
                   const isExpanded = expandedOrderId === order.id;
                   const breakdownValid = breakdownValidity[order.id];
+                  const badgeType = getPaymentBadgeType(order.payment_method);
 
                   return (
                     <OrderRow
                       key={order.id}
                       order={order}
                       hasMultiple={hasMultiple}
+                      badgeType={badgeType}
                       isExpanded={isExpanded}
                       breakdownValid={breakdownValid}
                       isCompleted={isCompleted}
