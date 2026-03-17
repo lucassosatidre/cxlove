@@ -74,23 +74,49 @@ export default function Import() {
         isNewClosing = true;
       }
 
-      // Get existing orders in this closing for deduplication
-      const { data: existingOrders } = await supabase
+      const buildOrderKey = (saleDate: string, totalAmount: number) => `${saleDate}|${totalAmount}`;
+
+      // Get existing orders in this closing for deduplication and field backfill
+      const { data: existingOrders, error: existingOrdersError } = await supabase
         .from('imported_orders')
-        .select('sale_date, total_amount')
+        .select('id, sale_date, total_amount, delivery_person')
         .eq('daily_closing_id', dailyClosingId);
 
-      const existingKeys = new Set(
-        (existingOrders || []).map(o => `${o.sale_date}|${o.total_amount}`)
-      );
+      if (existingOrdersError) throw existingOrdersError;
+
+      const existingOrdersByKey = new Map<string, { id: string; delivery_person: string | null }>();
+
+      (existingOrders || []).forEach((order) => {
+        const key = buildOrderKey(order.sale_date ?? '', order.total_amount);
+        if (!existingOrdersByKey.has(key)) {
+          existingOrdersByKey.set(key, {
+            id: order.id,
+            delivery_person: order.delivery_person,
+          });
+        }
+      });
 
       // Filter only new orders
-      const newOrders = ordersForDate.filter(o => {
-        const key = `${o.sale_date}|${o.total_amount}`;
-        return !existingKeys.has(key);
+      const newOrders = ordersForDate.filter((order) => {
+        const key = buildOrderKey(order.sale_date, order.total_amount);
+        return !existingOrdersByKey.has(key);
       });
 
       const duplicateCount = ordersForDate.length - newOrders.length;
+
+      // Complement missing delivery person on existing duplicate orders
+      const deliveryUpdates = new Map<string, string>();
+      ordersForDate.forEach((order) => {
+        const existingOrder = existingOrdersByKey.get(buildOrderKey(order.sale_date, order.total_amount));
+        if (!existingOrder) return;
+
+        const existingDelivery = existingOrder.delivery_person?.trim() ?? '';
+        const incomingDelivery = order.delivery_person.trim();
+
+        if (!existingDelivery && incomingDelivery) {
+          deliveryUpdates.set(existingOrder.id, incomingDelivery);
+        }
+      });
 
       // Create import record
       const { data: importData, error: importError } = await supabase
@@ -126,6 +152,20 @@ export default function Import() {
           const { error: ordersError } = await supabase.from('imported_orders').insert(batch);
           if (ordersError) throw ordersError;
         }
+      }
+
+      if (deliveryUpdates.size > 0) {
+        const deliveryUpdateResults = await Promise.all(
+          Array.from(deliveryUpdates.entries()).map(([id, deliveryPerson]) =>
+            supabase
+              .from('imported_orders')
+              .update({ delivery_person: deliveryPerson })
+              .eq('id', id)
+          )
+        );
+
+        const deliveryUpdateError = deliveryUpdateResults.find((result) => result.error)?.error;
+        if (deliveryUpdateError) throw deliveryUpdateError;
       }
 
       // Get total accumulated
