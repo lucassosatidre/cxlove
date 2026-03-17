@@ -29,7 +29,7 @@ interface Props {
   onSaved?: () => void;
 }
 
-export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, isCompleted, onBreakdownValid }: Props) {
+export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, isCompleted, onBreakdownValid, onSaved }: Props) {
   const [rows, setRows] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
