@@ -71,45 +71,62 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
 
+        console.log('[CardParser] Sheet names:', workbook.SheetNames);
+
         // Find the "Transações" sheet (Page 2) - usually the second sheet
         let sheet: XLSX.WorkSheet | null = null;
+        let sheetName = '';
         for (const name of workbook.SheetNames) {
-          if (name.toLowerCase().includes('transaç') || name.toLowerCase().includes('transac')) {
+          const norm = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          if (norm.includes('transac')) {
             sheet = workbook.Sheets[name];
+            sheetName = name;
             break;
           }
         }
         // Fallback: use second sheet if available, else first
         if (!sheet) {
-          sheet = workbook.Sheets[workbook.SheetNames[1]] || workbook.Sheets[workbook.SheetNames[0]];
+          sheetName = workbook.SheetNames[1] || workbook.SheetNames[0];
+          sheet = workbook.Sheets[sheetName];
         }
+
+        console.log('[CardParser] Using sheet:', sheetName);
 
         const jsonData = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
 
-        // Find the header row containing "Data da venda"
+        console.log('[CardParser] Total rows:', jsonData.length);
+        if (jsonData.length > 0) console.log('[CardParser] First row:', JSON.stringify(jsonData[0]));
+        if (jsonData.length > 1) console.log('[CardParser] Second row:', JSON.stringify(jsonData[1]));
+
+        // Normalize helper to strip accents
+        const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+        // Find the header row containing "Data da venda" - search up to 20 rows
         let headerRowIndex = -1;
         let colMap: Record<string, number> = {};
 
-        for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+        for (let i = 0; i < Math.min(jsonData.length, 20); i++) {
           const row = jsonData[i] as string[];
           if (!row) continue;
-          const found = row.findIndex(cell => String(cell || '').toLowerCase().includes('data da venda'));
+          const found = row.findIndex(cell => norm(String(cell || '')).includes('data da venda'));
           if (found >= 0) {
             headerRowIndex = i;
             row.forEach((cell, idx) => {
-              const name = String(cell || '').trim().toLowerCase();
+              const name = norm(String(cell || ''));
               if (name.includes('data da venda')) colMap['sale_date'] = idx;
               if (name.includes('hora da venda')) colMap['sale_time'] = idx;
-              if (name.includes('metodo') || name.includes('método')) colMap['payment_method'] = idx;
+              if (name.includes('metodo')) colMap['payment_method'] = idx;
               if (name.includes('bandeira')) colMap['brand'] = idx;
               if (name.includes('valor bruto')) colMap['gross_amount'] = idx;
-              if (name.includes('valor liquido') || name.includes('valor líquido')) colMap['net_amount'] = idx;
+              if (name.includes('valor liquido')) colMap['net_amount'] = idx;
               if (name.includes('serial')) colMap['machine_serial'] = idx;
-              if (name.includes('id da transacao') || name.includes('id da transação')) colMap['transaction_id'] = idx;
+              if (name.includes('id da transacao')) colMap['transaction_id'] = idx;
             });
             break;
           }
         }
+
+        console.log('[CardParser] Header row index:', headerRowIndex, 'colMap:', JSON.stringify(colMap));
 
         // Fallback to positional if header not found
         if (headerRowIndex === -1) {
@@ -124,11 +141,14 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
             machine_serial: 14,
             transaction_id: 13,
           };
+          console.log('[CardParser] Using fallback positional colMap');
         }
 
         const transactions: ParsedCardTransaction[] = [];
         let excludedCount = 0;
         let totalCount = 0;
+        let skippedNoSerial = 0;
+        let skippedZeroAmount = 0;
 
         for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
           const row = jsonData[i] as unknown[];
@@ -137,7 +157,8 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
           const serial = String(row[colMap.machine_serial] ?? '').trim();
           const grossAmount = parseBRCurrency(row[colMap.gross_amount]);
           
-          if (!serial || grossAmount === 0) continue;
+          if (!serial) { skippedNoSerial++; continue; }
+          if (grossAmount === 0) { skippedZeroAmount++; continue; }
           totalCount++;
 
           if (EXCLUDED_SERIALS.has(serial)) {
@@ -157,13 +178,17 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
           });
         }
 
+        console.log(`[CardParser] Results: total=${totalCount}, excluded=${excludedCount}, kept=${transactions.length}, skippedNoSerial=${skippedNoSerial}, skippedZeroAmount=${skippedZeroAmount}`);
+        if (transactions.length > 0) console.log('[CardParser] First transaction:', JSON.stringify(transactions[0]));
+
         if (transactions.length === 0) {
-          reject(new Error('Nenhuma transação de entregador encontrada no arquivo (todas foram de máquinas excluídas ou o arquivo está vazio).'));
+          reject(new Error(`Nenhuma transação de entregador encontrada. Total: ${totalCount}, Excluídas: ${excludedCount}, Sem serial: ${skippedNoSerial}, Valor zero: ${skippedZeroAmount}.`));
           return;
         }
 
         resolve({ transactions, excludedCount, totalCount });
       } catch (err) {
+        console.error('[CardParser] Error:', err);
         reject(new Error('Erro ao ler o arquivo de transações. Verifique se o formato está correto.'));
       }
     };
