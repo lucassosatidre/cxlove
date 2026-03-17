@@ -347,9 +347,11 @@ export default function DeliveryReconciliation() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <AppSidebar />
+      <div className="ml-56 flex flex-col flex-1">
       {/* Header */}
       <header className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => navigate(`/reconciliation/${id}`)}>
               <ArrowLeft className="h-4 w-4" />
@@ -374,7 +376,7 @@ export default function DeliveryReconciliation() {
               Desfazer
             </Button>
             <div className="relative">
-              <Button variant="default" size="sm" disabled={importing}>
+              <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90" disabled={importing}>
                 <Upload className="h-4 w-4 mr-1" />
                 {importing ? 'Importando...' : 'Importar Maquininha'}
               </Button>
