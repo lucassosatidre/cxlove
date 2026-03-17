@@ -11,6 +11,7 @@ import {
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AppSidebar from '@/components/AppSidebar';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
 import { formatCurrency } from '@/lib/payment-utils';
