@@ -32,6 +32,8 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
   const [rows, setRows] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const methods = useMemo(() => splitPaymentMethods(paymentMethod), [paymentMethod]);
   const scenario = useMemo(() => getBreakdownScenario(methods), [methods]);
@@ -85,7 +87,7 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     onBreakdownValid(isValid);
   }, [isValid, onBreakdownValid]);
 
-  const handleAmountChange = useCallback((index: number, value: string) => {
+  const commitAmount = useCallback((index: number, value: string) => {
     const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.');
     const numVal = parseFloat(cleaned) || 0;
     const amount = Math.round(Math.max(0, numVal) * 100) / 100;
@@ -161,12 +163,26 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     }
   }, [isValid, saving, isCompleted, saveBreakdowns]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleFocus = useCallback((index: number, currentAmount: number) => {
+    setEditingIndex(index);
+    setEditingValue(currentAmount > 0 ? currentAmount.toFixed(2).replace('.', ',') : '');
+  }, []);
+
+  const handleBlurField = useCallback((index: number) => {
+    commitAmount(index, editingValue);
+    setEditingIndex(null);
+    // handleCommit will be called after state updates via effect
+    setTimeout(() => handleCommit(), 0);
+  }, [commitAmount, editingValue, handleCommit]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      (e.target as HTMLElement).blur();
+      commitAmount(index, editingValue);
+      setEditingIndex(null);
+      setTimeout(() => handleCommit(), 0);
     }
-  }, []);
+  }, [commitAmount, editingValue, handleCommit]);
 
   if (loading) {
     return (
@@ -206,10 +222,15 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
                 inputMode="decimal"
                 placeholder="R$ 0,00"
                 className="h-8 text-right font-mono-tabular text-sm"
-                value={row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : ''}
-                onChange={(e) => handleAmountChange(idx, e.target.value)}
-                onBlur={handleCommit}
-                onKeyDown={handleKeyDown}
+                value={editingIndex === idx ? editingValue : (row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : '')}
+                onChange={(e) => {
+                  if (editingIndex === idx) {
+                    setEditingValue(e.target.value);
+                  }
+                }}
+                onFocus={() => handleFocus(idx, row.amount)}
+                onBlur={() => handleBlurField(idx)}
+                onKeyDown={(e) => handleKeyDown(e, idx)}
                 disabled={isCompleted || (row.is_auto_calculated && scenario === 'one_physical_one_online')}
               />
             </div>
