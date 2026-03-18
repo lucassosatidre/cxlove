@@ -5,12 +5,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const ALL_PERMISSIONS = ['dashboard', 'import', 'reconciliation', 'delivery_reconciliation'];
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Verify caller is admin
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
@@ -24,7 +25,6 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
-  // Verify caller is admin using their JWT
   const supabaseUser = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_ANON_KEY")!,
@@ -38,7 +38,6 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Check admin role
   const { data: roleData } = await supabaseAdmin
     .from('user_roles')
     .select('role')
@@ -66,14 +65,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get all roles
     const { data: roles } = await supabaseAdmin.from('user_roles').select('*');
+    const { data: permissions } = await supabaseAdmin.from('user_permissions').select('*');
 
     const enrichedUsers = users.map(u => ({
       id: u.id,
       email: u.email,
       created_at: u.created_at,
       role: roles?.find(r => r.user_id === u.id)?.role || null,
+      permissions: permissions?.filter(p => p.user_id === u.id).map(p => p.permission) || [],
     }));
 
     return new Response(JSON.stringify({ users: enrichedUsers }), {
@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    await supabaseAdmin.from('user_permissions').delete().eq('user_id', userId);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
@@ -105,7 +106,6 @@ Deno.serve(async (req) => {
   // UPDATE ROLE
   if (action === 'update_role') {
     const { userId, role } = body;
-    // Upsert role
     await supabaseAdmin.from('user_roles').delete().eq('user_id', userId);
     if (role) {
       const { error } = await supabaseAdmin.from('user_roles').insert({ user_id: userId, role });
@@ -121,8 +121,29 @@ Deno.serve(async (req) => {
     });
   }
 
+  // UPDATE PERMISSIONS
+  if (action === 'update_permissions') {
+    const { userId, permissions } = body;
+    // Delete existing permissions
+    await supabaseAdmin.from('user_permissions').delete().eq('user_id', userId);
+    // Insert new permissions
+    if (permissions && permissions.length > 0) {
+      const rows = permissions.map((p: string) => ({ user_id: userId, permission: p }));
+      const { error } = await supabaseAdmin.from('user_permissions').insert(rows);
+      if (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   // CREATE USER (default action)
-  const { email, password, role } = body;
+  const { email, password, role, permissions } = body;
 
   if (!email || !password) {
     return new Response(JSON.stringify({ error: 'Email e senha são obrigatórios' }), {
@@ -145,15 +166,14 @@ Deno.serve(async (req) => {
   }
 
   if (role && data.user) {
-    const { error: roleError } = await supabaseAdmin
-      .from('user_roles')
-      .insert({ user_id: data.user.id, role });
+    await supabaseAdmin.from('user_roles').insert({ user_id: data.user.id, role });
+  }
 
-    if (roleError) {
-      return new Response(JSON.stringify({ user: data.user, roleError: roleError.message }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+  // Add permissions (default: all)
+  if (data.user) {
+    const perms = permissions && permissions.length > 0 ? permissions : ALL_PERMISSIONS;
+    const rows = perms.map((p: string) => ({ user_id: data.user!.id, permission: p }));
+    await supabaseAdmin.from('user_permissions').insert(rows);
   }
 
   return new Response(JSON.stringify({ user: data.user }), {
