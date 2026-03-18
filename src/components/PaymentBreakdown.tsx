@@ -222,10 +222,15 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
                 inputMode="decimal"
                 placeholder="R$ 0,00"
                 className="h-8 text-right font-mono-tabular text-sm"
-                value={row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : ''}
-                onChange={(e) => handleAmountChange(idx, e.target.value)}
-                onBlur={handleCommit}
-                onKeyDown={handleKeyDown}
+                value={editingIndex === idx ? editingValue : (row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : '')}
+                onChange={(e) => {
+                  if (editingIndex === idx) {
+                    setEditingValue(e.target.value);
+                  }
+                }}
+                onFocus={() => handleFocus(idx, row.amount)}
+                onBlur={() => handleBlurField(idx)}
+                onKeyDown={(e) => handleKeyDown(e, idx)}
                 disabled={isCompleted || (row.is_auto_calculated && scenario === 'one_physical_one_online')}
               />
             </div>
