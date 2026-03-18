@@ -670,14 +670,38 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
+
+  const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   const formatSaleDate = (d: string | null) => {
     if (!d) return '—';
     const [y, m, day] = d.split('-');
     return `${day}/${m}/${y}`;
+  };
+
+  const startEdit = (field: 'payment_method' | 'delivery_person') => {
+    if (isCompleted) return;
+    setEditingField(field);
+    setEditValue(order[field] || '');
+    setTimeout(() => editInputRef.current?.focus(), 0);
+  };
+
+  const commitEdit = () => {
+    if (editingField && editValue.trim() && editValue.trim() !== (order[editingField] || '')) {
+      onUpdateField(editingField, editValue.trim());
+    }
+    setEditingField(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, field: 'payment_method' | 'delivery_person') => {
+    e.preventDefault();
+    e.stopPropagation();
+    startEdit(field);
   };
 
   return (
@@ -719,22 +743,76 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         {visibleColumns.partner_order_number && (
           <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         )}
-        <td className={`p-3 text-sm ${cellClass}`}>
-          <div className="flex items-center gap-2">
-            <span className="truncate">{order.payment_method}</span>
-            <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
-            {hasMultiple && (
-              isExpanded
-                ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            )}
-          </div>
+        <td
+          className={`p-3 text-sm ${cellClass}`}
+          onContextMenu={(e) => handleContextMenu(e, 'payment_method')}
+        >
+          {editingField === 'payment_method' ? (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <Input
+                ref={editInputRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitEdit();
+                  if (e.key === 'Escape') setEditingField(null);
+                }}
+                className="h-7 text-sm"
+                list="payment-suggestions"
+              />
+              <datalist id="payment-suggestions">
+                {allPaymentMethods.map(p => <option key={p} value={p} />)}
+              </datalist>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 group">
+              <span className="truncate">{order.payment_method}</span>
+              <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
+              {hasMultiple && (
+                isExpanded
+                  ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              )}
+              {!isCompleted && (
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
+              )}
+            </div>
+          )}
         </td>
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
-        <td className={`p-3 text-sm ${cellClass}`}>
-          {order.delivery_person || '—'}
+        <td
+          className={`p-3 text-sm ${cellClass}`}
+          onContextMenu={(e) => handleContextMenu(e, 'delivery_person')}
+        >
+          {editingField === 'delivery_person' ? (
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <Input
+                ref={editInputRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={commitEdit}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitEdit();
+                  if (e.key === 'Escape') setEditingField(null);
+                }}
+                className="h-7 text-sm"
+                list="delivery-suggestions"
+              />
+              <datalist id="delivery-suggestions">
+                {allDeliveryPersons.map(d => <option key={d} value={d} />)}
+              </datalist>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 group">
+              <span>{order.delivery_person || '—'}</span>
+              {!isCompleted && (
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
+              )}
+            </div>
+          )}
         </td>
       </tr>
       {hasMultiple && isExpanded && (
