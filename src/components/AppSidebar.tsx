@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
-import { LayoutDashboard, Upload, LogOut, X, Users } from 'lucide-react';
+import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { LayoutDashboard, Upload, LogOut, X, Users, CreditCard, Truck } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import propositoLogo from '@/assets/proposito-logo.png';
 
@@ -13,15 +14,22 @@ interface AppSidebarProps {
 export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const { user, signOut } = useAuth();
   const { isAdmin } = useUserRole();
+  const { hasPermission } = useUserPermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
 
-  const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-    { icon: Upload, label: 'Importar', path: '/import' },
-    ...(isAdmin ? [{ icon: Users, label: 'Usuários', path: '/users' }] : []),
+  const allNavItems = [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/', permission: 'dashboard' },
+    { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
   ];
+
+  const navItems = allNavItems.filter(item => hasPermission(item.permission));
+
+  // Admin-only items
+  if (isAdmin) {
+    navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
+  }
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -41,7 +49,6 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      {/* Propósito logo + close */}
       <div className="px-4 pt-4 pb-1 flex items-center justify-between">
         <img src={propositoLogo} alt="Propósito Soluções" className="h-8 object-contain" />
         {isMobile && (
@@ -51,12 +58,10 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         )}
       </div>
 
-      {/* Client name */}
       <div className="px-4 pb-3 border-b border-white/5">
         <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight">Pizzaria Estrela da Ilha</p>
       </div>
 
-      {/* User badge */}
       <div className="mx-3 mt-3 mb-4 px-3 py-2.5 bg-sidebar-accent rounded-lg">
         <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground font-medium">Usuário</p>
         <p className="text-xs font-semibold text-sidebar-accent-foreground truncate mt-0.5">
@@ -64,7 +69,6 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         </p>
       </div>
 
-      {/* Navigation */}
       <nav className="flex-1 px-3 space-y-1">
         {navItems.map((item) => {
           const active = isActive(item.path);
@@ -85,7 +89,6 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         })}
       </nav>
 
-      {/* Footer */}
       <div className="px-3 pb-4 space-y-1">
         <button
           onClick={signOut}

@@ -261,6 +261,24 @@ export type Database = {
           },
         ]
       }
+      user_permissions: {
+        Row: {
+          id: string
+          permission: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          permission: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          permission?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
