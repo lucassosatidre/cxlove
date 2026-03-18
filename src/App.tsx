@@ -41,6 +41,7 @@ const App = () => (
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
+            <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
