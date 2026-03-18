@@ -515,6 +515,9 @@ export default function Reconciliation() {
                             toggleConfirm(order.id, false);
                           }
                         }}
+                        onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
+                        allPaymentMethods={paymentMethods}
+                        allDeliveryPersons={deliveryPersons}
                       />
                     );
                   })}
