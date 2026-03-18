@@ -163,12 +163,26 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     }
   }, [isValid, saving, isCompleted, saveBreakdowns]);
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleFocus = useCallback((index: number, currentAmount: number) => {
+    setEditingIndex(index);
+    setEditingValue(currentAmount > 0 ? currentAmount.toFixed(2).replace('.', ',') : '');
+  }, []);
+
+  const handleBlurField = useCallback((index: number) => {
+    commitAmount(index, editingValue);
+    setEditingIndex(null);
+    // handleCommit will be called after state updates via effect
+    setTimeout(() => handleCommit(), 0);
+  }, [commitAmount, editingValue, handleCommit]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      (e.target as HTMLElement).blur();
+      commitAmount(index, editingValue);
+      setEditingIndex(null);
+      setTimeout(() => handleCommit(), 0);
     }
-  }, []);
+  }, [commitAmount, editingValue, handleCommit]);
 
   if (loading) {
     return (
