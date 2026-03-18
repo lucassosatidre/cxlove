@@ -518,6 +518,7 @@ export default function Reconciliation() {
                         }}
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
                         allPaymentMethods={paymentMethods}
+                        offlinePaymentMethods={offlinePaymentMethods}
                         allDeliveryPersons={deliveryPersons}
                       />
                     );
