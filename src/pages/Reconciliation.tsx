@@ -640,6 +640,7 @@ interface OrderRowProps {
   onBreakdownSaved?: () => void;
   onUpdateField: (field: 'payment_method' | 'delivery_person', value: string) => void;
   allPaymentMethods: string[];
+  offlinePaymentMethods: string[];
   allDeliveryPersons: string[];
 }
 
