@@ -144,13 +144,9 @@ export default function Reconciliation() {
   const handleRowClick = useCallback((order: Order) => {
     if (needsBreakdown(order.payment_method)) {
       setExpandedOrderId(prev => prev === order.id ? null : order.id);
-    } else {
-      const isCompleted = closingData?.status === 'completed';
-      if (!isCompleted) {
-        toggleConfirm(order.id, order.is_confirmed);
-      }
     }
-  }, [toggleConfirm, closingData]);
+    // Only checkbox can confirm — row click no longer toggles confirmation
+  }, []);
 
   const handleBreakdownValid = useCallback((orderId: string, valid: boolean) => {
     setBreakdownValidity(prev => ({ ...prev, [orderId]: valid }));
