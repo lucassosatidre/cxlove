@@ -636,6 +636,9 @@ interface OrderRowProps {
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
   onBreakdownSaved?: () => void;
+  onUpdateField: (field: 'payment_method' | 'delivery_person', value: string) => void;
+  allPaymentMethods: string[];
+  allDeliveryPersons: string[];
 }
 
 function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakdownValid?: boolean }) {
