@@ -32,6 +32,8 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
   const [rows, setRows] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState('');
 
   const methods = useMemo(() => splitPaymentMethods(paymentMethod), [paymentMethod]);
   const scenario = useMemo(() => getBreakdownScenario(methods), [methods]);
