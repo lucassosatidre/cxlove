@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { LayoutDashboard, Upload, LogOut, X } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import { LayoutDashboard, Upload, LogOut, X, Users } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import propositoLogo from '@/assets/proposito-logo.png';
 
@@ -11,6 +12,7 @@ interface AppSidebarProps {
 
 export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useUserRole();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -18,6 +20,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: Upload, label: 'Importar', path: '/import' },
+    ...(isAdmin ? [{ icon: Users, label: 'Usuários', path: '/users' }] : []),
   ];
 
   const isActive = (path: string) => {
