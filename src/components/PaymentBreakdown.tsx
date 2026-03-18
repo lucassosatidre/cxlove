@@ -87,7 +87,7 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     onBreakdownValid(isValid);
   }, [isValid, onBreakdownValid]);
 
-  const handleAmountChange = useCallback((index: number, value: string) => {
+  const commitAmount = useCallback((index: number, value: string) => {
     const cleaned = value.replace(/[^\d.,]/g, '').replace(',', '.');
     const numVal = parseFloat(cleaned) || 0;
     const amount = Math.round(Math.max(0, numVal) * 100) / 100;
