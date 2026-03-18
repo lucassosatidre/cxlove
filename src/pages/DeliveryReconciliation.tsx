@@ -117,6 +117,29 @@ export default function DeliveryReconciliation() {
     return map;
   }, [transactions]);
 
+  // Build serial → delivery person map from matched data
+  const serialToDeliveryPerson = useMemo(() => {
+    const serialCounts = new Map<string, Map<string, number>>();
+    transactions.forEach(tx => {
+      if (!tx.matched_order_id || !tx.machine_serial) return;
+      const order = orders.find(o => o.id === tx.matched_order_id);
+      if (!order?.delivery_person) return;
+      if (!serialCounts.has(tx.machine_serial)) serialCounts.set(tx.machine_serial, new Map());
+      const counts = serialCounts.get(tx.machine_serial)!;
+      counts.set(order.delivery_person, (counts.get(order.delivery_person) || 0) + 1);
+    });
+    const result = new Map<string, string>();
+    for (const [serial, counts] of serialCounts) {
+      let maxCount = 0;
+      let bestPerson = '';
+      for (const [person, count] of counts) {
+        if (count > maxCount) { maxCount = count; bestPerson = person; }
+      }
+      if (bestPerson) result.set(serial, bestPerson);
+    }
+    return result;
+  }, [transactions, orders]);
+
   const unmatchedTransactions = useMemo(() =>
     transactions.filter(tx => !tx.matched_order_id), [transactions]
   );
