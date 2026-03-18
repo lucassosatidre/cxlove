@@ -673,13 +673,11 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, allDeliveryPersons }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const editInputRef = useRef<HTMLInputElement>(null);
 
   const formatSaleDate = (d: string | null) => {
     if (!d) return '—';
@@ -687,24 +685,17 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
     return `${day}/${m}/${y}`;
   };
 
-  const startEdit = (field: 'payment_method' | 'delivery_person') => {
+  const startEdit = (e: React.MouseEvent, field: 'payment_method' | 'delivery_person') => {
+    e.stopPropagation();
     if (isCompleted) return;
     setEditingField(field);
-    setEditValue(order[field] || '');
-    setTimeout(() => editInputRef.current?.focus(), 0);
   };
 
-  const commitEdit = () => {
-    if (editingField && editValue.trim() && editValue.trim() !== (order[editingField] || '')) {
-      onUpdateField(editingField, editValue.trim());
+  const handleSelectValue = (value: string) => {
+    if (editingField && value !== (order[editingField] || '')) {
+      onUpdateField(editingField, value);
     }
     setEditingField(null);
-  };
-
-  const handleContextMenu = (e: React.MouseEvent, field: 'payment_method' | 'delivery_person') => {
-    e.preventDefault();
-    e.stopPropagation();
-    startEdit(field);
   };
 
   return (
@@ -746,27 +737,22 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         {visibleColumns.partner_order_number && (
           <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         )}
-        <td
-          className={`p-3 text-sm ${cellClass}`}
-          onContextMenu={(e) => handleContextMenu(e, 'payment_method')}
-        >
+        <td className={`p-3 text-sm ${cellClass}`}>
           {editingField === 'payment_method' ? (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              <Input
-                ref={editInputRef}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={commitEdit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit();
-                  if (e.key === 'Escape') setEditingField(null);
-                }}
-                className="h-7 text-sm"
-                list="payment-suggestions"
-              />
-              <datalist id="payment-suggestions">
-                {allPaymentMethods.map(p => <option key={p} value={p} />)}
-              </datalist>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Select
+                defaultOpen
+                value={order.payment_method}
+                onValueChange={handleSelectValue}
+                onOpenChange={(open) => { if (!open) setEditingField(null); }}
+              >
+                <SelectTrigger className="h-7 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {offlinePaymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           ) : (
             <div className="flex items-center gap-2 group">
@@ -778,7 +764,9 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
                   : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               )}
               {!isCompleted && (
-                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
+                <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
+                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
+                </button>
               )}
             </div>
           )}
@@ -786,33 +774,30 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
-        <td
-          className={`p-3 text-sm ${cellClass}`}
-          onContextMenu={(e) => handleContextMenu(e, 'delivery_person')}
-        >
+        <td className={`p-3 text-sm ${cellClass}`}>
           {editingField === 'delivery_person' ? (
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              <Input
-                ref={editInputRef}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onBlur={commitEdit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') commitEdit();
-                  if (e.key === 'Escape') setEditingField(null);
-                }}
-                className="h-7 text-sm"
-                list="delivery-suggestions"
-              />
-              <datalist id="delivery-suggestions">
-                {allDeliveryPersons.map(d => <option key={d} value={d} />)}
-              </datalist>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Select
+                defaultOpen
+                value={order.delivery_person || ''}
+                onValueChange={handleSelectValue}
+                onOpenChange={(open) => { if (!open) setEditingField(null); }}
+              >
+                <SelectTrigger className="h-7 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {allDeliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           ) : (
             <div className="flex items-center gap-1 group">
               <span>{order.delivery_person || '—'}</span>
               {!isCompleted && (
-                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 shrink-0 transition-opacity" />
+                <button onClick={(e) => startEdit(e, 'delivery_person')} className="shrink-0">
+                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
+                </button>
               )}
             </div>
           )}
