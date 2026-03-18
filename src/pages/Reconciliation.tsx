@@ -376,31 +376,40 @@ export default function Reconciliation() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
             </div>
-            <Select value={filterPayment} onValueChange={setFilterPayment}>
-              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as formas de pagamento</SelectItem>
-                <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
-                <SelectItem value="only_online">Somente pagamentos online</SelectItem>
-                <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
-                {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={filterDelivery} onValueChange={setFilterDelivery}>
-              <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os entregadores</SelectItem>
-                {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
-                <SelectItem value="confirmed">Confirmados</SelectItem>
-                <SelectItem value="pending">Pendentes</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Formas de Pagamento</span>
+              <Select value={filterPayment} onValueChange={setFilterPayment}>
+                <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as formas de pagamento</SelectItem>
+                  <SelectItem value="only_offline">Somente pagamentos offline</SelectItem>
+                  <SelectItem value="only_online">Somente pagamentos online</SelectItem>
+                  <SelectItem value="offline_card_delivery">Cartão Delivery (sem dinheiro)</SelectItem>
+                  {paymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Motoboy</span>
+              <Select value={filterDelivery} onValueChange={setFilterDelivery}>
+                <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os entregadores</SelectItem>
+                  {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</span>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os status</SelectItem>
+                  <SelectItem value="confirmed">Confirmados</SelectItem>
+                  <SelectItem value="pending">Pendentes</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="relative">
               <Button
                 variant="outline"
