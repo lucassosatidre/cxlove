@@ -9,7 +9,7 @@ import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, Che
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
-import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, type PaymentBadgeType } from '@/lib/payment-utils';
+import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
