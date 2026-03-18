@@ -667,7 +667,14 @@ export default function DeliveryReconciliation() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          {tx.brand && <span className="text-[10px] text-muted-foreground">{tx.brand}</span>}
+                          {tx.machine_serial && serialToDeliveryPerson.has(tx.machine_serial) ? (
+                            <span className="text-[10px] font-medium text-primary flex items-center gap-0.5">
+                              <Truck className="h-2.5 w-2.5" />
+                              {serialToDeliveryPerson.get(tx.machine_serial)}
+                            </span>
+                          ) : tx.brand ? (
+                            <span className="text-[10px] text-muted-foreground">{tx.brand}</span>
+                          ) : null}
                           {tx.sale_time && (
                             <span className="text-[10px] text-muted-foreground">
                               <Clock className="h-2.5 w-2.5 inline mr-0.5" />{tx.sale_time}
