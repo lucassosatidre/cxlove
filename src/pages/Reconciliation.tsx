@@ -156,6 +156,27 @@ export default function Reconciliation() {
     setBreakdownValidity(prev => ({ ...prev, [orderId]: valid }));
   }, []);
 
+  const handleUpdateOrderField = useCallback(async (orderId: string, field: 'payment_method' | 'delivery_person', value: string) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order) return;
+    const oldValue = order[field];
+    
+    // Optimistic update
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, [field]: value } : o));
+
+    const { error } = await supabase
+      .from('imported_orders')
+      .update({ [field]: value })
+      .eq('id', orderId);
+
+    if (error) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, [field]: oldValue } : o));
+      toast.error('Erro ao atualizar pedido.');
+    } else {
+      toast.success(`${field === 'payment_method' ? 'Forma de pagamento' : 'Entregador'} atualizado.`);
+    }
+  }, [orders]);
+
   const toggleSort = useCallback((field: SortField) => {
     setSortField(prev => {
       if (prev === field) {
