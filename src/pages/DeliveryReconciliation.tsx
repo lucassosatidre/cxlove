@@ -117,6 +117,29 @@ export default function DeliveryReconciliation() {
     return map;
   }, [transactions]);
 
+  // Build serial → delivery person map from matched data
+  const serialToDeliveryPerson = useMemo(() => {
+    const serialCounts = new Map<string, Map<string, number>>();
+    transactions.forEach(tx => {
+      if (!tx.matched_order_id || !tx.machine_serial) return;
+      const order = orders.find(o => o.id === tx.matched_order_id);
+      if (!order?.delivery_person) return;
+      if (!serialCounts.has(tx.machine_serial)) serialCounts.set(tx.machine_serial, new Map());
+      const counts = serialCounts.get(tx.machine_serial)!;
+      counts.set(order.delivery_person, (counts.get(order.delivery_person) || 0) + 1);
+    });
+    const result = new Map<string, string>();
+    for (const [serial, counts] of serialCounts) {
+      let maxCount = 0;
+      let bestPerson = '';
+      for (const [person, count] of counts) {
+        if (count > maxCount) { maxCount = count; bestPerson = person; }
+      }
+      if (bestPerson) result.set(serial, bestPerson);
+    }
+    return result;
+  }, [transactions, orders]);
+
   const unmatchedTransactions = useMemo(() =>
     transactions.filter(tx => !tx.matched_order_id), [transactions]
   );
@@ -644,7 +667,14 @@ export default function DeliveryReconciliation() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          {tx.brand && <span className="text-[10px] text-muted-foreground">{tx.brand}</span>}
+                          {tx.machine_serial && serialToDeliveryPerson.has(tx.machine_serial) ? (
+                            <span className="text-[10px] font-medium text-primary flex items-center gap-0.5">
+                              <Truck className="h-2.5 w-2.5" />
+                              {serialToDeliveryPerson.get(tx.machine_serial)}
+                            </span>
+                          ) : tx.brand ? (
+                            <span className="text-[10px] text-muted-foreground">{tx.brand}</span>
+                          ) : null}
                           {tx.sale_time && (
                             <span className="text-[10px] text-muted-foreground">
                               <Clock className="h-2.5 w-2.5 inline mr-0.5" />{tx.sale_time}
