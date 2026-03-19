@@ -240,6 +240,30 @@ export default function Reconciliation() {
       toast.error('Erro ao atualizar pedido.');
     } else {
       toast.success(`${field === 'payment_method' ? 'Forma de pagamento' : 'Entregador'} atualizado.`);
+      
+      // When payment method changes, delete old breakdowns and reset validity
+      if (field === 'payment_method' && value !== oldValue) {
+        await supabase
+          .from('order_payment_breakdowns')
+          .delete()
+          .eq('imported_order_id', orderId);
+        
+        // Update allBreakdowns state
+        setAllBreakdowns(prev => prev.filter(b => b.imported_order_id !== orderId));
+        
+        // Reset breakdown validity - if the new method needs breakdown, mark as invalid
+        if (needsBreakdown(value)) {
+          setBreakdownValidity(prev => ({ ...prev, [orderId]: false }));
+          // Auto-expand the row to show the breakdown editor
+          setExpandedOrderId(orderId);
+        } else {
+          setBreakdownValidity(prev => {
+            const next = { ...prev };
+            delete next[orderId];
+            return next;
+          });
+        }
+      }
     }
   }, [orders]);
 
