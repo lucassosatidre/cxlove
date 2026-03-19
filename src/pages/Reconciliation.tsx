@@ -599,10 +599,17 @@ export default function Reconciliation() {
                           if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
                         }}
                         onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
-                        onBreakdownSaved={() => {
+                        onBreakdownSaved={async () => {
                           if (!order.is_confirmed) {
                             toggleConfirm(order.id, false);
                           }
+                          // Reload breakdowns to update totals
+                          const orderIds = orders.map(o => o.id);
+                          const { data: bkData } = await supabase
+                            .from('order_payment_breakdowns')
+                            .select('imported_order_id, payment_method_name, payment_type, amount')
+                            .in('imported_order_id', orderIds);
+                          setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
                         }}
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
                         allPaymentMethods={paymentMethods}
