@@ -447,19 +447,8 @@ export default function Reconciliation() {
           </div>
         </div>
 
-  // Cash calculator state
-  const [showCashCalc, setShowCashCalc] = useState(false);
-  const DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
-  const [cashCounts, setCashCounts] = useState<Record<number, number>>(() => {
-    const init: Record<number, number> = {};
-    [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05].forEach(d => init[d] = 0);
-    return init;
-  });
-  const cashTotal = useMemo(() => DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
 
-  // Save conference state
-  const [showConferenceErrors, setShowConferenceErrors] = useState(false);
-  const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
+
 
 
         {/* Import History Toggle */}
