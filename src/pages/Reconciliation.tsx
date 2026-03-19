@@ -833,8 +833,8 @@ export default function Reconciliation() {
             <Button variant="outline" size="sm" onClick={() => setCashCounts({})}>
               Limpar
             </Button>
-            <Button size="sm" onClick={() => { setShowCashCalc(false); toast.success(`Contagem registrada: ${formatCurrency(cashTotal)}`); }}>
-              Salvar
+            <Button size="sm" onClick={handleSaveCashSnapshot} disabled={savingCash || isCompleted}>
+              {savingCash ? 'Salvando...' : cashSnapshotSaved ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
         </DialogContent>
