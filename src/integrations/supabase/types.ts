@@ -83,6 +83,44 @@ export type Database = {
           },
         ]
       }
+      cash_snapshots: {
+        Row: {
+          counts: Json
+          created_at: string
+          daily_closing_id: string
+          id: string
+          total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          counts?: Json
+          created_at?: string
+          daily_closing_id: string
+          id?: string
+          total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          counts?: Json
+          created_at?: string
+          daily_closing_id?: string
+          id?: string
+          total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_snapshots_daily_closing_id_fkey"
+            columns: ["daily_closing_id"]
+            isOneToOne: false
+            referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       daily_closings: {
         Row: {
           closing_date: string
