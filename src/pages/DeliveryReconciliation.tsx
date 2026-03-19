@@ -91,11 +91,23 @@ export default function DeliveryReconciliation() {
     ]);
 
     setClosingDate(closing?.closing_date || '');
-    setOrders(ordData || []);
+    const ordersList = ordData || [];
+    setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
     if (snapData) {
       setCashSnapshotData({ counts: snapData.counts as Record<string, number>, total: Number(snapData.total), updated_at: snapData.updated_at });
     }
+
+    // Load breakdowns for all orders
+    if (ordersList.length > 0) {
+      const orderIds = ordersList.map(o => o.id);
+      const { data: bkData } = await supabase
+        .from('order_payment_breakdowns')
+        .select('imported_order_id, payment_method_name, payment_type, amount')
+        .in('imported_order_id', orderIds);
+      setBreakdowns(bkData || []);
+    }
+
     setLoading(false);
   };
 
