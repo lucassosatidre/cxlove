@@ -79,6 +79,9 @@ export default function Reconciliation() {
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
   const [cashCounts, setCashCounts] = useState<Record<number, number>>({});
   const cashTotal = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
+  const [cashSnapshotSaved, setCashSnapshotSaved] = useState(false);
+  const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCash, setSavingCash] = useState(false);
 
   // Save conference state
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
