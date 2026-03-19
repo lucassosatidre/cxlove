@@ -56,6 +56,7 @@ export default function DeliveryReconciliation() {
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [breakdowns, setBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [transactions, setTransactions] = useState<CardTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
