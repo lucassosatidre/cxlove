@@ -304,8 +304,42 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
+  const handleSaveCashSnapshot = useCallback(async () => {
+    if (!id || !user) return;
+    setSavingCash(true);
+    const countsJson: Record<string, number> = {};
+    for (const [k, v] of Object.entries(cashCounts)) {
+      if (v > 0) countsJson[k] = v;
+    }
+
+    const { error } = await supabase
+      .from('cash_snapshots')
+      .upsert({
+        daily_closing_id: id,
+        user_id: user.id,
+        counts: countsJson,
+        total: cashTotal,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'daily_closing_id,user_id' });
+
+    if (error) {
+      toast.error('Erro ao salvar contagem de dinheiro.');
+    } else {
+      setCashSnapshotSaved(true);
+      setCashSnapshotData({ counts: countsJson, total: cashTotal, updated_at: new Date().toISOString() });
+      toast.success(`Contagem salva: ${formatCurrency(cashTotal)}`);
+      setShowCashCalc(false);
+    }
+    setSavingCash(false);
+  }, [id, user, cashCounts, cashTotal]);
+
   const handleSaveConference = useCallback(() => {
     const errors: string[] = [];
+
+    if (!cashSnapshotSaved) {
+      errors.push('Calculadora de Dinheiro: contagem não foi salva. Abra a calculadora e salve antes de finalizar.');
+    }
+
     for (const order of orders) {
       if (!order.is_confirmed) {
         errors.push(`Comanda #${order.order_number}: não está confirmada.`);
@@ -323,7 +357,7 @@ export default function Reconciliation() {
       setConferenceErrors(errors);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSaved]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => {
