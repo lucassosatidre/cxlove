@@ -65,6 +65,7 @@ export default function Reconciliation() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [allBreakdowns, setAllBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [visibleColumns, setVisibleColumns] = useState({
     sale_date: false,
     sale_time: false,
