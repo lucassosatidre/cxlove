@@ -1109,38 +1109,53 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
           <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         )}
         <td className={`p-3 text-sm ${cellClass}`}>
-          {editingField === 'payment_method' ? (
-            <div onClick={(e) => e.stopPropagation()}>
-              <Select
-                defaultOpen
-                value={order.payment_method}
-                onValueChange={handleSelectValue}
-                onOpenChange={(open) => { if (!open) setEditingField(null); }}
-              >
-                <SelectTrigger className="h-7 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {offlinePaymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 group">
-              <span className="truncate">{order.payment_method}</span>
-              <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
-              {hasMultiple && (
-                isExpanded
-                  ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              )}
-              {!isCompleted && (
-                <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
-                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-2 group">
+            <Popover open={paymentPopoverOpen} onOpenChange={(open) => {
+              if (!open && paymentPopoverOpen) {
+                savePaymentMethods();
+              }
+              setPaymentPopoverOpen(open);
+            }}>
+              <PopoverTrigger asChild>
+                <span className="truncate cursor-default">{order.payment_method}</span>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                <div className="p-3 border-b border-border">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Formas de Pagamento</p>
+                </div>
+                <div className="p-2 space-y-1 max-h-60 overflow-auto">
+                  {offlinePaymentMethods.map(method => (
+                    <label
+                      key={method}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer text-sm"
+                    >
+                      <Checkbox
+                        checked={selectedMethods.includes(method)}
+                        onCheckedChange={() => togglePaymentMethod(method)}
+                      />
+                      <span>{method}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="p-2 border-t border-border flex justify-end">
+                  <Button size="sm" className="h-7 text-xs" onClick={savePaymentMethods}>
+                    Confirmar
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
+            {hasMultiple && (
+              isExpanded
+                ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
+            {!isCompleted && (
+              <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
+              </button>
+            )}
+          </div>
         </td>
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
