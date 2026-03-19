@@ -84,26 +84,6 @@ export default function Reconciliation() {
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
   const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
 
-  const handleSaveConference = useCallback(() => {
-    const errors: string[] = [];
-    for (const order of orders) {
-      if (!order.is_confirmed) {
-        errors.push(`Comanda #${order.order_number}: não está confirmada.`);
-      }
-      if (!order.delivery_person || order.delivery_person.trim() === '') {
-        errors.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
-      }
-      if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) {
-        errors.push(`Comanda #${order.order_number}: rateio de pagamento pendente.`);
-      }
-    }
-    if (errors.length === 0) {
-      finalize();
-    } else {
-      setConferenceErrors(errors);
-      setShowConferenceErrors(true);
-    }
-  }, [orders, breakdownValidity, finalize]);
 
   const toggleColumn = (col: keyof typeof visibleColumns) => {
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
