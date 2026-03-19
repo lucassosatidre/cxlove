@@ -5,7 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -65,6 +65,7 @@ export default function Reconciliation() {
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showImportHistory, setShowImportHistory] = useState(false);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
+  const [allBreakdowns, setAllBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [visibleColumns, setVisibleColumns] = useState({
     sale_date: false,
     sale_time: false,
@@ -104,8 +105,20 @@ export default function Reconciliation() {
         .order('created_at', { ascending: false }),
     ]);
 
-    setOrders(ordData || []);
+    const ordersList = ordData || [];
+    setOrders(ordersList);
     setImportRecords(impData || []);
+
+    // Load all breakdowns for orders in this closing
+    if (ordersList.length > 0) {
+      const orderIds = ordersList.map(o => o.id);
+      const { data: bkData } = await supabase
+        .from('order_payment_breakdowns')
+        .select('imported_order_id, payment_method_name, payment_type, amount')
+        .in('imported_order_id', orderIds);
+      setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
+    }
+
     setLoading(false);
   };
 
@@ -291,6 +304,51 @@ export default function Reconciliation() {
   const pending = useMemo(() => filtered.length - confirmed, [filtered, confirmed]);
   const percent = useMemo(() => filtered.length ? Math.round((confirmed / filtered.length) * 100) : 0, [filtered, confirmed]);
 
+  // Offline payment method totals for confirmed orders
+  const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+
+  const offlineMethodTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+
+    const confirmedOrders = orders.filter(o => o.is_confirmed);
+    const breakdownsByOrder = new Map<string, typeof allBreakdowns>();
+    allBreakdowns.forEach(b => {
+      if (!breakdownsByOrder.has(b.imported_order_id)) breakdownsByOrder.set(b.imported_order_id, []);
+      breakdownsByOrder.get(b.imported_order_id)!.push(b);
+    });
+
+    const matchCategory = (methodName: string): string | null => {
+      const lower = methodName.toLowerCase().trim();
+      if (lower === 'dinheiro') return 'Dinheiro';
+      if (lower.includes('(cobrar) pix') || lower === '(cobrar) pix') return '(COBRAR) Pix';
+      if (lower.includes('crédit') || lower.includes('crédito') || lower === 'credito') return 'Crédito';
+      if (lower.includes('débit') || lower.includes('débito') || lower === 'debito') return 'Débito';
+      if (lower.includes('voucher') && !lower.includes('voucher parceiro') && !lower.includes('online')) return 'Voucher';
+      return null;
+    };
+
+    for (const order of confirmedOrders) {
+      const breakdowns = breakdownsByOrder.get(order.id);
+      if (breakdowns && breakdowns.length > 0) {
+        // Use breakdown amounts
+        for (const b of breakdowns) {
+          const cat = matchCategory(b.payment_method_name);
+          if (cat) totals[cat] += b.amount;
+        }
+      } else {
+        // Single payment method — use total_amount
+        const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+        if (methods.length === 1) {
+          const cat = matchCategory(methods[0]);
+          if (cat) totals[cat] += order.total_amount;
+        }
+      }
+    }
+
+    return totals;
+  }, [orders, allBreakdowns]);
+
   const formatDate = (dateStr: string) => {
     const [y, m, d] = dateStr.split('-');
     return `${d}/${m}/${y}`;
@@ -344,6 +402,34 @@ export default function Reconciliation() {
           </div>
         </header>
 
+        {/* Offline Payment Totals */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Recebimentos Offline (Confirmados)</p>
+            <div className="flex flex-wrap gap-3">
+              {OFFLINE_CATEGORIES.map(cat => {
+                const total = offlineMethodTotals[cat];
+                const iconMap: Record<string, React.ReactNode> = {
+                  'Dinheiro': <Banknote className="h-4 w-4 text-success" />,
+                  '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
+                  'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+                  'Débito': <CreditCardIcon className="h-4 w-4 text-muted-foreground" />,
+                  'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+                };
+                return (
+                  <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                    {iconMap[cat]}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
+                      <p className="text-sm font-semibold text-foreground font-mono-tabular">{formatCurrency(total)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         {/* Stats */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -359,6 +445,7 @@ export default function Reconciliation() {
             </div>
           </div>
         </div>
+
 
         {/* Import History Toggle */}
         {importRecords.length > 0 && (
@@ -512,10 +599,17 @@ export default function Reconciliation() {
                           if (!isCompleted) toggleConfirm(order.id, order.is_confirmed);
                         }}
                         onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
-                        onBreakdownSaved={() => {
+                        onBreakdownSaved={async () => {
                           if (!order.is_confirmed) {
                             toggleConfirm(order.id, false);
                           }
+                          // Reload breakdowns to update totals
+                          const orderIds = orders.map(o => o.id);
+                          const { data: bkData } = await supabase
+                            .from('order_payment_breakdowns')
+                            .select('imported_order_id, payment_method_name, payment_type, amount')
+                            .in('imported_order_id', orderIds);
+                          setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
                         }}
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
                         allPaymentMethods={paymentMethods}
