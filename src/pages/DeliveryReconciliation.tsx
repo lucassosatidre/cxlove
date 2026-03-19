@@ -10,6 +10,7 @@ import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
   Banknote
+} from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
