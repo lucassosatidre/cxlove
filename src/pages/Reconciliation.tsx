@@ -128,7 +128,24 @@ export default function Reconciliation() {
         .from('order_payment_breakdowns')
         .select('imported_order_id, payment_method_name, payment_type, amount')
         .in('imported_order_id', orderIds);
-      setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
+      const breakdowns = (bkData || []).map(b => ({ ...b, amount: Number(b.amount) }));
+      setAllBreakdowns(breakdowns);
+
+      // Pre-compute breakdown validity so orders with completed rateio aren't shown as pending
+      const validityMap: Record<string, boolean> = {};
+      for (const order of ordersList) {
+        if (needsBreakdown(order.payment_method)) {
+          const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === order.id);
+          if (orderBreakdowns.length > 0) {
+            const sum = orderBreakdowns.reduce((s, b) => s + b.amount, 0);
+            const diff = Math.abs(sum - Number(order.total_amount));
+            validityMap[order.id] = diff < 0.01;
+          } else {
+            validityMap[order.id] = false;
+          }
+        }
+      }
+      setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
     }
 
     setLoading(false);
