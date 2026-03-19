@@ -81,7 +81,7 @@ export default function DeliveryReconciliation() {
         .select('*')
         .eq('daily_closing_id', id!),
       supabase.from('cash_snapshots')
-        .select('total, updated_at')
+        .select('counts, total, updated_at')
         .eq('daily_closing_id', id!)
         .order('updated_at', { ascending: false })
         .limit(1)
