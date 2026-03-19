@@ -8,7 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
-  CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet
+  CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
+  Banknote
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
@@ -63,6 +64,7 @@ export default function DeliveryReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
+  const [cashSnapshotData, setCashSnapshotData] = useState<{ total: number; updated_at: string } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -70,7 +72,7 @@ export default function DeliveryReconciliation() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: closing }, { data: ordData }, { data: txData }] = await Promise.all([
+    const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date').eq('id', id!).single(),
       supabase.from('imported_orders')
         .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
@@ -78,11 +80,20 @@ export default function DeliveryReconciliation() {
       supabase.from('card_transactions')
         .select('*')
         .eq('daily_closing_id', id!),
+      supabase.from('cash_snapshots')
+        .select('total, updated_at')
+        .eq('daily_closing_id', id!)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     setClosingDate(closing?.closing_date || '');
     setOrders(ordData || []);
     setTransactions((txData || []) as CardTransaction[]);
+    if (snapData) {
+      setCashSnapshotData({ total: Number(snapData.total), updated_at: snapData.updated_at });
+    }
     setLoading(false);
   };
 
@@ -474,6 +485,26 @@ export default function DeliveryReconciliation() {
           </div>
         </div>
       </div>
+
+      {/* Cash Snapshot Card (read-only) */}
+      {cashSnapshotData && (
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3 flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Banknote className="h-4 w-4 text-success" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+            </div>
+            <span className="flex items-center gap-1 text-xs text-success">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Salvo
+            </span>
+            <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
+            <span className="text-xs text-muted-foreground">
+              Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="border-b border-border bg-card">
