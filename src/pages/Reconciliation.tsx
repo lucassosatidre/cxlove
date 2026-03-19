@@ -79,6 +79,9 @@ export default function Reconciliation() {
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
   const [cashCounts, setCashCounts] = useState<Record<number, number>>({});
   const cashTotal = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
+  const [cashSnapshotSaved, setCashSnapshotSaved] = useState(false);
+  const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCash, setSavingCash] = useState(false);
 
   // Save conference state
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
@@ -146,6 +149,29 @@ export default function Reconciliation() {
         }
       }
       setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
+    }
+
+    // Load saved cash snapshot
+    if (id) {
+      const { data: snapData } = await supabase
+        .from('cash_snapshots')
+        .select('counts, total, updated_at')
+        .eq('daily_closing_id', id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (snapData) {
+        const counts = snapData.counts as Record<string, number>;
+        setCashSnapshotData({ counts, total: Number(snapData.total), updated_at: snapData.updated_at });
+        setCashSnapshotSaved(true);
+        // Restore counts into calculator
+        const restored: Record<number, number> = {};
+        for (const [k, v] of Object.entries(counts)) {
+          restored[parseFloat(k)] = v;
+        }
+        setCashCounts(restored);
+      }
     }
 
     setLoading(false);
@@ -278,8 +304,42 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
+  const handleSaveCashSnapshot = useCallback(async () => {
+    if (!id || !user) return;
+    setSavingCash(true);
+    const countsJson: Record<string, number> = {};
+    for (const [k, v] of Object.entries(cashCounts)) {
+      if (v > 0) countsJson[k] = v;
+    }
+
+    const { error } = await supabase
+      .from('cash_snapshots')
+      .upsert({
+        daily_closing_id: id,
+        user_id: user.id,
+        counts: countsJson,
+        total: cashTotal,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'daily_closing_id,user_id' });
+
+    if (error) {
+      toast.error('Erro ao salvar contagem de dinheiro.');
+    } else {
+      setCashSnapshotSaved(true);
+      setCashSnapshotData({ counts: countsJson, total: cashTotal, updated_at: new Date().toISOString() });
+      toast.success(`Contagem salva: ${formatCurrency(cashTotal)}`);
+      setShowCashCalc(false);
+    }
+    setSavingCash(false);
+  }, [id, user, cashCounts, cashTotal]);
+
   const handleSaveConference = useCallback(() => {
     const errors: string[] = [];
+
+    if (!cashSnapshotSaved) {
+      errors.push('Calculadora de Dinheiro: contagem não foi salva. Abra a calculadora e salve antes de finalizar.');
+    }
+
     for (const order of orders) {
       if (!order.is_confirmed) {
         errors.push(`Comanda #${order.order_number}: não está confirmada.`);
@@ -297,7 +357,7 @@ export default function Reconciliation() {
       setConferenceErrors(errors);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSaved]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => {
@@ -504,6 +564,48 @@ export default function Reconciliation() {
           </div>
         </div>
 
+        {/* Cash Snapshot Card */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-success" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+              </div>
+              {cashSnapshotSaved ? (
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Salvo
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-warning">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Não salvo
+                </span>
+              )}
+            </div>
+            {cashSnapshotData ? (
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
+                <span className="text-xs text-muted-foreground">
+                  Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
+                </span>
+                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalc(true)}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  Ver detalhes
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalc(true)}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  Abrir Calculadora
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
 
 
 
@@ -773,8 +875,8 @@ export default function Reconciliation() {
             <Button variant="outline" size="sm" onClick={() => setCashCounts({})}>
               Limpar
             </Button>
-            <Button size="sm" onClick={() => { setShowCashCalc(false); toast.success(`Contagem registrada: ${formatCurrency(cashTotal)}`); }}>
-              Salvar
+            <Button size="sm" onClick={handleSaveCashSnapshot} disabled={savingCash || isCompleted}>
+              {savingCash ? 'Salvando...' : cashSnapshotSaved ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
         </DialogContent>
