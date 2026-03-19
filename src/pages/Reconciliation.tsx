@@ -564,6 +564,48 @@ export default function Reconciliation() {
           </div>
         </div>
 
+        {/* Cash Snapshot Card */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-success" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+              </div>
+              {cashSnapshotSaved ? (
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Salvo
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-warning">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Não salvo
+                </span>
+              )}
+            </div>
+            {cashSnapshotData ? (
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
+                <span className="text-xs text-muted-foreground">
+                  Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
+                </span>
+                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalc(true)}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  Ver detalhes
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalc(true)}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  Abrir Calculadora
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
 
 
 
