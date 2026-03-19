@@ -402,6 +402,34 @@ export default function Reconciliation() {
           </div>
         </header>
 
+        {/* Offline Payment Totals */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Recebimentos Offline (Confirmados)</p>
+            <div className="flex flex-wrap gap-3">
+              {OFFLINE_CATEGORIES.map(cat => {
+                const total = offlineMethodTotals[cat];
+                const iconMap: Record<string, React.ReactNode> = {
+                  'Dinheiro': <Banknote className="h-4 w-4 text-success" />,
+                  '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
+                  'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+                  'Débito': <CreditCardIcon className="h-4 w-4 text-muted-foreground" />,
+                  'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+                };
+                return (
+                  <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                    {iconMap[cat]}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
+                      <p className="text-sm font-semibold text-foreground font-mono-tabular">{formatCurrency(total)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
         {/* Stats */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -417,6 +445,7 @@ export default function Reconciliation() {
             </div>
           </div>
         </div>
+
 
         {/* Import History Toggle */}
         {importRecords.length > 0 && (
