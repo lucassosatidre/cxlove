@@ -72,7 +72,7 @@ export default function DeliveryReconciliation() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: closing }, { data: ordData }, { data: txData }] = await Promise.all([
+    const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date').eq('id', id!).single(),
       supabase.from('imported_orders')
         .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
@@ -80,11 +80,20 @@ export default function DeliveryReconciliation() {
       supabase.from('card_transactions')
         .select('*')
         .eq('daily_closing_id', id!),
+      supabase.from('cash_snapshots')
+        .select('total, updated_at')
+        .eq('daily_closing_id', id!)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     setClosingDate(closing?.closing_date || '');
     setOrders(ordData || []);
     setTransactions((txData || []) as CardTransaction[]);
+    if (snapData) {
+      setCashSnapshotData({ total: Number(snapData.total), updated_at: snapData.updated_at });
+    }
     setLoading(false);
   };
 
