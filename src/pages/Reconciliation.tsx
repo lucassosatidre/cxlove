@@ -695,8 +695,8 @@ export default function Reconciliation() {
               )}
             </div>
             <Button
-              onClick={finalize}
-              disabled={pending > 0 || isCompleted || completing}
+              onClick={handleSaveConference}
+              disabled={isCompleted || completing}
               className="bg-success hover:bg-success/90 text-success-foreground"
             >
               {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
