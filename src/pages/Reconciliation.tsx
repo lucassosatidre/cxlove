@@ -5,7 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -72,6 +73,17 @@ export default function Reconciliation() {
     sales_channel: false,
     partner_order_number: false,
   });
+
+  // Cash calculator state
+  const [showCashCalc, setShowCashCalc] = useState(false);
+  const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
+  const [cashCounts, setCashCounts] = useState<Record<number, number>>({});
+  const cashTotal = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
+
+  // Save conference state
+  const [showConferenceErrors, setShowConferenceErrors] = useState(false);
+  const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
+
 
   const toggleColumn = (col: keyof typeof visibleColumns) => {
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
@@ -249,6 +261,27 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
+  const handleSaveConference = useCallback(() => {
+    const errors: string[] = [];
+    for (const order of orders) {
+      if (!order.is_confirmed) {
+        errors.push(`Comanda #${order.order_number}: não está confirmada.`);
+      }
+      if (!order.delivery_person || order.delivery_person.trim() === '') {
+        errors.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
+      }
+      if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) {
+        errors.push(`Comanda #${order.order_number}: rateio de pagamento pendente.`);
+      }
+    }
+    if (errors.length === 0) {
+      finalize();
+    } else {
+      setConferenceErrors(errors);
+      setShowConferenceErrors(true);
+    }
+  }, [orders, breakdownValidity, finalize]);
+
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => {
     const baseMethods = ['Dinheiro', 'Crédito', 'Débito', '(COBRAR) Pix'];
@@ -386,6 +419,10 @@ export default function Reconciliation() {
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCashCalc(true)}>
+                <Calculator className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Calculadora Dinheiro</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
@@ -397,6 +434,10 @@ export default function Reconciliation() {
               <Button variant="outline" size="sm" onClick={() => bulkUpdate(false)} disabled={isCompleted}>
                 <XCircle className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Desmarcar todos</span>
+              </Button>
+              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-success hover:bg-success/90 text-success-foreground">
+                <Save className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Salvar Conferência</span>
               </Button>
             </div>
           </div>
@@ -445,6 +486,9 @@ export default function Reconciliation() {
             </div>
           </div>
         </div>
+
+
+
 
 
         {/* Import History Toggle */}
@@ -661,6 +705,88 @@ export default function Reconciliation() {
         </div>
       </div>
       <AppSidebar />
+
+      {/* Cash Calculator Dialog */}
+      <Dialog open={showCashCalc} onOpenChange={setShowCashCalc}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Calculadora de Dinheiro
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+              <span>Cédula/Moeda</span>
+              <span className="text-center">Qtd</span>
+              <span className="text-right">Subtotal</span>
+            </div>
+            {CASH_DENOMINATIONS.map(denom => (
+              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
+                <span className="text-sm font-medium text-foreground">
+                  {formatCurrency(denom)}
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={cashCounts[denom] || ''}
+                  onChange={(e) => setCashCounts(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                  className="h-8 text-center text-sm"
+                  placeholder="0"
+                />
+                <span className="text-sm text-right font-mono text-foreground">
+                  {formatCurrency(denom * (cashCounts[denom] || 0))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotal)}</span>
+            </div>
+            {offlineMethodTotals['Dinheiro'] > 0 && (
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-muted-foreground">Dinheiro confirmado nos pedidos:</span>
+                <span className="text-sm font-medium text-muted-foreground font-mono">{formatCurrency(offlineMethodTotals['Dinheiro'])}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCashCounts({})}>
+              Limpar
+            </Button>
+            <Button size="sm" onClick={() => { setShowCashCalc(false); toast.success(`Contagem registrada: ${formatCurrency(cashTotal)}`); }}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conference Errors Dialog */}
+      <Dialog open={showConferenceErrors} onOpenChange={setShowConferenceErrors}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Pendências na Conferência
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {conferenceErrors.map((err, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm bg-destructive/10 text-destructive rounded-md px-3 py-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{err}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConferenceErrors(false)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
