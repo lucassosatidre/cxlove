@@ -56,6 +56,7 @@ export default function DeliveryReconciliation() {
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [breakdowns, setBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [transactions, setTransactions] = useState<CardTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -90,11 +91,23 @@ export default function DeliveryReconciliation() {
     ]);
 
     setClosingDate(closing?.closing_date || '');
-    setOrders(ordData || []);
+    const ordersList = ordData || [];
+    setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
     if (snapData) {
       setCashSnapshotData({ counts: snapData.counts as Record<string, number>, total: Number(snapData.total), updated_at: snapData.updated_at });
     }
+
+    // Load breakdowns for all orders
+    if (ordersList.length > 0) {
+      const orderIds = ordersList.map(o => o.id);
+      const { data: bkData } = await supabase
+        .from('order_payment_breakdowns')
+        .select('imported_order_id, payment_method_name, payment_type, amount')
+        .in('imported_order_id', orderIds);
+      setBreakdowns(bkData || []);
+    }
+
     setLoading(false);
   };
 
@@ -229,7 +242,8 @@ export default function DeliveryReconciliation() {
           sale_time: o.sale_time,
           is_confirmed: o.is_confirmed,
         })),
-        new Set()
+        new Set(),
+        breakdowns
       );
 
       // Apply matches

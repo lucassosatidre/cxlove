@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
-import { CheckCircle2, AlertTriangle, Wifi, CreditCard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, AlertTriangle, Wifi, CreditCard, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   splitPaymentMethods,
@@ -38,7 +39,11 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
   const methods = useMemo(() => splitPaymentMethods(paymentMethod), [paymentMethod]);
   const scenario = useMemo(() => getBreakdownScenario(methods), [methods]);
 
-  // Load existing breakdowns
+  // Get unique physical methods for the "add row" dropdown
+  const physicalMethods = useMemo(() => {
+    return [...new Set(methods.filter(m => classifyPaymentType(m) === 'fisico'))];
+  }, [methods]);
+
   useEffect(() => {
     loadBreakdowns();
   }, [orderId]);
@@ -58,7 +63,6 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
         is_auto_calculated: d.is_auto_calculated,
       })));
     } else {
-      // Initialize from payment method string
       const initial: BreakdownRow[] = methods.map(m => ({
         payment_method_name: m,
         payment_type: classifyPaymentType(m),
@@ -66,7 +70,6 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
         is_auto_calculated: false,
       }));
 
-      // For 1 physical + 1 online, mark online as auto
       if (scenario === 'one_physical_one_online') {
         const onlineIdx = initial.findIndex(r => r.payment_type === 'online');
         if (onlineIdx >= 0) {
@@ -82,7 +85,6 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
   const diff = useMemo(() => Math.round((totalAmount - sum) * 100) / 100, [totalAmount, sum]);
   const isValid = useMemo(() => Math.abs(diff) < 0.01, [diff]);
 
-  // Notify parent about validity
   useEffect(() => {
     onBreakdownValid(isValid);
   }, [isValid, onBreakdownValid]);
@@ -96,18 +98,19 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
       const next = [...prev];
       next[index] = { ...next[index], amount };
 
-      // Auto-calculate for 1 physical + 1 online scenario
-      if (scenario === 'one_physical_one_online' && next[index].payment_type === 'fisico') {
-        const onlineIdx = next.findIndex(r => r.payment_type === 'online');
+      // Auto-calculate for 1 physical + 1 online scenario (only if no extra rows added)
+      if (scenario === 'one_physical_one_online' && next.length === methods.length && next[index].payment_type === 'fisico') {
+        const onlineIdx = next.findIndex(r => r.payment_type === 'online' && r.is_auto_calculated);
         if (onlineIdx >= 0) {
-          const autoVal = Math.round((totalAmount - amount) * 100) / 100;
+          const physicalSum = next.filter((r, i) => r.payment_type === 'fisico').reduce((s, r) => s + r.amount, 0);
+          const autoVal = Math.round((totalAmount - physicalSum) * 100) / 100;
           next[onlineIdx] = { ...next[onlineIdx], amount: Math.max(0, autoVal), is_auto_calculated: true };
         }
       }
 
       return next;
     });
-  }, [scenario, totalAmount]);
+  }, [scenario, totalAmount, methods.length]);
 
   const saveBreakdowns = useCallback(async () => {
     if (!isValid) {
@@ -117,13 +120,11 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
 
     setSaving(true);
 
-    // Delete existing breakdowns for this order
     await supabase
       .from('order_payment_breakdowns')
       .delete()
       .eq('imported_order_id', orderId);
 
-    // Insert new ones
     const inserts = rows.map(r => ({
       imported_order_id: orderId,
       payment_method_name: r.payment_method_name,
@@ -145,7 +146,6 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     setSaving(false);
   }, [orderId, rows, isValid, onSaved]);
 
-  // Auto-save valid breakdowns on blur/enter
   const pendingSaveRef = useRef(false);
 
   useEffect(() => {
@@ -171,7 +171,6 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
   const handleBlurField = useCallback((index: number) => {
     commitAmount(index, editingValue);
     setEditingIndex(null);
-    // handleCommit will be called after state updates via effect
     setTimeout(() => handleCommit(), 0);
   }, [commitAmount, editingValue, handleCommit]);
 
@@ -184,6 +183,33 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
     }
   }, [commitAmount, editingValue, handleCommit]);
 
+  const addRow = useCallback((methodName: string) => {
+    setRows(prev => [...prev, {
+      payment_method_name: methodName,
+      payment_type: classifyPaymentType(methodName),
+      amount: 0,
+      is_auto_calculated: false,
+    }]);
+  }, []);
+
+  const removeRow = useCallback((index: number) => {
+    setRows(prev => {
+      if (prev.length <= methods.length) return prev; // Don't remove original rows
+      const next = prev.filter((_, i) => i !== index);
+      return next;
+    });
+  }, [methods.length]);
+
+  // Check if a row is an "extra" row (added by user, can be removed)
+  const isExtraRow = useCallback((index: number) => {
+    // Count how many rows of this method exist vs how many are in the original methods
+    const row = rows[index];
+    const originalCount = methods.filter(m => m === row.payment_method_name).length;
+    const currentRows = rows.filter(r => r.payment_method_name === row.payment_method_name);
+    const currentIndex = currentRows.indexOf(row);
+    return currentIndex >= originalCount;
+  }, [rows, methods]);
+
   if (loading) {
     return (
       <div className="p-4 flex justify-center">
@@ -194,8 +220,26 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
 
   return (
     <div className="bg-secondary/50 border-t border-border px-4 py-3 space-y-3">
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-        Detalhamento por forma de pagamento
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          Detalhamento por forma de pagamento
+        </div>
+        {!isCompleted && physicalMethods.length > 0 && (
+          <div className="flex items-center gap-1">
+            {physicalMethods.map(method => (
+              <Button
+                key={method}
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] px-2 gap-1"
+                onClick={() => addRow(method)}
+              >
+                <Plus className="h-3 w-3" />
+                {method}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -216,23 +260,35 @@ export default function PaymentBreakdown({ orderId, paymentMethod, totalAmount, 
                 {row.payment_type === 'online' ? 'Online' : 'Físico'}
               </span>
             </div>
-            <div className="w-32 shrink-0">
-              <Input
-                type="text"
-                inputMode="decimal"
-                placeholder="R$ 0,00"
-                className="h-8 text-right font-mono-tabular text-sm"
-                value={editingIndex === idx ? editingValue : (row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : '')}
-                onChange={(e) => {
-                  if (editingIndex === idx) {
-                    setEditingValue(e.target.value);
-                  }
-                }}
-                onFocus={() => handleFocus(idx, row.amount)}
-                onBlur={() => handleBlurField(idx)}
-                onKeyDown={(e) => handleKeyDown(e, idx)}
-                disabled={isCompleted || (row.is_auto_calculated && scenario === 'one_physical_one_online')}
-              />
+            <div className="flex items-center gap-1.5">
+              <div className="w-32 shrink-0">
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="R$ 0,00"
+                  className="h-8 text-right font-mono-tabular text-sm"
+                  value={editingIndex === idx ? editingValue : (row.amount > 0 ? row.amount.toFixed(2).replace('.', ',') : '')}
+                  onChange={(e) => {
+                    if (editingIndex === idx) {
+                      setEditingValue(e.target.value);
+                    }
+                  }}
+                  onFocus={() => handleFocus(idx, row.amount)}
+                  onBlur={() => handleBlurField(idx)}
+                  onKeyDown={(e) => handleKeyDown(e, idx)}
+                  disabled={isCompleted || (row.is_auto_calculated && scenario === 'one_physical_one_online' && rows.length === methods.length)}
+                />
+              </div>
+              {!isCompleted && isExtraRow(idx) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => removeRow(idx)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
           </div>
         ))}
