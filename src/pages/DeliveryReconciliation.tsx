@@ -92,7 +92,7 @@ export default function DeliveryReconciliation() {
     setOrders(ordData || []);
     setTransactions((txData || []) as CardTransaction[]);
     if (snapData) {
-      setCashSnapshotData({ total: Number(snapData.total), updated_at: snapData.updated_at });
+      setCashSnapshotData({ counts: snapData.counts as Record<string, number>, total: Number(snapData.total), updated_at: snapData.updated_at });
     }
     setLoading(false);
   };
