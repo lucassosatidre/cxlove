@@ -8,8 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
-  CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet
-} from 'lucide-react';
+  CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
+  Banknote
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
