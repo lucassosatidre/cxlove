@@ -486,6 +486,26 @@ export default function DeliveryReconciliation() {
         </div>
       </div>
 
+      {/* Cash Snapshot Card (read-only) */}
+      {cashSnapshotData && (
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3 flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Banknote className="h-4 w-4 text-success" />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+            </div>
+            <span className="flex items-center gap-1 text-xs text-success">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Salvo
+            </span>
+            <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
+            <span className="text-xs text-muted-foreground">
+              Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="border-b border-border bg-card">
         <div className="px-6 py-3 flex flex-wrap gap-2">
