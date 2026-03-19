@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import propositoLogo from '@/assets/proposito-logo.png';
+import estrelaLogo from '@/assets/estrela-logo.png';
 
 export default function Login() {
   const { user, loading, signIn } = useAuth();
@@ -38,24 +39,35 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
-        <div className="bg-card rounded-2xl border border-border shadow-sm p-8">
-          {/* Propósito logo */}
-          <div className="flex justify-center mb-5">
-            <div className="h-20 w-20 rounded-2xl bg-muted/50 border border-border flex items-center justify-center p-2">
+      <div className="w-full max-w-sm space-y-4">
+        {/* App Card */}
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
+          <div className="flex items-start gap-4">
+            <div className="h-16 w-16 rounded-xl bg-muted/50 border border-border flex items-center justify-center p-2 shrink-0">
               <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
             </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">CX Love</h1>
+              <p className="text-sm text-primary font-medium mt-0.5">Plataforma de finanças</p>
+              <p className="text-xs text-muted-foreground mt-0.5">By: Propósito Soluções</p>
+            </div>
           </div>
+        </div>
 
-          {/* App name */}
-          <h1 className="text-2xl font-bold text-foreground text-center">CX Love</h1>
+        {/* Client Card */}
+        <div className="bg-card rounded-2xl border border-border shadow-sm px-5 py-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg overflow-hidden shrink-0">
+            <img src={estrelaLogo} alt="Pizzaria Estrela da Ilha" className="h-full w-full object-cover" />
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Cliente Ativo</p>
+            <p className="text-sm font-semibold text-foreground">Pizzaria Estrela da Ilha</p>
+          </div>
+        </div>
 
-          {/* Subtitle + dev credit */}
-          <p className="text-sm text-primary font-medium text-center mt-1">Fechamento de caixa</p>
-          <p className="text-xs text-muted-foreground text-center mt-0.5">Propósito Soluções</p>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4 mt-6">
+        {/* Login Card */}
+        <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-foreground text-sm">Email</Label>
               <Input
