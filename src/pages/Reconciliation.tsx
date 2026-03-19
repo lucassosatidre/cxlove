@@ -435,7 +435,7 @@ export default function Reconciliation() {
                 <XCircle className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Desmarcar todos</span>
               </Button>
-              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-green-600 hover:bg-green-700 text-white">
+              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>
               </Button>
