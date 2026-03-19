@@ -105,8 +105,20 @@ export default function Reconciliation() {
         .order('created_at', { ascending: false }),
     ]);
 
-    setOrders(ordData || []);
+    const ordersList = ordData || [];
+    setOrders(ordersList);
     setImportRecords(impData || []);
+
+    // Load all breakdowns for orders in this closing
+    if (ordersList.length > 0) {
+      const orderIds = ordersList.map(o => o.id);
+      const { data: bkData } = await supabase
+        .from('order_payment_breakdowns')
+        .select('imported_order_id, payment_method_name, payment_type, amount')
+        .in('imported_order_id', orderIds);
+      setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
+    }
+
     setLoading(false);
   };
 
