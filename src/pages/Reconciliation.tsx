@@ -151,6 +151,29 @@ export default function Reconciliation() {
       setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
     }
 
+    // Load saved cash snapshot
+    if (id) {
+      const { data: snapData } = await supabase
+        .from('cash_snapshots')
+        .select('counts, total, updated_at')
+        .eq('daily_closing_id', id)
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (snapData) {
+        const counts = snapData.counts as Record<string, number>;
+        setCashSnapshotData({ counts, total: Number(snapData.total), updated_at: snapData.updated_at });
+        setCashSnapshotSaved(true);
+        // Restore counts into calculator
+        const restored: Record<number, number> = {};
+        for (const [k, v] of Object.entries(counts)) {
+          restored[parseFloat(k)] = v;
+        }
+        setCashCounts(restored);
+      }
+    }
+
     setLoading(false);
   };
 
