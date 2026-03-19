@@ -1020,6 +1020,8 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
+  const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
+  const [paymentPopoverOpen, setPaymentPopoverOpen] = useState(false);
 
   const formatSaleDate = (d: string | null) => {
     if (!d) return '—';
@@ -1030,7 +1032,13 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
   const startEdit = (e: React.MouseEvent, field: 'payment_method' | 'delivery_person') => {
     e.stopPropagation();
     if (isCompleted) return;
-    setEditingField(field);
+    if (field === 'payment_method') {
+      const current = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+      setSelectedMethods(current);
+      setPaymentPopoverOpen(true);
+    } else {
+      setEditingField(field);
+    }
   };
 
   const handleSelectValue = (value: string) => {
@@ -1038,6 +1046,27 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
       onUpdateField(editingField, value);
     }
     setEditingField(null);
+  };
+
+  const togglePaymentMethod = (method: string) => {
+    setSelectedMethods(prev => {
+      if (prev.includes(method)) {
+        return prev.filter(m => m !== method);
+      }
+      return [...prev, method];
+    });
+  };
+
+  const savePaymentMethods = () => {
+    if (selectedMethods.length === 0) {
+      toast.error('Selecione ao menos uma forma de pagamento.');
+      return;
+    }
+    const newValue = selectedMethods.join(', ');
+    if (newValue !== order.payment_method) {
+      onUpdateField('payment_method', newValue);
+    }
+    setPaymentPopoverOpen(false);
   };
 
   return (
