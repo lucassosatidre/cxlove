@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -238,6 +240,30 @@ export default function Reconciliation() {
       toast.error('Erro ao atualizar pedido.');
     } else {
       toast.success(`${field === 'payment_method' ? 'Forma de pagamento' : 'Entregador'} atualizado.`);
+      
+      // When payment method changes, delete old breakdowns and reset validity
+      if (field === 'payment_method' && value !== oldValue) {
+        await supabase
+          .from('order_payment_breakdowns')
+          .delete()
+          .eq('imported_order_id', orderId);
+        
+        // Update allBreakdowns state
+        setAllBreakdowns(prev => prev.filter(b => b.imported_order_id !== orderId));
+        
+        // Reset breakdown validity - if the new method needs breakdown, mark as invalid
+        if (needsBreakdown(value)) {
+          setBreakdownValidity(prev => ({ ...prev, [orderId]: false }));
+          // Auto-expand the row to show the breakdown editor
+          setExpandedOrderId(orderId);
+        } else {
+          setBreakdownValidity(prev => {
+            const next = { ...prev };
+            delete next[orderId];
+            return next;
+          });
+        }
+      }
     }
   }, [orders]);
 
@@ -1018,6 +1044,8 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
+  const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
+  const [paymentPopoverOpen, setPaymentPopoverOpen] = useState(false);
 
   const formatSaleDate = (d: string | null) => {
     if (!d) return '—';
@@ -1028,7 +1056,13 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
   const startEdit = (e: React.MouseEvent, field: 'payment_method' | 'delivery_person') => {
     e.stopPropagation();
     if (isCompleted) return;
-    setEditingField(field);
+    if (field === 'payment_method') {
+      const current = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+      setSelectedMethods(current);
+      setPaymentPopoverOpen(true);
+    } else {
+      setEditingField(field);
+    }
   };
 
   const handleSelectValue = (value: string) => {
@@ -1036,6 +1070,27 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
       onUpdateField(editingField, value);
     }
     setEditingField(null);
+  };
+
+  const togglePaymentMethod = (method: string) => {
+    setSelectedMethods(prev => {
+      if (prev.includes(method)) {
+        return prev.filter(m => m !== method);
+      }
+      return [...prev, method];
+    });
+  };
+
+  const savePaymentMethods = () => {
+    if (selectedMethods.length === 0) {
+      toast.error('Selecione ao menos uma forma de pagamento.');
+      return;
+    }
+    const newValue = selectedMethods.join(', ');
+    if (newValue !== order.payment_method) {
+      onUpdateField('payment_method', newValue);
+    }
+    setPaymentPopoverOpen(false);
   };
 
   return (
@@ -1078,38 +1133,53 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
           <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         )}
         <td className={`p-3 text-sm ${cellClass}`}>
-          {editingField === 'payment_method' ? (
-            <div onClick={(e) => e.stopPropagation()}>
-              <Select
-                defaultOpen
-                value={order.payment_method}
-                onValueChange={handleSelectValue}
-                onOpenChange={(open) => { if (!open) setEditingField(null); }}
-              >
-                <SelectTrigger className="h-7 text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {offlinePaymentMethods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 group">
-              <span className="truncate">{order.payment_method}</span>
-              <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
-              {hasMultiple && (
-                isExpanded
-                  ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              )}
-              {!isCompleted && (
-                <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
-                  <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-2 group">
+            <Popover open={paymentPopoverOpen} onOpenChange={(open) => {
+              if (!open && paymentPopoverOpen) {
+                savePaymentMethods();
+              }
+              setPaymentPopoverOpen(open);
+            }}>
+              <PopoverTrigger asChild>
+                <span className="truncate cursor-default">{order.payment_method}</span>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-0" align="start" onClick={(e) => e.stopPropagation()}>
+                <div className="p-3 border-b border-border">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Formas de Pagamento</p>
+                </div>
+                <div className="p-2 space-y-1 max-h-60 overflow-auto">
+                  {offlinePaymentMethods.map(method => (
+                    <label
+                      key={method}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent cursor-pointer text-sm"
+                    >
+                      <Checkbox
+                        checked={selectedMethods.includes(method)}
+                        onCheckedChange={() => togglePaymentMethod(method)}
+                      />
+                      <span>{method}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="p-2 border-t border-border flex justify-end">
+                  <Button size="sm" className="h-7 text-xs" onClick={savePaymentMethods}>
+                    Confirmar
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+            <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
+            {hasMultiple && (
+              isExpanded
+                ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            )}
+            {!isCompleted && (
+              <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
+                <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
+              </button>
+            )}
+          </div>
         </td>
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
