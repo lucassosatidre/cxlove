@@ -65,6 +65,7 @@ export default function DeliveryReconciliation() {
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [showCashDetails, setShowCashDetails] = useState(false);
 
   useEffect(() => {
     if (!id) return;
