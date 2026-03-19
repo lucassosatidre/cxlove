@@ -419,6 +419,10 @@ export default function Reconciliation() {
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCashCalc(true)}>
+                <Calculator className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Calculadora Dinheiro</span>
+              </Button>
               <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
@@ -430,6 +434,10 @@ export default function Reconciliation() {
               <Button variant="outline" size="sm" onClick={() => bulkUpdate(false)} disabled={isCompleted}>
                 <XCircle className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Desmarcar todos</span>
+              </Button>
+              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-green-600 hover:bg-green-700 text-white">
+                <Save className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Salvar Conferência</span>
               </Button>
             </div>
           </div>
