@@ -705,6 +705,88 @@ export default function Reconciliation() {
         </div>
       </div>
       <AppSidebar />
+
+      {/* Cash Calculator Dialog */}
+      <Dialog open={showCashCalc} onOpenChange={setShowCashCalc}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Calculadora de Dinheiro
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+              <span>Cédula/Moeda</span>
+              <span className="text-center">Qtd</span>
+              <span className="text-right">Subtotal</span>
+            </div>
+            {CASH_DENOMINATIONS.map(denom => (
+              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
+                <span className="text-sm font-medium text-foreground">
+                  {formatCurrency(denom)}
+                </span>
+                <Input
+                  type="number"
+                  min={0}
+                  value={cashCounts[denom] || ''}
+                  onChange={(e) => setCashCounts(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                  className="h-8 text-center text-sm"
+                  placeholder="0"
+                />
+                <span className="text-sm text-right font-mono text-foreground">
+                  {formatCurrency(denom * (cashCounts[denom] || 0))}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotal)}</span>
+            </div>
+            {offlineMethodTotals['Dinheiro'] > 0 && (
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-muted-foreground">Dinheiro confirmado nos pedidos:</span>
+                <span className="text-sm font-medium text-muted-foreground font-mono">{formatCurrency(offlineMethodTotals['Dinheiro'])}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCashCounts({})}>
+              Limpar
+            </Button>
+            <Button size="sm" onClick={() => { setShowCashCalc(false); toast.success(`Contagem registrada: ${formatCurrency(cashTotal)}`); }}>
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Conference Errors Dialog */}
+      <Dialog open={showConferenceErrors} onOpenChange={setShowConferenceErrors}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Pendências na Conferência
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {conferenceErrors.map((err, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm bg-destructive/10 text-destructive rounded-md px-3 py-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{err}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowConferenceErrors(false)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
