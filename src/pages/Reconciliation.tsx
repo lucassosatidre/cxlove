@@ -105,7 +105,7 @@ export default function Reconciliation() {
     }
   }, [orders, breakdownValidity, finalize]);
 
-
+  const toggleColumn = (col: keyof typeof visibleColumns) => {
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
   };
 
