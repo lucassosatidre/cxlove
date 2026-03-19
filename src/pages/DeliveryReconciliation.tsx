@@ -242,7 +242,8 @@ export default function DeliveryReconciliation() {
           sale_time: o.sale_time,
           is_confirmed: o.is_confirmed,
         })),
-        new Set()
+        new Set(),
+        breakdowns
       );
 
       // Apply matches
