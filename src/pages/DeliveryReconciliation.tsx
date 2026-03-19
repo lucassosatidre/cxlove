@@ -64,7 +64,7 @@ export default function DeliveryReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
-  const [cashSnapshotData, setCashSnapshotData] = useState<{ total: number; updated_at: string } | null>(null);
+  const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -81,7 +81,7 @@ export default function DeliveryReconciliation() {
         .select('*')
         .eq('daily_closing_id', id!),
       supabase.from('cash_snapshots')
-        .select('total, updated_at')
+        .select('counts, total, updated_at')
         .eq('daily_closing_id', id!)
         .order('updated_at', { ascending: false })
         .limit(1)
@@ -92,7 +92,7 @@ export default function DeliveryReconciliation() {
     setOrders(ordData || []);
     setTransactions((txData || []) as CardTransaction[]);
     if (snapData) {
-      setCashSnapshotData({ total: Number(snapData.total), updated_at: snapData.updated_at });
+      setCashSnapshotData({ counts: snapData.counts as Record<string, number>, total: Number(snapData.total), updated_at: snapData.updated_at });
     }
     setLoading(false);
   };
@@ -486,22 +486,38 @@ export default function DeliveryReconciliation() {
         </div>
       </div>
 
-      {/* Cash Snapshot Card (read-only) */}
+      {/* Cash Snapshot Card (read-only with breakdown) */}
       {cashSnapshotData && (
         <div className="border-b border-border bg-card">
-          <div className="px-6 py-3 flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Banknote className="h-4 w-4 text-success" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+          <div className="px-6 py-3">
+            <div className="flex items-center gap-4 mb-2">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-success" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+              </div>
+              <span className="flex items-center gap-1 text-xs text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Salvo
+              </span>
+              <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
+              <span className="text-xs text-muted-foreground">
+                Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
+              </span>
             </div>
-            <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Salvo
-            </span>
-            <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
-            <span className="text-xs text-muted-foreground">
-              Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
-            </span>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(cashSnapshotData.counts)
+                .map(([denom, qty]) => ({ denom: parseFloat(denom), qty }))
+                .filter(({ qty }) => qty > 0)
+                .sort((a, b) => b.denom - a.denom)
+                .map(({ denom, qty }) => (
+                  <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
+                    <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
+                    <span className="text-muted-foreground">×</span>
+                    <span className="font-semibold text-foreground">{qty}</span>
+                    <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
+                  </div>
+                ))}
+            </div>
           </div>
         </div>
       )}
