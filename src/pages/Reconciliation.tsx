@@ -74,7 +74,38 @@ export default function Reconciliation() {
     partner_order_number: false,
   });
 
-  const toggleColumn = (col: keyof typeof visibleColumns) => {
+  // Cash calculator state
+  const [showCashCalc, setShowCashCalc] = useState(false);
+  const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
+  const [cashCounts, setCashCounts] = useState<Record<number, number>>({});
+  const cashTotal = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
+
+  // Save conference state
+  const [showConferenceErrors, setShowConferenceErrors] = useState(false);
+  const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
+
+  const handleSaveConference = useCallback(() => {
+    const errors: string[] = [];
+    for (const order of orders) {
+      if (!order.is_confirmed) {
+        errors.push(`Comanda #${order.order_number}: não está confirmada.`);
+      }
+      if (!order.delivery_person || order.delivery_person.trim() === '') {
+        errors.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
+      }
+      if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) {
+        errors.push(`Comanda #${order.order_number}: rateio de pagamento pendente.`);
+      }
+    }
+    if (errors.length === 0) {
+      finalize();
+    } else {
+      setConferenceErrors(errors);
+      setShowConferenceErrors(true);
+    }
+  }, [orders, breakdownValidity, finalize]);
+
+
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
   };
 
