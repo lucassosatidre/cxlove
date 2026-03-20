@@ -85,19 +85,21 @@ export default function DeliveryReconciliation() {
         .select('*')
         .eq('daily_closing_id', id!),
       supabase.from('cash_snapshots')
-        .select('counts, total, updated_at')
-        .eq('daily_closing_id', id!)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .select('counts, total, updated_at, snapshot_type')
+        .eq('daily_closing_id', id!),
     ]);
 
     setClosingDate(closing?.closing_date || '');
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
-    if (snapData) {
-      setCashSnapshotData({ counts: snapData.counts as Record<string, number>, total: Number(snapData.total), updated_at: snapData.updated_at });
+    for (const snap of (snapData || [])) {
+      const type = (snap as any).snapshot_type || 'abertura';
+      if (type === 'abertura') {
+        setCashSnapshotDataAbertura({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
+      } else if (type === 'fechamento') {
+        setCashSnapshotDataFechamento({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
+      }
     }
 
     // Load breakdowns for all orders
