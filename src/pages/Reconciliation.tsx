@@ -1036,10 +1036,28 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-const UNIDENTIFIED_PAYMENTS = ['offline', 'pagamento não cadastrado', 'dinheiro'];
+// Known specific offline methods that should display normally (not as a tag)
+const KNOWN_OFFLINE_METHODS = [
+  'crédito', 'credito', 'débito', 'debito', '(cobrar) pix', 'voucher',
+  '(pago) pix banco do brasil', 'sob demanda ifood'
+];
 
 function isUnidentifiedPayment(method: string): boolean {
-  return UNIDENTIFIED_PAYMENTS.includes(method.toLowerCase().trim());
+  // If it's online, it's identified (auto-filled)
+  if (isOnlinePayment(method)) return false;
+  // If it's a known specific offline method, it's identified
+  const lower = method.toLowerCase().trim();
+  if (KNOWN_OFFLINE_METHODS.some(km => lower === km)) return false;
+  // Check comma-separated: if ALL individual methods are known, it's identified
+  const methods = method.split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
+  if (methods.length > 1) {
+    const allKnown = methods.every(m => 
+      isOnlinePayment(m) || KNOWN_OFFLINE_METHODS.some(km => m === km)
+    );
+    if (allKnown) return false;
+  }
+  // Otherwise it's unidentified → show tag
+  return true;
 }
 
 function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
