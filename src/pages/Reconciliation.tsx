@@ -1280,8 +1280,8 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             }}>
               {isUnidentified ? (
                 <>
-                  {/* Show selected payment text before the tag if operator already chose */}
-                  {!isOriginalImportPayment(order.payment_method) && (
+                  {/* Only show payment text if operator has already saved breakdowns */}
+                  {hasBreakdowns && (
                     <span className="truncate text-foreground">{order.payment_method}</span>
                   )}
                   <PopoverTrigger asChild>
