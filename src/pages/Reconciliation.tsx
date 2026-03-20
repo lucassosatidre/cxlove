@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -52,6 +53,7 @@ interface ImportRecord {
 export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { isCaixaTele } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
@@ -582,7 +584,7 @@ export default function Reconciliation() {
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
+              <Button variant="outline" size="sm" onClick={() => navigate(isCaixaTele ? '/tele/import' : '/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
