@@ -41,7 +41,7 @@ export default function UserManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<string>('operador');
+  const [newRole, setNewRole] = useState<string>('caixa_tele');
   const [newPermissions, setNewPermissions] = useState<string[]>(ALL_PERMISSIONS.map(p => p.key));
   const [creating, setCreating] = useState(false);
 
