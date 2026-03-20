@@ -40,26 +40,37 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
   const [saving, setSaving] = useState(false);
   const [editingValues, setEditingValues] = useState<Record<number, string>>({});
 
-  const addPayment = useCallback(() => {
-    onPaymentsChanged([...payments, { payment_method: '', amount: 0 }]);
+  // Auto-show first empty row for pending orders
+  const effectivePayments = payments.length === 0 ? [{ payment_method: '', amount: 0 }] : payments;
+
+  // Sync the auto-created row to parent if needed
+  const ensurePayments = useCallback(() => {
+    if (payments.length === 0) {
+      onPaymentsChanged([{ payment_method: '', amount: 0 }]);
+    }
   }, [payments, onPaymentsChanged]);
 
+  const addPayment = useCallback(() => {
+    ensurePayments();
+    onPaymentsChanged([...effectivePayments, { payment_method: '', amount: 0 }]);
+  }, [effectivePayments, onPaymentsChanged, ensurePayments]);
+
   const removePayment = useCallback((index: number) => {
-    const updated = payments.filter((_, i) => i !== index);
+    const updated = effectivePayments.filter((_, i) => i !== index);
     onPaymentsChanged(updated);
     setEditingValues(prev => {
       const next = { ...prev };
       delete next[index];
       return next;
     });
-  }, [payments, onPaymentsChanged]);
+  }, [effectivePayments, onPaymentsChanged]);
 
   const updatePayment = useCallback((index: number, field: 'payment_method' | 'amount', value: string | number) => {
-    const updated = [...payments];
+    const updated = [...effectivePayments];
     updated[index] = { ...updated[index], [field]: value };
     onPaymentsChanged(updated);
     return updated;
-  }, [payments, onPaymentsChanged]);
+  }, [effectivePayments, onPaymentsChanged]);
 
   const handleAmountChange = useCallback((index: number, rawValue: string) => {
     setEditingValues(prev => ({ ...prev, [index]: rawValue }));
@@ -121,17 +132,17 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
     }
   }, [editingValues, updatePayment, totalAmount, doSave, onPaymentsChanged]);
 
-  const sum = payments.reduce((acc, p) => acc + p.amount, 0);
+  const sum = effectivePayments.reduce((acc, p) => acc + p.amount, 0);
   const diff = Math.round((totalAmount - sum) * 100) / 100;
-  const isValid = payments.length > 0 && payments.every(p => p.payment_method && p.amount > 0) && Math.abs(diff) < 0.01;
+  const isValid = effectivePayments.length > 0 && effectivePayments.every(p => p.payment_method && p.amount > 0) && Math.abs(diff) < 0.01;
 
   const savePayments = useCallback(async () => {
     if (!isValid) {
       toast.error('Preencha todos os campos e confira que a soma bate com o total.');
       return;
     }
-    doSave(payments);
-  }, [payments, isValid, doSave]);
+    doSave(effectivePayments);
+  }, [effectivePayments, isValid, doSave]);
 
   const getDisplayValue = (index: number, amount: number) => {
     if (editingValues[index] !== undefined) return editingValues[index];
@@ -140,7 +151,7 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
 
   return (
     <div className="space-y-1.5">
-      {payments.map((entry, idx) => (
+      {effectivePayments.map((entry, idx) => (
         <div key={idx} className="flex items-center gap-1.5">
           <Select
             value={entry.payment_method}
@@ -176,13 +187,13 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
         </div>
       ))}
 
-      <div className="flex items-center justify-between gap-2">
-        <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={addPayment}>
-          <Plus className="h-2.5 w-2.5" />
-          Adicionar
-        </Button>
+      {effectivePayments.length > 1 || (effectivePayments.length === 1 && effectivePayments[0].payment_method) ? (
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={addPayment}>
+            <Plus className="h-2.5 w-2.5" />
+            Adicionar
+          </Button>
 
-        {payments.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted-foreground tabular-nums">
               {sum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -203,8 +214,8 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
               {saving ? '...' : 'Salvar'}
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
