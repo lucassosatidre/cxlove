@@ -40,9 +40,20 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
   const [saving, setSaving] = useState(false);
   const [editingValues, setEditingValues] = useState<Record<number, string>>({});
 
-  const addPayment = useCallback(() => {
-    onPaymentsChanged([...payments, { payment_method: '', amount: 0 }]);
+  // Auto-show first empty row for pending orders
+  const effectivePayments = payments.length === 0 ? [{ payment_method: '', amount: 0 }] : payments;
+
+  // Sync the auto-created row to parent if needed
+  const ensurePayments = useCallback(() => {
+    if (payments.length === 0) {
+      onPaymentsChanged([{ payment_method: '', amount: 0 }]);
+    }
   }, [payments, onPaymentsChanged]);
+
+  const addPayment = useCallback(() => {
+    ensurePayments();
+    onPaymentsChanged([...effectivePayments, { payment_method: '', amount: 0 }]);
+  }, [effectivePayments, onPaymentsChanged, ensurePayments]);
 
   const removePayment = useCallback((index: number) => {
     const updated = payments.filter((_, i) => i !== index);
