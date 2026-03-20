@@ -373,6 +373,38 @@ export type Database = {
           },
         ]
       }
+      salon_order_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_method: string
+          salon_order_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_method: string
+          salon_order_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_method?: string
+          salon_order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salon_order_payments_salon_order_id_fkey"
+            columns: ["salon_order_id"]
+            isOneToOne: false
+            referencedRelation: "salon_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salon_orders: {
         Row: {
           confirmed_at: string | null
