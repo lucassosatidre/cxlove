@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { CalendarDays, Store, Bike, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
+import { CalendarDays, Store, Bike, ChevronRight, CheckCircle2, Clock, Vault } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import CashExpectationDialog from '@/components/CashExpectationDialog';
 
 interface ClosingRow {
   id: string;
