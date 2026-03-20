@@ -962,32 +962,61 @@ export default function Reconciliation() {
 
       {/* Cash Calculator Dialog - Abertura */}
       <Dialog open={showCashCalcAbertura} onOpenChange={setShowCashCalcAbertura}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className={expectedCash ? "sm:max-w-2xl" : "sm:max-w-md"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calculator className="h-5 w-5" />
               Calculadora de Dinheiro — Abertura
             </DialogTitle>
+            {expectedCash && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Valores esperados definidos pelo administrador estão exibidos ao lado.
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+            <div className={`grid ${expectedCash ? 'grid-cols-[1fr_80px_1fr_1fr]' : 'grid-cols-[1fr_80px_1fr]'} gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1`}>
               <span>Cédula/Moeda</span>
               <span className="text-center">Qtd</span>
               <span className="text-right">Subtotal</span>
+              {expectedCash && <span className="text-right text-warning">Esperado</span>}
             </div>
-            {CASH_DENOMINATIONS.map(denom => (
-              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
-                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
-                <Input type="number" min={0} value={cashCountsAbertura[denom] || ''} onChange={(e) => setCashCountsAbertura(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
-                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsAbertura[denom] || 0))}</span>
-              </div>
-            ))}
+            {CASH_DENOMINATIONS.map(denom => {
+              const expectedCount = expectedCash?.counts?.[String(denom)] || 0;
+              const expectedSubtotal = denom * expectedCount;
+              const actualSubtotal = denom * (cashCountsAbertura[denom] || 0);
+              return (
+                <div key={denom} className={`grid ${expectedCash ? 'grid-cols-[1fr_80px_1fr_1fr]' : 'grid-cols-[1fr_80px_1fr]'} gap-2 items-center`}>
+                  <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                  <Input type="number" min={0} value={cashCountsAbertura[denom] || ''} onChange={(e) => setCashCountsAbertura(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                  <span className="text-sm text-right font-mono text-foreground">{formatCurrency(actualSubtotal)}</span>
+                  {expectedCash && (
+                    <span className={`text-sm text-right font-mono ${expectedCount > 0 ? (actualSubtotal === expectedSubtotal ? 'text-success' : 'text-warning') : 'text-muted-foreground'}`}>
+                      {expectedCount > 0 ? `${expectedCount}× = ${formatCurrency(expectedSubtotal)}` : '—'}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="border-t border-border pt-3 mt-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
               <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalAbertura)}</span>
             </div>
+            {expectedCash && (
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-muted-foreground">Total esperado (admin):</span>
+                <span className={`text-sm font-medium font-mono ${Math.abs(cashTotalAbertura - expectedCash.total) < 0.01 ? 'text-success' : 'text-warning'}`}>
+                  {formatCurrency(expectedCash.total)}
+                </span>
+              </div>
+            )}
+            {expectedCash && cashTotalAbertura > 0 && Math.abs(cashTotalAbertura - expectedCash.total) >= 0.01 && (
+              <div className="mt-2 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2 text-xs text-warning">
+                ⚠️ Diferença de {formatCurrency(Math.abs(cashTotalAbertura - expectedCash.total))} entre o valor contado e o esperado.
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setCashCountsAbertura({})}>Limpar</Button>
