@@ -880,6 +880,7 @@ export default function Reconciliation() {
                         isAutoOnline={autoOnline}
                         hasBreakdowns={hasBreakdowns}
                         visibleColumns={visibleColumns}
+                        orderBreakdowns={allBreakdowns.filter(b => b.imported_order_id === order.id)}
                         onRowClick={() => handleRowClick(order)}
                         onCheckboxClick={(e) => {
                           e.stopPropagation();
@@ -890,7 +891,6 @@ export default function Reconciliation() {
                           if (!order.is_confirmed) {
                             toggleConfirm(order.id, false);
                           }
-                          // Reload breakdowns to update totals
                           const orderIds = orders.map(o => o.id);
                           const { data: bkData } = await supabase
                             .from('order_payment_breakdowns')
