@@ -57,6 +57,61 @@ export default function SalonDashboard() {
 
   const getImportsForClosing = (closingId: string) => imports.filter(i => i.salon_closing_id === closingId);
 
+  const toggleImportSelection = (importId: string) => {
+    setSelectedImports(prev => {
+      const next = new Set(prev);
+      if (next.has(importId)) next.delete(importId);
+      else next.add(importId);
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedImports.size === 0) return;
+    const confirmed = window.confirm(`Tem certeza que deseja apagar ${selectedImports.size} importação(ões)? Os pedidos e pagamentos associados serão removidos.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const importIds = Array.from(selectedImports);
+
+      // Get order IDs for these imports to delete payments first
+      const { data: orders } = await supabase
+        .from('salon_orders')
+        .select('id')
+        .in('salon_import_id', importIds);
+
+      if (orders && orders.length > 0) {
+        const orderIds = orders.map(o => o.id);
+        await supabase.from('salon_order_payments').delete().in('salon_order_id', orderIds);
+        await supabase.from('salon_orders').delete().in('salon_import_id', importIds);
+      }
+
+      await supabase.from('salon_imports').delete().in('id', importIds);
+
+      // Check if any closing now has zero imports and delete it
+      const affectedClosingIds = [...new Set(
+        imports.filter(i => importIds.includes(i.id) && i.salon_closing_id).map(i => i.salon_closing_id!)
+      )];
+
+      for (const closingId of affectedClosingIds) {
+        const remaining = imports.filter(i => i.salon_closing_id === closingId && !importIds.includes(i.id));
+        if (remaining.length === 0) {
+          await supabase.from('salon_closings').delete().eq('id', closingId);
+        }
+      }
+
+      toast.success(`${importIds.length} importação(ões) removida(s) com sucesso.`);
+      setSelectedImports(new Set());
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar importações.');
+      console.error(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   const weekday = today.toLocaleDateString('pt-BR', { weekday: 'long' });
