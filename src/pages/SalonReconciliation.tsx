@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
-import { parseCardTransactionFile } from '@/lib/card-transaction-parser';
+import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
 
