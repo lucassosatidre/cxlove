@@ -1212,8 +1212,8 @@ function isUnidentifiedPayment(method: string): boolean {
   return true;
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
-  const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
+  const colCount = 6 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
