@@ -41,7 +41,7 @@ export default function UserManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<string>('operador');
+  const [newRole, setNewRole] = useState<string>('caixa_tele');
   const [newPermissions, setNewPermissions] = useState<string[]>(ALL_PERMISSIONS.map(p => p.key));
   const [creating, setCreating] = useState(false);
 
@@ -51,7 +51,7 @@ export default function UserManagement() {
 
   // Role edit
   const [editingRole, setEditingRole] = useState<ManagedUser | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('operador');
+  const [selectedRole, setSelectedRole] = useState<string>('caixa_tele');
   const [updatingRole, setUpdatingRole] = useState(false);
 
   // Permissions edit
@@ -94,7 +94,7 @@ export default function UserManagement() {
       setCreateOpen(false);
       setNewEmail('');
       setNewPassword('');
-      setNewRole('operador');
+      setNewRole('caixa_tele');
       setNewPermissions(ALL_PERMISSIONS.map(p => p.key));
       loadUsers();
     } catch (err: any) {
@@ -154,13 +154,17 @@ export default function UserManagement() {
   };
 
   const roleLabel = (role: string | null) => {
-    if (role === 'admin') return 'Admin';
-    if (role === 'operador') return 'Operador';
+    if (role === 'admin') return 'Administrador';
+    if (role === 'caixa_tele') return 'Caixa Tele';
+    if (role === 'caixa_salao') return 'Caixa Salão';
+    if (role === 'operador') return 'Operador (legado)';
     return 'Sem papel';
   };
 
   const roleBadgeClass = (role: string | null) => {
     if (role === 'admin') return 'bg-primary/15 text-primary border-primary/30';
+    if (role === 'caixa_tele') return 'bg-blue-500/15 text-blue-600 border-blue-500/30';
+    if (role === 'caixa_salao') return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
     if (role === 'operador') return 'bg-success/15 text-success border-success/30';
     return 'bg-muted text-muted-foreground';
   };
@@ -257,7 +261,7 @@ export default function UserManagement() {
                         size="icon"
                         onClick={() => {
                           setEditingRole(u);
-                          setSelectedRole(u.role || 'operador');
+                          setSelectedRole(u.role || 'caixa_tele');
                         }}
                         title="Alterar papel"
                       >
@@ -304,12 +308,13 @@ export default function UserManagement() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="operador">Operador</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="caixa_tele">Caixa Tele</SelectItem>
+                  <SelectItem value="caixa_salao">Caixa Salão</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            {newRole !== 'admin' && (
+            {newRole === 'operador' && (
               <div className="space-y-3">
                 <Label>Permissões de acesso</Label>
                 <div className="space-y-2">
@@ -349,8 +354,9 @@ export default function UserManagement() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="operador">Operador</SelectItem>
+                <SelectItem value="admin">Administrador</SelectItem>
+                <SelectItem value="caixa_tele">Caixa Tele</SelectItem>
+                <SelectItem value="caixa_salao">Caixa Salão</SelectItem>
               </SelectContent>
             </Select>
           </div>

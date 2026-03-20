@@ -15,7 +15,7 @@ export type PermissionKey = typeof ALL_PERMISSIONS[number]['key'];
 
 export function useUserPermissions() {
   const { user } = useAuth();
-  const { isAdmin, loading: roleLoading } = useUserRole();
+  const { isAdmin, isCaixaTele, isCaixaSalao, loading: roleLoading } = useUserRole();
   const [permissions, setPermissions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -26,15 +26,29 @@ export function useUserPermissions() {
       return;
     }
 
+    if (roleLoading) return;
+
     // Admins have all permissions
-    if (!roleLoading && isAdmin) {
+    if (isAdmin) {
       setPermissions(ALL_PERMISSIONS.map(p => p.key));
       setLoading(false);
       return;
     }
 
-    if (roleLoading) return;
+    // Role-based fixed permissions
+    if (isCaixaTele) {
+      setPermissions(['dashboard']);
+      setLoading(false);
+      return;
+    }
 
+    if (isCaixaSalao) {
+      setPermissions(['salon']);
+      setLoading(false);
+      return;
+    }
+
+    // Fallback: load from user_permissions table
     const fetch = async () => {
       const { data } = await supabase
         .from('user_permissions')
@@ -46,7 +60,7 @@ export function useUserPermissions() {
     };
 
     fetch();
-  }, [user, isAdmin, roleLoading]);
+  }, [user, isAdmin, isCaixaTele, isCaixaSalao, roleLoading]);
 
   const hasPermission = (key: string) => isAdmin || permissions.includes(key);
 
