@@ -1039,6 +1039,12 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
+const UNIDENTIFIED_PAYMENTS = ['offline', 'pagamento não cadastrado', 'dinheiro'];
+
+function isUnidentifiedPayment(method: string): boolean {
+  return UNIDENTIFIED_PAYMENTS.includes(method.toLowerCase().trim());
+}
+
 function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
@@ -1046,6 +1052,8 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
   const [selectedMethods, setSelectedMethods] = useState<string[]>([]);
   const [paymentPopoverOpen, setPaymentPopoverOpen] = useState(false);
+
+  const isUnidentified = isUnidentifiedPayment(order.payment_method);
 
   const formatSaleDate = (d: string | null) => {
     if (!d) return '—';
@@ -1057,7 +1065,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
     e.stopPropagation();
     if (isCompleted) return;
     if (field === 'payment_method') {
-      const current = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+      const current = isUnidentified ? [] : order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       setSelectedMethods(current);
       setPaymentPopoverOpen(true);
     } else {
@@ -1141,7 +1149,21 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               setPaymentPopoverOpen(open);
             }}>
               <PopoverTrigger asChild>
-                <span className="truncate cursor-default">{order.payment_method}</span>
+                {isUnidentified ? (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
+                    className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] ${
+                      needsBreakdown(order.payment_method)
+                        ? 'bg-warning/15 text-warning hover:bg-warning/25 border border-warning/30'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
+                    }`}
+                  >
+                    <AlertTriangle className="h-3 w-3" />
+                    {needsBreakdown(order.payment_method) ? 'Rateio necessário' : 'Pagamento no ato'}
+                  </button>
+                ) : (
+                  <span className="truncate cursor-default">{order.payment_method}</span>
+                )}
               </PopoverTrigger>
               <PopoverContent className="w-64 p-0" align="start" onClick={(e) => e.stopPropagation()}>
                 <div className="p-3 border-b border-border">
@@ -1168,13 +1190,13 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
                 </div>
               </PopoverContent>
             </Popover>
-            <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />
+            {!isUnidentified && <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />}
             {hasMultiple && (
               isExpanded
                 ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             )}
-            {!isCompleted && (
+            {!isCompleted && !isUnidentified && (
               <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
                 <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
               </button>
