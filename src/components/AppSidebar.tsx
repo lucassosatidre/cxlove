@@ -22,6 +22,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
 
   const allNavItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/', permission: 'dashboard' },
+    { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
     { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
   ];
 

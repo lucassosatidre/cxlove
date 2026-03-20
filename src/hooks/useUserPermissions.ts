@@ -5,6 +5,7 @@ import { useUserRole } from './useUserRole';
 
 export const ALL_PERMISSIONS = [
   { key: 'dashboard', label: 'Dashboard' },
+  { key: 'salon', label: 'Salão' },
   { key: 'import', label: 'Importar' },
   { key: 'reconciliation', label: 'Conciliação' },
   { key: 'delivery_reconciliation', label: 'Conciliação Delivery' },
