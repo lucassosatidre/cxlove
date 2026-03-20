@@ -1308,7 +1308,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
           <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         )}
         <td className={`p-3 text-sm ${cellClass}`}>
-          <div className="flex items-center gap-2 group">
+          <div className="flex items-center gap-2 group flex-wrap">
             <Popover open={paymentPopoverOpen} onOpenChange={(open) => {
               if (!open && paymentPopoverOpen) {
                 savePaymentMethods();
@@ -1316,38 +1316,53 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               setPaymentPopoverOpen(open);
             }}>
               {isUnidentified ? (
-                <>
-                  {/* If operator already confirmed (has breakdowns or not raw import), show full text */}
-                  {(hasBreakdowns || !isOriginalImportPayment(order.payment_method)) ? (
-                    <span className="truncate text-foreground">{order.payment_method}</span>
-                  ) : (
+                (() => {
+                  const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+                  const physicalMethods = methods.filter(m => !isOnlinePayment(m));
+                  const onlineMethods = methods.filter(m => isOnlinePayment(m));
+                  const isOperatorSet = physicalMethods.length > 0 && physicalMethods.every(m => offlinePaymentMethods.includes(m));
+
+                  return (
                     <>
-                      {/* Show only online method names from the import, hide physical ones */}
-                      {(() => {
-                        const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
-                        const onlineMethods = methods.filter(m => isOnlinePayment(m));
-                        return onlineMethods.length > 0 ? (
-                          <span className="truncate text-foreground">{onlineMethods.join(', ')}</span>
-                        ) : null;
-                      })()}
+                      {/* Show online methods from import if any */}
+                      {onlineMethods.length > 0 && (
+                        <span className="truncate text-foreground">{onlineMethods.join(', ')}</span>
+                      )}
+                      {/* If operator already selected, show method name */}
+                      {isOperatorSet && (
+                        <span className="truncate text-foreground font-medium">{physicalMethods.join(', ')}</span>
+                      )}
+                      <PopoverTrigger asChild>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
+                          className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] shrink-0 ${
+                            isOperatorSet
+                              ? 'bg-primary/10 text-primary border border-primary/20'
+                              : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
+                          }`}
+                        >
+                          {isOperatorSet ? (
+                            <>
+                              <CreditCard className="h-3 w-3" />
+                              Pagamento na entrega
+                            </>
+                          ) : (
+                            <>
+                              <AlertTriangle className="h-3 w-3" />
+                              Pagamento no ato
+                            </>
+                          )}
+                        </button>
+                      </PopoverTrigger>
+                      {hasMultiple && !hasBreakdowns && (
+                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium shrink-0 bg-warning/15 text-warning border border-warning/30">
+                          <AlertTriangle className="h-3 w-3" />
+                          Rateio necessário
+                        </span>
+                      )}
                     </>
-                  )}
-                  <PopoverTrigger asChild>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
-                      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] shrink-0 bg-muted text-muted-foreground hover:bg-muted/80 border border-border"
-                    >
-                      <AlertTriangle className="h-3 w-3" />
-                      Pagamento no ato
-                    </button>
-                  </PopoverTrigger>
-                  {hasMultiple && !hasBreakdowns && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium shrink-0 bg-warning/15 text-warning border border-warning/30">
-                      <AlertTriangle className="h-3 w-3" />
-                      Rateio necessário
-                    </span>
-                  )}
-                </>
+                  );
+                })()
               ) : (
                 <>
                   <span className="truncate cursor-default">{order.payment_method}</span>
