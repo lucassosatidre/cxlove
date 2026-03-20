@@ -14,6 +14,7 @@ import UserManagement from "./pages/UserManagement";
 import SalonDashboard from "./pages/SalonDashboard";
 import SalonImport from "./pages/SalonImport";
 import SalonClosing from "./pages/SalonClosing";
+import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
