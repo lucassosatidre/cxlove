@@ -386,12 +386,9 @@ export default function Reconciliation() {
   }, [orders, breakdownValidity, finalize, cashSnapshotSaved]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
-  const offlinePaymentMethods = useMemo(() => {
-    const baseMethods = ['Dinheiro', 'Crédito', 'Débito', '(COBRAR) Pix'];
-    const allMethods = orders.flatMap(o => o.payment_method.split(',').map(m => m.trim())).filter(Boolean);
-    const offline = allMethods.filter(m => !isOnlinePayment(m));
-    return [...new Set([...baseMethods, ...offline])].sort();
-  }, [orders]);
+  const offlinePaymentMethods = useMemo(() => [
+    'Crédito', 'Débito', '(COBRAR) Pix', 'Dinheiro', 'Voucher', '(PAGO) Pix Banco do Brasil', 'Sob Demanda Ifood', 'Pagamento não cadastrado'
+  ], []);
   const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
 
   const filtered = useMemo(() => {
