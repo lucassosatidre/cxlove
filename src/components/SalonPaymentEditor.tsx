@@ -132,17 +132,17 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
     }
   }, [editingValues, updatePayment, totalAmount, doSave, onPaymentsChanged]);
 
-  const sum = payments.reduce((acc, p) => acc + p.amount, 0);
+  const sum = effectivePayments.reduce((acc, p) => acc + p.amount, 0);
   const diff = Math.round((totalAmount - sum) * 100) / 100;
-  const isValid = payments.length > 0 && payments.every(p => p.payment_method && p.amount > 0) && Math.abs(diff) < 0.01;
+  const isValid = effectivePayments.length > 0 && effectivePayments.every(p => p.payment_method && p.amount > 0) && Math.abs(diff) < 0.01;
 
   const savePayments = useCallback(async () => {
     if (!isValid) {
       toast.error('Preencha todos os campos e confira que a soma bate com o total.');
       return;
     }
-    doSave(payments);
-  }, [payments, isValid, doSave]);
+    doSave(effectivePayments);
+  }, [effectivePayments, isValid, doSave]);
 
   const getDisplayValue = (index: number, amount: number) => {
     if (editingValues[index] !== undefined) return editingValues[index];
@@ -151,7 +151,7 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
 
   return (
     <div className="space-y-1.5">
-      {payments.map((entry, idx) => (
+      {effectivePayments.map((entry, idx) => (
         <div key={idx} className="flex items-center gap-1.5">
           <Select
             value={entry.payment_method}
