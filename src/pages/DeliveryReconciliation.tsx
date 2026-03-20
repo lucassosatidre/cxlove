@@ -65,8 +65,10 @@ export default function DeliveryReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
-  const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
-  const [showCashDetails, setShowCashDetails] = useState(false);
+  const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [cashSnapshotDataFechamento, setCashSnapshotDataFechamento] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
+  const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
 
   useEffect(() => {
     if (!id) return;
