@@ -161,26 +161,30 @@ export default function Reconciliation() {
       setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
     }
 
-    // Load saved cash snapshot
+    // Load saved cash snapshots (abertura + fechamento)
     if (id) {
-      const { data: snapData } = await supabase
+      const { data: snapList } = await supabase
         .from('cash_snapshots')
-        .select('counts, total, updated_at')
+        .select('counts, total, updated_at, snapshot_type')
         .eq('daily_closing_id', id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('updated_at', { ascending: false });
 
-      if (snapData) {
-        const counts = snapData.counts as Record<string, number>;
-        setCashSnapshotData({ counts, total: Number(snapData.total), updated_at: snapData.updated_at });
-        setCashSnapshotSaved(true);
-        // Restore counts into calculator
+      for (const snap of (snapList || [])) {
+        const counts = snap.counts as Record<string, number>;
         const restored: Record<number, number> = {};
         for (const [k, v] of Object.entries(counts)) {
           restored[parseFloat(k)] = v;
         }
-        setCashCounts(restored);
+        const type = (snap as any).snapshot_type || 'abertura';
+        if (type === 'abertura') {
+          setCashSnapshotDataAbertura({ counts, total: Number(snap.total), updated_at: snap.updated_at });
+          setCashSnapshotSavedAbertura(true);
+          setCashCountsAbertura(restored);
+        } else if (type === 'fechamento') {
+          setCashSnapshotDataFechamento({ counts, total: Number(snap.total), updated_at: snap.updated_at });
+          setCashSnapshotSavedFechamento(true);
+          setCashCountsFechamento(restored);
+        }
       }
     }
 
