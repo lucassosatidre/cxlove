@@ -896,6 +896,11 @@ export default function Reconciliation() {
                           setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
                         }}
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
+                        onAutoConfirm={() => {
+                          if (!order.is_confirmed) {
+                            toggleConfirm(order.id, false);
+                          }
+                        }}
                         allPaymentMethods={paymentMethods}
                         offlinePaymentMethods={offlinePaymentMethods}
                         allDeliveryPersons={deliveryPersons}
