@@ -100,12 +100,6 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         </p>
       </div>
 
-      <div className="mx-3 mt-3 mb-4 px-3 py-2.5 bg-sidebar-accent rounded-lg">
-        <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground font-medium">Usuário</p>
-        <p className="text-xs font-semibold text-sidebar-accent-foreground truncate mt-0.5">
-          {userName}
-        </p>
-      </div>
 
       <nav className="flex-1 px-3 space-y-1">
         {navItems.map((item) => {
