@@ -314,7 +314,7 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
-            {newRole !== 'admin' && (
+            {newRole === 'operador' && (
               <div className="space-y-3">
                 <Label>Permissões de acesso</Label>
                 <div className="space-y-2">
