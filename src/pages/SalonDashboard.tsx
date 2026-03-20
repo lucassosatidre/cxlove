@@ -229,6 +229,12 @@ export default function SalonDashboard() {
                           {closingImports.map((imp) => (
                             <div key={imp.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
                               <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={selectedImports.has(imp.id)}
+                                  onCheckedChange={() => toggleImportSelection(imp.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-4 w-4"
+                                />
                                 <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
                                 <span className="text-foreground font-medium">{imp.file_name}</span>
                               </div>
@@ -253,6 +259,30 @@ export default function SalonDashboard() {
           </div>
         )}
       </div>
+
+      {/* Floating delete bar */}
+      {selectedImports.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background rounded-xl shadow-lg px-5 py-3 flex items-center gap-4 z-50">
+          <span className="text-sm font-medium">{selectedImports.size} importação(ões) selecionada(s)</span>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleDeleteSelected}
+            disabled={deleting}
+          >
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            {deleting ? 'Apagando...' : 'Apagar'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-background hover:text-background/80 hover:bg-background/10"
+            onClick={() => setSelectedImports(new Set())}
+          >
+            Cancelar
+          </Button>
+        </div>
+      )}
     </AppLayout>
   );
 }
