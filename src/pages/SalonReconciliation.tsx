@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
-import { parseCardTransactionFile } from '@/lib/card-transaction-parser';
+import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
 
@@ -145,7 +145,7 @@ export default function SalonReconciliation() {
     if (!user || !id) return;
     setImporting(true);
     try {
-      const { transactions: parsed, excludedCount } = await parseCardTransactionFile(file);
+      const { transactions: parsed, excludedCount } = await parseSalonCardTransactionFile(file);
 
       await supabase.from('salon_card_transactions').delete().eq('salon_closing_id', id);
 
