@@ -754,10 +754,23 @@ export default function DeliveryReconciliation() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-mono-tabular font-medium text-foreground">
-                          {formatCurrency(order.total_amount)}
+                          {(() => {
+                            const orderBks = breakdowns.filter(b => b.imported_order_id === order.id && b.payment_type === 'fisico');
+                            if (orderBks.length > 0) {
+                              const totalPhysical = orderBks.reduce((s, b) => s + b.amount, 0);
+                              return formatCurrency(totalPhysical);
+                            }
+                            return formatCurrency(order.total_amount);
+                          })()}
                         </span>
                         <Badge variant="secondary" className="text-[10px]">
-                          {order.payment_method}
+                          {(() => {
+                            const orderBks = breakdowns.filter(b => b.imported_order_id === order.id && b.payment_type === 'fisico');
+                            if (orderBks.length > 0) {
+                              return orderBks.map(b => b.payment_method_name).join(', ');
+                            }
+                            return order.payment_method;
+                          })()}
                         </Badge>
                       </div>
                     </div>
