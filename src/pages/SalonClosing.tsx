@@ -235,11 +235,11 @@ export default function SalonClosing() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8"></TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Hora</TableHead>
-                <TableHead>Pagamento</TableHead>
+                <TableHead className="w-10"></TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>Pagamento</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -263,13 +263,6 @@ export default function SalonClosing() {
                         className="cursor-pointer hover:bg-muted/50"
                         onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
                       >
-                        <TableCell className="w-8 px-2">
-                          {isExpanded ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </TableCell>
                         <TableCell>
                           {order.order_type.toLowerCase() === 'ficha' ? (
                             <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>
@@ -283,6 +276,16 @@ export default function SalonClosing() {
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {order.sale_time || '—'}
+                        </TableCell>
+                        <TableCell className="w-10 px-2">
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell>
                           {status === 'complete' ? (
@@ -298,9 +301,6 @@ export default function SalonClosing() {
                               Pendente
                             </Badge>
                           )}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                       {isExpanded && (
