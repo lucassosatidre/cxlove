@@ -1,14 +1,15 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, FileSpreadsheet, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import SalonPaymentEditor from '@/components/SalonPaymentEditor';
 
 interface SalonOrder {
   id: string;
@@ -26,6 +27,12 @@ interface ClosingData {
   status: string;
 }
 
+interface PaymentEntry {
+  id?: string;
+  payment_method: string;
+  amount: number;
+}
+
 export default function SalonClosing() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -34,7 +41,9 @@ export default function SalonClosing() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [filterPayment, setFilterPayment] = useState('');
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  // Map of orderId -> PaymentEntry[]
+  const [orderPayments, setOrderPayments] = useState<Record<string, PaymentEntry[]>>({});
 
   useEffect(() => {
     if (!id) return;
@@ -47,7 +56,30 @@ export default function SalonClosing() {
       supabase.from('salon_orders').select('*').eq('salon_closing_id', id!).order('sale_time', { ascending: true }),
     ]);
     setClosing(closingData as ClosingData | null);
-    setOrders((ordersData as SalonOrder[]) || []);
+    const ordersList = (ordersData as SalonOrder[]) || [];
+    setOrders(ordersList);
+
+    // Load all payments for these orders
+    if (ordersList.length > 0) {
+      const orderIds = ordersList.map(o => o.id);
+      const { data: paymentsData } = await supabase
+        .from('salon_order_payments')
+        .select('*')
+        .in('salon_order_id', orderIds);
+
+      if (paymentsData) {
+        const map: Record<string, PaymentEntry[]> = {};
+        paymentsData.forEach((p: any) => {
+          if (!map[p.salon_order_id]) map[p.salon_order_id] = [];
+          map[p.salon_order_id].push({
+            id: p.id,
+            payment_method: p.payment_method,
+            amount: Number(p.amount),
+          });
+        });
+        setOrderPayments(map);
+      }
+    }
     setLoading(false);
   };
 
@@ -57,51 +89,47 @@ export default function SalonClosing() {
   };
 
   const orderTypes = useMemo(() => [...new Set(orders.map(o => o.order_type))].sort(), [orders]);
-  const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
 
   const filtered = useMemo(() => {
     return orders.filter(o => {
       if (search) {
         const s = search.toLowerCase();
         if (!o.order_type.toLowerCase().includes(s) &&
-            !o.payment_method.toLowerCase().includes(s) &&
             !(o.sale_time || '').includes(s)) return false;
       }
       if (filterType && o.order_type !== filterType) return false;
-      if (filterPayment && o.payment_method !== filterPayment) return false;
       return true;
     });
-  }, [orders, search, filterType, filterPayment]);
+  }, [orders, search, filterType]);
 
   const totalAmount = useMemo(() => filtered.reduce((sum, o) => sum + o.total_amount, 0), [filtered]);
 
-  // Payment method summary — split comma-separated methods and aggregate individually
+  // Payment summary from manually entered payments only
   const paymentSummary = useMemo(() => {
     const map: Record<string, { count: number; total: number }> = {};
-    filtered.forEach(o => {
-      const raw = o.payment_method || '(sem pagamento)';
-      const methods = raw.split(',').map(s => s.trim()).filter(Boolean);
-      if (methods.length <= 1) {
-        const key = methods[0] || '(sem pagamento)';
-        if (!map[key]) map[key] = { count: 0, total: 0 };
-        map[key].count++;
-        map[key].total += o.total_amount;
-      } else {
-        // Multiple methods: count each occurrence, split total evenly
-        const perMethod: Record<string, number> = {};
-        methods.forEach(m => {
-          perMethod[m] = (perMethod[m] || 0) + 1;
-        });
-        const share = o.total_amount / methods.length;
-        Object.entries(perMethod).forEach(([method, qty]) => {
-          if (!map[method]) map[method] = { count: 0, total: 0 };
-          map[method].count += qty;
-          map[method].total += share * qty;
-        });
-      }
+    Object.values(orderPayments).flat().forEach(p => {
+      if (!p.payment_method) return;
+      if (!map[p.payment_method]) map[p.payment_method] = { count: 0, total: 0 };
+      map[p.payment_method].count++;
+      map[p.payment_method].total += p.amount;
     });
     return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
-  }, [filtered]);
+  }, [orderPayments]);
+
+  const totalAssigned = useMemo(() => {
+    return Object.values(orderPayments).flat().reduce((sum, p) => sum + p.amount, 0);
+  }, [orderPayments]);
+
+  const handlePaymentsChanged = useCallback((orderId: string, payments: PaymentEntry[]) => {
+    setOrderPayments(prev => ({ ...prev, [orderId]: payments }));
+  }, []);
+
+  const getOrderPaymentStatus = useCallback((orderId: string, totalAmount: number) => {
+    const payments = orderPayments[orderId] || [];
+    if (payments.length === 0) return 'pending';
+    const sum = payments.reduce((acc, p) => acc + p.amount, 0);
+    return Math.abs(totalAmount - sum) < 0.01 ? 'complete' : 'partial';
+  }, [orderPayments]);
 
   if (loading) {
     return (
@@ -121,6 +149,8 @@ export default function SalonClosing() {
     );
   }
 
+  const completedCount = filtered.filter(o => getOrderPaymentStatus(o.id, o.total_amount) === 'complete').length;
+
   return (
     <AppLayout
       title={`Salão — ${formatDate(closing.closing_date)}`}
@@ -133,16 +163,22 @@ export default function SalonClosing() {
       }
     >
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
         <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Total</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Total Vendas</p>
           <p className="text-2xl font-bold text-foreground">
             R$ {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </p>
         </div>
         <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Pedidos</p>
-          <p className="text-2xl font-bold text-foreground">{filtered.length}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Total Lançado</p>
+          <p className="text-2xl font-bold text-foreground">
+            R$ {totalAssigned.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="bg-card rounded-xl shadow-card p-4 border border-border">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Preenchidos</p>
+          <p className="text-2xl font-bold text-foreground">{completedCount} / {filtered.length}</p>
         </div>
         <div className="bg-card rounded-xl shadow-card p-4 border border-border">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Status</p>
@@ -191,14 +227,6 @@ export default function SalonClosing() {
           <option value="">Todos os tipos</option>
           {orderTypes.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select
-          value={filterPayment}
-          onChange={(e) => setFilterPayment(e.target.value)}
-          className="border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-        >
-          <option value="">Todos os pagamentos</option>
-          {paymentMethods.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
       </div>
 
       {/* Table */}
@@ -207,36 +235,80 @@ export default function SalonClosing() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8"></TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Hora</TableHead>
-                <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>Pagamento</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {order.sale_time || '—'}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {order.payment_method || <span className="text-muted-foreground italic">—</span>}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                  </TableRow>
-                ))
+                filtered.map((order) => {
+                  const status = getOrderPaymentStatus(order.id, order.total_amount);
+                  const isExpanded = expandedOrder === order.id;
+                  const payments = orderPayments[order.id] || [];
+
+                  return (
+                    <>
+                      <TableRow
+                        key={order.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
+                      >
+                        <TableCell className="w-8 px-2">
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {order.sale_time || '—'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell>
+                          {status === 'complete' ? (
+                            <Badge className="bg-success/15 text-success border-success/30 text-xs">
+                              ✅ {payments.map(p => p.payment_method).join(', ')}
+                            </Badge>
+                          ) : status === 'partial' ? (
+                            <Badge className="bg-warning/15 text-warning border-warning/30 text-xs">
+                              ⚠️ Parcial
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-muted text-muted-foreground text-xs">
+                              Pendente
+                            </Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                      {isExpanded && (
+                        <TableRow key={`${order.id}-editor`}>
+                          <TableCell colSpan={5} className="bg-secondary/50 p-4">
+                            <SalonPaymentEditor
+                              orderId={order.id}
+                              totalAmount={order.total_amount}
+                              payments={payments}
+                              onPaymentsChanged={(p) => handlePaymentsChanged(order.id, p)}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })
               )}
             </TableBody>
           </Table>
