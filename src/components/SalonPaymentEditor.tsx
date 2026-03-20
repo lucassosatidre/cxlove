@@ -69,8 +69,18 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
     const updated = [...effectivePayments];
     updated[index] = { ...updated[index], [field]: value };
     onPaymentsChanged(updated);
+
+    // Auto-save when changing payment method if sum already matches total
+    if (field === 'payment_method') {
+      const currentSum = updated.reduce((acc, p) => acc + p.amount, 0);
+      const currentDiff = Math.round((totalAmount - currentSum) * 100) / 100;
+      if (Math.abs(currentDiff) < 0.01 && updated.every(p => p.payment_method && p.amount > 0)) {
+        doSave(updated);
+      }
+    }
+
     return updated;
-  }, [effectivePayments, onPaymentsChanged]);
+  }, [effectivePayments, onPaymentsChanged, totalAmount, doSave]);
 
   const handleAmountChange = useCallback((index: number, rawValue: string) => {
     setEditingValues(prev => ({ ...prev, [index]: rawValue }));
