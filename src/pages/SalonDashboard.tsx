@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import AppLayout from '@/components/AppLayout';
-import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight } from 'lucide-react';
+import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface SalonClosing {
   id: string;
