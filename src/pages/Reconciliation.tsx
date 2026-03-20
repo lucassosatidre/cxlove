@@ -1197,7 +1197,9 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
     e.stopPropagation();
     if (isCompleted) return;
     if (field === 'payment_method') {
-      const current = isUnidentified ? [] : order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+      // If it's a raw import value, start empty; otherwise keep operator's previous selection
+      const isRawImport = isOriginalImportPayment(order.payment_method);
+      const current = isRawImport ? [] : order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       setSelectedMethods(current);
       setPaymentPopoverOpen(true);
     } else {
