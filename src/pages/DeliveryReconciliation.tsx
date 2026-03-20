@@ -90,7 +90,8 @@ export default function DeliveryReconciliation() {
         .eq('daily_closing_id', id!),
     ]);
 
-    setClosingDate(closing?.closing_date || '');
+    const dateStr = closing?.closing_date || '';
+    setClosingDate(dateStr);
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
@@ -100,6 +101,24 @@ export default function DeliveryReconciliation() {
         setCashSnapshotDataAbertura({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
       } else if (type === 'fechamento') {
         setCashSnapshotDataFechamento({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
+      }
+    }
+
+    // Load expected cash from admin
+    if (dateStr) {
+      const { data: expData } = await supabase
+        .from('cash_expectations')
+        .select('counts, total')
+        .eq('closing_date', dateStr)
+        .maybeSingle();
+      if (expData) {
+        const loadedCounts: Record<string, number> = {};
+        if (expData.counts && typeof expData.counts === 'object') {
+          for (const [k, v] of Object.entries(expData.counts as Record<string, number>)) {
+            loadedCounts[k] = v;
+          }
+        }
+        setExpectedCash({ counts: loadedCounts, total: Number(expData.total) });
       }
     }
 
