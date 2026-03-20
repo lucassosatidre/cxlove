@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { parseExcelFile } from '@/lib/excel-parser';
+import { isAllOnline } from '@/lib/payment-utils';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/components/AppLayout';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
@@ -96,18 +97,24 @@ export default function TeleImport() {
       if (newOrders.length > 0) {
         const batchSize = 500;
         for (let i = 0; i < newOrders.length; i += batchSize) {
-          const batch = newOrders.slice(i, i + batchSize).map(o => ({
-            import_id: importRecord.id,
-            daily_closing_id: closingId,
-            order_number: o.order_number,
-            payment_method: o.payment_method,
-            total_amount: o.total_amount,
-            delivery_person: o.delivery_person,
-            sale_date: o.sale_date || null,
-            sale_time: o.sale_time || null,
-            sales_channel: o.sales_channel || null,
-            partner_order_number: o.partner_order_number || null,
-          }));
+          const batch = newOrders.slice(i, i + batchSize).map(o => {
+            const allOnline = isAllOnline(o.payment_method);
+            return {
+              import_id: importRecord.id,
+              daily_closing_id: closingId,
+              order_number: o.order_number,
+              payment_method: o.payment_method,
+              total_amount: o.total_amount,
+              delivery_person: o.delivery_person,
+              sale_date: o.sale_date || null,
+              sale_time: o.sale_time || null,
+              sales_channel: o.sales_channel || null,
+              partner_order_number: o.partner_order_number || null,
+              is_confirmed: allOnline,
+              confirmed_at: allOnline ? new Date().toISOString() : null,
+              confirmed_by: allOnline ? user!.id : null,
+            };
+          });
           const { error: insertErr } = await supabase.from('imported_orders').insert(batch);
           if (insertErr) throw new Error('Erro ao inserir pedidos.');
         }
