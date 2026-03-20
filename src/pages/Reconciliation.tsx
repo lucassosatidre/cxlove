@@ -1284,9 +1284,20 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             }}>
               {isUnidentified ? (
                 <>
-                  {/* Show payment text if operator has chosen a method (not raw import value) or has breakdowns */}
-                  {(hasBreakdowns || !isOriginalImportPayment(order.payment_method)) && (
+                  {/* If operator already confirmed (has breakdowns or not raw import), show full text */}
+                  {(hasBreakdowns || !isOriginalImportPayment(order.payment_method)) ? (
                     <span className="truncate text-foreground">{order.payment_method}</span>
+                  ) : (
+                    <>
+                      {/* Show only online method names from the import, hide physical ones */}
+                      {(() => {
+                        const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+                        const onlineMethods = methods.filter(m => isOnlinePayment(m));
+                        return onlineMethods.length > 0 ? (
+                          <span className="truncate text-foreground">{onlineMethods.join(', ')}</span>
+                        ) : null;
+                      })()}
+                    </>
                   )}
                   <PopoverTrigger asChild>
                     <button
