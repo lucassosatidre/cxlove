@@ -163,7 +163,41 @@ export default function SalonClosing() {
     );
   }
 
-  const completedCount = filtered.filter(o => getOrderPaymentStatus(o.id, o.total_amount) === 'complete').length;
+  const completedCount = orders.filter(o => getOrderPaymentStatus(o.id, o.total_amount) === 'complete').length;
+  const isCompleted = closing?.status === 'completed';
+
+  const handleFinalize = async () => {
+    const errs: string[] = [];
+    orders.forEach((order, idx) => {
+      const status = getOrderPaymentStatus(order.id, order.total_amount);
+      if (status !== 'complete') {
+        const label = order.order_type.toLowerCase() === 'ficha' ? 'Ficha'
+          : /^\d+$/.test(order.order_type.trim()) ? `Retirada`
+          : order.order_type;
+        errs.push(`${label} (${order.sale_time || 'sem hora'}) — pagamento ${status === 'partial' ? 'parcial' : 'pendente'}`);
+      }
+    });
+
+    if (errs.length > 0) {
+      setErrors(errs);
+      setShowErrors(true);
+      return;
+    }
+
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id!);
+
+    if (error) {
+      toast.error('Erro ao finalizar conferência');
+    } else {
+      toast.success('Conferência concluída com sucesso!');
+      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
+    }
+    setFinalizing(false);
+  };
 
   return (
     <AppLayout
