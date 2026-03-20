@@ -84,6 +84,7 @@ export default function Reconciliation() {
   const [cashSnapshotSavedAbertura, setCashSnapshotSavedAbertura] = useState(false);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
   const [savingCashAbertura, setSavingCashAbertura] = useState(false);
+  const [expectedCash, setExpectedCash] = useState<{ counts: Record<string, number>; total: number } | null>(null);
 
   // Cash calculator state - Fechamento
   const [showCashCalcFechamento, setShowCashCalcFechamento] = useState(false);
