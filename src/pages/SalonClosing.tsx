@@ -104,7 +104,7 @@ export default function SalonClosing() {
         if (!o.order_type.toLowerCase().includes(s) &&
             !(o.sale_time || '').includes(s)) return false;
       }
-      if (filterType && o.order_type !== filterType) return false;
+      if (filterType && filterType !== '__all__' && o.order_type !== filterType) return false;
       return true;
     });
   }, [orders, search, filterType]);
