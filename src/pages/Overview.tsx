@@ -243,6 +243,11 @@ export default function Overview() {
           </div>
         )}
       </div>
+      {/* Cash Expectation Dialog for Admin */}
+      <CashExpectationDialog
+        open={showCashExpectation}
+        onOpenChange={setShowCashExpectation}
+      />
     </AppLayout>
   );
 }
