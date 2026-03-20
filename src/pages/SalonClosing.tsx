@@ -380,6 +380,54 @@ export default function SalonClosing() {
           </Table>
         </div>
       </div>
+
+      {/* Sticky footer */}
+      <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border px-5 py-3 flex items-center justify-between mt-6 rounded-b-xl shadow-card">
+        <div className="flex items-center gap-3">
+          <Badge className={isCompleted ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}>
+            {isCompleted ? '✅ Conferência concluída' : `⏳ ${completedCount}/${orders.length} preenchidos`}
+          </Badge>
+          {!isCompleted && completedCount === orders.length && orders.length > 0 && (
+            <span className="text-xs text-success font-medium">Todos preenchidos — pronto para concluir!</span>
+          )}
+        </div>
+        <Button
+          onClick={handleFinalize}
+          disabled={finalizing || isCompleted}
+          className="bg-success hover:bg-success/90 text-success-foreground"
+        >
+          <CheckCircle2 className="h-4 w-4 mr-2" />
+          {isCompleted ? 'Conferência Concluída' : finalizing ? 'Concluindo...' : 'Concluir Conferência'}
+        </Button>
+      </div>
+
+      {/* Error dialog */}
+      <Dialog open={showErrors} onOpenChange={setShowErrors}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Pendências na Conferência
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {errors.length} pedido(s) com pagamento incompleto:
+          </p>
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {errors.map((err, i) => (
+              <div key={i} className="flex items-start gap-2 text-sm bg-destructive/10 text-destructive rounded-md px-3 py-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>{err}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowErrors(false)}>
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
