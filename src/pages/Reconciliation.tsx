@@ -1168,12 +1168,11 @@ function isOriginalImportPayment(method: string): boolean {
 
 
 function isUnidentifiedPayment(method: string): boolean {
-  // If it's online, it's identified (auto-filled) — no tag needed
-  if (isOnlinePayment(method)) return false;
-  // Check comma-separated: if ALL individual methods are online, no tag
   const methods = method.split(',').map(m => m.trim()).filter(Boolean);
-  if (methods.length > 1 && methods.every(m => isOnlinePayment(m))) return false;
-  // ALL non-online (physical) methods need operator confirmation
+  if (methods.length === 0) return false;
+  // If ALL individual methods are online, it's identified (auto-filled) — no tag needed
+  if (methods.every(m => isOnlinePayment(m))) return false;
+  // Any payment containing at least one physical method needs operator confirmation
   return true;
 }
 
