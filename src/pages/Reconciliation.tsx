@@ -586,14 +586,6 @@ export default function Reconciliation() {
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => bulkUpdate(true)} disabled={isCompleted}>
-                <CheckCheck className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Marcar todos</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => bulkUpdate(false)} disabled={isCompleted}>
-                <XCircle className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Desmarcar todos</span>
-              </Button>
               <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>
