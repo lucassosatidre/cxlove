@@ -1379,7 +1379,7 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
       ))}
       <div className="flex items-center gap-1">
         <button onClick={addEntry} className="text-[10px] text-primary hover:underline">+ Rateio</button>
-        <Button size="sm" className="h-6 text-[10px] px-2 ml-auto" onClick={handleSave} disabled={saving}>
+        <Button size="sm" className="h-6 text-[10px] px-2 ml-auto" onClick={() => handleSave(false)} disabled={saving}>
           {saving ? '...' : 'Salvar'}
         </Button>
         <button onClick={() => setEditing(false)} className="text-[10px] text-muted-foreground hover:underline">
