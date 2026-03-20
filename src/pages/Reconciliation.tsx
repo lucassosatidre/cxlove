@@ -914,7 +914,7 @@ export default function Reconciliation() {
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
                         onAutoConfirm={() => {
                           if (!order.is_confirmed) {
-                            toggleConfirm(order.id, false);
+                            toggleConfirm(order.id, false, true);
                           }
                         }}
                         allPaymentMethods={paymentMethods}
