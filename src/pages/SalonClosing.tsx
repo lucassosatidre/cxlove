@@ -41,7 +41,7 @@ export default function SalonClosing() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  
   // Map of orderId -> PaymentEntry[]
   const [orderPayments, setOrderPayments] = useState<Record<string, PaymentEntry[]>>({});
 
