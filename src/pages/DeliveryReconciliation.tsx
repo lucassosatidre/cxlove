@@ -541,11 +541,18 @@ export default function DeliveryReconciliation() {
             </div>
             <div className="mt-2 flex items-center gap-4 flex-wrap">
               <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataAbertura.total)}</span>
-              {expectedCash && (
-                <span className={`text-sm font-mono ${Math.abs(cashSnapshotDataAbertura.total - expectedCash.total) < 0.01 ? 'text-success' : 'text-warning'}`}>
-                  (Esperado: {formatCurrency(expectedCash.total)}{Math.abs(cashSnapshotDataAbertura.total - expectedCash.total) >= 0.01 && ` · Dif: ${formatCurrency(cashSnapshotDataAbertura.total - expectedCash.total)}`})
-                </span>
-              )}
+              {expectedCash && (() => {
+                const BILL_DENOMS = [200, 100, 50, 20, 10, 5, 2];
+                const expBills = BILL_DENOMS.reduce((s, d) => s + d * (expectedCash.counts[String(d)] || 0), 0);
+                const opBills = BILL_DENOMS.reduce((s, d) => s + d * ((cashSnapshotDataAbertura.counts[String(d)] as number) || 0), 0);
+                const diff = opBills - expBills;
+                const match = Math.abs(diff) < 0.01;
+                return (
+                  <span className={`text-sm font-mono ${match ? 'text-success' : 'text-warning'}`}>
+                    (Esperado: {formatCurrency(expectedCash.total)}{!match && ` · Dif cédulas: ${formatCurrency(diff)}`})
+                  </span>
+                );
+              })()}
               <span className="text-xs text-muted-foreground">
                 Salvo em {new Date(cashSnapshotDataAbertura.updated_at).toLocaleString('pt-BR')}
               </span>
