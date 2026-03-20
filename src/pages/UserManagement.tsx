@@ -94,7 +94,7 @@ export default function UserManagement() {
       setCreateOpen(false);
       setNewEmail('');
       setNewPassword('');
-      setNewRole('operador');
+      setNewRole('caixa_tele');
       setNewPermissions(ALL_PERMISSIONS.map(p => p.key));
       loadUsers();
     } catch (err: any) {
