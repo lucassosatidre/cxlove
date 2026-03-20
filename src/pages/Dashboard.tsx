@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   return (
     <AppLayout
-      title="Dashboard"
+      title="Tele"
       subtitle={`📅 ${dateStr} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
         <Button onClick={() => navigate('/import')} className="bg-primary hover:bg-primary/90">

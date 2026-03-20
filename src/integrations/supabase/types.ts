@@ -126,6 +126,7 @@ export type Database = {
           closing_date: string
           created_at: string
           id: string
+          reconciliation_status: string
           status: string
           updated_at: string
           user_id: string
@@ -134,6 +135,7 @@ export type Database = {
           closing_date: string
           created_at?: string
           id?: string
+          reconciliation_status?: string
           status?: string
           updated_at?: string
           user_id: string
@@ -142,6 +144,7 @@ export type Database = {
           closing_date?: string
           created_at?: string
           id?: string
+          reconciliation_status?: string
           status?: string
           updated_at?: string
           user_id?: string
@@ -373,6 +376,7 @@ export type Database = {
           closing_date: string
           created_at: string
           id: string
+          reconciliation_status: string
           status: string
           updated_at: string
           user_id: string
@@ -381,6 +385,7 @@ export type Database = {
           closing_date: string
           created_at?: string
           id?: string
+          reconciliation_status?: string
           status?: string
           updated_at?: string
           user_id: string
@@ -389,6 +394,7 @@ export type Database = {
           closing_date?: string
           created_at?: string
           id?: string
+          reconciliation_status?: string
           status?: string
           updated_at?: string
           user_id?: string
