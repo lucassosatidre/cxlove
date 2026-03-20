@@ -1170,8 +1170,10 @@ function isUnidentifiedPayment(method: string): boolean {
   // Check comma-separated: if ALL individual methods are online, no tag
   const methods = method.split(',').map(m => m.trim()).filter(Boolean);
   if (methods.length > 1 && methods.every(m => isOnlinePayment(m))) return false;
-  // ALL non-online methods show a tag for the operator to fill
-  return true;
+  // Only raw import values that haven't been classified show the "Pagamento no ato" tag
+  // If the operator already set a known method (Crédito, Débito, etc.), it's identified
+  if (methods.every(m => isOriginalImportPayment(m))) return true;
+  return false;
 }
 
 function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
