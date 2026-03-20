@@ -5,7 +5,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -41,7 +41,7 @@ export default function SalonClosing() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  
   // Map of orderId -> PaymentEntry[]
   const [orderPayments, setOrderPayments] = useState<Record<string, PaymentEntry[]>>({});
 
@@ -235,11 +235,11 @@ export default function SalonClosing() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Hora</TableHead>
-                <TableHead className="w-10"></TableHead>
-                <TableHead className="text-right">Total</TableHead>
+                <TableHead className="w-[80px]">Tipo</TableHead>
+                <TableHead className="w-[60px]">Hora</TableHead>
                 <TableHead>Pagamento</TableHead>
+                <TableHead className="text-right w-[100px]">Total</TableHead>
+                <TableHead className="w-[90px]">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -252,70 +252,52 @@ export default function SalonClosing() {
               ) : (
                 filtered.map((order) => {
                   const status = getOrderPaymentStatus(order.id, order.total_amount);
-                  const isExpanded = expandedOrder === order.id;
                   const payments = orderPayments[order.id] || [];
                   const isNumber = /^\d+$/.test(order.order_type.trim());
 
                   return (
-                    <>
-                      <TableRow
-                        key={order.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
-                      >
-                        <TableCell>
-                          {order.order_type.toLowerCase() === 'ficha' ? (
-                            <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>
-                          ) : isNumber ? (
-                            <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>
-                          ) : order.order_type.toLowerCase() === 'salão' || order.order_type.toLowerCase() === 'salao' ? (
-                            <Badge className="bg-warning text-foreground border-transparent text-xs">Salão</Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {order.sale_time || '—'}
-                        </TableCell>
-                        <TableCell className="w-10 px-2">
-                          {isExpanded ? (
-                            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </TableCell>
-                        <TableCell>
-                          {status === 'complete' ? (
-                            <Badge className="bg-success/15 text-success border-success/30 text-xs">
-                              ✅ {payments.map(p => p.payment_method).join(', ')}
-                            </Badge>
-                          ) : status === 'partial' ? (
-                            <Badge className="bg-warning/15 text-warning border-warning/30 text-xs">
-                              ⚠️ Parcial
-                            </Badge>
-                          ) : (
-                            <Badge className="bg-muted text-muted-foreground text-xs">
-                              Pendente
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                      {isExpanded && (
-                        <TableRow key={`${order.id}-editor`}>
-                          <TableCell colSpan={5} className="bg-secondary/50 p-4">
-                            <SalonPaymentEditor
-                              orderId={order.id}
-                              totalAmount={order.total_amount}
-                              payments={payments}
-                              onPaymentsChanged={(p) => handlePaymentsChanged(order.id, p)}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
+                    <TableRow key={order.id}>
+                      <TableCell>
+                        {order.order_type.toLowerCase() === 'ficha' ? (
+                          <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>
+                        ) : isNumber ? (
+                          <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>
+                        ) : order.order_type.toLowerCase() === 'salão' || order.order_type.toLowerCase() === 'salao' ? (
+                          <Badge className="bg-warning text-foreground border-transparent text-xs">Salão</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {order.sale_time || '—'}
+                      </TableCell>
+                      <TableCell className="py-2">
+                        <SalonPaymentEditor
+                          orderId={order.id}
+                          totalAmount={order.total_amount}
+                          payments={payments}
+                          onPaymentsChanged={(p) => handlePaymentsChanged(order.id, p)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-medium tabular-nums text-sm">
+                        R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell>
+                        {status === 'complete' ? (
+                          <Badge className="bg-success/15 text-success border-success/30 text-[10px]">
+                            ✅ OK
+                          </Badge>
+                        ) : status === 'partial' ? (
+                          <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">
+                            ⚠️ Parcial
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-muted text-muted-foreground text-[10px]">
+                            Pendente
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}

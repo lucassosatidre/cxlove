@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,8 @@ interface Props {
 
 export default function SalonPaymentEditor({ orderId, totalAmount, payments, onPaymentsChanged }: Props) {
   const [saving, setSaving] = useState(false);
+  // Temporary editing state per index to allow free typing
+  const [editingValues, setEditingValues] = useState<Record<number, string>>({});
 
   const addPayment = useCallback(() => {
     onPaymentsChanged([...payments, { payment_method: '', amount: 0 }]);
@@ -46,6 +48,11 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
   const removePayment = useCallback((index: number) => {
     const updated = payments.filter((_, i) => i !== index);
     onPaymentsChanged(updated);
+    setEditingValues(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
   }, [payments, onPaymentsChanged]);
 
   const updatePayment = useCallback((index: number, field: 'payment_method' | 'amount', value: string | number) => {
@@ -53,6 +60,24 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
     updated[index] = { ...updated[index], [field]: value };
     onPaymentsChanged(updated);
   }, [payments, onPaymentsChanged]);
+
+  const handleAmountChange = useCallback((index: number, rawValue: string) => {
+    setEditingValues(prev => ({ ...prev, [index]: rawValue }));
+  }, []);
+
+  const commitAmount = useCallback((index: number) => {
+    const raw = editingValues[index];
+    if (raw !== undefined) {
+      const cleaned = raw.replace(/[^\d.,]/g, '').replace(',', '.');
+      const num = parseFloat(cleaned) || 0;
+      updatePayment(index, 'amount', Math.round(Math.max(0, num) * 100) / 100);
+      setEditingValues(prev => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+    }
+  }, [editingValues, updatePayment]);
 
   const sum = payments.reduce((acc, p) => acc + p.amount, 0);
   const diff = Math.round((totalAmount - sum) * 100) / 100;
@@ -78,7 +103,6 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
       toast.error('Erro ao salvar pagamentos.');
     } else {
       toast.success('Pagamentos salvos!');
-      // Reload saved data with IDs
       const { data } = await supabase
         .from('salon_order_payments')
         .select('*')
@@ -94,15 +118,20 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
     setSaving(false);
   }, [orderId, payments, isValid, onPaymentsChanged]);
 
+  const getDisplayValue = (index: number, amount: number) => {
+    if (editingValues[index] !== undefined) return editingValues[index];
+    return amount > 0 ? amount.toFixed(2).replace('.', ',') : '';
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       {payments.map((entry, idx) => (
-        <div key={idx} className="flex items-center gap-2">
+        <div key={idx} className="flex items-center gap-1.5">
           <Select
             value={entry.payment_method}
             onValueChange={(v) => updatePayment(idx, 'payment_method', v)}
           >
-            <SelectTrigger className="h-8 text-xs flex-1 min-w-[140px]">
+            <SelectTrigger className="h-7 text-[11px] flex-1 min-w-[120px]">
               <SelectValue placeholder="Forma de pagamento" />
             </SelectTrigger>
             <SelectContent>
@@ -115,28 +144,26 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
             type="text"
             inputMode="decimal"
             placeholder="R$ 0,00"
-            className="h-8 w-24 text-right text-xs font-mono tabular-nums"
-            value={entry.amount > 0 ? entry.amount.toFixed(2).replace('.', ',') : ''}
-            onChange={(e) => {
-              const cleaned = e.target.value.replace(/[^\d.,]/g, '').replace(',', '.');
-              const num = parseFloat(cleaned) || 0;
-              updatePayment(idx, 'amount', Math.round(Math.max(0, num) * 100) / 100);
-            }}
+            className="h-7 w-20 text-right text-[11px] font-mono tabular-nums"
+            value={getDisplayValue(idx, entry.amount)}
+            onChange={(e) => handleAmountChange(idx, e.target.value)}
+            onBlur={() => commitAmount(idx)}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitAmount(idx); }}
           />
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+            className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
             onClick={() => removePayment(idx)}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-3 w-3" />
           </Button>
         </div>
       ))}
 
       <div className="flex items-center justify-between gap-2">
-        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={addPayment}>
-          <Plus className="h-3 w-3" />
+        <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={addPayment}>
+          <Plus className="h-2.5 w-2.5" />
           Adicionar
         </Button>
 
@@ -153,12 +180,12 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
             <Button
               variant="default"
               size="sm"
-              className="h-7 text-xs gap-1"
+              className="h-6 text-[10px] gap-1 px-2"
               onClick={savePayments}
               disabled={!isValid || saving}
             >
-              <Save className="h-3 w-3" />
-              {saving ? 'Salvando...' : 'Salvar'}
+              <Save className="h-2.5 w-2.5" />
+              {saving ? '...' : 'Salvar'}
             </Button>
           </div>
         )}
