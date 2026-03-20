@@ -1,0 +1,250 @@
+import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Button } from '@/components/ui/button';
+import AppLayout from '@/components/AppLayout';
+import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowLeft, Ban } from 'lucide-react';
+import { parseSalonExcelFile } from '@/lib/salon-excel-parser';
+
+interface ImportSummary {
+  totalRead: number;
+  existing: number;
+  newOrders: number;
+  skippedCancelled: number;
+  closingDate: string;
+  isNewClosing: boolean;
+}
+
+export default function SalonImport() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [dragging, setDragging] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [summary, setSummary] = useState<ImportSummary | null>(null);
+
+  const processFile = useCallback(async (file: File) => {
+    if (!user) return;
+    setProcessing(true);
+    setError('');
+    setFileName(file.name);
+
+    try {
+      const { orders, skippedCancelled } = await parseSalonExcelFile(file);
+      if (orders.length === 0) {
+        setError('Nenhum pedido válido encontrado (todos cancelados ou arquivo vazio).');
+        setProcessing(false);
+        return;
+      }
+
+      // Determine closing date from the first order with a date
+      const firstDate = orders.find(o => o.sale_date)?.sale_date || new Date().toISOString().split('T')[0];
+
+      // Find or create salon closing for this date
+      let { data: existingClosing } = await supabase
+        .from('salon_closings')
+        .select('id')
+        .eq('closing_date', firstDate)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      let closingId: string;
+      let isNewClosing = false;
+
+      if (existingClosing) {
+        closingId = existingClosing.id;
+      } else {
+        const { data: newClosing, error: closingErr } = await supabase
+          .from('salon_closings')
+          .insert({ closing_date: firstDate, user_id: user.id })
+          .select('id')
+          .single();
+        if (closingErr || !newClosing) throw new Error('Erro ao criar fechamento.');
+        closingId = newClosing.id;
+        isNewClosing = true;
+      }
+
+      // Check for existing orders to avoid duplicates
+      const { data: existingOrders } = await supabase
+        .from('salon_orders')
+        .select('order_type, sale_time, total_amount')
+        .eq('salon_closing_id', closingId);
+
+      const existingSet = new Set(
+        (existingOrders || []).map(o => `${o.order_type}|${o.sale_time}|${o.total_amount}`)
+      );
+
+      const newOrders = orders.filter(o => !existingSet.has(`${o.order_type}|${o.sale_time}|${o.total_amount}`));
+      const duplicateCount = orders.length - newOrders.length;
+
+      // Create import record
+      const { data: importRecord, error: importErr } = await supabase
+        .from('salon_imports')
+        .insert({
+          user_id: user.id,
+          file_name: file.name,
+          total_rows: orders.length + skippedCancelled,
+          new_rows: newOrders.length,
+          duplicate_rows: duplicateCount,
+          skipped_cancelled: skippedCancelled,
+          salon_closing_id: closingId,
+          status: 'completed',
+        } as any)
+        .select('id')
+        .single();
+
+      if (importErr || !importRecord) throw new Error('Erro ao salvar importação.');
+
+      // Insert new orders in batches
+      if (newOrders.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < newOrders.length; i += batchSize) {
+          const batch = newOrders.slice(i, i + batchSize).map(o => ({
+            salon_import_id: importRecord.id,
+            salon_closing_id: closingId,
+            order_type: o.order_type,
+            sale_date: o.sale_date || null,
+            sale_time: o.sale_time || null,
+            payment_method: o.payment_method,
+            total_amount: o.total_amount,
+          }));
+          const { error: insertErr } = await supabase.from('salon_orders').insert(batch as any);
+          if (insertErr) throw new Error('Erro ao inserir pedidos.');
+        }
+      }
+
+      setSummary({
+        totalRead: orders.length + skippedCancelled,
+        existing: duplicateCount,
+        newOrders: newOrders.length,
+        skippedCancelled,
+        closingDate: firstDate,
+        isNewClosing,
+      });
+    } catch (err: any) {
+      setError(err.message || 'Erro ao processar o arquivo.');
+    } finally {
+      setProcessing(false);
+    }
+  }, [user]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) processFile(file);
+  }, [processFile]);
+
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) processFile(file);
+  }, [processFile]);
+
+  const formatDate = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  return (
+    <AppLayout title="Importar Salão" subtitle="Importe relatórios de vendas do salão">
+      {!summary ? (
+        <div className="max-w-xl mx-auto">
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
+              dragging ? 'border-primary bg-primary/5' : 'border-border'
+            }`}
+          >
+            {processing ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full" />
+                <p className="text-sm text-muted-foreground">Processando {fileName}...</p>
+              </div>
+            ) : (
+              <>
+                <Upload className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">Arraste o arquivo aqui</h3>
+                <p className="text-sm text-muted-foreground mb-4">ou clique para selecionar</p>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileInput}
+                  className="hidden"
+                  id="salon-file-upload"
+                />
+                <Button asChild variant="outline">
+                  <label htmlFor="salon-file-upload" className="cursor-pointer">
+                    Selecionar arquivo
+                  </label>
+                </Button>
+              </>
+            )}
+          </div>
+
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/30 rounded-xl flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+
+          <div className="mt-6 p-4 bg-muted/50 rounded-xl">
+            <p className="text-xs font-semibold text-muted-foreground mb-2">Colunas utilizadas:</p>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• <strong>A</strong> — Tipo do pedido (Salão, Ficha, etc.)</li>
+              <li>• <strong>I</strong> — Data/Hora da venda</li>
+              <li>• <strong>L</strong> — Forma de pagamento</li>
+              <li>• <strong>Y</strong> — Total</li>
+              <li>• <strong>M</strong> — Cancelado (S = ignorado)</li>
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <div className="max-w-xl mx-auto space-y-4">
+          <div className="bg-card rounded-xl shadow-card border border-border p-6 text-center">
+            <CheckCircle2 className="h-12 w-12 text-success mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-foreground mb-1">Importação concluída!</h3>
+            <p className="text-sm text-muted-foreground">
+              Fechamento: <strong>{formatDate(summary.closingDate)}</strong>
+              {summary.isNewClosing ? ' (novo)' : ' (existente)'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <SummaryCard icon={<FileSpreadsheet className="h-5 w-5" />} label="Total lidos" value={summary.totalRead} />
+            <SummaryCard icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Novos" value={summary.newOrders} />
+            <SummaryCard icon={<AlertCircle className="h-5 w-5 text-muted-foreground" />} label="Duplicados" value={summary.existing} />
+            <SummaryCard icon={<Ban className="h-5 w-5 text-destructive" />} label="Cancelados" value={summary.skippedCancelled} />
+          </div>
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setSummary(null)} className="flex-1">
+              <Upload className="h-4 w-4 mr-2" />
+              Nova importação
+            </Button>
+            <Button onClick={() => navigate('/salon')} className="flex-1">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar ao Salão
+            </Button>
+          </div>
+        </div>
+      )}
+    </AppLayout>
+  );
+}
+
+function SummaryCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+  return (
+    <div className="bg-card rounded-xl shadow-card border border-border p-4 flex items-center gap-3">
+      <div className="text-muted-foreground">{icon}</div>
+      <div>
+        <p className="text-2xl font-bold text-foreground">{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+      </div>
+    </div>
+  );
+}
