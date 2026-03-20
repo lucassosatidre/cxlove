@@ -41,7 +41,8 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
+            <Route path="/tele" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
