@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import AppLayout from '@/components/AppLayout';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { CalendarDays, Store, Bike, ChevronRight, CheckCircle2, Clock } from 'lucide-react';
+import { CalendarDays, Store, Bike, ChevronRight, CheckCircle2, Clock, Vault } from 'lucide-react';
+import { useUserRole } from '@/hooks/useUserRole';
+import CashExpectationDialog from '@/components/CashExpectationDialog';
 
 interface ClosingRow {
   id: string;
@@ -21,9 +24,11 @@ interface DayEntry {
 
 export default function Overview() {
   const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [teleClosings, setTeleClosings] = useState<ClosingRow[]>([]);
   const [salonClosings, setSalonClosings] = useState<ClosingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCashExpectation, setShowCashExpectation] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -99,7 +104,18 @@ export default function Overview() {
   };
 
   return (
-    <AppLayout title="Visão Geral" subtitle="Acompanhamento diário — Conferência & Conciliação">
+    <AppLayout
+      title="Visão Geral"
+      subtitle="Acompanhamento diário — Conferência & Conciliação"
+      headerActions={
+        isAdmin ? (
+          <Button onClick={() => setShowCashExpectation(true)} variant="outline">
+            <Vault className="h-4 w-4 mr-2" />
+            Abrir Caixa
+          </Button>
+        ) : undefined
+      }
+    >
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="bg-card rounded-xl shadow-card p-5 border border-border">
@@ -227,6 +243,11 @@ export default function Overview() {
           </div>
         )}
       </div>
+      {/* Cash Expectation Dialog for Admin */}
+      <CashExpectationDialog
+        open={showCashExpectation}
+        onOpenChange={setShowCashExpectation}
+      />
     </AppLayout>
   );
 }

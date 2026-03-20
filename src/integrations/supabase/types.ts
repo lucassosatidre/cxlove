@@ -83,6 +83,36 @@ export type Database = {
           },
         ]
       }
+      cash_expectations: {
+        Row: {
+          closing_date: string
+          counts: Json
+          created_at: string
+          created_by: string
+          id: string
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          closing_date: string
+          counts?: Json
+          created_at?: string
+          created_by: string
+          id?: string
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          closing_date?: string
+          counts?: Json
+          created_at?: string
+          created_by?: string
+          id?: string
+          total?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cash_snapshots: {
         Row: {
           counts: Json
