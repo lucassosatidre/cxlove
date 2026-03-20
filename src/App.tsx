@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Login from "./pages/Login";
+import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
 import Import from "./pages/Import";
 import Reconciliation from "./pages/Reconciliation";
