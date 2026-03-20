@@ -405,8 +405,11 @@ export default function Reconciliation() {
   const handleSaveConference = useCallback(() => {
     const errors: string[] = [];
 
-    if (!cashSnapshotSaved) {
-      errors.push('Calculadora de Dinheiro: contagem não foi salva. Abra a calculadora e salve antes de finalizar.');
+    if (!cashSnapshotSavedAbertura) {
+      errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
+    }
+    if (!cashSnapshotSavedFechamento) {
+      errors.push('Contagem de Dinheiro no Fechamento: não foi salva. Abra a calculadora e salve antes de finalizar.');
     }
 
     for (const order of orders) {
@@ -426,7 +429,7 @@ export default function Reconciliation() {
       setConferenceErrors(errors);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize, cashSnapshotSaved]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => [
