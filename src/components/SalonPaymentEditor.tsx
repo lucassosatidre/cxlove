@@ -56,21 +56,21 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
   }, [effectivePayments, onPaymentsChanged, ensurePayments]);
 
   const removePayment = useCallback((index: number) => {
-    const updated = payments.filter((_, i) => i !== index);
+    const updated = effectivePayments.filter((_, i) => i !== index);
     onPaymentsChanged(updated);
     setEditingValues(prev => {
       const next = { ...prev };
       delete next[index];
       return next;
     });
-  }, [payments, onPaymentsChanged]);
+  }, [effectivePayments, onPaymentsChanged]);
 
   const updatePayment = useCallback((index: number, field: 'payment_method' | 'amount', value: string | number) => {
-    const updated = [...payments];
+    const updated = [...effectivePayments];
     updated[index] = { ...updated[index], [field]: value };
     onPaymentsChanged(updated);
     return updated;
-  }, [payments, onPaymentsChanged]);
+  }, [effectivePayments, onPaymentsChanged]);
 
   const handleAmountChange = useCallback((index: number, rawValue: string) => {
     setEditingValues(prev => ({ ...prev, [index]: rawValue }));
