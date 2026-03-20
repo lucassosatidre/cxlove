@@ -1153,6 +1153,7 @@ interface OrderRowProps {
   isAutoOnline: boolean;
   hasBreakdowns: boolean;
   visibleColumns: ColumnVisibility;
+  orderBreakdowns: Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
