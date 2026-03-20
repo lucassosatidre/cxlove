@@ -21,7 +21,8 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const isMobile = useIsMobile();
 
   const allNavItems = [
-    { icon: Bike, label: 'Tele', path: '/', permission: 'dashboard' },
+    { icon: LayoutDashboard, label: 'Visão Geral', path: '/', permission: 'dashboard' },
+    { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
     { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
     { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
   ];
