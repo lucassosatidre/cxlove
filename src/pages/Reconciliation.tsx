@@ -518,11 +518,13 @@ export default function Reconciliation() {
 
     const matchCategory = (methodName: string): string | null => {
       const lower = methodName.toLowerCase().trim();
+      // Exclude online/pago payments — they are not offline receivables
+      if (lower.includes('pago online') || lower.includes('(pago)') || lower.includes('online')) return null;
       if (lower === 'dinheiro') return 'Dinheiro';
       if (lower.includes('(cobrar) pix') || lower === '(cobrar) pix') return '(COBRAR) Pix';
       if (lower.includes('crédit') || lower.includes('crédito') || lower === 'credito') return 'Crédito';
       if (lower.includes('débit') || lower.includes('débito') || lower === 'debito') return 'Débito';
-      if (lower.includes('voucher') && !lower.includes('voucher parceiro') && !lower.includes('online')) return 'Voucher';
+      if (lower.includes('voucher') && !lower.includes('voucher parceiro')) return 'Voucher';
       return null;
     };
 
