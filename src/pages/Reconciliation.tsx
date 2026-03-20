@@ -342,11 +342,11 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
-  const handleSaveCashSnapshot = useCallback(async () => {
+  const handleSaveCashSnapshotAbertura = useCallback(async () => {
     if (!id || !user) return;
-    setSavingCash(true);
+    setSavingCashAbertura(true);
     const countsJson: Record<string, number> = {};
-    for (const [k, v] of Object.entries(cashCounts)) {
+    for (const [k, v] of Object.entries(cashCountsAbertura)) {
       if (v > 0) countsJson[k] = v;
     }
 
@@ -356,20 +356,51 @@ export default function Reconciliation() {
         daily_closing_id: id,
         user_id: user.id,
         counts: countsJson,
-        total: cashTotal,
+        total: cashTotalAbertura,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'daily_closing_id,user_id' });
+        snapshot_type: 'abertura',
+      }, { onConflict: 'daily_closing_id,user_id,snapshot_type' });
 
     if (error) {
-      toast.error('Erro ao salvar contagem de dinheiro.');
+      toast.error('Erro ao salvar contagem de abertura.');
     } else {
-      setCashSnapshotSaved(true);
-      setCashSnapshotData({ counts: countsJson, total: cashTotal, updated_at: new Date().toISOString() });
-      toast.success(`Contagem salva: ${formatCurrency(cashTotal)}`);
-      setShowCashCalc(false);
+      setCashSnapshotSavedAbertura(true);
+      setCashSnapshotDataAbertura({ counts: countsJson, total: cashTotalAbertura, updated_at: new Date().toISOString() });
+      toast.success(`Contagem abertura salva: ${formatCurrency(cashTotalAbertura)}`);
+      setShowCashCalcAbertura(false);
     }
-    setSavingCash(false);
-  }, [id, user, cashCounts, cashTotal]);
+    setSavingCashAbertura(false);
+  }, [id, user, cashCountsAbertura, cashTotalAbertura]);
+
+  const handleSaveCashSnapshotFechamento = useCallback(async () => {
+    if (!id || !user) return;
+    setSavingCashFechamento(true);
+    const countsJson: Record<string, number> = {};
+    for (const [k, v] of Object.entries(cashCountsFechamento)) {
+      if (v > 0) countsJson[k] = v;
+    }
+
+    const { error } = await supabase
+      .from('cash_snapshots')
+      .upsert({
+        daily_closing_id: id,
+        user_id: user.id,
+        counts: countsJson,
+        total: cashTotalFechamento,
+        updated_at: new Date().toISOString(),
+        snapshot_type: 'fechamento',
+      }, { onConflict: 'daily_closing_id,user_id,snapshot_type' });
+
+    if (error) {
+      toast.error('Erro ao salvar contagem de fechamento.');
+    } else {
+      setCashSnapshotSavedFechamento(true);
+      setCashSnapshotDataFechamento({ counts: countsJson, total: cashTotalFechamento, updated_at: new Date().toISOString() });
+      toast.success(`Contagem fechamento salva: ${formatCurrency(cashTotalFechamento)}`);
+      setShowCashCalcFechamento(false);
+    }
+    setSavingCashFechamento(false);
+  }, [id, user, cashCountsFechamento, cashTotalFechamento]);
 
   const handleSaveConference = useCallback(() => {
     const errors: string[] = [];
