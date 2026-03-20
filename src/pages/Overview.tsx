@@ -24,9 +24,11 @@ interface DayEntry {
 
 export default function Overview() {
   const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [teleClosings, setTeleClosings] = useState<ClosingRow[]>([]);
   const [salonClosings, setSalonClosings] = useState<ClosingRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCashExpectation, setShowCashExpectation] = useState(false);
 
   useEffect(() => {
     loadData();
