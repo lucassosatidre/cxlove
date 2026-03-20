@@ -76,14 +76,22 @@ export default function Reconciliation() {
     partner_order_number: false,
   });
 
-  // Cash calculator state
-  const [showCashCalc, setShowCashCalc] = useState(false);
+  // Cash calculator state - Abertura
+  const [showCashCalcAbertura, setShowCashCalcAbertura] = useState(false);
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
-  const [cashCounts, setCashCounts] = useState<Record<number, number>>({});
-  const cashTotal = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
-  const [cashSnapshotSaved, setCashSnapshotSaved] = useState(false);
-  const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
-  const [savingCash, setSavingCash] = useState(false);
+  const [cashCountsAbertura, setCashCountsAbertura] = useState<Record<number, number>>({});
+  const cashTotalAbertura = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCountsAbertura[d] || 0), 0), [cashCountsAbertura]);
+  const [cashSnapshotSavedAbertura, setCashSnapshotSavedAbertura] = useState(false);
+  const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCashAbertura, setSavingCashAbertura] = useState(false);
+
+  // Cash calculator state - Fechamento
+  const [showCashCalcFechamento, setShowCashCalcFechamento] = useState(false);
+  const [cashCountsFechamento, setCashCountsFechamento] = useState<Record<number, number>>({});
+  const cashTotalFechamento = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCountsFechamento[d] || 0), 0), [cashCountsFechamento]);
+  const [cashSnapshotSavedFechamento, setCashSnapshotSavedFechamento] = useState(false);
+  const [cashSnapshotDataFechamento, setCashSnapshotDataFechamento] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCashFechamento, setSavingCashFechamento] = useState(false);
 
   // Save conference state
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
@@ -153,26 +161,30 @@ export default function Reconciliation() {
       setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
     }
 
-    // Load saved cash snapshot
+    // Load saved cash snapshots (abertura + fechamento)
     if (id) {
-      const { data: snapData } = await supabase
+      const { data: snapList } = await supabase
         .from('cash_snapshots')
-        .select('counts, total, updated_at')
+        .select('counts, total, updated_at, snapshot_type')
         .eq('daily_closing_id', id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .order('updated_at', { ascending: false });
 
-      if (snapData) {
-        const counts = snapData.counts as Record<string, number>;
-        setCashSnapshotData({ counts, total: Number(snapData.total), updated_at: snapData.updated_at });
-        setCashSnapshotSaved(true);
-        // Restore counts into calculator
+      for (const snap of (snapList || [])) {
+        const counts = snap.counts as Record<string, number>;
         const restored: Record<number, number> = {};
         for (const [k, v] of Object.entries(counts)) {
           restored[parseFloat(k)] = v;
         }
-        setCashCounts(restored);
+        const type = (snap as any).snapshot_type || 'abertura';
+        if (type === 'abertura') {
+          setCashSnapshotDataAbertura({ counts, total: Number(snap.total), updated_at: snap.updated_at });
+          setCashSnapshotSavedAbertura(true);
+          setCashCountsAbertura(restored);
+        } else if (type === 'fechamento') {
+          setCashSnapshotDataFechamento({ counts, total: Number(snap.total), updated_at: snap.updated_at });
+          setCashSnapshotSavedFechamento(true);
+          setCashCountsFechamento(restored);
+        }
       }
     }
 
@@ -330,11 +342,11 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
-  const handleSaveCashSnapshot = useCallback(async () => {
+  const handleSaveCashSnapshotAbertura = useCallback(async () => {
     if (!id || !user) return;
-    setSavingCash(true);
+    setSavingCashAbertura(true);
     const countsJson: Record<string, number> = {};
-    for (const [k, v] of Object.entries(cashCounts)) {
+    for (const [k, v] of Object.entries(cashCountsAbertura)) {
       if (v > 0) countsJson[k] = v;
     }
 
@@ -344,26 +356,60 @@ export default function Reconciliation() {
         daily_closing_id: id,
         user_id: user.id,
         counts: countsJson,
-        total: cashTotal,
+        total: cashTotalAbertura,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'daily_closing_id,user_id' });
+        snapshot_type: 'abertura',
+      }, { onConflict: 'daily_closing_id,user_id,snapshot_type' });
 
     if (error) {
-      toast.error('Erro ao salvar contagem de dinheiro.');
+      toast.error('Erro ao salvar contagem de abertura.');
     } else {
-      setCashSnapshotSaved(true);
-      setCashSnapshotData({ counts: countsJson, total: cashTotal, updated_at: new Date().toISOString() });
-      toast.success(`Contagem salva: ${formatCurrency(cashTotal)}`);
-      setShowCashCalc(false);
+      setCashSnapshotSavedAbertura(true);
+      setCashSnapshotDataAbertura({ counts: countsJson, total: cashTotalAbertura, updated_at: new Date().toISOString() });
+      toast.success(`Contagem abertura salva: ${formatCurrency(cashTotalAbertura)}`);
+      setShowCashCalcAbertura(false);
     }
-    setSavingCash(false);
-  }, [id, user, cashCounts, cashTotal]);
+    setSavingCashAbertura(false);
+  }, [id, user, cashCountsAbertura, cashTotalAbertura]);
+
+  const handleSaveCashSnapshotFechamento = useCallback(async () => {
+    if (!id || !user) return;
+    setSavingCashFechamento(true);
+    const countsJson: Record<string, number> = {};
+    for (const [k, v] of Object.entries(cashCountsFechamento)) {
+      if (v > 0) countsJson[k] = v;
+    }
+
+    const { error } = await supabase
+      .from('cash_snapshots')
+      .upsert({
+        daily_closing_id: id,
+        user_id: user.id,
+        counts: countsJson,
+        total: cashTotalFechamento,
+        updated_at: new Date().toISOString(),
+        snapshot_type: 'fechamento',
+      }, { onConflict: 'daily_closing_id,user_id,snapshot_type' });
+
+    if (error) {
+      toast.error('Erro ao salvar contagem de fechamento.');
+    } else {
+      setCashSnapshotSavedFechamento(true);
+      setCashSnapshotDataFechamento({ counts: countsJson, total: cashTotalFechamento, updated_at: new Date().toISOString() });
+      toast.success(`Contagem fechamento salva: ${formatCurrency(cashTotalFechamento)}`);
+      setShowCashCalcFechamento(false);
+    }
+    setSavingCashFechamento(false);
+  }, [id, user, cashCountsFechamento, cashTotalFechamento]);
 
   const handleSaveConference = useCallback(() => {
     const errors: string[] = [];
 
-    if (!cashSnapshotSaved) {
-      errors.push('Calculadora de Dinheiro: contagem não foi salva. Abra a calculadora e salve antes de finalizar.');
+    if (!cashSnapshotSavedAbertura) {
+      errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
+    }
+    if (!cashSnapshotSavedFechamento) {
+      errors.push('Contagem de Dinheiro no Fechamento: não foi salva. Abra a calculadora e salve antes de finalizar.');
     }
 
     for (const order of orders) {
@@ -383,7 +429,7 @@ export default function Reconciliation() {
       setConferenceErrors(errors);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize, cashSnapshotSaved]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => [
@@ -519,9 +565,13 @@ export default function Reconciliation() {
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowCashCalc(true)}>
+              <Button variant="outline" size="sm" onClick={() => setShowCashCalcAbertura(true)}>
                 <Calculator className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Calculadora Dinheiro</span>
+                <span className="hidden sm:inline">Calculadora Abertura</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCashCalcFechamento(true)}>
+                <Calculator className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Calculadora Fechamento</span>
               </Button>
               <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
@@ -587,15 +637,15 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        {/* Cash Snapshot Card */}
+        {/* Cash Snapshot - Abertura */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Banknote className="h-4 w-4 text-success" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro na Abertura</span>
               </div>
-              {cashSnapshotSaved ? (
+              {cashSnapshotSavedAbertura ? (
                 <span className="flex items-center gap-1 text-xs text-success">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   Salvo
@@ -607,13 +657,13 @@ export default function Reconciliation() {
                 </span>
               )}
             </div>
-            {cashSnapshotData ? (
+            {cashSnapshotDataAbertura ? (
               <div className="mt-2 flex items-center gap-4">
-                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotData.total)}</span>
+                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataAbertura.total)}</span>
                 <span className="text-xs text-muted-foreground">
-                  Salvo em {new Date(cashSnapshotData.updated_at).toLocaleString('pt-BR')}
+                  Salvo em {new Date(cashSnapshotDataAbertura.updated_at).toLocaleString('pt-BR')}
                 </span>
-                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalc(true)}>
+                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalcAbertura(true)}>
                   <Calculator className="h-3.5 w-3.5 mr-1" />
                   Ver detalhes
                 </Button>
@@ -621,7 +671,50 @@ export default function Reconciliation() {
             ) : (
               <div className="mt-2 flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalc(true)}>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalcAbertura(true)}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  Abrir Calculadora
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Cash Snapshot - Fechamento */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-primary" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
+              </div>
+              {cashSnapshotSavedFechamento ? (
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Salvo
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-warning">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Não salvo
+                </span>
+              )}
+            </div>
+            {cashSnapshotDataFechamento ? (
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
+                <span className="text-xs text-muted-foreground">
+                  Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
+                </span>
+                <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalcFechamento(true)}>
+                  <Calculator className="h-3.5 w-3.5 mr-1" />
+                  Ver detalhes
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalcFechamento(true)}>
                   <Calculator className="h-3.5 w-3.5 mr-1" />
                   Abrir Calculadora
                 </Button>
@@ -848,13 +941,13 @@ export default function Reconciliation() {
       </div>
       <AppSidebar />
 
-      {/* Cash Calculator Dialog */}
-      <Dialog open={showCashCalc} onOpenChange={setShowCashCalc}>
+      {/* Cash Calculator Dialog - Abertura */}
+      <Dialog open={showCashCalcAbertura} onOpenChange={setShowCashCalcAbertura}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calculator className="h-5 w-5" />
-              Calculadora de Dinheiro
+              Calculadora de Dinheiro — Abertura
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
@@ -865,27 +958,54 @@ export default function Reconciliation() {
             </div>
             {CASH_DENOMINATIONS.map(denom => (
               <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
-                <span className="text-sm font-medium text-foreground">
-                  {formatCurrency(denom)}
-                </span>
-                <Input
-                  type="number"
-                  min={0}
-                  value={cashCounts[denom] || ''}
-                  onChange={(e) => setCashCounts(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))}
-                  className="h-8 text-center text-sm"
-                  placeholder="0"
-                />
-                <span className="text-sm text-right font-mono text-foreground">
-                  {formatCurrency(denom * (cashCounts[denom] || 0))}
-                </span>
+                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                <Input type="number" min={0} value={cashCountsAbertura[denom] || ''} onChange={(e) => setCashCountsAbertura(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsAbertura[denom] || 0))}</span>
               </div>
             ))}
           </div>
           <div className="border-t border-border pt-3 mt-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
-              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotal)}</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalAbertura)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCashCountsAbertura({})}>Limpar</Button>
+            <Button size="sm" onClick={handleSaveCashSnapshotAbertura} disabled={savingCashAbertura || isCompleted}>
+              {savingCashAbertura ? 'Salvando...' : cashSnapshotSavedAbertura ? 'Atualizar Contagem' : 'Salvar Contagem'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cash Calculator Dialog - Fechamento */}
+      <Dialog open={showCashCalcFechamento} onOpenChange={setShowCashCalcFechamento}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Calculadora de Dinheiro — Fechamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+              <span>Cédula/Moeda</span>
+              <span className="text-center">Qtd</span>
+              <span className="text-right">Subtotal</span>
+            </div>
+            {CASH_DENOMINATIONS.map(denom => (
+              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
+                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                <Input type="number" min={0} value={cashCountsFechamento[denom] || ''} onChange={(e) => setCashCountsFechamento(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsFechamento[denom] || 0))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalFechamento)}</span>
             </div>
             {offlineMethodTotals['Dinheiro'] > 0 && (
               <div className="flex items-center justify-between mt-1">
@@ -895,11 +1015,9 @@ export default function Reconciliation() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setCashCounts({})}>
-              Limpar
-            </Button>
-            <Button size="sm" onClick={handleSaveCashSnapshot} disabled={savingCash || isCompleted}>
-              {savingCash ? 'Salvando...' : cashSnapshotSaved ? 'Atualizar Contagem' : 'Salvar Contagem'}
+            <Button variant="outline" size="sm" onClick={() => setCashCountsFechamento({})}>Limpar</Button>
+            <Button size="sm" onClick={handleSaveCashSnapshotFechamento} disabled={savingCashFechamento || isCompleted}>
+              {savingCashFechamento ? 'Salvando...' : cashSnapshotSavedFechamento ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
         </DialogContent>
