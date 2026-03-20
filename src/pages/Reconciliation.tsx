@@ -1412,6 +1412,36 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             )}
           </div>
         </td>
+        <td className={`p-3 text-sm ${cellClass}`}>
+          {isUnidentified && (() => {
+            const physicalBreakdowns = orderBreakdowns.filter(b => b.payment_type === 'fisico' && b.amount > 0);
+            if (physicalBreakdowns.length > 0) {
+              return (
+                <div className="flex flex-col gap-0.5">
+                  {physicalBreakdowns.map((b, i) => (
+                    <span key={i} className="text-xs font-medium text-foreground">
+                      {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
+                    </span>
+                  ))}
+                </div>
+              );
+            }
+            // Single physical payment (no breakdown) - show from payment_method if confirmed
+            if (order.is_confirmed && !hasMultiple) {
+              const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+              const physical = methods.filter(m => !isOnlinePayment(m));
+              if (physical.length > 0) {
+                return (
+                  <span className="text-xs font-medium text-foreground">
+                    {physical[0]} / <span className="font-mono-tabular">{formatCurrency(order.total_amount)}</span>
+                  </span>
+                );
+              }
+            }
+            return <span className="text-xs text-muted-foreground">—</span>;
+          })()}
+          {!isUnidentified && <span className="text-xs text-muted-foreground">—</span>}
+        </td>
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
