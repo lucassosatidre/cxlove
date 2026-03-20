@@ -1150,23 +1150,34 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               }
               setPaymentPopoverOpen(open);
             }}>
-              <PopoverTrigger asChild>
-                {isUnidentified ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
-                    className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] ${
-                      needsBreakdown(order.payment_method)
-                        ? 'bg-warning/15 text-warning hover:bg-warning/25 border border-warning/30'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
-                    }`}
-                  >
-                    <AlertTriangle className="h-3 w-3" />
-                    {needsBreakdown(order.payment_method) ? 'Rateio necessário' : 'Pagamento no ato'}
-                  </button>
-                ) : (
+              {isUnidentified ? (
+                <>
+                  {/* Show selected payment text before the tag if operator already chose */}
+                  {!isOriginalImport && (
+                    <span className="truncate text-foreground">{order.payment_method}</span>
+                  )}
+                  <PopoverTrigger asChild>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] shrink-0 ${
+                        hasMultiple
+                          ? 'bg-warning/15 text-warning hover:bg-warning/25 border border-warning/30'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
+                      }`}
+                    >
+                      <AlertTriangle className="h-3 w-3" />
+                      {hasMultiple ? 'Rateio necessário' : 'Pagamento no ato'}
+                    </button>
+                  </PopoverTrigger>
+                </>
+              ) : (
+                <>
                   <span className="truncate cursor-default">{order.payment_method}</span>
-                )}
-              </PopoverTrigger>
+                  <PopoverTrigger asChild>
+                    <span />
+                  </PopoverTrigger>
+                </>
+              )}
               <PopoverContent className="w-64 p-0" align="start" onClick={(e) => e.stopPropagation()}>
                 <div className="p-3 border-b border-border">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Formas de Pagamento</p>
