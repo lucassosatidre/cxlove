@@ -95,8 +95,10 @@ export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
           const orderType = String(row[COL_ORDER_TYPE] ?? '').trim();
           if (!orderType) continue;
 
-          const { date, time } = parseDateTime(row[COL_DATETIME]);
           const paymentMethod = String(row[COL_PAYMENT] ?? '').trim();
+          if (!paymentMethod) continue;
+
+          const { date, time } = parseDateTime(row[COL_DATETIME]);
           const totalAmount = parseCurrency(row[COL_TOTAL]);
 
           orders.push({
