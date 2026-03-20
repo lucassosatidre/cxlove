@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
 import Import from "./pages/Import";
+import TeleImport from "./pages/TeleImport";
 import Reconciliation from "./pages/Reconciliation";
 import ReconciliationLegacy from "./pages/ReconciliationLegacy";
 import DeliveryReconciliation from "./pages/DeliveryReconciliation";
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
             <Route path="/tele" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
+            <Route path="/tele/import" element={<ProtectedRoute><TeleImport /></ProtectedRoute>} />
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
