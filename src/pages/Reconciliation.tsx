@@ -1291,16 +1291,18 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
                   <PopoverTrigger asChild>
                     <button
                       onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
-                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] shrink-0 ${
-                        hasMultiple
-                          ? 'bg-warning/15 text-warning hover:bg-warning/25 border border-warning/30'
-                          : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
-                      }`}
+                      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] shrink-0 bg-muted text-muted-foreground hover:bg-muted/80 border border-border"
                     >
                       <AlertTriangle className="h-3 w-3" />
-                      {hasMultiple ? 'Rateio necessário' : 'Pagamento no ato'}
+                      Pagamento no ato
                     </button>
                   </PopoverTrigger>
+                  {hasMultiple && !hasBreakdowns && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium shrink-0 bg-warning/15 text-warning border border-warning/30">
+                      <AlertTriangle className="h-3 w-3" />
+                      Rateio necessário
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
