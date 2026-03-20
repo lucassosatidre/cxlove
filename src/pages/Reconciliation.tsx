@@ -217,7 +217,7 @@ export default function Reconciliation() {
     if (!order) return;
 
     // When confirming (not unchecking), validate that physical payments have breakdowns filled
-    if (!current) {
+    if (!current && !skipValidation) {
       const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       const hasPhysical = methods.some(m => !isOnlinePayment(m));
       
