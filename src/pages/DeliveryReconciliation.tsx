@@ -136,22 +136,32 @@ export default function DeliveryReconciliation() {
   };
 
   // Filter orders to only show offline card payments (not cash, not online)
+  // Prioritize breakdowns (operator-entered data) over raw Saipos payment_method
   const offlineOrders = useMemo(() => {
     return orders.filter(o => {
+      const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === o.id);
+      
+      // If there are breakdowns, use them to determine if order has physical card payments
+      if (orderBreakdowns.length > 0) {
+        return orderBreakdowns.some(b => {
+          if (b.payment_type !== 'fisico') return false;
+          const m = b.payment_method_name.toLowerCase();
+          if (m === 'dinheiro') return false;
+          return m.includes('crédit') || m.includes('credit') || m.includes('débit') || m.includes('debit') || m.includes('pix') || m.includes('voucher');
+        });
+      }
+      
+      // Fallback to raw payment_method from import
       const methods = o.payment_method.split(',').map(m => m.trim().toLowerCase());
       const hasOfflineCard = methods.some(m => {
-        // Exclude online/pre-paid methods
         if (m.includes('online') || m.includes('(pago)') || m.includes('anotaai')) return false;
-        // Exclude cash
         if (m === 'dinheiro') return false;
-        // "Voucher Parceiro Desconto" is an iFood discount, not a physical payment
         if (m.includes('voucher parceiro desconto')) return false;
-        // Keep physical card/pix/voucher payments
         return m.includes('crédit') || m.includes('credit') || m.includes('débit') || m.includes('debit') || m.includes('pix') || m.includes('voucher');
       });
       return hasOfflineCard;
     });
-  }, [orders]);
+  }, [orders, breakdowns]);
 
   // Map order ID → all matched transactions (supports combined matches with 2 txs per order)
   const matchedOrderIds = useMemo(() => {
@@ -744,10 +754,23 @@ export default function DeliveryReconciliation() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-mono-tabular font-medium text-foreground">
-                          {formatCurrency(order.total_amount)}
+                          {(() => {
+                            const orderBks = breakdowns.filter(b => b.imported_order_id === order.id && b.payment_type === 'fisico');
+                            if (orderBks.length > 0) {
+                              const totalPhysical = orderBks.reduce((s, b) => s + b.amount, 0);
+                              return formatCurrency(totalPhysical);
+                            }
+                            return formatCurrency(order.total_amount);
+                          })()}
                         </span>
                         <Badge variant="secondary" className="text-[10px]">
-                          {order.payment_method}
+                          {(() => {
+                            const orderBks = breakdowns.filter(b => b.imported_order_id === order.id && b.payment_type === 'fisico');
+                            if (orderBks.length > 0) {
+                              return orderBks.map(b => b.payment_method_name).join(', ');
+                            }
+                            return order.payment_method;
+                          })()}
                         </Badge>
                       </div>
                     </div>
