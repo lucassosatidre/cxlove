@@ -11,8 +11,8 @@ export interface ParsedCardTransaction {
   transaction_id: string;
 }
 
-// Serials to EXCLUDE (store/iFood machines, not delivery drivers)
-const EXCLUDED_SERIALS = new Set([
+// Fixed machine serials - EXCLUDED from delivery, INCLUDED for salon
+export const FIXED_MACHINE_SERIALS = new Set([
   'S1F2-000158242609442',
   'S1F2-000158242610215',
   'S1F2-000158242606048',
@@ -26,6 +26,8 @@ const EXCLUDED_SERIALS = new Set([
   'S1F2-000158242609530',
   'S1F2-000158242610541',
 ]);
+
+const EXCLUDED_SERIALS = FIXED_MACHINE_SERIALS;
 
 function parseBRCurrency(value: unknown): number {
   if (typeof value === 'number') return value;
