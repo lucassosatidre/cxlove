@@ -14,6 +14,7 @@ import UserManagement from "./pages/UserManagement";
 import SalonDashboard from "./pages/SalonDashboard";
 import SalonImport from "./pages/SalonImport";
 import SalonClosing from "./pages/SalonClosing";
+import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -47,6 +48,7 @@ const App = () => (
             <Route path="/salon" element={<ProtectedRoute><SalonDashboard /></ProtectedRoute>} />
             <Route path="/salon/import" element={<ProtectedRoute><SalonImport /></ProtectedRoute>} />
             <Route path="/salon/closing/:id" element={<ProtectedRoute><SalonClosing /></ProtectedRoute>} />
+            <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SalonReconciliation /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
