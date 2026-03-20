@@ -210,14 +210,14 @@ export default function Reconciliation() {
     setLoading(false);
   };
 
-  const toggleConfirm = useCallback(async (orderId: string, current: boolean) => {
+  const toggleConfirm = useCallback(async (orderId: string, current: boolean, skipValidation = false) => {
     if (!user) return;
 
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
     // When confirming (not unchecking), validate that physical payments have breakdowns filled
-    if (!current) {
+    if (!current && !skipValidation) {
       const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       const hasPhysical = methods.some(m => !isOnlinePayment(m));
       
@@ -914,7 +914,7 @@ export default function Reconciliation() {
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
                         onAutoConfirm={() => {
                           if (!order.is_confirmed) {
-                            toggleConfirm(order.id, false);
+                            toggleConfirm(order.id, false, true);
                           }
                         }}
                         allPaymentMethods={paymentMethods}
