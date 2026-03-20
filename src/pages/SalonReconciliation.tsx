@@ -145,7 +145,7 @@ export default function SalonReconciliation() {
     if (!user || !id) return;
     setImporting(true);
     try {
-      const { transactions: parsed, excludedCount } = await parseCardTransactionFile(file);
+      const { transactions: parsed, excludedCount } = await parseSalonCardTransactionFile(file);
 
       await supabase.from('salon_card_transactions').delete().eq('salon_closing_id', id);
 
