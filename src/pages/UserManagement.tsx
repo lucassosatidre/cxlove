@@ -51,7 +51,7 @@ export default function UserManagement() {
 
   // Role edit
   const [editingRole, setEditingRole] = useState<ManagedUser | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('operador');
+  const [selectedRole, setSelectedRole] = useState<string>('caixa_tele');
   const [updatingRole, setUpdatingRole] = useState(false);
 
   // Permissions edit
