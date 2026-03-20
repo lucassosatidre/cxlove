@@ -860,6 +860,7 @@ export default function Reconciliation() {
                     const breakdownValid = breakdownValidity[order.id];
                     const badgeType = getPaymentBadgeType(order.payment_method);
                     const autoOnline = isAllOnline(order.payment_method);
+                    const hasBreakdowns = allBreakdowns.some(b => b.imported_order_id === order.id);
 
                     return (
                       <OrderRow
