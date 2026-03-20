@@ -238,8 +238,8 @@ export default function SalonClosing() {
                 <TableHead className="w-8"></TableHead>
                 <TableHead>Tipo</TableHead>
                 <TableHead>Hora</TableHead>
-                <TableHead className="text-right">Total</TableHead>
                 <TableHead>Pagamento</TableHead>
+                <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -254,6 +254,7 @@ export default function SalonClosing() {
                   const status = getOrderPaymentStatus(order.id, order.total_amount);
                   const isExpanded = expandedOrder === order.id;
                   const payments = orderPayments[order.id] || [];
+                  const isNumber = /^\d+$/.test(order.order_type.trim());
 
                   return (
                     <>
@@ -270,13 +271,18 @@ export default function SalonClosing() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
+                          {order.order_type.toLowerCase() === 'ficha' ? (
+                            <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>
+                          ) : isNumber ? (
+                            <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>
+                          ) : order.order_type.toLowerCase() === 'salão' || order.order_type.toLowerCase() === 'salao' ? (
+                            <Badge className="bg-warning text-foreground border-transparent text-xs">Salão</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {order.sale_time || '—'}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </TableCell>
                         <TableCell>
                           {status === 'complete' ? (
@@ -292,6 +298,9 @@ export default function SalonClosing() {
                               Pendente
                             </Badge>
                           )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">
+                          R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </TableCell>
                       </TableRow>
                       {isExpanded && (
