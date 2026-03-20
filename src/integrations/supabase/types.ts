@@ -299,6 +299,137 @@ export type Database = {
           },
         ]
       }
+      salon_closings: {
+        Row: {
+          closing_date: string
+          created_at: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          closing_date: string
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          closing_date?: string
+          created_at?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      salon_imports: {
+        Row: {
+          created_at: string
+          duplicate_rows: number
+          file_name: string
+          id: string
+          new_rows: number
+          salon_closing_id: string | null
+          skipped_cancelled: number
+          status: string
+          total_rows: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          duplicate_rows?: number
+          file_name: string
+          id?: string
+          new_rows?: number
+          salon_closing_id?: string | null
+          skipped_cancelled?: number
+          status?: string
+          total_rows?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          duplicate_rows?: number
+          file_name?: string
+          id?: string
+          new_rows?: number
+          salon_closing_id?: string | null
+          skipped_cancelled?: number
+          status?: string
+          total_rows?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salon_imports_salon_closing_id_fkey"
+            columns: ["salon_closing_id"]
+            isOneToOne: false
+            referencedRelation: "salon_closings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      salon_orders: {
+        Row: {
+          confirmed_at: string | null
+          confirmed_by: string | null
+          id: string
+          is_confirmed: boolean
+          order_type: string
+          payment_method: string
+          sale_date: string | null
+          sale_time: string | null
+          salon_closing_id: string | null
+          salon_import_id: string
+          total_amount: number
+        }
+        Insert: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          id?: string
+          is_confirmed?: boolean
+          order_type: string
+          payment_method?: string
+          sale_date?: string | null
+          sale_time?: string | null
+          salon_closing_id?: string | null
+          salon_import_id: string
+          total_amount?: number
+        }
+        Update: {
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          id?: string
+          is_confirmed?: boolean
+          order_type?: string
+          payment_method?: string
+          sale_date?: string | null
+          sale_time?: string | null
+          salon_closing_id?: string | null
+          salon_import_id?: string
+          total_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salon_orders_salon_closing_id_fkey"
+            columns: ["salon_closing_id"]
+            isOneToOne: false
+            referencedRelation: "salon_closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salon_orders_salon_import_id_fkey"
+            columns: ["salon_import_id"]
+            isOneToOne: false
+            referencedRelation: "salon_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_permissions: {
         Row: {
           id: string

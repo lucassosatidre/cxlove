@@ -11,6 +11,9 @@ import Reconciliation from "./pages/Reconciliation";
 import ReconciliationLegacy from "./pages/ReconciliationLegacy";
 import DeliveryReconciliation from "./pages/DeliveryReconciliation";
 import UserManagement from "./pages/UserManagement";
+import SalonDashboard from "./pages/SalonDashboard";
+import SalonImport from "./pages/SalonImport";
+import SalonClosing from "./pages/SalonClosing";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -41,6 +44,9 @@ const App = () => (
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
+            <Route path="/salon" element={<ProtectedRoute><SalonDashboard /></ProtectedRoute>} />
+            <Route path="/salon/import" element={<ProtectedRoute><SalonImport /></ProtectedRoute>} />
+            <Route path="/salon/closing/:id" element={<ProtectedRoute><SalonClosing /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
