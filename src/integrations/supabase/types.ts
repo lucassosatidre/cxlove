@@ -89,6 +89,7 @@ export type Database = {
           created_at: string
           daily_closing_id: string
           id: string
+          snapshot_type: string
           total: number
           updated_at: string
           user_id: string
@@ -98,6 +99,7 @@ export type Database = {
           created_at?: string
           daily_closing_id: string
           id?: string
+          snapshot_type?: string
           total?: number
           updated_at?: string
           user_id: string
@@ -107,6 +109,7 @@ export type Database = {
           created_at?: string
           daily_closing_id?: string
           id?: string
+          snapshot_type?: string
           total?: number
           updated_at?: string
           user_id?: string
