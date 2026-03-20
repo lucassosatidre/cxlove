@@ -888,9 +888,6 @@ export default function Reconciliation() {
                         }}
                         onBreakdownValid={(valid) => handleBreakdownValid(order.id, valid)}
                         onBreakdownSaved={async () => {
-                          if (!order.is_confirmed) {
-                            toggleConfirm(order.id, false);
-                          }
                           const orderIds = orders.map(o => o.id);
                           const { data: bkData } = await supabase
                             .from('order_payment_breakdowns')
