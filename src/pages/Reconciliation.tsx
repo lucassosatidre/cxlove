@@ -1320,7 +1320,8 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
                   const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
                   const physicalMethods = methods.filter(m => !isOnlinePayment(m));
                   const onlineMethods = methods.filter(m => isOnlinePayment(m));
-                  const isOperatorSet = physicalMethods.length > 0 && physicalMethods.every(m => offlinePaymentMethods.includes(m));
+                  // Only show method name after operator confirmed the order
+                  const isOperatorSet = order.is_confirmed;
 
                   return (
                     <>
