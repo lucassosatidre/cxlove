@@ -130,7 +130,7 @@ export default function Dashboard() {
       title="Tele"
       subtitle={`📅 ${dateStr} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        <Button onClick={() => navigate('/import')} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => navigate('/tele/import')} className="bg-primary hover:bg-primary/90">
           <Plus className="h-4 w-4 mr-2" />
           Nova Importação
         </Button>
