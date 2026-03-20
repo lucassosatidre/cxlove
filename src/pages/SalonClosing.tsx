@@ -75,14 +75,30 @@ export default function SalonClosing() {
 
   const totalAmount = useMemo(() => filtered.reduce((sum, o) => sum + o.total_amount, 0), [filtered]);
 
-  // Payment method summary
+  // Payment method summary — split comma-separated methods and aggregate individually
   const paymentSummary = useMemo(() => {
     const map: Record<string, { count: number; total: number }> = {};
     filtered.forEach(o => {
-      const key = o.payment_method || '(sem pagamento)';
-      if (!map[key]) map[key] = { count: 0, total: 0 };
-      map[key].count++;
-      map[key].total += o.total_amount;
+      const raw = o.payment_method || '(sem pagamento)';
+      const methods = raw.split(',').map(s => s.trim()).filter(Boolean);
+      if (methods.length <= 1) {
+        const key = methods[0] || '(sem pagamento)';
+        if (!map[key]) map[key] = { count: 0, total: 0 };
+        map[key].count++;
+        map[key].total += o.total_amount;
+      } else {
+        // Multiple methods: count each occurrence, split total evenly
+        const perMethod: Record<string, number> = {};
+        methods.forEach(m => {
+          perMethod[m] = (perMethod[m] || 0) + 1;
+        });
+        const share = o.total_amount / methods.length;
+        Object.entries(perMethod).forEach(([method, qty]) => {
+          if (!map[method]) map[method] = { count: 0, total: 0 };
+          map[method].count += qty;
+          map[method].total += share * qty;
+        });
+      }
     });
     return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
   }, [filtered]);
