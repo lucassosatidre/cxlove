@@ -860,6 +860,7 @@ export default function Reconciliation() {
                     const breakdownValid = breakdownValidity[order.id];
                     const badgeType = getPaymentBadgeType(order.payment_method);
                     const autoOnline = isAllOnline(order.payment_method);
+                    const hasBreakdowns = allBreakdowns.some(b => b.imported_order_id === order.id);
 
                     return (
                       <OrderRow
@@ -871,6 +872,7 @@ export default function Reconciliation() {
                         breakdownValid={breakdownValid}
                         isCompleted={isCompleted}
                         isAutoOnline={autoOnline}
+                        hasBreakdowns={hasBreakdowns}
                         visibleColumns={visibleColumns}
                         onRowClick={() => handleRowClick(order)}
                         onCheckboxClick={(e) => {
@@ -1114,6 +1116,7 @@ interface OrderRowProps {
   breakdownValid: boolean;
   isCompleted: boolean;
   isAutoOnline: boolean;
+  hasBreakdowns: boolean;
   visibleColumns: ColumnVisibility;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
@@ -1174,7 +1177,7 @@ function isUnidentifiedPayment(method: string): boolean {
   return true;
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
@@ -1279,8 +1282,8 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             }}>
               {isUnidentified ? (
                 <>
-                  {/* Show selected payment text before the tag if operator already chose */}
-                  {!isOriginalImportPayment(order.payment_method) && (
+                  {/* Only show payment text if operator has already saved breakdowns */}
+                  {hasBreakdowns && (
                     <span className="truncate text-foreground">{order.payment_method}</span>
                   )}
                   <PopoverTrigger asChild>
