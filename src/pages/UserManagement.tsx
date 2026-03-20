@@ -228,6 +228,14 @@ export default function UserManagement() {
                         <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 text-xs">
                           Acesso total
                         </Badge>
+                      ) : u.role === 'caixa_tele' ? (
+                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-xs">
+                          Tele
+                        </Badge>
+                      ) : u.role === 'caixa_salao' ? (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
+                          Salão
+                        </Badge>
                       ) : u.permissions.length === 0 ? (
                         <span className="text-xs text-muted-foreground">Nenhuma</span>
                       ) : (
