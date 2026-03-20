@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
 import Import from "./pages/Import";
+import TeleImport from "./pages/TeleImport";
 import Reconciliation from "./pages/Reconciliation";
 import ReconciliationLegacy from "./pages/ReconciliationLegacy";
 import DeliveryReconciliation from "./pages/DeliveryReconciliation";
