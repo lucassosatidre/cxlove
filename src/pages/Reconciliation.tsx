@@ -896,6 +896,11 @@ export default function Reconciliation() {
                           setAllBreakdowns((bkData || []).map(b => ({ ...b, amount: Number(b.amount) })));
                         }}
                         onUpdateField={(field, value) => handleUpdateOrderField(order.id, field, value)}
+                        onAutoConfirm={() => {
+                          if (!order.is_confirmed) {
+                            toggleConfirm(order.id, false);
+                          }
+                        }}
                         allPaymentMethods={paymentMethods}
                         offlinePaymentMethods={offlinePaymentMethods}
                         allDeliveryPersons={deliveryPersons}
@@ -1156,6 +1161,7 @@ interface OrderRowProps {
   onBreakdownValid: (valid: boolean) => void;
   onBreakdownSaved?: () => void;
   onUpdateField: (field: 'payment_method' | 'delivery_person', value: string) => void;
+  onAutoConfirm?: () => void;
   allPaymentMethods: string[];
   offlinePaymentMethods: string[];
   allDeliveryPersons: string[];
@@ -1206,14 +1212,21 @@ interface ValoresCellProps {
   isCompleted: boolean;
   offlinePaymentMethods: string[];
   onSaved?: () => void;
+  onAutoConfirm?: () => void;
 }
 
-function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offlinePaymentMethods, onSaved }: ValoresCellProps) {
+function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offlinePaymentMethods, onSaved, onAutoConfirm }: ValoresCellProps) {
   const [editing, setEditing] = useState(false);
   const [entries, setEntries] = useState<Array<{ method: string; amount: string }>>([{ method: '', amount: '' }]);
   const [saving, setSaving] = useState(false);
 
   const physicalBreakdowns = orderBreakdowns.filter(b => b.payment_type === 'fisico' && b.amount > 0);
+
+  // Detect if this is a hybrid order (has both online and physical methods)
+  const parsedMethods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+  const hasOnlineComponent = parsedMethods.some(m => isOnlinePayment(m));
+  const hasPhysicalComponent = parsedMethods.some(m => !isOnlinePayment(m));
+  const isHybrid = hasOnlineComponent && hasPhysicalComponent;
 
   // If already has saved breakdowns, show them
   if (physicalBreakdowns.length > 0 && !editing) {
@@ -1260,7 +1273,7 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
     setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (autoConfirmAfter = false) => {
     const valid = entries.filter(e => e.method && e.amount);
     if (valid.length === 0) {
       toast.error('Informe ao menos um método e valor.');
@@ -1315,10 +1328,12 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
     if (error) {
       toast.error('Erro ao salvar valores.');
     } else {
-
       toast.success('Valores salvos!');
       setEditing(false);
       onSaved?.();
+      if (autoConfirmAfter) {
+        onAutoConfirm?.();
+      }
     }
     setSaving(false);
   };
@@ -1347,12 +1362,15 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                // Check if single entry with method selected and amount matches total
-                if (entries.length === 1 && entry.method) {
+                if (entries.length === 1 && entry.method && entry.amount) {
                   const cleaned = entry.amount.replace(/[^\d.,]/g, '').replace(',', '.');
                   const amount = Math.round((parseFloat(cleaned) || 0) * 100) / 100;
-                  if (Math.abs(amount - order.total_amount) < 0.01) {
-                    handleSave();
+                  if (isHybrid && amount > 0 && amount <= order.total_amount) {
+                    // Hybrid: auto-save with online remainder and auto-confirm
+                    handleSave(true);
+                  } else if (Math.abs(amount - order.total_amount) < 0.01) {
+                    // Exact match: auto-save
+                    handleSave(false);
                   }
                 }
               }
@@ -1367,7 +1385,7 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
       ))}
       <div className="flex items-center gap-1">
         <button onClick={addEntry} className="text-[10px] text-primary hover:underline">+ Rateio</button>
-        <Button size="sm" className="h-6 text-[10px] px-2 ml-auto" onClick={handleSave} disabled={saving}>
+        <Button size="sm" className="h-6 text-[10px] px-2 ml-auto" onClick={() => handleSave(false)} disabled={saving}>
           {saving ? '...' : 'Salvar'}
         </Button>
         <button onClick={() => setEditing(false)} className="text-[10px] text-muted-foreground hover:underline">
@@ -1388,7 +1406,7 @@ function isUnidentifiedPayment(method: string): boolean {
   return true;
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onAutoConfirm, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 6 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
@@ -1580,6 +1598,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               isCompleted={isCompleted}
               offlinePaymentMethods={offlinePaymentMethods}
               onSaved={onBreakdownSaved}
+              onAutoConfirm={onAutoConfirm}
             />
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
