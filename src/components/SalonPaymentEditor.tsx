@@ -187,13 +187,13 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
         </div>
       ))}
 
-      <div className="flex items-center justify-between gap-2">
-        <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={addPayment}>
-          <Plus className="h-2.5 w-2.5" />
-          Adicionar
-        </Button>
+      {effectivePayments.length > 1 || (effectivePayments.length === 1 && effectivePayments[0].payment_method) ? (
+        <div className="flex items-center justify-between gap-2">
+          <Button variant="outline" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={addPayment}>
+            <Plus className="h-2.5 w-2.5" />
+            Adicionar
+          </Button>
 
-        {payments.length > 0 && (
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted-foreground tabular-nums">
               {sum.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} / {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -214,8 +214,8 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
               {saving ? '...' : 'Salvar'}
             </Button>
           </div>
-        )}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }
