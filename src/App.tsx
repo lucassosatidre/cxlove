@@ -33,6 +33,20 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+function RoleRedirect() {
+  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+  if (isCaixaTele) return <Navigate to="/tele" replace />;
+  if (isCaixaSalao) return <Navigate to="/salon" replace />;
+  return <Overview />;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
