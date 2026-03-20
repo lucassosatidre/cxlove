@@ -555,16 +555,48 @@ export default function DeliveryReconciliation() {
               </Button>
             </div>
             {showCashDetailsAbertura && (
-              <div className="mt-3 space-y-2">
-                {expectedCash && (
-                  <div className="flex flex-wrap gap-2 mb-1">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-full">Valor esperado (admin)</span>
-                    {Object.entries(expectedCash.counts)
+              <div className="mt-3">
+                {expectedCash ? (
+                  <div className="grid grid-cols-[auto_1fr_1fr] gap-x-4 gap-y-1 text-xs">
+                    <div />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Esperado (Admin)</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Operador</span>
+                    {[200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.25, 0.1, 0.05]
+                      .filter(d => (expectedCash.counts[String(d)] || 0) > 0 || (cashSnapshotDataAbertura.counts[String(d)] || 0) > 0)
+                      .map(denom => {
+                        const expQty = expectedCash.counts[String(denom)] || 0;
+                        const opQty = (cashSnapshotDataAbertura.counts[String(denom)] as number) || 0;
+                        const match = expQty === opQty;
+                        return (
+                          <div key={denom} className="contents">
+                            <span className="font-medium text-foreground font-mono py-1">{formatCurrency(denom)}</span>
+                            <div className="flex items-center gap-1.5 bg-primary/10 rounded-md px-2.5 py-1 border border-primary/20">
+                              <span className="font-semibold text-foreground">{expQty}</span>
+                              <span className="text-muted-foreground">= {formatCurrency(denom * expQty)}</span>
+                            </div>
+                            <div className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 border ${match ? 'bg-success/10 border-success/20' : 'bg-warning/10 border-warning/20'}`}>
+                              <span className="font-semibold text-foreground">{opQty}</span>
+                              <span className="text-muted-foreground">= {formatCurrency(denom * opQty)}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    <div className="contents font-semibold border-t border-border">
+                      <span className="py-1.5 text-foreground">Total</span>
+                      <span className="py-1.5 font-mono text-foreground">{formatCurrency(expectedCash.total)}</span>
+                      <span className={`py-1.5 font-mono ${Math.abs(cashSnapshotDataAbertura.total - expectedCash.total) < 0.01 ? 'text-success' : 'text-warning'}`}>
+                        {formatCurrency(cashSnapshotDataAbertura.total)}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(cashSnapshotDataAbertura.counts)
                       .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
                       .filter(({ qty }) => qty > 0)
                       .sort((a, b) => b.denom - a.denom)
                       .map(({ denom, qty }) => (
-                        <div key={`exp-${denom}`} className="flex items-center gap-1.5 bg-primary/10 rounded-md px-2.5 py-1 border border-primary/20 text-xs">
+                        <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
                           <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
                           <span className="text-muted-foreground">×</span>
                           <span className="font-semibold text-foreground">{qty}</span>
@@ -573,21 +605,6 @@ export default function DeliveryReconciliation() {
                       ))}
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {expectedCash && <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-full">Contagem do operador</span>}
-                  {Object.entries(cashSnapshotDataAbertura.counts)
-                    .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
-                    .filter(({ qty }) => qty > 0)
-                    .sort((a, b) => b.denom - a.denom)
-                    .map(({ denom, qty }) => (
-                      <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
-                        <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
-                        <span className="text-muted-foreground">×</span>
-                        <span className="font-semibold text-foreground">{qty}</span>
-                        <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
-                      </div>
-                    ))}
-                </div>
               </div>
             )}
           </div>
