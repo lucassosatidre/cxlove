@@ -1202,6 +1202,178 @@ function isOriginalImportPayment(method: string): boolean {
   return true;
 }
 
+interface ValoresCellProps {
+  order: Order;
+  orderBreakdowns: Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>;
+  hasMultiple: boolean;
+  isCompleted: boolean;
+  offlinePaymentMethods: string[];
+  onSaved?: () => void;
+}
+
+function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offlinePaymentMethods, onSaved }: ValoresCellProps) {
+  const [editing, setEditing] = useState(false);
+  const [entries, setEntries] = useState<Array<{ method: string; amount: string }>>([{ method: '', amount: '' }]);
+  const [saving, setSaving] = useState(false);
+
+  const physicalBreakdowns = orderBreakdowns.filter(b => b.payment_type === 'fisico' && b.amount > 0);
+
+  // If already has saved breakdowns, show them
+  if (physicalBreakdowns.length > 0 && !editing) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        {physicalBreakdowns.map((b, i) => (
+          <span key={i} className="text-xs font-medium text-foreground">
+            {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
+          </span>
+        ))}
+        {!isCompleted && (
+          <button
+            onClick={() => {
+              setEntries(physicalBreakdowns.map(b => ({ method: b.payment_method_name, amount: b.amount.toFixed(2).replace('.', ',') })));
+              setEditing(true);
+            }}
+            className="text-[10px] text-primary hover:underline text-left mt-0.5"
+          >
+            Editar
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (isCompleted) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => setEditing(true)}
+        className="text-xs text-primary hover:underline font-medium"
+      >
+        + Informar valores
+      </button>
+    );
+  }
+
+  const addEntry = () => setEntries(prev => [...prev, { method: '', amount: '' }]);
+  const removeEntry = (idx: number) => setEntries(prev => prev.filter((_, i) => i !== idx));
+  const updateEntry = (idx: number, field: 'method' | 'amount', value: string) => {
+    setEntries(prev => prev.map((e, i) => i === idx ? { ...e, [field]: value } : e));
+  };
+
+  const handleSave = async () => {
+    const valid = entries.filter(e => e.method && e.amount);
+    if (valid.length === 0) {
+      toast.error('Informe ao menos um método e valor.');
+      return;
+    }
+
+    setSaving(true);
+
+    // Delete existing breakdowns
+    await supabase
+      .from('order_payment_breakdowns')
+      .delete()
+      .eq('imported_order_id', order.id);
+
+    // Build inserts: physical entries from user + online entries if mixed
+    const inserts: Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number; is_auto_calculated: boolean }> = [];
+
+    const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+    const onlineMethods = methods.filter(m => isOnlinePayment(m));
+
+    // Add physical entries from user input
+    let physicalTotal = 0;
+    for (const e of valid) {
+      const cleaned = e.amount.replace(/[^\d.,]/g, '').replace(',', '.');
+      const amount = Math.round((parseFloat(cleaned) || 0) * 100) / 100;
+      physicalTotal += amount;
+      inserts.push({
+        imported_order_id: order.id,
+        payment_method_name: e.method,
+        payment_type: 'fisico',
+        amount,
+        is_auto_calculated: false,
+      });
+    }
+
+    // If there are online methods, add them with remaining amount
+    if (onlineMethods.length > 0) {
+      const onlineAmount = Math.round((order.total_amount - physicalTotal) * 100) / 100;
+      for (const m of onlineMethods) {
+        inserts.push({
+          imported_order_id: order.id,
+          payment_method_name: m,
+          payment_type: 'online',
+          amount: onlineMethods.length === 1 ? Math.max(0, onlineAmount) : 0,
+          is_auto_calculated: true,
+        });
+      }
+    }
+
+    const { error } = await supabase.from('order_payment_breakdowns').insert(inserts);
+
+    if (error) {
+      toast.error('Erro ao salvar valores.');
+    } else {
+      // Also update payment_method on the order with the selected physical methods
+      const allMethodNames = [...valid.map(e => e.method), ...onlineMethods];
+      await supabase
+        .from('imported_orders')
+        .update({ payment_method: allMethodNames.join(', ') })
+        .eq('id', order.id);
+
+      toast.success('Valores salvos!');
+      setEditing(false);
+      onSaved?.();
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="space-y-1.5 min-w-[180px]">
+      {entries.map((entry, idx) => (
+        <div key={idx} className="flex items-center gap-1">
+          <Select value={entry.method} onValueChange={(v) => updateEntry(idx, 'method', v)}>
+            <SelectTrigger className="h-7 text-[11px] w-[100px] px-1.5">
+              <SelectValue placeholder="Método" />
+            </SelectTrigger>
+            <SelectContent>
+              {offlinePaymentMethods.map(m => (
+                <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input
+            type="text"
+            inputMode="decimal"
+            placeholder="0,00"
+            className="h-7 text-[11px] w-[70px] text-right font-mono-tabular px-1.5"
+            value={entry.amount}
+            onChange={(e) => updateEntry(idx, 'amount', e.target.value)}
+          />
+          {entries.length > 1 && (
+            <button onClick={() => removeEntry(idx)} className="text-destructive hover:text-destructive/80">
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      ))}
+      <div className="flex items-center gap-1">
+        <button onClick={addEntry} className="text-[10px] text-primary hover:underline">+ Rateio</button>
+        <Button size="sm" className="h-6 text-[10px] px-2 ml-auto" onClick={handleSave} disabled={saving}>
+          {saving ? '...' : 'Salvar'}
+        </Button>
+        <button onClick={() => setEditing(false)} className="text-[10px] text-muted-foreground hover:underline">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 function isUnidentifiedPayment(method: string): boolean {
   const methods = method.split(',').map(m => m.trim()).filter(Boolean);
@@ -1412,35 +1584,19 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             )}
           </div>
         </td>
-        <td className={`p-3 text-sm ${cellClass}`}>
-          {isUnidentified && (() => {
-            const physicalBreakdowns = orderBreakdowns.filter(b => b.payment_type === 'fisico' && b.amount > 0);
-            if (physicalBreakdowns.length > 0) {
-              return (
-                <div className="flex flex-col gap-0.5">
-                  {physicalBreakdowns.map((b, i) => (
-                    <span key={i} className="text-xs font-medium text-foreground">
-                      {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
-                    </span>
-                  ))}
-                </div>
-              );
-            }
-            // Single physical payment (no breakdown) - show from payment_method if confirmed
-            if (order.is_confirmed && !hasMultiple) {
-              const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
-              const physical = methods.filter(m => !isOnlinePayment(m));
-              if (physical.length > 0) {
-                return (
-                  <span className="text-xs font-medium text-foreground">
-                    {physical[0]} / <span className="font-mono-tabular">{formatCurrency(order.total_amount)}</span>
-                  </span>
-                );
-              }
-            }
-            return <span className="text-xs text-muted-foreground">—</span>;
-          })()}
-          {!isUnidentified && <span className="text-xs text-muted-foreground">—</span>}
+        <td className={`p-3 text-sm ${cellClass}`} onClick={(e) => e.stopPropagation()}>
+          {isUnidentified ? (
+            <ValoresCell
+              order={order}
+              orderBreakdowns={orderBreakdowns}
+              hasMultiple={hasMultiple}
+              isCompleted={isCompleted}
+              offlinePaymentMethods={offlinePaymentMethods}
+              onSaved={onBreakdownSaved}
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
         </td>
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
