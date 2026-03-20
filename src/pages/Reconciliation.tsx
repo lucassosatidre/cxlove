@@ -1318,12 +1318,6 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
     if (error) {
       toast.error('Erro ao salvar valores.');
     } else {
-      // Also update payment_method on the order with the selected physical methods
-      const allMethodNames = [...valid.map(e => e.method), ...onlineMethods];
-      await supabase
-        .from('imported_orders')
-        .update({ payment_method: allMethodNames.join(', ') })
-        .eq('id', order.id);
 
       toast.success('Valores salvos!');
       setEditing(false);
