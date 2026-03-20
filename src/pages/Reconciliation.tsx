@@ -76,14 +76,22 @@ export default function Reconciliation() {
     partner_order_number: false,
   });
 
-  // Cash calculator state
-  const [showCashCalc, setShowCashCalc] = useState(false);
+  // Cash calculator state - Abertura
+  const [showCashCalcAbertura, setShowCashCalcAbertura] = useState(false);
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
-  const [cashCounts, setCashCounts] = useState<Record<number, number>>({});
-  const cashTotal = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCounts[d] || 0), 0), [cashCounts]);
-  const [cashSnapshotSaved, setCashSnapshotSaved] = useState(false);
-  const [cashSnapshotData, setCashSnapshotData] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
-  const [savingCash, setSavingCash] = useState(false);
+  const [cashCountsAbertura, setCashCountsAbertura] = useState<Record<number, number>>({});
+  const cashTotalAbertura = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCountsAbertura[d] || 0), 0), [cashCountsAbertura]);
+  const [cashSnapshotSavedAbertura, setCashSnapshotSavedAbertura] = useState(false);
+  const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCashAbertura, setSavingCashAbertura] = useState(false);
+
+  // Cash calculator state - Fechamento
+  const [showCashCalcFechamento, setShowCashCalcFechamento] = useState(false);
+  const [cashCountsFechamento, setCashCountsFechamento] = useState<Record<number, number>>({});
+  const cashTotalFechamento = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCountsFechamento[d] || 0), 0), [cashCountsFechamento]);
+  const [cashSnapshotSavedFechamento, setCashSnapshotSavedFechamento] = useState(false);
+  const [cashSnapshotDataFechamento, setCashSnapshotDataFechamento] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCashFechamento, setSavingCashFechamento] = useState(false);
 
   // Save conference state
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
