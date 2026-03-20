@@ -1162,7 +1162,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               {isUnidentified ? (
                 <>
                   {/* Show selected payment text before the tag if operator already chose */}
-                  {!isOriginalImport && (
+                  {!isOriginalImportPayment(order.payment_method) && (
                     <span className="truncate text-foreground">{order.payment_method}</span>
                   )}
                   <PopoverTrigger asChild>
