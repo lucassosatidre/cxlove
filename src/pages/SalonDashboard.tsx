@@ -33,6 +33,8 @@ export default function SalonDashboard() {
   const [imports, setImports] = useState<SalonImportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedClosingId, setExpandedClosingId] = useState<string | null>(null);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadData();
