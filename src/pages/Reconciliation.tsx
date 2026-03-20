@@ -1037,26 +1037,13 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
 }
 
 // Known specific offline methods that should display normally (not as a tag)
-const KNOWN_OFFLINE_METHODS = [
-  'crédito', 'credito', 'débito', 'debito', '(cobrar) pix', 'voucher',
-  '(pago) pix banco do brasil', 'sob demanda ifood'
-];
-
 function isUnidentifiedPayment(method: string): boolean {
-  // If it's online, it's identified (auto-filled)
+  // If it's online, it's identified (auto-filled) — no tag needed
   if (isOnlinePayment(method)) return false;
-  // If it's a known specific offline method, it's identified
-  const lower = method.toLowerCase().trim();
-  if (KNOWN_OFFLINE_METHODS.some(km => lower === km)) return false;
-  // Check comma-separated: if ALL individual methods are known, it's identified
-  const methods = method.split(',').map(m => m.trim().toLowerCase()).filter(Boolean);
-  if (methods.length > 1) {
-    const allKnown = methods.every(m => 
-      isOnlinePayment(m) || KNOWN_OFFLINE_METHODS.some(km => m === km)
-    );
-    if (allKnown) return false;
-  }
-  // Otherwise it's unidentified → show tag
+  // Check comma-separated: if ALL individual methods are online, no tag
+  const methods = method.split(',').map(m => m.trim()).filter(Boolean);
+  if (methods.length > 1 && methods.every(m => isOnlinePayment(m))) return false;
+  // ALL non-online methods show a tag for the operator to fill
   return true;
 }
 
