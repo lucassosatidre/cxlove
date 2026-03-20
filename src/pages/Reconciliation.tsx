@@ -565,9 +565,13 @@ export default function Reconciliation() {
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowCashCalc(true)}>
+              <Button variant="outline" size="sm" onClick={() => setShowCashCalcAbertura(true)}>
                 <Calculator className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Calculadora Dinheiro</span>
+                <span className="hidden sm:inline">Calculadora Abertura</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCashCalcFechamento(true)}>
+                <Calculator className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Calculadora Fechamento</span>
               </Button>
               <Button variant="outline" size="sm" onClick={() => navigate('/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
