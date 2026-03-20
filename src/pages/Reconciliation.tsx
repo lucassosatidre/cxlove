@@ -1384,6 +1384,9 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
   const [paymentPopoverOpen, setPaymentPopoverOpen] = useState(false);
 
   const isUnidentified = isUnidentifiedPayment(order.payment_method);
+  const parsedMethods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+  const hasOnlineComponent = parsedMethods.some(isOnlinePayment);
+  const hasPhysicalComponent = parsedMethods.some(m => !isOnlinePayment(m));
 
   const formatSaleDate = (d: string | null) => {
     if (!d) return '—';
@@ -1481,54 +1484,34 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               setPaymentPopoverOpen(open);
             }}>
               {isUnidentified ? (
-                (() => {
-                  const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
-                  const physicalMethods = methods.filter(m => !isOnlinePayment(m));
-                  const onlineMethods = methods.filter(m => isOnlinePayment(m));
-                  // Only show method name after operator confirmed the order
-                  const isOperatorSet = order.is_confirmed;
-
-                  return (
-                    <>
-                      {/* Show online methods from import if any */}
-                      {onlineMethods.length > 0 && (
-                        <span className="truncate text-foreground">{onlineMethods.join(', ')}</span>
-                      )}
-                      {/* If operator already selected, show method name */}
-                      {isOperatorSet && (
-                        <span className="truncate text-foreground font-medium">{physicalMethods.join(', ')}</span>
-                      )}
-                      <PopoverTrigger asChild>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); startEdit(e, 'payment_method'); }}
-                          className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium cursor-pointer transition-colors active:scale-[0.97] shrink-0 ${
-                            isOperatorSet
-                              ? 'bg-primary/10 text-primary border border-primary/20'
-                              : 'bg-muted text-muted-foreground hover:bg-muted/80 border border-border'
-                          }`}
-                        >
-                          {isOperatorSet ? (
-                            <>
-                              <CreditCard className="h-3 w-3" />
-                              Pagamento na entrega
-                            </>
-                          ) : (
-                            <>
-                              <AlertTriangle className="h-3 w-3" />
-                              Pagamento no ato
-                            </>
-                          )}
-                        </button>
-                      </PopoverTrigger>
-                      {hasMultiple && !hasBreakdowns && (
-                        <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium shrink-0 bg-warning/15 text-warning border border-warning/30">
+                <>
+                  {hasOnlineComponent && <PaymentBadge type="online" />}
+                  {hasPhysicalComponent && (
+                    <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium shrink-0 border ${
+                      order.is_confirmed
+                        ? 'bg-primary/10 text-primary border-primary/20'
+                        : 'bg-muted text-muted-foreground border-border'
+                    }`}>
+                      {order.is_confirmed ? (
+                        <>
+                          <CreditCard className="h-3 w-3" />
+                          Pagamento na entrega
+                        </>
+                      ) : (
+                        <>
                           <AlertTriangle className="h-3 w-3" />
-                          Rateio necessário
-                        </span>
+                          Pagamento no ato
+                        </>
                       )}
-                    </>
-                  );
-                })()
+                    </span>
+                  )}
+                  {hasMultiple && !hasBreakdowns && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full font-medium shrink-0 bg-warning/15 text-warning border border-warning/30">
+                      <AlertTriangle className="h-3 w-3" />
+                      Rateio necessário
+                    </span>
+                  )}
+                </>
               ) : (
                 <>
                   <span className="truncate cursor-default">{order.payment_method}</span>
