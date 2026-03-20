@@ -83,6 +83,8 @@ export default function SalonDashboard() {
 
       if (orders && orders.length > 0) {
         const orderIds = orders.map(o => o.id);
+        // Clear FK references from card transactions
+        await supabase.from('salon_card_transactions').update({ matched_order_id: null, match_type: null, match_confidence: null }).in('matched_order_id', orderIds);
         await supabase.from('salon_order_payments').delete().in('salon_order_id', orderIds);
         await supabase.from('salon_orders').delete().in('salon_import_id', importIds);
       }
