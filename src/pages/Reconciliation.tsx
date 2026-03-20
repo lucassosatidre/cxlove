@@ -1114,6 +1114,7 @@ interface OrderRowProps {
   breakdownValid: boolean;
   isCompleted: boolean;
   isAutoOnline: boolean;
+  hasBreakdowns: boolean;
   visibleColumns: ColumnVisibility;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
