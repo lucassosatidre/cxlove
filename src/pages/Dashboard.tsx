@@ -4,8 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import AppLayout from '@/components/AppLayout';
-import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight } from 'lucide-react';
+import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface DailyClosing {
   id: string;
@@ -27,10 +29,13 @@ interface ImportRow {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [closings, setClosings] = useState<DailyClosing[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedClosingId, setExpandedClosingId] = useState<string | null>(null);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -53,6 +58,68 @@ export default function Dashboard() {
 
   const getImportsForClosing = (closingId: string) => imports.filter(i => i.daily_closing_id === closingId);
   const legacyImports = imports.filter(i => !i.daily_closing_id);
+
+  const toggleImportSelection = (importId: string) => {
+    setSelectedImports(prev => {
+      const next = new Set(prev);
+      if (next.has(importId)) next.delete(importId);
+      else next.add(importId);
+      return next;
+    });
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedImports.size === 0) return;
+    const confirmed = window.confirm(`Tem certeza que deseja apagar ${selectedImports.size} importação(ões)? Os pedidos e pagamentos associados serão removidos.`);
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      const importIds = Array.from(selectedImports);
+
+      // Get order IDs for these imports to delete related data first
+      const { data: orders } = await supabase
+        .from('imported_orders')
+        .select('id')
+        .in('import_id', importIds);
+
+      if (orders && orders.length > 0) {
+        const orderIds = orders.map(o => o.id);
+        // Clear FK references from card transactions
+        await supabase.from('card_transactions')
+          .update({ matched_order_id: null, match_type: null, match_confidence: null })
+          .in('matched_order_id', orderIds);
+        // Delete payment breakdowns
+        await supabase.from('order_payment_breakdowns').delete().in('imported_order_id', orderIds);
+        // Delete orders
+        await supabase.from('imported_orders').delete().in('import_id', importIds);
+      }
+
+      // Delete imports
+      await supabase.from('imports').delete().in('id', importIds);
+
+      // Check if any closing now has zero imports and delete it
+      const affectedClosingIds = [...new Set(
+        imports.filter(i => importIds.includes(i.id) && i.daily_closing_id).map(i => i.daily_closing_id!)
+      )];
+
+      for (const closingId of affectedClosingIds) {
+        const remaining = imports.filter(i => i.daily_closing_id === closingId && !importIds.includes(i.id));
+        if (remaining.length === 0) {
+          await supabase.from('daily_closings').delete().eq('id', closingId);
+        }
+      }
+
+      toast.success(`${importIds.length} importação(ões) removida(s) com sucesso.`);
+      setSelectedImports(new Set());
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar importações.');
+      console.error(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -171,6 +238,12 @@ export default function Dashboard() {
                           {closingImports.map((imp) => (
                             <div key={imp.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
                               <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={selectedImports.has(imp.id)}
+                                  onCheckedChange={() => toggleImportSelection(imp.id)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-4 w-4"
+                                />
                                 <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
                                 <span className="text-foreground font-medium">{imp.file_name}</span>
                               </div>
@@ -216,6 +289,30 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Floating delete bar */}
+      {selectedImports.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-foreground text-background rounded-xl shadow-lg px-5 py-3 flex items-center gap-4 z-50">
+          <span className="text-sm font-medium">{selectedImports.size} importação(ões) selecionada(s)</span>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleDeleteSelected}
+            disabled={deleting}
+          >
+            <Trash2 className="h-4 w-4 mr-1.5" />
+            {deleting ? 'Apagando...' : 'Apagar'}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-background hover:text-background/80 hover:bg-background/10"
+            onClick={() => setSelectedImports(new Set())}
+          >
+            Cancelar
+          </Button>
+        </div>
+      )}
     </AppLayout>
   );
 }
