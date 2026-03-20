@@ -14,7 +14,7 @@ interface AppSidebarProps {
 
 export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const { user, signOut } = useAuth();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
   const { hasPermission } = useUserPermissions();
   const navigate = useNavigate();
   const location = useLocation();
