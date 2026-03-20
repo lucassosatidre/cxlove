@@ -261,7 +261,7 @@ export default function UserManagement() {
                         size="icon"
                         onClick={() => {
                           setEditingRole(u);
-                          setSelectedRole(u.role || 'operador');
+                          setSelectedRole(u.role || 'caixa_tele');
                         }}
                         title="Alterar papel"
                       >

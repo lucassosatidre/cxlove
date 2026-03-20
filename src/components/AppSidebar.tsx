@@ -20,18 +20,27 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const location = useLocation();
   const isMobile = useIsMobile();
 
-  const allNavItems = [
-    { icon: LayoutDashboard, label: 'Visão Geral', path: '/', permission: 'dashboard' },
-    { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
-    { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
-    { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
-  ];
+  let navItems: { icon: any; label: string; path: string; permission: string }[] = [];
 
-  const navItems = allNavItems.filter(item => hasPermission(item.permission));
-
-  // Admin-only items
-  if (isAdmin) {
-    navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
+  if (isCaixaTele) {
+    navItems = [
+      { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
+    ];
+  } else if (isCaixaSalao) {
+    navItems = [
+      { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
+    ];
+  } else {
+    const allNavItems = [
+      { icon: LayoutDashboard, label: 'Visão Geral', path: '/', permission: 'dashboard' },
+      { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
+      { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
+      { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
+    ];
+    navItems = allNavItems.filter(item => hasPermission(item.permission));
+    if (isAdmin) {
+      navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
+    }
   }
 
   const isActive = (path: string) => {
