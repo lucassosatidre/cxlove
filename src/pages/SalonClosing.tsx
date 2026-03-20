@@ -163,10 +163,15 @@ export default function SalonClosing() {
       title={`Salão — ${formatDate(closing.closing_date)}`}
       subtitle={`${orders.length} pedidos`}
       headerActions={
-        <Button variant="outline" onClick={() => navigate('/salon')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="default" onClick={() => navigate(`/salon/reconciliation/${id}`)}>
+            Conciliação Salão
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/salon')}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Voltar
+          </Button>
+        </div>
       }
     >
       {/* Stats */}
