@@ -67,6 +67,7 @@ export default function DeliveryReconciliation() {
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
   const [cashSnapshotDataFechamento, setCashSnapshotDataFechamento] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [expectedCash, setExpectedCash] = useState<{ counts: Record<string, number>; total: number } | null>(null);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
 
