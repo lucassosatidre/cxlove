@@ -1036,7 +1036,16 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-// Known specific offline methods that should display normally (not as a tag)
+// Raw import values that haven't been classified by the operator yet
+const ORIGINAL_IMPORT_METHODS = [
+  'offline', 'pagamento não cadastrado', 'dinheiro'
+];
+
+function isOriginalImportPayment(method: string): boolean {
+  const lower = method.toLowerCase().trim();
+  return ORIGINAL_IMPORT_METHODS.includes(lower);
+}
+
 function isUnidentifiedPayment(method: string): boolean {
   // If it's online, it's identified (auto-filled) — no tag needed
   if (isOnlinePayment(method)) return false;
