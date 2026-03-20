@@ -1344,6 +1344,19 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
             className="h-7 text-[11px] w-[70px] text-right font-mono-tabular px-1.5"
             value={entry.amount}
             onChange={(e) => updateEntry(idx, 'amount', e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                // Check if single entry with method selected and amount matches total
+                if (entries.length === 1 && entry.method) {
+                  const cleaned = entry.amount.replace(/[^\d.,]/g, '').replace(',', '.');
+                  const amount = Math.round((parseFloat(cleaned) || 0) * 100) / 100;
+                  if (Math.abs(amount - order.total_amount) < 0.01) {
+                    handleSave();
+                  }
+                }
+              }
+            }}
           />
           {entries.length > 1 && (
             <button onClick={() => removeEntry(idx)} className="text-destructive hover:text-destructive/80">
