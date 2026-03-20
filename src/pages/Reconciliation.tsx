@@ -1196,7 +1196,7 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
     return (
       <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-muted text-muted-foreground">
         <CreditCard className="h-3 w-3" />
-        Pagamento no ato
+        Pagamento na entrega
       </span>
     );
   }
