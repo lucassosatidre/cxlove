@@ -354,8 +354,9 @@ export default function UserManagement() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="operador">Operador</SelectItem>
+                <SelectItem value="admin">Administrador</SelectItem>
+                <SelectItem value="caixa_tele">Caixa Tele</SelectItem>
+                <SelectItem value="caixa_salao">Caixa Salão</SelectItem>
               </SelectContent>
             </Select>
           </div>
