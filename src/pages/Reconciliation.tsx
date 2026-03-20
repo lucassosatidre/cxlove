@@ -216,11 +216,27 @@ export default function Reconciliation() {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
-    if (!current && needsBreakdown(order.payment_method)) {
-      if (!breakdownValidity[orderId]) {
-        toast.error('Preencha o detalhamento das formas de pagamento antes de confirmar.');
-        setExpandedOrderId(orderId);
-        return;
+    // When confirming (not unchecking), validate that physical payments have breakdowns filled
+    if (!current) {
+      const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+      const hasPhysical = methods.some(m => !isOnlinePayment(m));
+      
+      if (hasPhysical) {
+        // Check if breakdowns exist for this order
+        const orderBks = allBreakdowns.filter(b => b.imported_order_id === orderId);
+        const physicalBks = orderBks.filter(b => b.payment_type === 'fisico');
+        
+        if (physicalBks.length === 0) {
+          toast.error('Preencha a coluna Valores antes de confirmar.');
+          return;
+        }
+        
+        // Also check total validity for multi-payment
+        if (needsBreakdown(order.payment_method) && !breakdownValidity[orderId]) {
+          toast.error('Preencha o detalhamento das formas de pagamento antes de confirmar.');
+          setExpandedOrderId(orderId);
+          return;
+        }
       }
     }
 
@@ -240,7 +256,7 @@ export default function Reconciliation() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_confirmed: current } : o));
       toast.error('Erro ao atualizar pedido.');
     }
-  }, [user, orders, breakdownValidity]);
+  }, [user, orders, breakdownValidity, allBreakdowns]);
 
   const handleRowClick = useCallback((order: Order) => {
     if (needsBreakdown(order.payment_method)) {
