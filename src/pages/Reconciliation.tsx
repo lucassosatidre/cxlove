@@ -1157,15 +1157,15 @@ function PaymentBadge({ type, breakdownValid }: { type: PaymentBadgeType; breakd
   );
 }
 
-// Raw import values that haven't been classified by the operator yet
-const ORIGINAL_IMPORT_METHODS = [
-  'offline', 'pagamento não cadastrado', 'dinheiro'
-];
-
+// Check if payment method is a raw import value (not yet confirmed by operator).
+// Any payment containing physical methods that hasn't been through breakdown is considered raw import.
 function isOriginalImportPayment(method: string): boolean {
-  const lower = method.toLowerCase().trim();
-  return ORIGINAL_IMPORT_METHODS.includes(lower);
+  // If ALL methods are online, it's not a raw import needing confirmation
+  if (isAllOnline(method)) return false;
+  // Any payment with physical components is considered raw import until operator confirms via breakdown
+  return true;
 }
+
 
 function isUnidentifiedPayment(method: string): boolean {
   // If it's online, it's identified (auto-filled) — no tag needed
