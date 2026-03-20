@@ -45,6 +45,7 @@ const App = () => (
             <Route path="/" element={<ProtectedRoute><Overview /></ProtectedRoute>} />
             <Route path="/tele" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
+            <Route path="/tele/import" element={<ProtectedRoute><TeleImport /></ProtectedRoute>} />
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
