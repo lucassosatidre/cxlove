@@ -210,7 +210,7 @@ export default function Reconciliation() {
     setLoading(false);
   };
 
-  const toggleConfirm = useCallback(async (orderId: string, current: boolean) => {
+  const toggleConfirm = useCallback(async (orderId: string, current: boolean, skipValidation = false) => {
     if (!user) return;
 
     const order = orders.find(o => o.id === orderId);
