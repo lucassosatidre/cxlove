@@ -854,6 +854,7 @@ export default function Reconciliation() {
                     {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
                     {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
                     <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valores</th>
                     <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                   </tr>
@@ -879,6 +880,7 @@ export default function Reconciliation() {
                         isAutoOnline={autoOnline}
                         hasBreakdowns={hasBreakdowns}
                         visibleColumns={visibleColumns}
+                        orderBreakdowns={allBreakdowns.filter(b => b.imported_order_id === order.id)}
                         onRowClick={() => handleRowClick(order)}
                         onCheckboxClick={(e) => {
                           e.stopPropagation();
@@ -889,7 +891,6 @@ export default function Reconciliation() {
                           if (!order.is_confirmed) {
                             toggleConfirm(order.id, false);
                           }
-                          // Reload breakdowns to update totals
                           const orderIds = orders.map(o => o.id);
                           const { data: bkData } = await supabase
                             .from('order_payment_breakdowns')
@@ -1152,6 +1153,7 @@ interface OrderRowProps {
   isAutoOnline: boolean;
   hasBreakdowns: boolean;
   visibleColumns: ColumnVisibility;
+  orderBreakdowns: Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
   onBreakdownValid: (valid: boolean) => void;
@@ -1210,8 +1212,8 @@ function isUnidentifiedPayment(method: string): boolean {
   return true;
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
-  const colCount = 5 + Object.values(visibleColumns).filter(Boolean).length;
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
+  const colCount = 6 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
@@ -1409,6 +1411,36 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               </button>
             )}
           </div>
+        </td>
+        <td className={`p-3 text-sm ${cellClass}`}>
+          {isUnidentified && (() => {
+            const physicalBreakdowns = orderBreakdowns.filter(b => b.payment_type === 'fisico' && b.amount > 0);
+            if (physicalBreakdowns.length > 0) {
+              return (
+                <div className="flex flex-col gap-0.5">
+                  {physicalBreakdowns.map((b, i) => (
+                    <span key={i} className="text-xs font-medium text-foreground">
+                      {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
+                    </span>
+                  ))}
+                </div>
+              );
+            }
+            // Single physical payment (no breakdown) - show from payment_method if confirmed
+            if (order.is_confirmed && !hasMultiple) {
+              const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+              const physical = methods.filter(m => !isOnlinePayment(m));
+              if (physical.length > 0) {
+                return (
+                  <span className="text-xs font-medium text-foreground">
+                    {physical[0]} / <span className="font-mono-tabular">{formatCurrency(order.total_amount)}</span>
+                  </span>
+                );
+              }
+            }
+            return <span className="text-xs text-muted-foreground">—</span>;
+          })()}
+          {!isUnidentified && <span className="text-xs text-muted-foreground">—</span>}
         </td>
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
