@@ -198,6 +198,9 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
           const orderNumber = String(row[columnMap.order_number] ?? '').trim();
           if (!orderNumber) continue;
 
+          // Skip rows where column A is not a pure number (e.g. "Salão", "Retirada")
+          if (!/^\d+$/.test(orderNumber)) continue;
+
           const saleDate = saleDateIndex !== undefined ? parseDate(row[saleDateIndex]) : '';
           const saleTime = saleDateIndex !== undefined ? parseTime(row[saleDateIndex]) : '';
           const salesChannel = salesChannelIndex !== undefined ? String(row[salesChannelIndex] ?? '').trim() : '';
