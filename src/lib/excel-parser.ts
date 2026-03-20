@@ -182,6 +182,7 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
           return;
         }
 
+        const orders: ParsedOrder[] = [];
         let skippedCancelled = 0;
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i] as unknown[];
