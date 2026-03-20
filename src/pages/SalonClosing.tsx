@@ -7,6 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Search } from 'lucide-react';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import SalonPaymentEditor from '@/components/SalonPaymentEditor';
@@ -97,7 +104,7 @@ export default function SalonClosing() {
         if (!o.order_type.toLowerCase().includes(s) &&
             !(o.sale_time || '').includes(s)) return false;
       }
-      if (filterType && o.order_type !== filterType) return false;
+      if (filterType && filterType !== '__all__' && o.order_type !== filterType) return false;
       return true;
     });
   }, [orders, search, filterType]);
@@ -219,14 +226,36 @@ export default function SalonClosing() {
             className="pl-9"
           />
         </div>
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          className="border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-        >
-          <option value="">Todos os tipos</option>
-          {orderTypes.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <Select value={filterType} onValueChange={setFilterType}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Todos os tipos" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Todos os tipos</SelectItem>
+            {orderTypes.map(t => {
+              const isNumber = /^\d+$/.test(t.trim());
+              const label = t.toLowerCase() === 'ficha' ? 'Ficha'
+                : isNumber ? 'Retirada'
+                : (t.toLowerCase() === 'salão' || t.toLowerCase() === 'salao') ? 'Salão'
+                : t;
+              return (
+                <SelectItem key={t} value={t}>
+                  <span className={
+                    t.toLowerCase() === 'ficha'
+                      ? 'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-foreground text-background'
+                      : isNumber
+                      ? 'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-foreground text-warning'
+                      : (t.toLowerCase() === 'salão' || t.toLowerCase() === 'salao')
+                      ? 'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-warning text-foreground'
+                      : ''
+                  }>
+                    {label}
+                  </span>
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* Table */}
