@@ -182,10 +182,17 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
           return;
         }
 
-        const orders: ParsedOrder[] = [];
+        let skippedCancelled = 0;
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i] as unknown[];
           if (!row || row.length === 0) continue;
+
+          // Column M (index 12): skip row if value is "S"
+          const colMValue = String(row[12] ?? '').trim().toUpperCase();
+          if (colMValue === 'S') {
+            skippedCancelled++;
+            continue;
+          }
 
           const orderNumber = String(row[columnMap.order_number] ?? '').trim();
           if (!orderNumber) continue;
