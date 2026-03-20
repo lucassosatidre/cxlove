@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
-import { Bike, Upload, LogOut, X, Users, CreditCard, Truck, Store } from 'lucide-react';
+import { Bike, Upload, LogOut, X, Users, CreditCard, Truck, Store, LayoutDashboard } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import propositoLogo from '@/assets/proposito-logo.png';
 import estrelaLogo from '@/assets/estrela-logo.png';
