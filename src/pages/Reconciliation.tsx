@@ -872,6 +872,7 @@ export default function Reconciliation() {
                         breakdownValid={breakdownValid}
                         isCompleted={isCompleted}
                         isAutoOnline={autoOnline}
+                        hasBreakdowns={hasBreakdowns}
                         visibleColumns={visibleColumns}
                         onRowClick={() => handleRowClick(order)}
                         onCheckboxClick={(e) => {
