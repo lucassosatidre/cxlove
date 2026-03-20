@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
-import { LayoutDashboard, Upload, LogOut, X, Users, CreditCard, Truck, Store } from 'lucide-react';
+import { Bike, Upload, LogOut, X, Users, CreditCard, Truck, Store } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import propositoLogo from '@/assets/proposito-logo.png';
 import estrelaLogo from '@/assets/estrela-logo.png';
@@ -21,7 +21,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   const isMobile = useIsMobile();
 
   const allNavItems = [
-    { icon: LayoutDashboard, label: 'Tele', path: '/', permission: 'dashboard' },
+    { icon: Bike, label: 'Tele', path: '/', permission: 'dashboard' },
     { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
     { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
   ];
