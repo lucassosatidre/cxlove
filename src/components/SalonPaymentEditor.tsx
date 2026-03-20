@@ -38,7 +38,6 @@ interface Props {
 
 export default function SalonPaymentEditor({ orderId, totalAmount, payments, onPaymentsChanged }: Props) {
   const [saving, setSaving] = useState(false);
-  // Temporary editing state per index to allow free typing
   const [editingValues, setEditingValues] = useState<Record<number, string>>({});
 
   const addPayment = useCallback(() => {
@@ -59,45 +58,21 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
     const updated = [...payments];
     updated[index] = { ...updated[index], [field]: value };
     onPaymentsChanged(updated);
+    return updated;
   }, [payments, onPaymentsChanged]);
 
   const handleAmountChange = useCallback((index: number, rawValue: string) => {
     setEditingValues(prev => ({ ...prev, [index]: rawValue }));
   }, []);
 
-  const commitAmount = useCallback((index: number) => {
-    const raw = editingValues[index];
-    if (raw !== undefined) {
-      const cleaned = raw.replace(/[^\d.,]/g, '').replace(',', '.');
-      const num = parseFloat(cleaned) || 0;
-      updatePayment(index, 'amount', Math.round(Math.max(0, num) * 100) / 100);
-      setEditingValues(prev => {
-        const next = { ...prev };
-        delete next[index];
-        return next;
-      });
-    }
-  }, [editingValues, updatePayment]);
-
-  const sum = payments.reduce((acc, p) => acc + p.amount, 0);
-  const diff = Math.round((totalAmount - sum) * 100) / 100;
-  const isValid = payments.length > 0 && payments.every(p => p.payment_method && p.amount > 0) && Math.abs(diff) < 0.01;
-
-  const savePayments = useCallback(async () => {
-    if (!isValid) {
-      toast.error('Preencha todos os campos e confira que a soma bate com o total.');
-      return;
-    }
+  const doSave = useCallback(async (paymentsList: PaymentEntry[]) => {
     setSaving(true);
-
     await supabase.from('salon_order_payments').delete().eq('salon_order_id', orderId);
-
-    const inserts = payments.map(p => ({
+    const inserts = paymentsList.map(p => ({
       salon_order_id: orderId,
       payment_method: p.payment_method,
       amount: p.amount,
     }));
-
     const { error } = await supabase.from('salon_order_payments').insert(inserts);
     if (error) {
       toast.error('Erro ao salvar pagamentos.');
@@ -116,7 +91,47 @@ export default function SalonPaymentEditor({ orderId, totalAmount, payments, onP
       }
     }
     setSaving(false);
-  }, [orderId, payments, isValid, onPaymentsChanged]);
+  }, [orderId, onPaymentsChanged]);
+
+  const commitAmount = useCallback((index: number) => {
+    const raw = editingValues[index];
+    if (raw === undefined) return;
+
+    const cleaned = raw.replace(/[^\d.,]/g, '').replace(',', '.');
+    const num = Math.round(Math.max(0, parseFloat(cleaned) || 0) * 100) / 100;
+    const updated = updatePayment(index, 'amount', num);
+    setEditingValues(prev => {
+      const next = { ...prev };
+      delete next[index];
+      return next;
+    });
+
+    if (!updated) return;
+
+    const newSum = updated.reduce((acc, p) => acc + p.amount, 0);
+    const newDiff = Math.round((totalAmount - newSum) * 100) / 100;
+
+    // Auto-save if sum matches total and all entries are valid
+    if (Math.abs(newDiff) < 0.01 && updated.every(p => p.payment_method && p.amount > 0)) {
+      doSave(updated);
+    }
+    // Auto-add new row if there's remaining difference and current entry is filled
+    else if (newDiff > 0.01 && updated[index]?.payment_method && num > 0) {
+      onPaymentsChanged([...updated, { payment_method: '', amount: 0 }]);
+    }
+  }, [editingValues, updatePayment, totalAmount, doSave, onPaymentsChanged]);
+
+  const sum = payments.reduce((acc, p) => acc + p.amount, 0);
+  const diff = Math.round((totalAmount - sum) * 100) / 100;
+  const isValid = payments.length > 0 && payments.every(p => p.payment_method && p.amount > 0) && Math.abs(diff) < 0.01;
+
+  const savePayments = useCallback(async () => {
+    if (!isValid) {
+      toast.error('Preencha todos os campos e confira que a soma bate com o total.');
+      return;
+    }
+    doSave(payments);
+  }, [payments, isValid, doSave]);
 
   const getDisplayValue = (index: number, amount: number) => {
     if (editingValues[index] !== undefined) return editingValues[index];
