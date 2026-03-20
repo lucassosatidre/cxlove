@@ -1385,8 +1385,19 @@ function ValoresCell({ order, orderBreakdowns, hasMultiple, isCompleted, offline
                     // Hybrid: auto-save with online remainder and auto-confirm
                     handleSave(true);
                   } else if (Math.abs(amount - order.total_amount) < 0.01) {
-                    // Exact match: auto-save
-                    handleSave(false);
+                    // Exact match: auto-save AND auto-confirm
+                    handleSave(true);
+                  }
+                } else if (entries.length > 1) {
+                  const allFilled = entries.every(en => en.method && en.amount);
+                  if (allFilled) {
+                    const total = entries.reduce((sum, en) => {
+                      const c = en.amount.replace(/[^\d.,]/g, '').replace(',', '.');
+                      return sum + (Math.round((parseFloat(c) || 0) * 100) / 100);
+                    }, 0);
+                    if (Math.abs(total - order.total_amount) < 0.01 || (isHybrid && total > 0 && total <= order.total_amount)) {
+                      handleSave(true);
+                    }
                   }
                 }
               }
