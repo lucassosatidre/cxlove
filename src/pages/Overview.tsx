@@ -104,7 +104,18 @@ export default function Overview() {
   };
 
   return (
-    <AppLayout title="Visão Geral" subtitle="Acompanhamento diário — Conferência & Conciliação">
+    <AppLayout
+      title="Visão Geral"
+      subtitle="Acompanhamento diário — Conferência & Conciliação"
+      headerActions={
+        isAdmin ? (
+          <Button onClick={() => setShowCashExpectation(true)} variant="outline">
+            <Vault className="h-4 w-4 mr-2" />
+            Abrir Caixa
+          </Button>
+        ) : undefined
+      }
+    >
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="bg-card rounded-xl shadow-card p-5 border border-border">
