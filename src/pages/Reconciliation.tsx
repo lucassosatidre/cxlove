@@ -1558,7 +1558,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
                       ) : (
                         <>
                           <AlertTriangle className="h-3 w-3" />
-                          Pagamento no ato
+                          Pagamento na entrega
                         </>
                       )}
                     </span>
