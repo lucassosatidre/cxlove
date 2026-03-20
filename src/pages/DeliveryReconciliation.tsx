@@ -573,7 +573,8 @@ export default function DeliveryReconciliation() {
                       .map(denom => {
                         const expQty = expectedCash.counts[String(denom)] || 0;
                         const opQty = (cashSnapshotDataAbertura.counts[String(denom)] as number) || 0;
-                        const match = expQty === opQty;
+                        const isCoin = denom <= 1;
+                        const match = isCoin || expQty === opQty;
                         return (
                           <div key={denom} className="contents">
                             <span className="font-medium text-foreground font-mono py-1">{formatCurrency(denom)}</span>
