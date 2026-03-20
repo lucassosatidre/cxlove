@@ -1156,6 +1156,7 @@ interface OrderRowProps {
   onBreakdownValid: (valid: boolean) => void;
   onBreakdownSaved?: () => void;
   onUpdateField: (field: 'payment_method' | 'delivery_person', value: string) => void;
+  onAutoConfirm?: () => void;
   allPaymentMethods: string[];
   offlinePaymentMethods: string[];
   allDeliveryPersons: string[];
@@ -1400,7 +1401,7 @@ function isUnidentifiedPayment(method: string): boolean {
   return true;
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onAutoConfirm, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 6 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
@@ -1592,6 +1593,7 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               isCompleted={isCompleted}
               offlinePaymentMethods={offlinePaymentMethods}
               onSaved={onBreakdownSaved}
+              onAutoConfirm={onAutoConfirm}
             />
           ) : (
             <span className="text-xs text-muted-foreground">—</span>
