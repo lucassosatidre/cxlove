@@ -941,13 +941,13 @@ export default function Reconciliation() {
       </div>
       <AppSidebar />
 
-      {/* Cash Calculator Dialog */}
-      <Dialog open={showCashCalc} onOpenChange={setShowCashCalc}>
+      {/* Cash Calculator Dialog - Abertura */}
+      <Dialog open={showCashCalcAbertura} onOpenChange={setShowCashCalcAbertura}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calculator className="h-5 w-5" />
-              Calculadora de Dinheiro
+              Calculadora de Dinheiro — Abertura
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
@@ -958,27 +958,54 @@ export default function Reconciliation() {
             </div>
             {CASH_DENOMINATIONS.map(denom => (
               <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
-                <span className="text-sm font-medium text-foreground">
-                  {formatCurrency(denom)}
-                </span>
-                <Input
-                  type="number"
-                  min={0}
-                  value={cashCounts[denom] || ''}
-                  onChange={(e) => setCashCounts(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))}
-                  className="h-8 text-center text-sm"
-                  placeholder="0"
-                />
-                <span className="text-sm text-right font-mono text-foreground">
-                  {formatCurrency(denom * (cashCounts[denom] || 0))}
-                </span>
+                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                <Input type="number" min={0} value={cashCountsAbertura[denom] || ''} onChange={(e) => setCashCountsAbertura(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsAbertura[denom] || 0))}</span>
               </div>
             ))}
           </div>
           <div className="border-t border-border pt-3 mt-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
-              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotal)}</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalAbertura)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCashCountsAbertura({})}>Limpar</Button>
+            <Button size="sm" onClick={handleSaveCashSnapshotAbertura} disabled={savingCashAbertura || isCompleted}>
+              {savingCashAbertura ? 'Salvando...' : cashSnapshotSavedAbertura ? 'Atualizar Contagem' : 'Salvar Contagem'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cash Calculator Dialog - Fechamento */}
+      <Dialog open={showCashCalcFechamento} onOpenChange={setShowCashCalcFechamento}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Calculadora de Dinheiro — Fechamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+              <span>Cédula/Moeda</span>
+              <span className="text-center">Qtd</span>
+              <span className="text-right">Subtotal</span>
+            </div>
+            {CASH_DENOMINATIONS.map(denom => (
+              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
+                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                <Input type="number" min={0} value={cashCountsFechamento[denom] || ''} onChange={(e) => setCashCountsFechamento(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsFechamento[denom] || 0))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalFechamento)}</span>
             </div>
             {offlineMethodTotals['Dinheiro'] > 0 && (
               <div className="flex items-center justify-between mt-1">
@@ -988,11 +1015,9 @@ export default function Reconciliation() {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setCashCounts({})}>
-              Limpar
-            </Button>
-            <Button size="sm" onClick={handleSaveCashSnapshot} disabled={savingCash || isCompleted}>
-              {savingCash ? 'Salvando...' : cashSnapshotSaved ? 'Atualizar Contagem' : 'Salvar Contagem'}
+            <Button variant="outline" size="sm" onClick={() => setCashCountsFechamento({})}>Limpar</Button>
+            <Button size="sm" onClick={handleSaveCashSnapshotFechamento} disabled={savingCashFechamento || isCompleted}>
+              {savingCashFechamento ? 'Salvando...' : cashSnapshotSavedFechamento ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
         </DialogContent>
