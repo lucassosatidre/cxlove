@@ -67,6 +67,7 @@ export default function DeliveryReconciliation() {
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
   const [cashSnapshotDataFechamento, setCashSnapshotDataFechamento] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [expectedCash, setExpectedCash] = useState<{ counts: Record<string, number>; total: number } | null>(null);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
 
@@ -89,7 +90,8 @@ export default function DeliveryReconciliation() {
         .eq('daily_closing_id', id!),
     ]);
 
-    setClosingDate(closing?.closing_date || '');
+    const dateStr = closing?.closing_date || '';
+    setClosingDate(dateStr);
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
@@ -99,6 +101,24 @@ export default function DeliveryReconciliation() {
         setCashSnapshotDataAbertura({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
       } else if (type === 'fechamento') {
         setCashSnapshotDataFechamento({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
+      }
+    }
+
+    // Load expected cash from admin
+    if (dateStr) {
+      const { data: expData } = await supabase
+        .from('cash_expectations')
+        .select('counts, total')
+        .eq('closing_date', dateStr)
+        .maybeSingle();
+      if (expData) {
+        const loadedCounts: Record<string, number> = {};
+        if (expData.counts && typeof expData.counts === 'object') {
+          for (const [k, v] of Object.entries(expData.counts as Record<string, number>)) {
+            loadedCounts[k] = v;
+          }
+        }
+        setExpectedCash({ counts: loadedCounts, total: Number(expData.total) });
       }
     }
 
@@ -519,8 +539,13 @@ export default function DeliveryReconciliation() {
                 Salvo
               </span>
             </div>
-            <div className="mt-2 flex items-center gap-4">
+            <div className="mt-2 flex items-center gap-4 flex-wrap">
               <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataAbertura.total)}</span>
+              {expectedCash && (
+                <span className={`text-sm font-mono ${Math.abs(cashSnapshotDataAbertura.total - expectedCash.total) < 0.01 ? 'text-success' : 'text-warning'}`}>
+                  (Esperado: {formatCurrency(expectedCash.total)}{Math.abs(cashSnapshotDataAbertura.total - expectedCash.total) >= 0.01 && ` · Dif: ${formatCurrency(cashSnapshotDataAbertura.total - expectedCash.total)}`})
+                </span>
+              )}
               <span className="text-xs text-muted-foreground">
                 Salvo em {new Date(cashSnapshotDataAbertura.updated_at).toLocaleString('pt-BR')}
               </span>
@@ -530,19 +555,39 @@ export default function DeliveryReconciliation() {
               </Button>
             </div>
             {showCashDetailsAbertura && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {Object.entries(cashSnapshotDataAbertura.counts)
-                  .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
-                  .filter(({ qty }) => qty > 0)
-                  .sort((a, b) => b.denom - a.denom)
-                  .map(({ denom, qty }) => (
-                    <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
-                      <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
-                      <span className="text-muted-foreground">×</span>
-                      <span className="font-semibold text-foreground">{qty}</span>
-                      <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
-                    </div>
-                  ))}
+              <div className="mt-3 space-y-2">
+                {expectedCash && (
+                  <div className="flex flex-wrap gap-2 mb-1">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-full">Valor esperado (admin)</span>
+                    {Object.entries(expectedCash.counts)
+                      .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
+                      .filter(({ qty }) => qty > 0)
+                      .sort((a, b) => b.denom - a.denom)
+                      .map(({ denom, qty }) => (
+                        <div key={`exp-${denom}`} className="flex items-center gap-1.5 bg-primary/10 rounded-md px-2.5 py-1 border border-primary/20 text-xs">
+                          <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
+                          <span className="text-muted-foreground">×</span>
+                          <span className="font-semibold text-foreground">{qty}</span>
+                          <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
+                        </div>
+                      ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {expectedCash && <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-full">Contagem do operador</span>}
+                  {Object.entries(cashSnapshotDataAbertura.counts)
+                    .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
+                    .filter(({ qty }) => qty > 0)
+                    .sort((a, b) => b.denom - a.denom)
+                    .map(({ denom, qty }) => (
+                      <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
+                        <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
+                        <span className="text-muted-foreground">×</span>
+                        <span className="font-semibold text-foreground">{qty}</span>
+                        <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
+                      </div>
+                    ))}
+                </div>
               </div>
             )}
           </div>
