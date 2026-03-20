@@ -299,6 +299,75 @@ export type Database = {
           },
         ]
       }
+      salon_card_transactions: {
+        Row: {
+          brand: string | null
+          created_at: string
+          gross_amount: number
+          id: string
+          machine_serial: string | null
+          match_confidence: string | null
+          match_type: string | null
+          matched_order_id: string | null
+          net_amount: number
+          payment_method: string
+          sale_date: string | null
+          sale_time: string | null
+          salon_closing_id: string
+          transaction_id: string | null
+          user_id: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          gross_amount?: number
+          id?: string
+          machine_serial?: string | null
+          match_confidence?: string | null
+          match_type?: string | null
+          matched_order_id?: string | null
+          net_amount?: number
+          payment_method: string
+          sale_date?: string | null
+          sale_time?: string | null
+          salon_closing_id: string
+          transaction_id?: string | null
+          user_id: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          gross_amount?: number
+          id?: string
+          machine_serial?: string | null
+          match_confidence?: string | null
+          match_type?: string | null
+          matched_order_id?: string | null
+          net_amount?: number
+          payment_method?: string
+          sale_date?: string | null
+          sale_time?: string | null
+          salon_closing_id?: string
+          transaction_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "salon_card_transactions_matched_order_id_fkey"
+            columns: ["matched_order_id"]
+            isOneToOne: false
+            referencedRelation: "salon_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salon_card_transactions_salon_closing_id_fkey"
+            columns: ["salon_closing_id"]
+            isOneToOne: false
+            referencedRelation: "salon_closings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       salon_closings: {
         Row: {
           closing_date: string
