@@ -588,13 +588,21 @@ export default function DeliveryReconciliation() {
                           </div>
                         );
                       })}
-                    <div className="contents font-semibold border-t border-border">
-                      <span className="py-1.5 text-foreground">Total</span>
-                      <span className="py-1.5 font-mono text-foreground">{formatCurrency(expectedCash.total)}</span>
-                      <span className={`py-1.5 font-mono ${Math.abs(cashSnapshotDataAbertura.total - expectedCash.total) < 0.01 ? 'text-success' : 'text-warning'}`}>
-                        {formatCurrency(cashSnapshotDataAbertura.total)}
-                      </span>
-                    </div>
+                    {(() => {
+                      const BILL_DENOMS = [200, 100, 50, 20, 10, 5, 2];
+                      const expBills = BILL_DENOMS.reduce((s, d) => s + d * (expectedCash.counts[String(d)] || 0), 0);
+                      const opBills = BILL_DENOMS.reduce((s, d) => s + d * ((cashSnapshotDataAbertura.counts[String(d)] as number) || 0), 0);
+                      const match = Math.abs(opBills - expBills) < 0.01;
+                      return (
+                        <div className="contents font-semibold border-t border-border">
+                          <span className="py-1.5 text-foreground">Total</span>
+                          <span className="py-1.5 font-mono text-foreground">{formatCurrency(expectedCash.total)}</span>
+                          <span className={`py-1.5 font-mono ${match ? 'text-success' : 'text-warning'}`}>
+                            {formatCurrency(cashSnapshotDataAbertura.total)}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
