@@ -84,7 +84,7 @@ export default function DeliveryReconciliation() {
 
   const loadData = async () => {
     const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
-      supabase.from('daily_closings').select('closing_date').eq('id', id!).single(),
+      supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
         .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
         .eq('daily_closing_id', id!),
