@@ -15,7 +15,7 @@
 export interface SalonMatchResult {
   transactionId: string;
   orderId: string;
-  matchType: 'exact' | 'approximate' | 'combined';
+  matchType: 'exact' | 'approximate' | 'combined' | 'combined_mixed';
   confidence: 'high' | 'medium' | 'low';
   amountDiff: number;
   combinedWithTransactionId?: string;
