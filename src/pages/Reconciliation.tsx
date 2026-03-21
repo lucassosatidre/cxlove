@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useTestMode } from '@/hooks/useTestMode';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,6 +14,7 @@ import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, Che
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
+import TestBanner from '@/components/TestBanner';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
@@ -54,6 +56,7 @@ export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isCaixaTele, isAdmin } = useUserRole();
+  const { isTestMode } = useTestMode();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
@@ -634,26 +637,28 @@ export default function Reconciliation() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="ml-56 flex flex-col flex-1">
+        {isTestMode && <div className="ml-56 px-6 pt-4"><TestBanner /></div>}
         {/* Header */}
         <header className="border-b border-border bg-card sticky top-0 z-10">
           <div className="px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+              <Button variant="ghost" size="sm" onClick={() => navigate(isTestMode ? '/tele-teste' : '/')}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div>
                 <h1 className="text-base font-semibold text-foreground">
+                  {isTestMode && <span className="text-amber-600 mr-1">[TESTE]</span>}
                   Fechamento {closingData ? formatDate(closingData.closing_date) : ''}
                 </h1>
                 <p className="text-xs text-muted-foreground">{orders.length} pedidos • {importRecords.length} importação(ões)</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="default" size="sm" onClick={() => navigate(`/delivery-reconciliation/${id}`)} className="bg-primary hover:bg-primary/90">
+              <Button variant="default" size="sm" onClick={() => navigate(`${isTestMode ? '/delivery-reconciliation-teste' : '/delivery-reconciliation'}/${id}`)} className="bg-primary hover:bg-primary/90">
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate(isCaixaTele ? '/tele/import' : '/import')} disabled={isCompleted}>
+              <Button variant="outline" size="sm" onClick={() => navigate(isTestMode ? '/tele-teste/import' : (isCaixaTele ? '/tele/import' : '/import'))} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>

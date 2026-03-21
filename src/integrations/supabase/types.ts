@@ -169,6 +169,7 @@ export type Database = {
           closing_date: string
           created_at: string
           id: string
+          is_test: boolean
           reconciliation_status: string
           status: string
           updated_at: string
@@ -178,6 +179,7 @@ export type Database = {
           closing_date: string
           created_at?: string
           id?: string
+          is_test?: boolean
           reconciliation_status?: string
           status?: string
           updated_at?: string
@@ -187,6 +189,7 @@ export type Database = {
           closing_date?: string
           created_at?: string
           id?: string
+          is_test?: boolean
           reconciliation_status?: string
           status?: string
           updated_at?: string
@@ -267,6 +270,7 @@ export type Database = {
           duplicate_rows: number
           file_name: string
           id: string
+          is_test: boolean
           new_rows: number
           status: string
           total_rows: number
@@ -278,6 +282,7 @@ export type Database = {
           duplicate_rows?: number
           file_name: string
           id?: string
+          is_test?: boolean
           new_rows?: number
           status?: string
           total_rows?: number
@@ -289,6 +294,7 @@ export type Database = {
           duplicate_rows?: number
           file_name?: string
           id?: string
+          is_test?: boolean
           new_rows?: number
           status?: string
           total_rows?: number

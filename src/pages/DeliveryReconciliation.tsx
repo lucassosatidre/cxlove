@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTestMode } from '@/hooks/useTestMode';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
+import TestBanner from '@/components/TestBanner';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -56,6 +58,7 @@ export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { isTestMode } = useTestMode();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -496,15 +499,17 @@ export default function DeliveryReconciliation() {
     <div className="min-h-screen bg-background flex flex-col">
       <AppSidebar />
       <div className="ml-56 flex flex-col flex-1">
+      {isTestMode && <div className="px-6 pt-4"><TestBanner /></div>}
       {/* Header */}
       <header className="border-b border-border bg-card sticky top-0 z-10">
         <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/reconciliation/${id}`)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`${isTestMode ? '/reconciliation-teste' : '/reconciliation'}/${id}`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
               <h1 className="text-base font-semibold text-foreground">
+                {isTestMode && <span className="text-amber-600 mr-1">[TESTE]</span>}
                 Conciliação do Delivery — {formatDate(closingDate)}
               </h1>
               <p className="text-xs text-muted-foreground">

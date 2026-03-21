@@ -2,10 +2,12 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTestMode } from '@/hooks/useTestMode';
 import { parseExcelFile } from '@/lib/excel-parser';
 import { isAllOnline } from '@/lib/payment-utils';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/components/AppLayout';
+import TestBanner from '@/components/TestBanner';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 
 interface ImportSummary {
@@ -19,6 +21,7 @@ interface ImportSummary {
 export default function TeleImport() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isTestMode } = useTestMode();
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -47,6 +50,7 @@ export default function TeleImport() {
         .from('daily_closings')
         .select('id')
         .eq('closing_date', firstDate)
+        .eq('is_test', isTestMode)
         .maybeSingle();
 
       let closingId: string;
@@ -57,7 +61,7 @@ export default function TeleImport() {
       } else {
         const { data: newClosing, error: closingErr } = await supabase
           .from('daily_closings')
-          .insert({ closing_date: firstDate, user_id: user.id })
+          .insert({ closing_date: firstDate, user_id: user.id, is_test: isTestMode })
           .select('id')
           .single();
         if (closingErr || !newClosing) throw new Error('Erro ao criar fechamento.');
@@ -86,6 +90,7 @@ export default function TeleImport() {
           duplicate_rows: duplicateCount,
           daily_closing_id: closingId,
           status: 'completed',
+          is_test: isTestMode,
         })
         .select('id')
         .single();
@@ -151,7 +156,8 @@ export default function TeleImport() {
   };
 
   return (
-    <AppLayout title="Importar Tele" subtitle="Importe relatórios de vendas da tele-entrega">
+    <AppLayout title={isTestMode ? "Importar Tele Teste" : "Importar Tele"} subtitle="Importe relatórios de vendas da tele-entrega">
+      {isTestMode && <TestBanner />}
       {!summary ? (
         <div className="max-w-xl mx-auto">
           <div
@@ -230,7 +236,7 @@ export default function TeleImport() {
               <Upload className="h-4 w-4 mr-2" />
               Nova importação
             </Button>
-            <Button onClick={() => navigate('/tele')} className="flex-1">
+            <Button onClick={() => navigate(isTestMode ? '/tele-teste' : '/tele')} className="flex-1">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar ao Tele
             </Button>
