@@ -591,28 +591,24 @@ export default function SalonReconciliation() {
                             <div key={tx.id} className={`flex items-center justify-between ${idx > 0 ? 'mt-1.5 pt-1.5 border-t border-border/30' : ''}`}>
                               <div className="flex items-center gap-2 text-xs">
                                 <Link2 className="h-3 w-3 text-success" />
-                                <span className="text-muted-foreground">
-                                  {tx.sale_time && <>{tx.sale_time} / </>}
-                                  {tx.payment_method} / <span className="font-mono tabular-nums">{formatCurrency(tx.gross_amount)}</span>
-                                  {tx.machine_serial && waiterMap.has(tx.machine_serial) && (
-                                    <> / <span className="font-medium text-foreground">{waiterMap.get(tx.machine_serial)}</span></>
-                                  )}
+                                <span className="text-muted-foreground font-mono tabular-nums">
+                                  {tx.sale_time || '--:--'}
                                 </span>
-                                {idx === 0 && (
-                                  <Badge
-                                    variant="secondary"
-                                    className={`text-[9px] ${
-                                      confidence === 'high' ? 'bg-success/10 text-success'
-                                        : confidence === 'medium' ? 'bg-primary/10 text-primary'
-                                        : 'bg-warning/10 text-warning'
-                                    }`}
-                                  >
-                                    {tx.match_type === 'manual' ? 'Manual'
-                                      : tx.match_type === 'combined' ? 'Match combinado'
-                                      : confidence === 'high' ? 'Match exato'
-                                      : confidence === 'medium' ? 'Match aproximado'
-                                      : 'Baixa confiança'}
-                                  </Badge>
+                                <span className="text-foreground">/</span>
+                                <span className="text-xs text-foreground">{tx.payment_method}</span>
+                                <span className="text-foreground">/</span>
+                                <span className="font-mono tabular-nums font-medium text-foreground">{formatCurrency(tx.gross_amount)}</span>
+                                <span className="text-foreground">/</span>
+                                <span className="font-medium text-primary">
+                                  {tx.machine_serial && waiterMap.has(tx.machine_serial)
+                                    ? waiterMap.get(tx.machine_serial)
+                                    : '—'}
+                                </span>
+                                {tx.brand && (
+                                  <>
+                                    <span className="text-foreground">/</span>
+                                    <span className="text-muted-foreground">{tx.brand}</span>
+                                  </>
                                 )}
                               </div>
                               <Button
@@ -625,11 +621,28 @@ export default function SalonReconciliation() {
                               </Button>
                             </div>
                           ))}
-                          {isCombined && (
-                            <div className="mt-1 text-[10px] text-muted-foreground">
-                              Soma: <span className="font-mono tabular-nums font-medium">{formatCurrency(totalMatchedAmount)}</span>
-                            </div>
-                          )}
+                          {/* Match reason & summary */}
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                            <Badge
+                              variant="secondary"
+                              className={`text-[9px] ${
+                                confidence === 'high' ? 'bg-success/10 text-success'
+                                  : confidence === 'medium' ? 'bg-primary/10 text-primary'
+                                  : 'bg-warning/10 text-warning'
+                              }`}
+                            >
+                              {matchedTxs[0]?.match_type === 'manual' ? 'Manual'
+                                : matchedTxs[0]?.match_type === 'combined' ? 'Match combinado'
+                                : confidence === 'high' ? 'Match exato'
+                                : confidence === 'medium' ? 'Match aproximado'
+                                : 'Baixa confiança'}
+                            </Badge>
+                            {isCombined && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Soma: <span className="font-mono tabular-nums font-medium">{formatCurrency(totalMatchedAmount)}</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -675,26 +688,28 @@ export default function SalonReconciliation() {
                       <div className="flex items-center gap-2">
                         <GripVertical className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5">
-                              {tx.sale_time && (
-                                <span className="text-xs text-muted-foreground font-mono tabular-nums">
-                                  <Clock className="h-3 w-3 inline mr-0.5" />{tx.sale_time}
-                                </span>
-                              )}
-                              <span className="text-xs font-medium text-foreground">{tx.payment_method}</span>
-                            </div>
-                            <span className="text-sm font-mono tabular-nums font-medium text-foreground">
+                          <div className="flex items-center gap-1 text-xs flex-wrap">
+                            <span className="font-mono tabular-nums text-muted-foreground">
+                              {tx.sale_time || '--:--'}
+                            </span>
+                            <span className="text-border">/</span>
+                            <span className="text-foreground">{tx.payment_method}</span>
+                            <span className="text-border">/</span>
+                            <span className="font-mono tabular-nums font-medium text-foreground">
                               {formatCurrency(tx.gross_amount)}
                             </span>
-                          </div>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            {tx.machine_serial && waiterMap.has(tx.machine_serial) && (
-                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-primary/30 text-primary">
-                                {waiterMap.get(tx.machine_serial)}
-                              </Badge>
+                            <span className="text-border">/</span>
+                            <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-primary/30 text-primary">
+                              {tx.machine_serial && waiterMap.has(tx.machine_serial)
+                                ? waiterMap.get(tx.machine_serial)
+                                : '—'}
+                            </Badge>
+                            {tx.brand && (
+                              <>
+                                <span className="text-border">/</span>
+                                <span className="text-muted-foreground">{tx.brand}</span>
+                              </>
                             )}
-                            {tx.brand && <span className="text-[10px] text-muted-foreground">{tx.brand}</span>}
                           </div>
                         </div>
                       </div>
