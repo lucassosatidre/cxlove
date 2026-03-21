@@ -1,6 +1,8 @@
 /**
  * Salon reconciliation matching algorithm.
- * Matches card machine transactions to salon orders using salon_order_payments amounts.
+ * Matches card machine transactions to salon orders using salon_order_payments amounts
+ * or total_amount when no payments are filled in.
+ * Time rule: transaction must occur at or after the order time.
  */
 
 export interface SalonMatchResult {
@@ -41,17 +43,31 @@ function parseTimeToMinutes(time: string): number {
 }
 
 /**
- * Get matchable amounts for a salon order from its manual payments.
+ * Time rule: transaction sale_time must be >= order sale_time.
+ */
+function isTransactionAfterOrder(txTime: string | null, orderTime: string | null): boolean {
+  if (!txTime || !orderTime) return true; // allow if either time is missing
+  const txMin = parseTimeToMinutes(txTime);
+  const oMin = parseTimeToMinutes(orderTime);
+  if (txMin < 0 || oMin < 0) return true;
+  return txMin >= oMin;
+}
+
+/**
+ * Get matchable amounts for a salon order.
+ * If payments are filled in, use those. Otherwise use total_amount.
  */
 function getMatchableAmounts(
   orderId: string,
+  totalAmount: number,
   payments: SalonPaymentForMatching[]
 ): number[] {
   const orderPayments = payments.filter(p => p.salon_order_id === orderId && p.amount > 0);
   if (orderPayments.length > 0) {
     return orderPayments.map(p => p.amount);
   }
-  return [];
+  // No payments filled in — use total_amount as single matchable amount
+  return totalAmount > 0 ? [totalAmount] : [];
 }
 
 export function matchSalonTransactionsToOrders(
@@ -65,14 +81,14 @@ export function matchSalonTransactionsToOrders(
   const orderMatchCounts = new Map<string, number>();
   const orderMatchTargets = new Map<string, number>();
 
-  // Only match orders that have payments filled in
+  // All orders are eligible (with or without payments)
   const eligibleOrders = orders.filter(o => {
-    const orderPayments = payments.filter(p => p.salon_order_id === o.id && p.amount > 0);
-    return orderPayments.length > 0;
+    const amounts = getMatchableAmounts(o.id, o.total_amount, payments);
+    return amounts.length > 0;
   });
 
   for (const order of eligibleOrders) {
-    const amounts = getMatchableAmounts(order.id, payments);
+    const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
     orderMatchTargets.set(order.id, amounts.length);
     orderMatchCounts.set(order.id, 0);
   }
@@ -85,7 +101,10 @@ export function matchSalonTransactionsToOrders(
     if (matchedTxIds.has(tx.id)) continue;
     for (const order of eligibleOrders) {
       if (isOrderFullyMatched(order.id)) continue;
-      const amounts = getMatchableAmounts(order.id, payments);
+      // Time rule: transaction must be after order
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
+
+      const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
       const matchedCount = orderMatchCounts.get(order.id) || 0;
       for (let i = matchedCount; i < amounts.length; i++) {
         if (Math.abs(tx.gross_amount - amounts[i]) < 0.01) {
@@ -109,13 +128,15 @@ export function matchSalonTransactionsToOrders(
   const COMBINED_TOLERANCE = 0.50;
   for (const order of eligibleOrders) {
     if (isOrderFullyMatched(order.id)) continue;
-    const amounts = getMatchableAmounts(order.id, payments);
+    const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
     const matchedCount = orderMatchCounts.get(order.id) || 0;
     if (matchedCount >= amounts.length) continue;
     const targetAmount = amounts[matchedCount];
 
-    const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
-    if (remainingTxs.length < 2) break;
+    const remainingTxs = transactions.filter(tx =>
+      !matchedTxIds.has(tx.id) && isTransactionAfterOrder(tx.sale_time, order.sale_time)
+    );
+    if (remainingTxs.length < 2) continue;
 
     let bestPair: { tx1: TxForMatching; tx2: TxForMatching; diff: number; confidence: 'high' | 'medium' | 'low' } | null = null;
 
