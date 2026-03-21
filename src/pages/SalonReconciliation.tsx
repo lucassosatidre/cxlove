@@ -294,6 +294,34 @@ export default function SalonReconciliation() {
     }
   }, [dragTxId, manualMatch]);
 
+  const handleFinalizeReconciliation = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ reconciliation_status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) {
+      setReconciliationStatus('completed');
+      toast.success('Conciliação finalizada com sucesso.');
+    } else {
+      toast.error('Erro ao finalizar conciliação.');
+    }
+  }, [id, isAdmin]);
+
+  const handleReopenReconciliation = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ reconciliation_status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) {
+      setReconciliationStatus('pending');
+      toast.success('Conciliação reaberta com sucesso.');
+    } else {
+      toast.error('Erro ao reabrir conciliação.');
+    }
+  }, [id, isAdmin]);
+
   const formatDate = (d: string) => {
     if (!d) return '';
     const [y, m, day] = d.split('-');
