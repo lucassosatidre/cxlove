@@ -321,13 +321,7 @@ export default function Overview() {
     <AppLayout
       title="Visão Geral"
       subtitle="Acompanhamento diário — Conferência, Conciliação & Cofre"
-      headerActions={
-        isAdmin ? (
-          <Button onClick={() => setShowCashExpectation(true)} variant="outline">
-            <Vault className="h-4 w-4 mr-2" />
-            Abrir Caixa
-          </Button>
-        ) : undefined
+      headerActions={undefined}
       }
     >
       <Tabs defaultValue="overview" className="w-full">
