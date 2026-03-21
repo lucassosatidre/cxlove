@@ -504,7 +504,7 @@ export default function DeliveryReconciliation() {
       <header className="border-b border-border bg-card sticky top-0 z-10">
         <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate(`/reconciliation/${id}`)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`${isTestMode ? '/reconciliation-teste' : '/reconciliation'}/${id}`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
