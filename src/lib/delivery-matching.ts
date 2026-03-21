@@ -57,6 +57,19 @@ function parseTimeToMinutes(time: string): number {
 }
 
 /**
+ * Returns true if the transaction time is >= order time.
+ * A payment can only happen after the order is placed.
+ * Returns true if either time is missing (can't validate).
+ */
+function isTransactionAfterOrder(txTime: string | null, orderTime: string | null): boolean {
+  if (!txTime || !orderTime) return true; // can't validate, allow
+  const txMin = parseTimeToMinutes(txTime);
+  const orderMin = parseTimeToMinutes(orderTime);
+  if (txMin < 0 || orderMin < 0) return true; // can't parse, allow
+  return txMin >= orderMin;
+}
+
+/**
  * Build a serial-to-delivery-person map based on which serial
  * appears most with which delivery person (from already matched data)
  */
@@ -153,6 +166,8 @@ export function matchTransactionsToOrders(
 
     for (const order of eligibleOrders) {
       if (isOrderFullyMatched(order.id)) continue;
+      // Transaction must be after order time
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
       
       const amounts = orderAmounts.get(order.id) || [order.total_amount];
       const matchedCount = orderMatchCounts.get(order.id) || 0;
@@ -188,6 +203,8 @@ export function matchTransactionsToOrders(
 
     for (const order of eligibleOrders) {
       if (isOrderFullyMatched(order.id)) continue;
+      // Transaction must be after order time
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
 
       const methods = order.payment_method.split(',').map(m => m.trim().toLowerCase());
       const hasVoucherDesconto = methods.some(m => m.includes('voucher parceiro desconto'));
@@ -257,6 +274,10 @@ export function matchTransactionsToOrders(
         const diff = Math.abs(sum - targetAmount);
 
         if (diff > COMBINED_TOLERANCE) continue;
+
+        // Both transactions must be after order time
+        if (!isTransactionAfterOrder(tx1.sale_time, order.sale_time || null)) continue;
+        if (!isTransactionAfterOrder(tx2.sale_time, order.sale_time || null)) continue;
 
         let score = 0;
         if (tx1.machine_serial && tx1.machine_serial === tx2.machine_serial) score++;
