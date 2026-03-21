@@ -408,5 +408,105 @@ export function matchSalonTransactionsToOrders(
     }
   }
 
+  // ═══════════════════════════════════════════
+  // PHASE 3: Forced resolution for remaining unmatched
+  // For each unmatched order, find the single best remaining transaction
+  // with exact value. If only one candidate exists, link it.
+  // ═══════════════════════════════════════════
+
+  for (const order of eligibleOrders) {
+    if (isOrderFullyMatched(order.id)) continue;
+    const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
+    const nextIdx = getNextUnmatchedAmountIndex(order.id, amounts);
+    if (nextIdx < 0) continue;
+    const targetAmount = amounts[nextIdx];
+
+    // Find all remaining transactions with exact value match
+    const exactCandidatesForOrder = transactions.filter(tx => {
+      if (matchedTxIds.has(tx.id)) return false;
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) return false;
+      return Math.abs(tx.gross_amount - targetAmount) < 0.01;
+    });
+
+    if (exactCandidatesForOrder.length === 1) {
+      // Only one candidate — strong match regardless of time/waiter
+      const tx = exactCandidatesForOrder[0];
+      const gap = timeGapMinutes(tx.sale_time, order.sale_time);
+      const reasonParts = ['valor idêntico', 'único candidato disponível'];
+      if (gap >= 0) reasonParts.push(`${gap}min após pedido`);
+
+      results.push({
+        transactionId: tx.id,
+        orderId: order.id,
+        matchType: 'exact',
+        confidence: 'high',
+        amountDiff: 0,
+        matchReason: `Match exato: ${reasonParts.join(', ')}`,
+      });
+      matchedTxIds.add(tx.id);
+      markAmountMatched(order.id, nextIdx);
+    } else if (exactCandidatesForOrder.length > 1) {
+      // Multiple candidates — pick best by waiter consistency then time
+      const scored = exactCandidatesForOrder.map(tx => {
+        const gap = timeGapMinutes(tx.sale_time, order.sale_time);
+        const window = getTimeWindow(order.order_type);
+        let score = 0;
+        if (gap >= 0 && gap <= window.ideal) score += 3;
+        else if (gap >= 0 && gap <= window.max) score += 2;
+        else if (gap >= 0) score += 1;
+        return { tx, score, gap };
+      });
+      scored.sort((a, b) => b.score - a.score || a.gap - b.gap);
+      const best = scored[0];
+
+      results.push({
+        transactionId: best.tx.id,
+        orderId: order.id,
+        matchType: 'exact',
+        confidence: 'medium',
+        amountDiff: 0,
+        matchReason: `Match exato: valor idêntico, melhor candidato entre ${scored.length} opções`,
+      });
+      matchedTxIds.add(best.tx.id);
+      markAmountMatched(order.id, nextIdx);
+    }
+  }
+
+  // Also check reverse: for each unmatched transaction, find unique order match
+  for (const tx of transactions) {
+    if (matchedTxIds.has(tx.id)) continue;
+
+    const candidateOrders = eligibleOrders.filter(order => {
+      if (isOrderFullyMatched(order.id)) return false;
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) return false;
+      const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
+      const nextIdx = getNextUnmatchedAmountIndex(order.id, amounts);
+      if (nextIdx < 0) return false;
+      return Math.abs(tx.gross_amount - amounts[nextIdx]) < 0.01;
+    });
+
+    if (candidateOrders.length === 1) {
+      const order = candidateOrders[0];
+      const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
+      const nextIdx = getNextUnmatchedAmountIndex(order.id, amounts);
+      if (nextIdx < 0) continue;
+
+      const gap = timeGapMinutes(tx.sale_time, order.sale_time);
+      const reasonParts = ['valor idêntico', 'única comanda compatível'];
+      if (gap >= 0) reasonParts.push(`${gap}min após pedido`);
+
+      results.push({
+        transactionId: tx.id,
+        orderId: order.id,
+        matchType: 'exact',
+        confidence: 'high',
+        amountDiff: 0,
+        matchReason: `Match exato: ${reasonParts.join(', ')}`,
+      });
+      matchedTxIds.add(tx.id);
+      markAmountMatched(order.id, nextIdx);
+    }
+  }
+
   return results;
 }
