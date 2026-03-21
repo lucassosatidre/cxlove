@@ -97,10 +97,8 @@ export default function SalonReconciliation() {
     setLoading(false);
   };
 
-  // Only orders that have payments filled
-  const eligibleOrders = useMemo(() => {
-    return orders.filter(o => payments.some(p => p.salon_order_id === o.id && p.amount > 0));
-  }, [orders, payments]);
+  // Show all orders for reconciliation (matching uses payments when available)
+  const eligibleOrders = useMemo(() => orders, [orders]);
 
   const matchedOrderIds = useMemo(() => {
     const map = new Map<string, SalonCardTx[]>();
