@@ -142,6 +142,7 @@ export function matchSalonTransactionsToOrders(
   // ═══════════════════════════════════════════
   // PHASE 1: Exact single-transaction matches
   // Priority: value exact → same waiter → time proximity
+  // Exact value = NEVER low confidence
   // ═══════════════════════════════════════════
 
   interface ExactCandidate {
@@ -166,17 +167,17 @@ export function matchSalonTransactionsToOrders(
 
       for (let i = 0; i < amounts.length; i++) {
         if (Math.abs(tx.gross_amount - amounts[i]) < 0.01) {
-          // Check if any other tx from same waiter is also an exact match for same order
           const sameWaiter = !!tx.machine_serial && !!order.sale_time;
 
           let timeScore = 0.5;
           if (gap >= 0) {
             if (gap <= window.ideal) timeScore = 1;
             else if (gap <= window.max) timeScore = 0.7;
-            else timeScore = 0.3;
+            else timeScore = 0.4;
           }
 
           const reasonParts: string[] = ['valor idêntico'];
+          if (sameWaiter) reasonParts.push('garçom identificado');
           if (gap >= 0) reasonParts.push(`${gap}min após pedido`);
 
           exactCandidates.push({
@@ -193,9 +194,11 @@ export function matchSalonTransactionsToOrders(
 
   // Sort: best matches first
   // 1. Time within window scores higher
-  // 2. Closer gap is better
+  // 2. Same waiter preferred
+  // 3. Closer gap is better
   exactCandidates.sort((a, b) => {
     if (b.timeScore !== a.timeScore) return b.timeScore - a.timeScore;
+    if (a.sameWaiter !== b.sameWaiter) return a.sameWaiter ? -1 : 1;
     return a.gap - b.gap;
   });
 
@@ -204,8 +207,10 @@ export function matchSalonTransactionsToOrders(
     const used = matchedOrderAmountIndices.get(c.order.id) || new Set();
     if (used.has(c.amountIdx)) continue;
 
-    const confidence: 'high' | 'medium' | 'low' =
-      c.timeScore >= 0.7 ? 'high' : c.timeScore >= 0.4 ? 'medium' : 'low';
+    // RULE: Exact value match = minimum 'medium', never 'low'
+    // If time is within window OR no competing candidate → 'high'
+    const confidence: 'high' | 'medium' =
+      c.timeScore >= 0.5 ? 'high' : 'medium';
 
     results.push({
       transactionId: c.tx.id,
