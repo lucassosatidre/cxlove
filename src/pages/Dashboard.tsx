@@ -32,6 +32,9 @@ interface ImportRow {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isTestMode } = useTestMode();
+  const routePrefix = isTestMode ? '/tele-teste' : '';
+  const reconciliationPrefix = isTestMode ? '/reconciliation-teste' : '/reconciliation';
   const [closings, setClosings] = useState<DailyClosing[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
