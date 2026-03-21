@@ -467,6 +467,32 @@ export default function SalonReconciliation() {
           </div>
         </div>
 
+        {/* Cash Snapshots (read-only) */}
+        {(cashSnapshotAbertura || cashSnapshotFechamento) && (
+          <div className="border-b border-border bg-card">
+            <div className="px-6 py-3 flex flex-wrap gap-4">
+              {cashSnapshotAbertura && (
+                <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2.5 border border-border">
+                  <Banknote className="h-4 w-4 text-success" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">Abertura (Dinheiro)</p>
+                    <p className="text-sm font-semibold text-foreground font-mono tabular-nums">{formatCurrency(cashSnapshotAbertura.total)}</p>
+                  </div>
+                </div>
+              )}
+              {cashSnapshotFechamento && (
+                <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2.5 border border-border">
+                  <Banknote className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">Fechamento (Dinheiro)</p>
+                    <p className="text-sm font-semibold text-foreground font-mono tabular-nums">{formatCurrency(cashSnapshotFechamento.total)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3 flex flex-wrap gap-2">
