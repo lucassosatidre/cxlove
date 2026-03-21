@@ -236,7 +236,7 @@ export default function TeleImport() {
               <Upload className="h-4 w-4 mr-2" />
               Nova importação
             </Button>
-            <Button onClick={() => navigate('/tele')} className="flex-1">
+            <Button onClick={() => navigate(isTestMode ? '/tele-teste' : '/tele')} className="flex-1">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Voltar ao Tele
             </Button>
