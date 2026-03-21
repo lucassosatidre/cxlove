@@ -63,6 +63,8 @@ export default function DeliveryReconciliation() {
   const [closingDate, setClosingDate] = useState('');
   const [search, setSearch] = useState('');
   const [filterMatch, setFilterMatch] = useState('all');
+  const [filterDeliveryPerson, setFilterDeliveryPerson] = useState('all');
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
@@ -213,18 +215,47 @@ export default function DeliveryReconciliation() {
     return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
   }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
 
+  const deliveryPersons = useMemo(() => {
+    const set = new Set<string>();
+    offlineOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
+    return Array.from(set).sort();
+  }, [offlineOrders]);
+
+  const paymentMethodsFilter = useMemo(() => {
+    const set = new Set<string>();
+    offlineOrders.forEach(o => {
+      const orderBks = breakdowns.filter(b => b.imported_order_id === o.id && b.payment_type === 'fisico');
+      if (orderBks.length > 0) {
+        orderBks.forEach(b => set.add(b.payment_method_name));
+      } else {
+        o.payment_method.split(',').map(m => m.trim()).filter(m => m).forEach(m => set.add(m));
+      }
+    });
+    return Array.from(set).sort();
+  }, [offlineOrders, breakdowns]);
+
   const filtered = useMemo(() => {
     return offlineOrders.filter(o => {
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterMatch === 'matched' && !matchedOrderIds.has(o.id)) return false;
       if (filterMatch === 'unmatched' && matchedOrderIds.has(o.id)) return false;
+      if (filterDeliveryPerson !== 'all' && o.delivery_person !== filterDeliveryPerson) return false;
+      if (filterPaymentMethod !== 'all') {
+        const orderBks = breakdowns.filter(b => b.imported_order_id === o.id && b.payment_type === 'fisico');
+        if (orderBks.length > 0) {
+          if (!orderBks.some(b => b.payment_method_name === filterPaymentMethod)) return false;
+        } else {
+          const methods = o.payment_method.split(',').map(m => m.trim());
+          if (!methods.includes(filterPaymentMethod)) return false;
+        }
+      }
       return true;
     }).sort((a, b) => {
       const aNum = parseInt(a.order_number.replace(/\D/g, ''), 10) || 0;
       const bNum = parseInt(b.order_number.replace(/\D/g, ''), 10) || 0;
       return aNum - bNum;
     });
-  }, [offlineOrders, search, filterMatch, matchedOrderIds]);
+  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, matchedOrderIds, breakdowns]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -688,6 +719,24 @@ export default function DeliveryReconciliation() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Buscar comanda..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
           </div>
+          <Select value={filterDeliveryPerson} onValueChange={setFilterDeliveryPerson}>
+            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos entregadores</SelectItem>
+              {deliveryPersons.map(dp => (
+                <SelectItem key={dp} value={dp}>{dp}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterPaymentMethod} onValueChange={setFilterPaymentMethod}>
+            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas formas</SelectItem>
+              {paymentMethodsFilter.map(pm => (
+                <SelectItem key={pm} value={pm}>{pm}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filterMatch} onValueChange={setFilterMatch}>
             <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
