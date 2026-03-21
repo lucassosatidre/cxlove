@@ -1170,6 +1170,12 @@ export default function Reconciliation() {
             <Button variant="outline" onClick={() => setShowConferenceErrors(false)}>
               Entendi
             </Button>
+            {isAdmin && (
+              <Button variant="destructive" onClick={() => { setShowConferenceErrors(false); handleAdminForceFinalize(); }}>
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                Forçar Fechamento
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
