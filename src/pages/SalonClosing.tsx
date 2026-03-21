@@ -147,6 +147,37 @@ export default function SalonClosing() {
     return Math.abs(totalAmount - sum) < 0.01 ? 'complete' : 'partial';
   }, [orderPayments]);
 
+  const handleAdminForceFinalize = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error('Erro ao forçar fechamento');
+    } else {
+      toast.success('Fechamento forçado pelo administrador.');
+      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
+      setShowErrors(false);
+    }
+    setFinalizing(false);
+  }, [id, isAdmin]);
+
+  const handleReopenClosing = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) {
+      setClosing(prev => prev ? { ...prev, status: 'pending' } : prev);
+      toast.success('Fechamento reaberto com sucesso.');
+    } else {
+      toast.error('Erro ao reabrir fechamento.');
+    }
+  }, [id, isAdmin]);
+
   if (loading) {
     return (
       <AppLayout title="Carregando...">
@@ -200,37 +231,6 @@ export default function SalonClosing() {
     }
     setFinalizing(false);
   };
-
-  const handleAdminForceFinalize = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    setFinalizing(true);
-    const { error } = await supabase
-      .from('salon_closings')
-      .update({ status: 'completed', updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) {
-      toast.error('Erro ao forçar fechamento');
-    } else {
-      toast.success('Fechamento forçado pelo administrador.');
-      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
-      setShowErrors(false);
-    }
-    setFinalizing(false);
-  }, [id, isAdmin]);
-
-  const handleReopenClosing = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    const { error } = await supabase
-      .from('salon_closings')
-      .update({ status: 'pending', updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (!error) {
-      setClosing(prev => prev ? { ...prev, status: 'pending' } : prev);
-      toast.success('Fechamento reaberto com sucesso.');
-    } else {
-      toast.error('Erro ao reabrir fechamento.');
-    }
-  }, [id, isAdmin]);
 
   return (
     <AppLayout
