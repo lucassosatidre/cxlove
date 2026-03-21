@@ -606,6 +606,81 @@ export type Database = {
         }
         Relationships: []
       }
+      vault_daily_closings: {
+        Row: {
+          balance: number
+          change_salon: number
+          change_tele: number
+          closing_date: string
+          created_at: string
+          id: string
+          updated_at: string
+          user_id: string
+          vault_entry: number
+          vault_entry_description: string | null
+          vault_exit: number
+          vault_exit_description: string | null
+        }
+        Insert: {
+          balance?: number
+          change_salon?: number
+          change_tele?: number
+          closing_date: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          vault_entry?: number
+          vault_entry_description?: string | null
+          vault_exit?: number
+          vault_exit_description?: string | null
+        }
+        Update: {
+          balance?: number
+          change_salon?: number
+          change_tele?: number
+          closing_date?: string
+          created_at?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+          vault_entry?: number
+          vault_entry_description?: string | null
+          vault_exit?: number
+          vault_exit_description?: string | null
+        }
+        Relationships: []
+      }
+      vault_misc_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string
+          expense_date: string
+          id: string
+          origin: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          description: string
+          expense_date: string
+          id?: string
+          origin: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string
+          expense_date?: string
+          id?: string
+          origin?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
