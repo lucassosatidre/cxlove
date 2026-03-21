@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import AppLayout from '@/components/AppLayout';
-import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2 } from 'lucide-react';
+import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface DailyClosing {
@@ -121,6 +121,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteEmptyClosing = async (closingId: string) => {
+    const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
+    if (!confirmed) return;
+    try {
+      // Delete any cash snapshots linked to this closing
+      await supabase.from('cash_snapshots').delete().eq('daily_closing_id', closingId);
+      // Delete any card transactions linked to this closing
+      await supabase.from('card_transactions').delete().eq('daily_closing_id', closingId);
+      // Delete the closing itself
+      const { error } = await supabase.from('daily_closings').delete().eq('id', closingId);
+      if (error) throw error;
+      toast.success('Fechamento vazio removido.');
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar fechamento.');
+      console.error(err);
+    }
+  };
+
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   const weekday = today.toLocaleDateString('pt-BR', { weekday: 'long' });
@@ -212,6 +231,19 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
+                      {closingImports.length === 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEmptyClosing(closing.id);
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Badge
                         variant={closing.status === 'completed' ? 'default' : 'secondary'}
                         className={closing.status === 'completed' ? 'bg-success text-success-foreground' : 'bg-warning/15 text-warning border-warning/30'}
