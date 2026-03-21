@@ -546,6 +546,7 @@ export default function SalonClosing() {
               <TableRow>
                 <TableHead className="w-[80px]">Tipo</TableHead>
                 <TableHead className="w-[60px]">Hora</TableHead>
+                <TableHead className="w-[120px]">Pgto Saipos</TableHead>
                 <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right w-[100px]">Total</TableHead>
                 <TableHead className="w-[90px]">Status</TableHead>
