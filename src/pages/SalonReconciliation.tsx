@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
+  ShieldCheck, RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
+import { useUserRole } from '@/hooks/useUserRole';
 
 interface SalonOrder {
   id: string;
