@@ -668,13 +668,14 @@ export function matchSalonTransactionsToOrders(
 
       if (scored.length === 1) {
         const { tx, gap } = scored[0];
+        const cashPortion = Math.round((order.total_amount - tx.gross_amount) * 100) / 100;
         results.push({
           transactionId: tx.id,
           orderId: order.id,
-          matchType: 'approximate',
+          matchType: 'combined_mixed',
           confidence: 'medium',
-          amountDiff: order.total_amount - tx.gross_amount,
-          matchReason: `Match parcial misto: cartão ${formatBRL(tx.gross_amount)} + dinheiro/externo, ${gap}min após pedido`,
+          amountDiff: Math.abs(order.total_amount - tx.gross_amount),
+          matchReason: `Match combinado com dinheiro parcial: maquininha ${formatBRL(tx.gross_amount)} + dinheiro (${formatBRL(cashPortion)})`,
         });
         matchedTxIds.add(tx.id);
         matchedOrderIds.add(order.id);
