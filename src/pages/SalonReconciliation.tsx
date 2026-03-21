@@ -101,6 +101,23 @@ export default function SalonReconciliation() {
       setPayments((payData || []).map(p => ({ ...p, amount: Number(p.amount) })));
     }
 
+    // Load cash snapshots for this salon closing (read-only display)
+    if (id) {
+      const { data: snapList } = await supabase
+        .from('cash_snapshots')
+        .select('total, updated_at, snapshot_type')
+        .eq('salon_closing_id', id);
+
+      for (const snap of (snapList || [])) {
+        const type = (snap as any).snapshot_type || 'abertura';
+        if (type === 'abertura') {
+          setCashSnapshotAbertura({ total: Number(snap.total), updated_at: snap.updated_at });
+        } else if (type === 'fechamento') {
+          setCashSnapshotFechamento({ total: Number(snap.total), updated_at: snap.updated_at });
+        }
+      }
+    }
+
     setLoading(false);
   };
 
