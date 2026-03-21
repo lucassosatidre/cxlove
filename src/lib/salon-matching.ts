@@ -632,9 +632,9 @@ export function matchSalonTransactionsToOrders(
 
       if (bestMatch) {
         const cardSum = bestMatch.txs.reduce((s, t) => s + t.gross_amount, 0);
-        const cashPortion = order.total_amount - cardSum;
+        const cashPortion = Math.round((order.total_amount - cardSum) * 100) / 100;
         const confidence: 'high' | 'medium' = bestMatch.sameWaiter ? 'high' : 'medium';
-        const reason = `Match combinado misto: ${expectedCardLines} transações cartão (${formatBRL(cardSum)}) + dinheiro (${formatBRL(cashPortion)}), diff ${formatBRL(bestMatch.diff)}`;
+        const reason = `Match combinado com dinheiro parcial: ${expectedCardLines} transações maquininha (${formatBRL(cardSum)}) + dinheiro (${formatBRL(cashPortion)})`;
 
         for (let t = 0; t < bestMatch.txs.length; t++) {
           const tx = bestMatch.txs[t];
@@ -642,7 +642,7 @@ export function matchSalonTransactionsToOrders(
           results.push({
             transactionId: tx.id,
             orderId: order.id,
-            matchType: 'combined',
+            matchType: 'combined_mixed',
             confidence,
             amountDiff: bestMatch.diff,
             combinedWithTransactionId: combinedWith,
