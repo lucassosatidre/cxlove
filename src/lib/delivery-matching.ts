@@ -166,6 +166,8 @@ export function matchTransactionsToOrders(
 
     for (const order of eligibleOrders) {
       if (isOrderFullyMatched(order.id)) continue;
+      // Transaction must be after order time
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
       
       const amounts = orderAmounts.get(order.id) || [order.total_amount];
       const matchedCount = orderMatchCounts.get(order.id) || 0;
