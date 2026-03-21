@@ -634,10 +634,22 @@ export default function Reconciliation() {
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
-              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-success hover:bg-success/90 text-success-foreground">
+              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !isAdmin} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>
               </Button>
+              {isAdmin && isCompleted && (
+                <Button variant="outline" size="sm" onClick={handleReopenClosing}>
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Reabrir</span>
+                </Button>
+              )}
+              {isAdmin && !isCompleted && (
+                <Button variant="outline" size="sm" onClick={handleAdminForceFinalize} disabled={completing} className="border-warning text-warning hover:bg-warning/10">
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Forçar Fechamento</span>
+                </Button>
+              )}
             </div>
           </div>
         </header>
