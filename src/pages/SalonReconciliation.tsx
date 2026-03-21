@@ -57,6 +57,7 @@ interface UndoAction {
 export default function SalonReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<SalonOrder[]>([]);
