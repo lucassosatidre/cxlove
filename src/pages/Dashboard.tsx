@@ -215,7 +215,7 @@ export default function Dashboard() {
               return (
                 <div key={closing.id}>
                   <button
-                    onClick={() => navigate(`/reconciliation/${closing.id}`)}
+                    onClick={() => navigate(`${reconciliationPrefix}/${closing.id}`)}
                     className="w-full text-left p-4 hover:bg-muted/40 row-transition flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-4">
