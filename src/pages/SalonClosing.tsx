@@ -469,6 +469,12 @@ export default function SalonClosing() {
             ))}
           </div>
           <DialogFooter>
+            {isAdmin && (
+              <Button variant="destructive" onClick={handleAdminForceFinalize} disabled={finalizing}>
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                Forçar Fechamento (Admin)
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setShowErrors(false)}>
               Entendi
             </Button>
