@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
-  ShieldCheck, RotateCcw,
+  ShieldCheck, RotateCcw, Banknote,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
