@@ -357,9 +357,12 @@ export function matchSalonTransactionsToOrders(
         const combo = findExactGroup(remainingTxs, expectedLines, target, COMBINED_TOLERANCE);
         if (combo) {
           const isDiscountMatch = Math.abs(target - order.total_amount) > 0.01;
+          const isMixedPartial = cls.isMixed && target < order.total_amount;
           bestMatch = {
             txs: combo.txs, diff: combo.diff, target, sameWaiter: false,
-            reason: `Match combinado: ${expectedLines} transações, garçons diferentes, soma ${combo.diff < 0.01 ? 'exata' : `≈ R$${combo.diff.toFixed(2)}`}${isDiscountMatch ? ', total + desconto' : ''}`,
+            reason: isMixedPartial
+              ? `Match combinado misto: ${expectedLines} transações cartão, garçons diferentes, parte dinheiro separada, diff ${combo.diff < 0.01 ? 'zero' : `R$${combo.diff.toFixed(2)}`}`
+              : `Match combinado: ${expectedLines} transações, garçons diferentes, soma ${combo.diff < 0.01 ? 'exata' : `≈ R$${combo.diff.toFixed(2)}`}${isDiscountMatch ? ', total + desconto' : ''}`,
           };
         }
       }
