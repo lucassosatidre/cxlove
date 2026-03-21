@@ -831,8 +831,11 @@ export default function DeliveryReconciliation() {
                             <div className="flex items-center gap-2 text-xs">
                               <Link2 className="h-3 w-3 text-success" />
                               <span className="text-muted-foreground">
-                                {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''} —{' '}
-                                <span className="font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
+                                {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''}
+                                {tx.machine_serial && serialToDeliveryPerson.has(tx.machine_serial) && (
+                                  <span className="text-primary font-medium"> • {serialToDeliveryPerson.get(tx.machine_serial)}</span>
+                                )}
+                                {' '}— <span className="font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
                               </span>
                               {idx === 0 && (
                                 <Badge
