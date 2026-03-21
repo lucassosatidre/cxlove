@@ -108,6 +108,7 @@ export default function SalonImport() {
             sale_time: o.sale_time || null,
             payment_method: o.payment_method,
             total_amount: o.total_amount,
+            discount_amount: o.discount_amount || 0,
           }));
           const { error: insertErr } = await supabase.from('salon_orders').insert(batch as any);
           if (insertErr) throw new Error('Erro ao inserir pedidos.');
