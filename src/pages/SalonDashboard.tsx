@@ -114,6 +114,21 @@ export default function SalonDashboard() {
     }
   };
 
+  const handleDeleteEmptyClosing = async (closingId: string) => {
+    const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
+    if (!confirmed) return;
+    try {
+      // Clean up any card transactions referencing this closing
+      await supabase.from('salon_card_transactions').delete().eq('salon_closing_id', closingId);
+      await supabase.from('salon_closings').delete().eq('id', closingId);
+      toast.success('Fechamento removido com sucesso.');
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar fechamento.');
+      console.error(err);
+    }
+  };
+
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   const weekday = today.toLocaleDateString('pt-BR', { weekday: 'long' });
