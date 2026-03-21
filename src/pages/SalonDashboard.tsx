@@ -226,6 +226,16 @@ export default function SalonDashboard() {
                       >
                         {closing.status === 'completed' ? 'Concluído' : 'Pendente'}
                       </Badge>
+                      {closingImports.length === 0 && closing.status !== 'completed' && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteEmptyClosing(closing.id); }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </button>
