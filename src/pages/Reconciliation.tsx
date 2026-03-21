@@ -637,6 +637,7 @@ export default function Reconciliation() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="ml-56 flex flex-col flex-1">
+        {isTestMode && <div className="ml-56 px-6 pt-4"><TestBanner /></div>}
         {/* Header */}
         <header className="border-b border-border bg-card sticky top-0 z-10">
           <div className="px-6 py-3 flex items-center justify-between">
