@@ -995,13 +995,21 @@ export default function Reconciliation() {
                 </span>
               )}
             </div>
-            <Button
-              onClick={handleSaveConference}
-              disabled={isCompleted || completing}
-              className="bg-success hover:bg-success/90 text-success-foreground"
-            >
-              {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {isAdmin && isCompleted && (
+                <Button variant="outline" size="sm" onClick={handleReopenClosing}>
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  Reabrir
+                </Button>
+              )}
+              <Button
+                onClick={handleSaveConference}
+                disabled={(isCompleted && !isAdmin) || completing}
+                className="bg-success hover:bg-success/90 text-success-foreground"
+              >
+                {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
