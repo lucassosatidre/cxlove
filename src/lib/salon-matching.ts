@@ -1,19 +1,24 @@
 /**
- * Salon reconciliation matching algorithm v2.
+ * Salon reconciliation matching algorithm v3.
  *
- * Priority order for matching:
- *   1. Exact or sum-exact value match
- *   2. Same waiter (machine serial)
- *   3. Time proximity (window depends on order type)
- *   4. Mixed waiters only as last resort (lower confidence)
+ * PRIORITY ORDER (strict):
+ *   1. Exact value 1:1 match (single transaction = single order)
+ *   2. Combined exact (sum of 2-5 transactions = order total)
+ *   3. Approximate 1:1 (small diff, best candidate)
+ *   4. Forced resolution for remaining
  *
- * Rules:
- * - Saipos reports ORDER START time, not payment time.
- * - Ficha: short window (0-15 min).
- * - Balcão: medium window (15-60 min).
- * - Salão: long window (up to 90+ min).
- * - Each machine serial = one waiter for the whole night.
- * - Rateio: same waiter, short burst, especially for orders > R$200.
+ * CONFIDENCE RULES:
+ *   - Exact value match = NEVER low confidence
+ *   - Low confidence only when real ambiguity exists
+ *   - Time distance alone cannot downgrade exact match
+ *   - Waiter is tiebreaker, not blocker
+ *
+ * CONTEXT:
+ *   - Saipos reports ORDER START time, not payment time
+ *   - Ficha: short window (0-15 min)
+ *   - Balcão: medium window (15-60 min)
+ *   - Salão: long window (up to 120+ min)
+ *   - Each machine serial = one waiter for the whole night
  */
 
 export interface SalonMatchResult {
@@ -47,7 +52,7 @@ interface TxForMatching {
   sale_time: string;
 }
 
-// ─── Time helpers ───
+// ─── Helpers ───
 
 function parseTimeToMinutes(time: string): number {
   if (!time) return -1;
@@ -64,14 +69,6 @@ function isTransactionAfterOrder(txTime: string | null, orderTime: string | null
   return txMin >= oMin;
 }
 
-function getTimeWindow(orderType: string): { ideal: number; max: number } {
-  const t = orderType.toLowerCase();
-  if (t === 'ficha') return { ideal: 15, max: 30 };
-  if (t === 'balcão' || t === 'balcao') return { ideal: 30, max: 60 };
-  // Salão, Retirada, numeric types → long window
-  return { ideal: 60, max: 120 };
-}
-
 function timeGapMinutes(txTime: string, orderTime: string | null): number {
   if (!orderTime) return -1;
   const txMin = parseTimeToMinutes(txTime);
@@ -79,8 +76,6 @@ function timeGapMinutes(txTime: string, orderTime: string | null): number {
   if (txMin < 0 || oMin < 0) return -1;
   return txMin - oMin;
 }
-
-// ─── Matchable amounts ───
 
 function getMatchableAmounts(
   orderId: string,
@@ -140,18 +135,17 @@ export function matchSalonTransactionsToOrders(
   };
 
   // ═══════════════════════════════════════════
-  // PHASE 1: Exact single-transaction matches
-  // Priority: value exact → same waiter → time proximity
-  // Exact value = NEVER low confidence
+  // PHASE 1: Exact 1:1 matches
+  // Value exact = priority. Time/waiter only for tiebreaking.
+  // Exact value = minimum 'medium', never 'low'.
   // ═══════════════════════════════════════════
 
   interface ExactCandidate {
     tx: TxForMatching;
     order: SalonOrderForMatching;
     amountIdx: number;
-    sameWaiter: boolean;
-    timeScore: number;
     gap: number;
+    sameWaiter: boolean;
     reason: string;
   }
 
@@ -162,29 +156,19 @@ export function matchSalonTransactionsToOrders(
     for (const order of eligibleOrders) {
       if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
       const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
-      const gap = timeGapMinutes(tx.sale_time, order.sale_time);
-      const window = getTimeWindow(order.order_type);
 
       for (let i = 0; i < amounts.length; i++) {
         if (Math.abs(tx.gross_amount - amounts[i]) < 0.01) {
-          const sameWaiter = !!tx.machine_serial && !!order.sale_time;
-
-          let timeScore = 0.5;
-          if (gap >= 0) {
-            if (gap <= window.ideal) timeScore = 1;
-            else if (gap <= window.max) timeScore = 0.7;
-            else timeScore = 0.4;
-          }
+          const gap = timeGapMinutes(tx.sale_time, order.sale_time);
+          const sameWaiter = !!tx.machine_serial;
 
           const reasonParts: string[] = ['valor idêntico'];
-          if (sameWaiter) reasonParts.push('garçom identificado');
           if (gap >= 0) reasonParts.push(`${gap}min após pedido`);
 
           exactCandidates.push({
             tx, order, amountIdx: i,
-            sameWaiter,
-            timeScore,
             gap: gap >= 0 ? gap : 999,
+            sameWaiter,
             reason: reasonParts.join(', '),
           });
         }
@@ -192,13 +176,28 @@ export function matchSalonTransactionsToOrders(
     }
   }
 
-  // Sort: best matches first
-  // 1. Time within window scores higher
-  // 2. Same waiter preferred
-  // 3. Closer gap is better
+  // For each tx, count how many orders it could match (uniqueness)
+  const txCandidateCount = new Map<string, number>();
+  const orderCandidateCount = new Map<string, number>();
+  for (const c of exactCandidates) {
+    txCandidateCount.set(c.tx.id, (txCandidateCount.get(c.tx.id) || 0) + 1);
+    const key = `${c.order.id}_${c.amountIdx}`;
+    orderCandidateCount.set(key, (orderCandidateCount.get(key) || 0) + 1);
+  }
+
+  // Sort: unique candidates first, then by time proximity
   exactCandidates.sort((a, b) => {
-    if (b.timeScore !== a.timeScore) return b.timeScore - a.timeScore;
-    if (a.sameWaiter !== b.sameWaiter) return a.sameWaiter ? -1 : 1;
+    const aUniqueTx = txCandidateCount.get(a.tx.id) || 0;
+    const bUniqueTx = txCandidateCount.get(b.tx.id) || 0;
+    const aUniqueOrd = orderCandidateCount.get(`${a.order.id}_${a.amountIdx}`) || 0;
+    const bUniqueOrd = orderCandidateCount.get(`${b.order.id}_${b.amountIdx}`) || 0;
+
+    // Unique matches first (only 1 candidate for either tx or order)
+    const aUnique = Math.min(aUniqueTx, aUniqueOrd);
+    const bUnique = Math.min(bUniqueTx, bUniqueOrd);
+    if (aUnique !== bUnique) return aUnique - bUnique;
+
+    // Then by time gap
     return a.gap - b.gap;
   });
 
@@ -207,10 +206,14 @@ export function matchSalonTransactionsToOrders(
     const used = matchedOrderAmountIndices.get(c.order.id) || new Set();
     if (used.has(c.amountIdx)) continue;
 
-    // RULE: Exact value match = minimum 'medium', never 'low'
-    // If time is within window OR no competing candidate → 'high'
-    const confidence: 'high' | 'medium' =
-      c.timeScore >= 0.5 ? 'high' : 'medium';
+    // Check if this is a unique candidate (only option for this order-amount)
+    const orderKey = `${c.order.id}_${c.amountIdx}`;
+    const numCandidatesForOrder = orderCandidateCount.get(orderKey) || 0;
+    const numCandidatesForTx = txCandidateCount.get(c.tx.id) || 0;
+    const isUnique = numCandidatesForOrder === 1 || numCandidatesForTx === 1;
+
+    // Exact value = minimum 'medium'. Unique or good time = 'high'.
+    const confidence: 'high' | 'medium' = isUnique || c.gap < 120 ? 'high' : 'medium';
 
     results.push({
       transactionId: c.tx.id,
@@ -218,19 +221,18 @@ export function matchSalonTransactionsToOrders(
       matchType: 'exact',
       confidence,
       amountDiff: 0,
-      matchReason: `Match exato: ${c.reason}`,
+      matchReason: `Match exato: ${c.reason}${isUnique ? ', único candidato' : ''}`,
     });
     matchedTxIds.add(c.tx.id);
     markAmountMatched(c.order.id, c.amountIdx);
   }
 
   // ═══════════════════════════════════════════
-  // PHASE 2: Combined matches (rateio)
-  // Priority: same waiter first, then mixed waiters
+  // PHASE 2: Combined matches (rateio) — up to 5 transactions
+  // Priority: same waiter > mixed waiters
   // ═══════════════════════════════════════════
 
   const COMBINED_TOLERANCE = 0.50;
-  const RATEIO_TIME_WINDOW = 15; // minutes between transactions
 
   for (const order of eligibleOrders) {
     if (isOrderFullyMatched(order.id)) continue;
@@ -244,19 +246,6 @@ export function matchSalonTransactionsToOrders(
     );
     if (remainingTxs.length < 2) continue;
 
-    // Group remaining txs by waiter
-    const txsByWaiter = new Map<string, TxForMatching[]>();
-    const noSerialTxs: TxForMatching[] = [];
-    for (const tx of remainingTxs) {
-      if (tx.machine_serial) {
-        const arr = txsByWaiter.get(tx.machine_serial) || [];
-        arr.push(tx);
-        txsByWaiter.set(tx.machine_serial, arr);
-      } else {
-        noSerialTxs.push(tx);
-      }
-    }
-
     interface ComboResult {
       txs: TxForMatching[];
       diff: number;
@@ -268,7 +257,7 @@ export function matchSalonTransactionsToOrders(
     const findBestCombo = (
       pool: TxForMatching[],
       isSameWaiter: boolean,
-      waiterLabel?: string
+      maxSize: number = 5
     ): ComboResult | null => {
       if (pool.length < 2) return null;
       let best: ComboResult | null = null;
@@ -285,30 +274,23 @@ export function matchSalonTransactionsToOrders(
         }
 
         let score = 0;
-        if (isSameWaiter) score += 4; // Strong waiter signal
-        if (timeSpan <= RATEIO_TIME_WINDOW) score += 2;
+        if (isSameWaiter) score += 4;
+        if (timeSpan <= 15) score += 2;
         else if (timeSpan <= 30) score += 1;
         if (targetAmount >= 200) score += 1;
-
-        // Time from order
-        const orderMin = parseTimeToMinutes(order.sale_time || '');
-        if (orderMin >= 0 && times.length > 0) {
-          const avgTime = times.reduce((a, b) => a + b, 0) / times.length;
-          const gap = avgTime - orderMin;
-          const window = getTimeWindow(order.order_type);
-          if (gap >= 0 && gap <= window.max) score += 1;
-        }
+        if (diff < 0.01) score += 2; // exact sum bonus
 
         const confidence: 'high' | 'medium' | 'low' =
           score >= 6 ? 'high' : score >= 4 ? 'medium' : 'low';
 
         const reasonParts: string[] = [];
         reasonParts.push(`soma de ${txGroup.length} transações`);
-        if (isSameWaiter && waiterLabel) reasonParts.push(`mesmo garçom`);
+        if (diff < 0.01) reasonParts.push('soma exata');
+        if (isSameWaiter) reasonParts.push('mesmo garçom');
         if (timeSpan >= 0) reasonParts.push(`${timeSpan}min entre elas`);
         if (!isSameWaiter) reasonParts.push('garçons diferentes');
 
-        if (!best || diff < best.diff || (diff === best.diff && score > 0)) {
+        if (!best || diff < best.diff || (diff === best.diff && score > (best.sameWaiter ? 6 : 0))) {
           best = {
             txs: txGroup,
             diff,
@@ -319,21 +301,20 @@ export function matchSalonTransactionsToOrders(
         }
       };
 
-      const limit = Math.min(pool.length, 20);
-
       // Try pairs
-      for (let i = 0; i < limit; i++) {
-        for (let j = i + 1; j < limit; j++) {
+      const limit2 = Math.min(pool.length, 20);
+      for (let i = 0; i < limit2; i++) {
+        for (let j = i + 1; j < limit2; j++) {
           tryGroup([pool[i], pool[j]]);
         }
       }
 
       // Try triples
-      if (targetAmount >= 150) {
-        const triLimit = Math.min(pool.length, 15);
-        for (let i = 0; i < triLimit; i++) {
-          for (let j = i + 1; j < triLimit; j++) {
-            for (let k = j + 1; k < triLimit; k++) {
+      if (maxSize >= 3) {
+        const limit3 = Math.min(pool.length, 15);
+        for (let i = 0; i < limit3; i++) {
+          for (let j = i + 1; j < limit3; j++) {
+            for (let k = j + 1; k < limit3; k++) {
               tryGroup([pool[i], pool[j], pool[k]]);
             }
           }
@@ -341,13 +322,29 @@ export function matchSalonTransactionsToOrders(
       }
 
       // Try quads
-      if (targetAmount >= 300) {
-        const quadLimit = Math.min(pool.length, 10);
-        for (let i = 0; i < quadLimit; i++) {
-          for (let j = i + 1; j < quadLimit; j++) {
-            for (let k = j + 1; k < quadLimit; k++) {
-              for (let l = k + 1; l < quadLimit; l++) {
+      if (maxSize >= 4 && targetAmount >= 150) {
+        const limit4 = Math.min(pool.length, 12);
+        for (let i = 0; i < limit4; i++) {
+          for (let j = i + 1; j < limit4; j++) {
+            for (let k = j + 1; k < limit4; k++) {
+              for (let l = k + 1; l < limit4; l++) {
                 tryGroup([pool[i], pool[j], pool[k], pool[l]]);
+              }
+            }
+          }
+        }
+      }
+
+      // Try quintets
+      if (maxSize >= 5 && targetAmount >= 200) {
+        const limit5 = Math.min(pool.length, 10);
+        for (let i = 0; i < limit5; i++) {
+          for (let j = i + 1; j < limit5; j++) {
+            for (let k = j + 1; k < limit5; k++) {
+              for (let l = k + 1; l < limit5; l++) {
+                for (let m = l + 1; m < limit5; m++) {
+                  tryGroup([pool[i], pool[j], pool[k], pool[l], pool[m]]);
+                }
               }
             }
           }
@@ -357,19 +354,27 @@ export function matchSalonTransactionsToOrders(
       return best;
     };
 
+    // Group remaining txs by waiter
+    const txsByWaiter = new Map<string, TxForMatching[]>();
+    for (const tx of remainingTxs) {
+      if (tx.machine_serial) {
+        const arr = txsByWaiter.get(tx.machine_serial) || [];
+        arr.push(tx);
+        txsByWaiter.set(tx.machine_serial, arr);
+      }
+    }
+
     // STEP 1: Try same-waiter combos first
     let bestCombo: ComboResult | null = null;
-
-    for (const [serial, waiterTxs] of txsByWaiter) {
+    for (const [, waiterTxs] of txsByWaiter) {
       if (waiterTxs.length < 2) continue;
-      const waiterLabel = serial;
-      const result = findBestCombo(waiterTxs, true, waiterLabel);
+      const result = findBestCombo(waiterTxs, true);
       if (result && (!bestCombo || result.diff < bestCombo.diff)) {
         bestCombo = result;
       }
     }
 
-    // STEP 2: Only if no same-waiter combo found, try mixed (lower confidence)
+    // STEP 2: If no same-waiter combo, try mixed (lower confidence)
     if (!bestCombo) {
       const mixedResult = findBestCombo(remainingTxs, false);
       if (mixedResult) {
@@ -380,11 +385,10 @@ export function matchSalonTransactionsToOrders(
       }
     }
 
-    // Only accept combo if confidence is not too low for mixed waiters
+    // Don't accept mixed-waiter low-confidence combos
     if (bestCombo) {
-      // Safety: don't accept mixed-waiter low-confidence combos
       if (!bestCombo.sameWaiter && bestCombo.confidence === 'low') {
-        continue; // Skip: better to leave unmatched than link incorrectly
+        continue;
       }
 
       for (let t = 0; t < bestCombo.txs.length; t++) {
@@ -409,10 +413,11 @@ export function matchSalonTransactionsToOrders(
   }
 
   // ═══════════════════════════════════════════
-  // PHASE 3: Forced resolution for remaining unmatched
-  // For each unmatched order, find the single best remaining transaction
-  // with exact value. If only one candidate exists, link it.
+  // PHASE 3: Approximate 1:1 matches
+  // For remaining unmatched, find closest single transaction
   // ═══════════════════════════════════════════
+
+  const APPROX_TOLERANCE = 1.00; // R$1.00 tolerance for approximate
 
   for (const order of eligibleOrders) {
     if (isOrderFullyMatched(order.id)) continue;
@@ -421,16 +426,66 @@ export function matchSalonTransactionsToOrders(
     if (nextIdx < 0) continue;
     const targetAmount = amounts[nextIdx];
 
-    // Find all remaining transactions with exact value match
-    const exactCandidatesForOrder = transactions.filter(tx => {
+    const candidates = transactions
+      .filter(tx => !matchedTxIds.has(tx.id) && isTransactionAfterOrder(tx.sale_time, order.sale_time))
+      .map(tx => ({
+        tx,
+        diff: Math.abs(tx.gross_amount - targetAmount),
+        gap: timeGapMinutes(tx.sale_time, order.sale_time),
+      }))
+      .filter(c => c.diff > 0.009 && c.diff <= APPROX_TOLERANCE)
+      .sort((a, b) => a.diff - b.diff);
+
+    if (candidates.length === 1) {
+      const c = candidates[0];
+      results.push({
+        transactionId: c.tx.id,
+        orderId: order.id,
+        matchType: 'approximate',
+        confidence: 'medium',
+        amountDiff: c.diff,
+        matchReason: `Match aproximado: diff R$${c.diff.toFixed(2)}, único candidato próximo`,
+      });
+      matchedTxIds.add(c.tx.id);
+      markAmountMatched(order.id, nextIdx);
+    } else if (candidates.length > 1) {
+      // Multiple close candidates — pick best but mark as medium
+      const best = candidates[0];
+      results.push({
+        transactionId: best.tx.id,
+        orderId: order.id,
+        matchType: 'approximate',
+        confidence: candidates.length <= 2 ? 'medium' : 'low',
+        amountDiff: best.diff,
+        matchReason: `Match aproximado: diff R$${best.diff.toFixed(2)}, melhor entre ${candidates.length} candidatos`,
+      });
+      matchedTxIds.add(best.tx.id);
+      markAmountMatched(order.id, nextIdx);
+    }
+  }
+
+  // ═══════════════════════════════════════════
+  // PHASE 4: Forced resolution for remaining
+  // If exactly one exact-value tx remains for an order, link it.
+  // Also check reverse: if a tx has exactly one matching order.
+  // ═══════════════════════════════════════════
+
+  // Forward: for each unmatched order, find unique exact tx
+  for (const order of eligibleOrders) {
+    if (isOrderFullyMatched(order.id)) continue;
+    const amounts = getMatchableAmounts(order.id, order.total_amount, payments);
+    const nextIdx = getNextUnmatchedAmountIndex(order.id, amounts);
+    if (nextIdx < 0) continue;
+    const targetAmount = amounts[nextIdx];
+
+    const exactForOrder = transactions.filter(tx => {
       if (matchedTxIds.has(tx.id)) return false;
       if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) return false;
       return Math.abs(tx.gross_amount - targetAmount) < 0.01;
     });
 
-    if (exactCandidatesForOrder.length === 1) {
-      // Only one candidate — strong match regardless of time/waiter
-      const tx = exactCandidatesForOrder[0];
+    if (exactForOrder.length === 1) {
+      const tx = exactForOrder[0];
       const gap = timeGapMinutes(tx.sale_time, order.sale_time);
       const reasonParts = ['valor idêntico', 'único candidato disponível'];
       if (gap >= 0) reasonParts.push(`${gap}min após pedido`);
@@ -445,18 +500,17 @@ export function matchSalonTransactionsToOrders(
       });
       matchedTxIds.add(tx.id);
       markAmountMatched(order.id, nextIdx);
-    } else if (exactCandidatesForOrder.length > 1) {
-      // Multiple candidates — pick best by waiter consistency then time
-      const scored = exactCandidatesForOrder.map(tx => {
-        const gap = timeGapMinutes(tx.sale_time, order.sale_time);
-        const window = getTimeWindow(order.order_type);
-        let score = 0;
-        if (gap >= 0 && gap <= window.ideal) score += 3;
-        else if (gap >= 0 && gap <= window.max) score += 2;
-        else if (gap >= 0) score += 1;
-        return { tx, score, gap };
+    } else if (exactForOrder.length > 1) {
+      // Multiple exact candidates — pick by time, mark medium
+      const scored = exactForOrder.map(tx => ({
+        tx,
+        gap: timeGapMinutes(tx.sale_time, order.sale_time),
+      }));
+      scored.sort((a, b) => {
+        const aGap = a.gap >= 0 ? a.gap : 999;
+        const bGap = b.gap >= 0 ? b.gap : 999;
+        return aGap - bGap;
       });
-      scored.sort((a, b) => b.score - a.score || a.gap - b.gap);
       const best = scored[0];
 
       results.push({
@@ -465,14 +519,14 @@ export function matchSalonTransactionsToOrders(
         matchType: 'exact',
         confidence: 'medium',
         amountDiff: 0,
-        matchReason: `Match exato: valor idêntico, melhor candidato entre ${scored.length} opções`,
+        matchReason: `Match exato: valor idêntico, melhor entre ${scored.length} candidatos`,
       });
       matchedTxIds.add(best.tx.id);
       markAmountMatched(order.id, nextIdx);
     }
   }
 
-  // Also check reverse: for each unmatched transaction, find unique order match
+  // Reverse: for each unmatched tx, find unique order match
   for (const tx of transactions) {
     if (matchedTxIds.has(tx.id)) continue;
 
