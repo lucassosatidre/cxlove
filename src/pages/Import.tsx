@@ -82,7 +82,6 @@ export default function Import() {
           .from('salon_closings')
           .select('id')
           .eq('closing_date', salonDate)
-          .eq('user_id', user.id)
           .maybeSingle();
 
         if (!sc) {
