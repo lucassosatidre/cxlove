@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useTestMode } from '@/hooks/useTestMode';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -13,6 +14,7 @@ import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, Che
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
+import TestBanner from '@/components/TestBanner';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
