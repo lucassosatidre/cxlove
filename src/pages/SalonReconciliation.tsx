@@ -592,8 +592,11 @@ export default function SalonReconciliation() {
                               <div className="flex items-center gap-2 text-xs">
                                 <Link2 className="h-3 w-3 text-success" />
                                 <span className="text-muted-foreground">
-                                  {tx.payment_method} {tx.brand ? `(${tx.brand})` : ''} —{' '}
-                                  <span className="font-mono tabular-nums">{formatCurrency(tx.gross_amount)}</span>
+                                  {tx.sale_time && <>{tx.sale_time} / </>}
+                                  {tx.payment_method} / <span className="font-mono tabular-nums">{formatCurrency(tx.gross_amount)}</span>
+                                  {tx.machine_serial && waiterMap.has(tx.machine_serial) && (
+                                    <> / <span className="font-medium text-foreground">{waiterMap.get(tx.machine_serial)}</span></>
+                                  )}
                                 </span>
                                 {idx === 0 && (
                                   <Badge
