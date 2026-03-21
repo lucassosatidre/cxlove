@@ -60,7 +60,7 @@ export default function TeleImport() {
       } else {
         const { data: newClosing, error: closingErr } = await supabase
           .from('daily_closings')
-          .insert({ closing_date: firstDate, user_id: user.id })
+          .insert({ closing_date: firstDate, user_id: user.id, is_test: isTestMode })
           .select('id')
           .single();
         if (closingErr || !newClosing) throw new Error('Erro ao criar fechamento.');
