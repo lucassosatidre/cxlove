@@ -103,8 +103,8 @@ export default function SalonClosing() {
         .select('*')
         .in('salon_order_id', orderIds);
 
+      const map: Record<string, PaymentEntry[]> = {};
       if (paymentsData) {
-        const map: Record<string, PaymentEntry[]> = {};
         paymentsData.forEach((p: any) => {
           if (!map[p.salon_order_id]) map[p.salon_order_id] = [];
           map[p.salon_order_id].push({
@@ -113,8 +113,27 @@ export default function SalonClosing() {
             amount: Number(p.amount),
           });
         });
-        setOrderPayments(map);
       }
+
+      // Pre-populate orders with split payments from Saipos that have no saved payments
+      ordersList.forEach(order => {
+        if (map[order.id] && map[order.id].length > 0) return; // already has saved payments
+        const methods = order.payment_method
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (methods.length > 1) {
+          const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
+          map[order.id] = methods.map((m, i) => ({
+            payment_method: m,
+            amount: i === methods.length - 1
+              ? Math.round((order.total_amount - splitAmount * (methods.length - 1)) * 100) / 100
+              : splitAmount,
+          }));
+        }
+      });
+
+      setOrderPayments(map);
     }
 
     // Load saved cash snapshots (abertura + fechamento) for salon
