@@ -121,6 +121,25 @@ export default function Dashboard() {
     }
   };
 
+  const handleDeleteEmptyClosing = async (closingId: string) => {
+    const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
+    if (!confirmed) return;
+    try {
+      // Delete any cash snapshots linked to this closing
+      await supabase.from('cash_snapshots').delete().eq('daily_closing_id', closingId);
+      // Delete any card transactions linked to this closing
+      await supabase.from('card_transactions').delete().eq('daily_closing_id', closingId);
+      // Delete the closing itself
+      const { error } = await supabase.from('daily_closings').delete().eq('id', closingId);
+      if (error) throw error;
+      toast.success('Fechamento vazio removido.');
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar fechamento.');
+      console.error(err);
+    }
+  };
+
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   const weekday = today.toLocaleDateString('pt-BR', { weekday: 'long' });
