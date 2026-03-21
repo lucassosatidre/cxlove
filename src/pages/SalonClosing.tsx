@@ -1,13 +1,15 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2, ShieldCheck, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2, ShieldCheck, RotateCcw, Banknote, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
+import { formatCurrency } from '@/lib/payment-utils';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -47,6 +49,7 @@ interface PaymentEntry {
 
 export default function SalonClosing() {
   const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
   const { isAdmin } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<SalonOrder[]>([]);
@@ -60,6 +63,23 @@ export default function SalonClosing() {
   
   // Map of orderId -> PaymentEntry[]
   const [orderPayments, setOrderPayments] = useState<Record<string, PaymentEntry[]>>({});
+
+  // Cash calculator state - Abertura
+  const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
+  const [showCashCalcAbertura, setShowCashCalcAbertura] = useState(false);
+  const [cashCountsAbertura, setCashCountsAbertura] = useState<Record<number, number>>({});
+  const cashTotalAbertura = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCountsAbertura[d] || 0), 0), [cashCountsAbertura]);
+  const [cashSnapshotSavedAbertura, setCashSnapshotSavedAbertura] = useState(false);
+  const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCashAbertura, setSavingCashAbertura] = useState(false);
+
+  // Cash calculator state - Fechamento
+  const [showCashCalcFechamento, setShowCashCalcFechamento] = useState(false);
+  const [cashCountsFechamento, setCashCountsFechamento] = useState<Record<number, number>>({});
+  const cashTotalFechamento = useMemo(() => CASH_DENOMINATIONS.reduce((sum, d) => sum + d * (cashCountsFechamento[d] || 0), 0), [cashCountsFechamento]);
+  const [cashSnapshotSavedFechamento, setCashSnapshotSavedFechamento] = useState(false);
+  const [cashSnapshotDataFechamento, setCashSnapshotDataFechamento] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
+  const [savingCashFechamento, setSavingCashFechamento] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -96,8 +116,96 @@ export default function SalonClosing() {
         setOrderPayments(map);
       }
     }
+
+    // Load saved cash snapshots (abertura + fechamento) for salon
+    if (id) {
+      const { data: snapList } = await supabase
+        .from('cash_snapshots')
+        .select('counts, total, updated_at, snapshot_type')
+        .eq('salon_closing_id', id)
+        .order('updated_at', { ascending: false });
+
+      for (const snap of (snapList || [])) {
+        const counts = snap.counts as Record<string, number>;
+        const restored: Record<number, number> = {};
+        for (const [k, v] of Object.entries(counts)) {
+          restored[parseFloat(k)] = v;
+        }
+        const type = (snap as any).snapshot_type || 'abertura';
+        if (type === 'abertura') {
+          setCashSnapshotDataAbertura({ counts, total: Number(snap.total), updated_at: snap.updated_at });
+          setCashSnapshotSavedAbertura(true);
+          setCashCountsAbertura(restored);
+        } else if (type === 'fechamento') {
+          setCashSnapshotDataFechamento({ counts, total: Number(snap.total), updated_at: snap.updated_at });
+          setCashSnapshotSavedFechamento(true);
+          setCashCountsFechamento(restored);
+        }
+      }
+    }
+
     setLoading(false);
   };
+
+  const handleSaveCashSnapshotAbertura = useCallback(async () => {
+    if (!id || !user) return;
+    setSavingCashAbertura(true);
+    const countsJson: Record<string, number> = {};
+    for (const [k, v] of Object.entries(cashCountsAbertura)) {
+      if (v > 0) countsJson[k] = v;
+    }
+
+    const { error } = await supabase
+      .from('cash_snapshots')
+      .upsert({
+        salon_closing_id: id,
+        user_id: user.id,
+        counts: countsJson,
+        total: cashTotalAbertura,
+        updated_at: new Date().toISOString(),
+        snapshot_type: 'abertura',
+      }, { onConflict: 'salon_closing_id,user_id,snapshot_type' });
+
+    if (error) {
+      toast.error('Erro ao salvar contagem de abertura.');
+    } else {
+      setCashSnapshotSavedAbertura(true);
+      setCashSnapshotDataAbertura({ counts: countsJson, total: cashTotalAbertura, updated_at: new Date().toISOString() });
+      toast.success(`Contagem abertura salva: ${formatCurrency(cashTotalAbertura)}`);
+      setShowCashCalcAbertura(false);
+    }
+    setSavingCashAbertura(false);
+  }, [id, user, cashCountsAbertura, cashTotalAbertura]);
+
+  const handleSaveCashSnapshotFechamento = useCallback(async () => {
+    if (!id || !user) return;
+    setSavingCashFechamento(true);
+    const countsJson: Record<string, number> = {};
+    for (const [k, v] of Object.entries(cashCountsFechamento)) {
+      if (v > 0) countsJson[k] = v;
+    }
+
+    const { error } = await supabase
+      .from('cash_snapshots')
+      .upsert({
+        salon_closing_id: id,
+        user_id: user.id,
+        counts: countsJson,
+        total: cashTotalFechamento,
+        updated_at: new Date().toISOString(),
+        snapshot_type: 'fechamento',
+      }, { onConflict: 'salon_closing_id,user_id,snapshot_type' });
+
+    if (error) {
+      toast.error('Erro ao salvar contagem de fechamento.');
+    } else {
+      setCashSnapshotSavedFechamento(true);
+      setCashSnapshotDataFechamento({ counts: countsJson, total: cashTotalFechamento, updated_at: new Date().toISOString() });
+      toast.success(`Contagem fechamento salva: ${formatCurrency(cashTotalFechamento)}`);
+      setShowCashCalcFechamento(false);
+    }
+    setSavingCashFechamento(false);
+  }, [id, user, cashCountsFechamento, cashTotalFechamento]);
 
   const formatDate = (dateStr: string) => {
     const [y, m, d] = dateStr.split('-');
@@ -134,6 +242,13 @@ export default function SalonClosing() {
 
   const totalAssigned = useMemo(() => {
     return Object.values(orderPayments).flat().reduce((sum, p) => sum + p.amount, 0);
+  }, [orderPayments]);
+
+  // Dinheiro total from payments
+  const dinheiroTotal = useMemo(() => {
+    return Object.values(orderPayments).flat()
+      .filter(p => p.payment_method?.toLowerCase() === 'dinheiro')
+      .reduce((sum, p) => sum + p.amount, 0);
   }, [orderPayments]);
 
   const handlePaymentsChanged = useCallback((orderId: string, payments: PaymentEntry[]) => {
@@ -201,7 +316,11 @@ export default function SalonClosing() {
 
   const handleFinalize = async () => {
     const errs: string[] = [];
-    orders.forEach((order, idx) => {
+
+    if (!cashSnapshotSavedAbertura) errs.push('Contagem de Dinheiro na Abertura não salva.');
+    if (!cashSnapshotSavedFechamento) errs.push('Contagem de Dinheiro no Fechamento não salva.');
+
+    orders.forEach((order) => {
       const status = getOrderPaymentStatus(order.id, order.total_amount);
       if (status !== 'complete') {
         const label = order.order_type.toLowerCase() === 'ficha' ? 'Ficha'
@@ -272,6 +391,88 @@ export default function SalonClosing() {
             {closing.status === 'completed' ? 'Concluído' : 'Pendente'}
           </Badge>
         </div>
+      </div>
+
+      {/* Cash Snapshot - Abertura */}
+      <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-success" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro na Abertura</span>
+          </div>
+          {cashSnapshotSavedAbertura ? (
+            <span className="flex items-center gap-1 text-xs text-success">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Salvo
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-warning">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Não salvo
+            </span>
+          )}
+        </div>
+        {cashSnapshotDataAbertura ? (
+          <div className="mt-2 flex items-center gap-4">
+            <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataAbertura.total)}</span>
+            <span className="text-xs text-muted-foreground">
+              Salvo em {new Date(cashSnapshotDataAbertura.updated_at).toLocaleString('pt-BR')}
+            </span>
+            <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalcAbertura(true)}>
+              <Calculator className="h-3.5 w-3.5 mr-1" />
+              Ver detalhes
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalcAbertura(true)}>
+              <Calculator className="h-3.5 w-3.5 mr-1" />
+              Abrir Calculadora
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Cash Snapshot - Fechamento */}
+      <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Banknote className="h-4 w-4 text-primary" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
+          </div>
+          {cashSnapshotSavedFechamento ? (
+            <span className="flex items-center gap-1 text-xs text-success">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Salvo
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 text-xs text-warning">
+              <AlertCircle className="h-3.5 w-3.5" />
+              Não salvo
+            </span>
+          )}
+        </div>
+        {cashSnapshotDataFechamento ? (
+          <div className="mt-2 flex items-center gap-4">
+            <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
+            <span className="text-xs text-muted-foreground">
+              Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
+            </span>
+            <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalcFechamento(true)}>
+              <Calculator className="h-3.5 w-3.5 mr-1" />
+              Ver detalhes
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-2 flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalcFechamento(true)}>
+              <Calculator className="h-3.5 w-3.5 mr-1" />
+              Abrir Calculadora
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Payment summary */}
@@ -458,7 +659,7 @@ export default function SalonClosing() {
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {errors.length} pedido(s) com pagamento incompleto:
+            {errors.length} pendência(s) encontrada(s):
           </p>
           <div className="space-y-1 max-h-[50vh] overflow-y-auto">
             {errors.map((err, i) => (
@@ -477,6 +678,88 @@ export default function SalonClosing() {
             )}
             <Button variant="outline" onClick={() => setShowErrors(false)}>
               Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cash Calculator Dialog - Abertura */}
+      <Dialog open={showCashCalcAbertura} onOpenChange={setShowCashCalcAbertura}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Calculadora de Dinheiro — Abertura (Salão)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+              <span>Cédula/Moeda</span>
+              <span className="text-center">Qtd</span>
+              <span className="text-right">Subtotal</span>
+            </div>
+            {CASH_DENOMINATIONS.map(denom => (
+              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
+                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                <Input type="number" min={0} value={cashCountsAbertura[denom] || ''} onChange={(e) => setCashCountsAbertura(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsAbertura[denom] || 0))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalAbertura)}</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCashCountsAbertura({})}>Limpar</Button>
+            <Button size="sm" onClick={handleSaveCashSnapshotAbertura} disabled={savingCashAbertura || isCompleted}>
+              {savingCashAbertura ? 'Salvando...' : cashSnapshotSavedAbertura ? 'Atualizar Contagem' : 'Salvar Contagem'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cash Calculator Dialog - Fechamento */}
+      <Dialog open={showCashCalcFechamento} onOpenChange={setShowCashCalcFechamento}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5" />
+              Calculadora de Dinheiro — Fechamento (Salão)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
+              <span>Cédula/Moeda</span>
+              <span className="text-center">Qtd</span>
+              <span className="text-right">Subtotal</span>
+            </div>
+            {CASH_DENOMINATIONS.map(denom => (
+              <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
+                <span className="text-sm font-medium text-foreground">{formatCurrency(denom)}</span>
+                <Input type="number" min={0} value={cashCountsFechamento[denom] || ''} onChange={(e) => setCashCountsFechamento(prev => ({ ...prev, [denom]: Math.max(0, parseInt(e.target.value) || 0) }))} className="h-8 text-center text-sm" placeholder="0" />
+                <span className="text-sm text-right font-mono text-foreground">{formatCurrency(denom * (cashCountsFechamento[denom] || 0))}</span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border pt-3 mt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
+              <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalFechamento)}</span>
+            </div>
+            {dinheiroTotal > 0 && (
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-xs text-muted-foreground">Dinheiro lançado nos pedidos:</span>
+                <span className="text-sm font-medium text-muted-foreground font-mono">{formatCurrency(dinheiroTotal)}</span>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCashCountsFechamento({})}>Limpar</Button>
+            <Button size="sm" onClick={handleSaveCashSnapshotFechamento} disabled={savingCashFechamento || isCompleted}>
+              {savingCashFechamento ? 'Salvando...' : cashSnapshotSavedFechamento ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
         </DialogContent>
