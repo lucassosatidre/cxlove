@@ -2,10 +2,12 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTestMode } from '@/hooks/useTestMode';
 import { parseExcelFile } from '@/lib/excel-parser';
 import { isAllOnline } from '@/lib/payment-utils';
 import { Button } from '@/components/ui/button';
 import AppLayout from '@/components/AppLayout';
+import TestBanner from '@/components/TestBanner';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 
 interface ImportSummary {
