@@ -336,6 +336,12 @@ export default function Overview() {
               Controle de Caixa
             </TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="cash-expectation" onClick={(e) => { e.preventDefault(); setShowCashExpectation(true); }}>
+              <Vault className="h-4 w-4 mr-2" />
+              Abrir Caixa
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ═══ Tab: Overview ═══ */}
