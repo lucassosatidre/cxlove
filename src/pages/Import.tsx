@@ -44,7 +44,6 @@ export default function Import() {
           .from('daily_closings')
           .select('id')
           .eq('closing_date', deliveryDate)
-          .eq('user_id', user.id)
           .maybeSingle();
 
         if (!dc) {
@@ -83,7 +82,6 @@ export default function Import() {
           .from('salon_closings')
           .select('id')
           .eq('closing_date', salonDate)
-          .eq('user_id', user.id)
           .maybeSingle();
 
         if (!sc) {

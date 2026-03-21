@@ -47,7 +47,6 @@ export default function TeleImport() {
         .from('daily_closings')
         .select('id')
         .eq('closing_date', firstDate)
-        .eq('user_id', user.id)
         .maybeSingle();
 
       let closingId: string;
