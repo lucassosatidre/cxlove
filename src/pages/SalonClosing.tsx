@@ -424,14 +424,28 @@ export default function SalonClosing() {
             <span className="text-xs text-success font-medium">Todos preenchidos — pronto para concluir!</span>
           )}
         </div>
-        <Button
-          onClick={handleFinalize}
-          disabled={finalizing || isCompleted}
-          className="bg-success hover:bg-success/90 text-success-foreground"
-        >
-          <CheckCircle2 className="h-4 w-4 mr-2" />
-          {isCompleted ? 'Conferência Concluída' : finalizing ? 'Concluindo...' : 'Concluir Conferência'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && isCompleted && (
+            <Button variant="outline" size="sm" onClick={handleReopenClosing}>
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Reabrir
+            </Button>
+          )}
+          {isAdmin && !isCompleted && (
+            <Button variant="outline" size="sm" onClick={handleAdminForceFinalize} disabled={finalizing} className="text-warning border-warning/30 hover:bg-warning/10">
+              <ShieldCheck className="h-4 w-4 mr-1" />
+              Forçar Fechamento
+            </Button>
+          )}
+          <Button
+            onClick={handleFinalize}
+            disabled={finalizing || isCompleted}
+            className="bg-success hover:bg-success/90 text-success-foreground"
+          >
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            {isCompleted ? 'Conferência Concluída' : finalizing ? 'Concluindo...' : 'Concluir Conferência'}
+          </Button>
+        </div>
       </div>
 
       {/* Error dialog */}
