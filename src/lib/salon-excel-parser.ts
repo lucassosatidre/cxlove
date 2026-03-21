@@ -6,6 +6,7 @@ export interface ParsedSalonOrder {
   sale_time: string;
   payment_method: string;
   total_amount: number;
+  discount_amount: number;
 }
 
 export interface SalonParseResult {
@@ -25,7 +26,6 @@ function parseCurrency(value: unknown): number {
 
 function parseDateTime(value: unknown): { date: string; time: string } {
   if (!value) return { date: '', time: '' };
-
   if (typeof value === 'number') {
     const d = XLSX.SSF.parse_date_code(value);
     if (d) {
@@ -34,7 +34,6 @@ function parseDateTime(value: unknown): { date: string; time: string } {
       return { date, time };
     }
   }
-
   if (typeof value === 'string') {
     const str = value.trim();
     const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})?/);
@@ -52,16 +51,26 @@ function parseDateTime(value: unknown): { date: string; time: string } {
       };
     }
   }
-
   return { date: '', time: '' };
 }
 
-// Column indices (0-based): A=0, I=8, L=11, M=12, Y=24
+// Fixed column indices
 const COL_ORDER_TYPE = 0;    // A
 const COL_DATETIME = 8;      // I
 const COL_PAYMENT = 11;      // L
 const COL_CANCELLED = 12;    // M
 const COL_TOTAL = 24;        // Y
+
+function findDiscountColumn(headerRow: unknown[]): number {
+  if (!headerRow) return -1;
+  for (let i = 0; i < headerRow.length; i++) {
+    const val = String(headerRow[i] ?? '').toLowerCase().trim();
+    if (val.includes('desconto') && !val.includes('taxa') && !val.includes('serviço')) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
   return new Promise((resolve, reject) => {
@@ -78,6 +87,9 @@ export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
           return;
         }
 
+        const headerRow = jsonData[0] as unknown[];
+        const colDiscount = findDiscountColumn(headerRow);
+
         const orders: ParsedSalonOrder[] = [];
         let skippedCancelled = 0;
 
@@ -85,7 +97,6 @@ export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
           const row = jsonData[i] as unknown[];
           if (!row || row.length === 0) continue;
 
-          // Skip cancelled orders (column M = 'S')
           const cancelledFlag = String(row[COL_CANCELLED] ?? '').trim().toUpperCase();
           if (cancelledFlag === 'S') {
             skippedCancelled++;
@@ -100,6 +111,7 @@ export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
 
           const { date, time } = parseDateTime(row[COL_DATETIME]);
           const totalAmount = parseCurrency(row[COL_TOTAL]);
+          const discountAmount = colDiscount >= 0 ? Math.abs(parseCurrency(row[colDiscount])) : 0;
 
           orders.push({
             order_type: orderType,
@@ -107,6 +119,7 @@ export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
             sale_time: time,
             payment_method: paymentMethod,
             total_amount: totalAmount,
+            discount_amount: discountAmount,
           });
         }
 

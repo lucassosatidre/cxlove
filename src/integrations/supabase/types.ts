@@ -527,6 +527,7 @@ export type Database = {
         Row: {
           confirmed_at: string | null
           confirmed_by: string | null
+          discount_amount: number
           id: string
           is_confirmed: boolean
           order_type: string
@@ -540,6 +541,7 @@ export type Database = {
         Insert: {
           confirmed_at?: string | null
           confirmed_by?: string | null
+          discount_amount?: number
           id?: string
           is_confirmed?: boolean
           order_type: string
@@ -553,6 +555,7 @@ export type Database = {
         Update: {
           confirmed_at?: string | null
           confirmed_by?: string | null
+          discount_amount?: number
           id?: string
           is_confirmed?: boolean
           order_type?: string
