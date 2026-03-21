@@ -581,6 +581,9 @@ export default function SalonClosing() {
                       <TableCell className="text-xs text-muted-foreground">
                         {order.sale_time || '—'}
                       </TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]" title={order.payment_method || ''}>
+                        {order.payment_method || '—'}
+                      </TableCell>
                       <TableCell className="py-2">
                         <SalonPaymentEditor
                           orderId={order.id}
