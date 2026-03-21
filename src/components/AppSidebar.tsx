@@ -32,7 +32,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     ];
   } else {
     const allNavItems = [
-      { icon: LayoutDashboard, label: 'Visão Geral', path: '/', permission: 'dashboard' },
+      { icon: LayoutDashboard, label: 'Painel', path: '/', permission: 'dashboard' },
       { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
       { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
       { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
