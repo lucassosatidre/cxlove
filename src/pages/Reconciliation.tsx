@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -53,7 +53,7 @@ interface ImportRecord {
 export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { isCaixaTele } = useUserRole();
+  const { isCaixaTele, isAdmin } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
@@ -377,6 +377,34 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
+  const handleAdminForceFinalize = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
+    if (!confirmed) return;
+    setCompleting(true);
+    const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
+    if (error) {
+      toast.error('Erro ao finalizar fechamento.');
+    } else {
+      setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
+      toast.success('Fechamento finalizado pelo administrador.');
+    }
+    setCompleting(false);
+  }, [id, isAdmin]);
+
+  const handleReopenClosing = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const confirmed = window.confirm('Deseja reabrir este fechamento? O status voltará para pendente.');
+    if (!confirmed) return;
+    const { error } = await supabase.from('daily_closings').update({ status: 'pending' }).eq('id', id);
+    if (error) {
+      toast.error('Erro ao reabrir fechamento.');
+    } else {
+      setClosingData(prev => prev ? { ...prev, status: 'pending' } : prev);
+      toast.success('Fechamento reaberto com sucesso.');
+    }
+  }, [id, isAdmin]);
+
   const handleSaveCashSnapshotAbertura = useCallback(async () => {
     if (!id || !user) return;
     setSavingCashAbertura(true);
@@ -438,6 +466,29 @@ export default function Reconciliation() {
   }, [id, user, cashCountsFechamento, cashTotalFechamento]);
 
   const handleSaveConference = useCallback(() => {
+    // Admin can force-finalize even with errors
+    if (isAdmin) {
+      const errors: string[] = [];
+
+      if (!cashSnapshotSavedAbertura) errors.push('Contagem de Dinheiro na Abertura não salva.');
+      if (!cashSnapshotSavedFechamento) errors.push('Contagem de Dinheiro no Fechamento não salva.');
+
+      for (const order of orders) {
+        if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
+        if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
+        if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) errors.push(`Comanda #${order.order_number}: rateio pendente.`);
+      }
+
+      if (errors.length === 0) {
+        finalize();
+      } else {
+        // Show errors but allow admin to force
+        setConferenceErrors(errors);
+        setShowConferenceErrors(true);
+      }
+      return;
+    }
+
     const errors: string[] = [];
 
     if (!cashSnapshotSavedAbertura) {
@@ -464,7 +515,7 @@ export default function Reconciliation() {
       setConferenceErrors(errors);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => [
@@ -606,10 +657,22 @@ export default function Reconciliation() {
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
-              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted} className="bg-success hover:bg-success/90 text-success-foreground">
+              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !isAdmin} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>
               </Button>
+              {isAdmin && isCompleted && (
+                <Button variant="outline" size="sm" onClick={handleReopenClosing}>
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Reabrir</span>
+                </Button>
+              )}
+              {isAdmin && !isCompleted && (
+                <Button variant="outline" size="sm" onClick={handleAdminForceFinalize} disabled={completing} className="border-warning text-warning hover:bg-warning/10">
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Forçar Fechamento</span>
+                </Button>
+              )}
             </div>
           </div>
         </header>
@@ -955,13 +1018,21 @@ export default function Reconciliation() {
                 </span>
               )}
             </div>
-            <Button
-              onClick={handleSaveConference}
-              disabled={isCompleted || completing}
-              className="bg-success hover:bg-success/90 text-success-foreground"
-            >
-              {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {isAdmin && isCompleted && (
+                <Button variant="outline" size="sm" onClick={handleReopenClosing}>
+                  <RotateCcw className="h-4 w-4 mr-1" />
+                  Reabrir
+                </Button>
+              )}
+              <Button
+                onClick={handleSaveConference}
+                disabled={(isCompleted && !isAdmin) || completing}
+                className="bg-success hover:bg-success/90 text-success-foreground"
+              >
+                {completing ? 'Finalizando...' : 'Finalizar Fechamento'}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -1099,6 +1170,12 @@ export default function Reconciliation() {
             <Button variant="outline" onClick={() => setShowConferenceErrors(false)}>
               Entendi
             </Button>
+            {isAdmin && (
+              <Button variant="destructive" onClick={() => { setShowConferenceErrors(false); handleAdminForceFinalize(); }}>
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                Forçar Fechamento
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
