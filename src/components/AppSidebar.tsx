@@ -34,6 +34,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     const allNavItems = [
       { icon: LayoutDashboard, label: 'Painel', path: '/', permission: 'dashboard' },
       { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
+      { icon: FlaskConical, label: 'Tele Teste', path: '/tele-teste', permission: 'dashboard' },
       { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
     ];
     navItems = allNavItems.filter(item => hasPermission(item.permission));
