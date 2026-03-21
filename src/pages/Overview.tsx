@@ -321,8 +321,6 @@ export default function Overview() {
     <AppLayout
       title="Visão Geral"
       subtitle="Acompanhamento diário — Conferência, Conciliação & Cofre"
-      headerActions={undefined}
-      }
     >
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="mb-6">
