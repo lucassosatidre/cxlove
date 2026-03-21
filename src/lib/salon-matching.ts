@@ -148,13 +148,20 @@ function getTargetAmounts(order: SalonOrderForMatching, classification: OrderCla
   const total = order.total_amount;
 
   if (classification.isMixed) {
-    // For mixed orders, we don't know the exact card portion.
-    // The card portion = total - cash portion. But we don't know cash portion.
-    // So we accept any match <= total as a partial match candidate.
-    // We'll handle this specially in matching.
+    // For mixed orders, add both total and estimated card-only portion
     targets.push(total);
     if (order.discount_amount > 0.01) {
       targets.push(Math.round((total + order.discount_amount) * 100) / 100);
+    }
+    // Add estimated card portion: total * (cardLines / totalMethods)
+    const totalMethods = classification.cardMethods.length + classification.externalMethods.length;
+    if (totalMethods > 0 && classification.expectedCardLines < totalMethods) {
+      const cardPortion = Math.round((total * classification.expectedCardLines / totalMethods) * 100) / 100;
+      targets.push(cardPortion);
+      if (order.discount_amount > 0.01) {
+        const totalWithDiscount = total + order.discount_amount;
+        targets.push(Math.round((totalWithDiscount * classification.expectedCardLines / totalMethods) * 100) / 100);
+      }
     }
   } else {
     targets.push(total);
@@ -335,9 +342,12 @@ export function matchSalonTransactionsToOrders(
         const combo = findExactGroup(waiterTxs, expectedLines, target, COMBINED_TOLERANCE);
         if (combo && (!bestMatch || combo.diff < bestMatch.diff)) {
           const isDiscountMatch = Math.abs(target - order.total_amount) > 0.01;
+          const isMixedPartial = cls.isMixed && target < order.total_amount;
           bestMatch = {
             txs: combo.txs, diff: combo.diff, target, sameWaiter: true,
-            reason: `Match combinado: ${expectedLines} transações, mesmo garçom, soma ${combo.diff < 0.01 ? 'exata' : `≈ R$${combo.diff.toFixed(2)}`}${isDiscountMatch ? ', total + desconto' : ''}`,
+            reason: isMixedPartial
+              ? `Match combinado misto: ${expectedLines} transações cartão, mesmo garçom, parte dinheiro separada, diff ${combo.diff < 0.01 ? 'zero' : `R$${combo.diff.toFixed(2)}`}`
+              : `Match combinado: ${expectedLines} transações, mesmo garçom, soma ${combo.diff < 0.01 ? 'exata' : `≈ R$${combo.diff.toFixed(2)}`}${isDiscountMatch ? ', total + desconto' : ''}`,
           };
         }
       }
@@ -347,9 +357,12 @@ export function matchSalonTransactionsToOrders(
         const combo = findExactGroup(remainingTxs, expectedLines, target, COMBINED_TOLERANCE);
         if (combo) {
           const isDiscountMatch = Math.abs(target - order.total_amount) > 0.01;
+          const isMixedPartial = cls.isMixed && target < order.total_amount;
           bestMatch = {
             txs: combo.txs, diff: combo.diff, target, sameWaiter: false,
-            reason: `Match combinado: ${expectedLines} transações, garçons diferentes, soma ${combo.diff < 0.01 ? 'exata' : `≈ R$${combo.diff.toFixed(2)}`}${isDiscountMatch ? ', total + desconto' : ''}`,
+            reason: isMixedPartial
+              ? `Match combinado misto: ${expectedLines} transações cartão, garçons diferentes, parte dinheiro separada, diff ${combo.diff < 0.01 ? 'zero' : `R$${combo.diff.toFixed(2)}`}`
+              : `Match combinado: ${expectedLines} transações, garçons diferentes, soma ${combo.diff < 0.01 ? 'exata' : `≈ R$${combo.diff.toFixed(2)}`}${isDiscountMatch ? ', total + desconto' : ''}`,
           };
         }
       }
@@ -563,38 +576,109 @@ export function matchSalonTransactionsToOrders(
 
   // ═══════════════════════════════════════════
   // PHASE 6: Mixed orders — accept partial card match
-  // For orders like "Crédito, Dinheiro", accept a card tx < total
+  // For orders like "Crédito, Dinheiro" or "Crédito, Débito, Débito, Dinheiro"
+  // The card sum will be LESS than total. The remainder is cash/external.
   // ═══════════════════════════════════════════
+
+  const MIXED_TOLERANCE = 0.10; // tolerance for mixed orders with cash
 
   for (const order of machineOrders) {
     if (matchedOrderIds.has(order.id)) continue;
     const cls = classifications.get(order.id)!;
     if (!cls.isMixed) continue;
-    if (cls.expectedCardLines !== 1) continue;
 
-    // Find remaining txs and pick by best time proximity
-    const remaining = transactions.filter(tx => !matchedTxIds.has(tx.id) && tx.gross_amount < order.total_amount);
-    if (remaining.length === 0) continue;
+    const expectedCardLines = cls.expectedCardLines;
+    const totalMethods = cls.cardMethods.length + cls.externalMethods.length;
+    const remaining = transactions.filter(tx => !matchedTxIds.has(tx.id));
 
-    // Score by time proximity
-    const scored = remaining.map(tx => ({
-      tx,
-      gap: timeGapMinutes(tx.sale_time, order.sale_time),
-    })).filter(c => c.gap >= 0 && c.gap <= 120)
-      .sort((a, b) => a.gap - b.gap);
+    if (expectedCardLines >= 2) {
+      // Multi-card + cash: find N card transactions whose sum < total
+      // Estimate card portion: total * (cardLines / totalMethods)
+      const estimatedCardPortion = Math.round((order.total_amount * expectedCardLines / totalMethods) * 100) / 100;
+      // Also try total + discount card portion
+      const estimatedTargets = [estimatedCardPortion];
+      if (order.discount_amount > 0.01) {
+        const totalWithDiscount = order.total_amount + order.discount_amount;
+        estimatedTargets.push(Math.round((totalWithDiscount * expectedCardLines / totalMethods) * 100) / 100);
+      }
 
-    if (scored.length === 1) {
-      const { tx, gap } = scored[0];
-      results.push({
-        transactionId: tx.id,
-        orderId: order.id,
-        matchType: 'approximate',
-        confidence: 'medium',
-        amountDiff: order.total_amount - tx.gross_amount,
-        matchReason: `Match parcial misto: cartão ${formatBRL(tx.gross_amount)} + dinheiro/externo, ${gap}min após pedido`,
-      });
-      matchedTxIds.add(tx.id);
-      matchedOrderIds.add(order.id);
+      let bestMatch: { txs: TxForMatching[]; diff: number; target: number; sameWaiter: boolean } | null = null;
+
+      for (const cardTarget of estimatedTargets) {
+        // Same-waiter first
+        const txsByWaiter = new Map<string, TxForMatching[]>();
+        for (const tx of remaining) {
+          const key = tx.machine_serial || '__none__';
+          const arr = txsByWaiter.get(key) || [];
+          arr.push(tx);
+          txsByWaiter.set(key, arr);
+        }
+
+        for (const [serial, waiterTxs] of txsByWaiter) {
+          if (serial === '__none__' || waiterTxs.length < expectedCardLines) continue;
+          const combo = findExactGroup(waiterTxs, expectedCardLines, cardTarget, MIXED_TOLERANCE);
+          if (combo && (!bestMatch || combo.diff < bestMatch.diff)) {
+            bestMatch = { txs: combo.txs, diff: combo.diff, target: cardTarget, sameWaiter: true };
+          }
+        }
+
+        if (!bestMatch) {
+          const combo = findExactGroup(remaining, expectedCardLines, cardTarget, MIXED_TOLERANCE);
+          if (combo) {
+            bestMatch = { txs: combo.txs, diff: combo.diff, target: cardTarget, sameWaiter: false };
+          }
+        }
+      }
+
+      if (bestMatch) {
+        const cardSum = bestMatch.txs.reduce((s, t) => s + t.gross_amount, 0);
+        const cashPortion = order.total_amount - cardSum;
+        const confidence: 'high' | 'medium' = bestMatch.sameWaiter ? 'high' : 'medium';
+        const reason = `Match combinado misto: ${expectedCardLines} transações cartão (${formatBRL(cardSum)}) + dinheiro (${formatBRL(cashPortion)}), diff ${formatBRL(bestMatch.diff)}`;
+
+        for (let t = 0; t < bestMatch.txs.length; t++) {
+          const tx = bestMatch.txs[t];
+          const combinedWith = bestMatch.txs.filter((_, idx) => idx !== t).map(x => x.id).join(',');
+          results.push({
+            transactionId: tx.id,
+            orderId: order.id,
+            matchType: 'combined',
+            confidence,
+            amountDiff: bestMatch.diff,
+            combinedWithTransactionId: combinedWith,
+            matchReason: reason,
+          });
+          matchedTxIds.add(tx.id);
+        }
+        matchedOrderIds.add(order.id);
+        continue;
+      }
+    }
+
+    // Single card line + cash: accept a card tx < total
+    if (expectedCardLines === 1) {
+      const cardOnly = remaining.filter(tx => tx.gross_amount < order.total_amount);
+      if (cardOnly.length === 0) continue;
+
+      const scored = cardOnly.map(tx => ({
+        tx,
+        gap: timeGapMinutes(tx.sale_time, order.sale_time),
+      })).filter(c => c.gap >= 0 && c.gap <= 120)
+        .sort((a, b) => a.gap - b.gap);
+
+      if (scored.length === 1) {
+        const { tx, gap } = scored[0];
+        results.push({
+          transactionId: tx.id,
+          orderId: order.id,
+          matchType: 'approximate',
+          confidence: 'medium',
+          amountDiff: order.total_amount - tx.gross_amount,
+          matchReason: `Match parcial misto: cartão ${formatBRL(tx.gross_amount)} + dinheiro/externo, ${gap}min após pedido`,
+        });
+        matchedTxIds.add(tx.id);
+        matchedOrderIds.add(order.id);
+      }
     }
   }
 
