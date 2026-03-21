@@ -68,6 +68,11 @@ const App = () => (
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
+            {/* Tele Teste routes */}
+            <Route path="/tele-teste" element={<ProtectedRoute><DashboardTest /></ProtectedRoute>} />
+            <Route path="/tele-teste/import" element={<ProtectedRoute><TeleImportTest /></ProtectedRoute>} />
+            <Route path="/reconciliation-teste/:id" element={<ProtectedRoute><ReconciliationTest /></ProtectedRoute>} />
+            <Route path="/delivery-reconciliation-teste/:id" element={<ProtectedRoute><DeliveryReconciliationTest /></ProtectedRoute>} />
             <Route path="/salon" element={<ProtectedRoute><SalonDashboard /></ProtectedRoute>} />
             <Route path="/salon/import" element={<ProtectedRoute><SalonImport /></ProtectedRoute>} />
             <Route path="/salon/closing/:id" element={<ProtectedRoute><SalonClosing /></ProtectedRoute>} />
