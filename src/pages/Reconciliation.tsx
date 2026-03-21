@@ -466,6 +466,29 @@ export default function Reconciliation() {
   }, [id, user, cashCountsFechamento, cashTotalFechamento]);
 
   const handleSaveConference = useCallback(() => {
+    // Admin can force-finalize even with errors
+    if (isAdmin) {
+      const errors: string[] = [];
+
+      if (!cashSnapshotSavedAbertura) errors.push('Contagem de Dinheiro na Abertura não salva.');
+      if (!cashSnapshotSavedFechamento) errors.push('Contagem de Dinheiro no Fechamento não salva.');
+
+      for (const order of orders) {
+        if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
+        if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
+        if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) errors.push(`Comanda #${order.order_number}: rateio pendente.`);
+      }
+
+      if (errors.length === 0) {
+        finalize();
+      } else {
+        // Show errors but allow admin to force
+        setConferenceErrors(errors);
+        setShowConferenceErrors(true);
+      }
+      return;
+    }
+
     const errors: string[] = [];
 
     if (!cashSnapshotSavedAbertura) {
@@ -492,7 +515,7 @@ export default function Reconciliation() {
       setConferenceErrors(errors);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => [
