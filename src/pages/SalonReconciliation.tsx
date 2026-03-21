@@ -715,7 +715,7 @@ export default function SalonReconciliation() {
                                 : confidence === 'medium' ? 'Match exato'
                                 : 'Baixa confiança'}
                             </Badge>
-                            {isCombined && (
+                            {isCombined && matchedTxs[0]?.match_type !== 'combined_mixed' && (
                               <span className="text-[10px] text-muted-foreground">
                                 Soma: <span className="font-mono tabular-nums font-medium">{formatCurrency(totalMatchedAmount)}</span>
                               </span>
