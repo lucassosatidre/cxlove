@@ -79,7 +79,7 @@ export default function SalonReconciliation() {
 
   const loadData = async () => {
     const [{ data: closing }, { data: ordData }, { data: txData }] = await Promise.all([
-      supabase.from('salon_closings').select('closing_date').eq('id', id!).single(),
+      supabase.from('salon_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('salon_orders').select('id, order_type, sale_time, total_amount').eq('salon_closing_id', id!),
       supabase.from('salon_card_transactions').select('*').eq('salon_closing_id', id!),
     ]);
