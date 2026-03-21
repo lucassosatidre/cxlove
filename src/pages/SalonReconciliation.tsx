@@ -140,6 +140,9 @@ export default function SalonReconciliation() {
   const unmatchedTransactions = useMemo(() =>
     transactions.filter(tx => !tx.matched_order_id), [transactions]);
 
+  const waiterMap = useMemo(() =>
+    buildWaiterMap(transactions.map(tx => tx.machine_serial)), [transactions]);
+
   const stats = useMemo(() => {
     const total = eligibleOrders.length;
     const matched = eligibleOrders.filter(o => matchedOrderIds.has(o.id)).length;
