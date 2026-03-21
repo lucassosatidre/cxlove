@@ -5,8 +5,9 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2, ShieldCheck, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUserRole } from '@/hooks/useUserRole';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -46,6 +47,7 @@ interface PaymentEntry {
 
 export default function SalonClosing() {
   const { id } = useParams<{ id: string }>();
+  const { isAdmin } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<SalonOrder[]>([]);
   const [closing, setClosing] = useState<ClosingData | null>(null);
@@ -144,6 +146,37 @@ export default function SalonClosing() {
     const sum = payments.reduce((acc, p) => acc + p.amount, 0);
     return Math.abs(totalAmount - sum) < 0.01 ? 'complete' : 'partial';
   }, [orderPayments]);
+
+  const handleAdminForceFinalize = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error('Erro ao forçar fechamento');
+    } else {
+      toast.success('Fechamento forçado pelo administrador.');
+      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
+      setShowErrors(false);
+    }
+    setFinalizing(false);
+  }, [id, isAdmin]);
+
+  const handleReopenClosing = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) {
+      setClosing(prev => prev ? { ...prev, status: 'pending' } : prev);
+      toast.success('Fechamento reaberto com sucesso.');
+    } else {
+      toast.error('Erro ao reabrir fechamento.');
+    }
+  }, [id, isAdmin]);
 
   if (loading) {
     return (
@@ -391,14 +424,28 @@ export default function SalonClosing() {
             <span className="text-xs text-success font-medium">Todos preenchidos — pronto para concluir!</span>
           )}
         </div>
-        <Button
-          onClick={handleFinalize}
-          disabled={finalizing || isCompleted}
-          className="bg-success hover:bg-success/90 text-success-foreground"
-        >
-          <CheckCircle2 className="h-4 w-4 mr-2" />
-          {isCompleted ? 'Conferência Concluída' : finalizing ? 'Concluindo...' : 'Concluir Conferência'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {isAdmin && isCompleted && (
+            <Button variant="outline" size="sm" onClick={handleReopenClosing}>
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Reabrir
+            </Button>
+          )}
+          {isAdmin && !isCompleted && (
+            <Button variant="outline" size="sm" onClick={handleAdminForceFinalize} disabled={finalizing} className="text-warning border-warning/30 hover:bg-warning/10">
+              <ShieldCheck className="h-4 w-4 mr-1" />
+              Forçar Fechamento
+            </Button>
+          )}
+          <Button
+            onClick={handleFinalize}
+            disabled={finalizing || isCompleted}
+            className="bg-success hover:bg-success/90 text-success-foreground"
+          >
+            <CheckCircle2 className="h-4 w-4 mr-2" />
+            {isCompleted ? 'Conferência Concluída' : finalizing ? 'Concluindo...' : 'Concluir Conferência'}
+          </Button>
+        </div>
       </div>
 
       {/* Error dialog */}
@@ -422,6 +469,12 @@ export default function SalonClosing() {
             ))}
           </div>
           <DialogFooter>
+            {isAdmin && (
+              <Button variant="destructive" onClick={handleAdminForceFinalize} disabled={finalizing}>
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                Forçar Fechamento (Admin)
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setShowErrors(false)}>
               Entendi
             </Button>
