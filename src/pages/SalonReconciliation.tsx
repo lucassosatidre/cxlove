@@ -676,23 +676,25 @@ export default function SalonReconciliation() {
                         <GripVertical className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-medium text-foreground">{tx.payment_method}</span>
+                            <div className="flex items-center gap-1.5">
+                              {tx.sale_time && (
+                                <span className="text-xs text-muted-foreground font-mono tabular-nums">
+                                  <Clock className="h-3 w-3 inline mr-0.5" />{tx.sale_time}
+                                </span>
+                              )}
+                              <span className="text-xs font-medium text-foreground">{tx.payment_method}</span>
+                            </div>
                             <span className="text-sm font-mono tabular-nums font-medium text-foreground">
                               {formatCurrency(tx.gross_amount)}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
+                            {tx.machine_serial && waiterMap.has(tx.machine_serial) && (
+                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-primary/30 text-primary">
+                                {waiterMap.get(tx.machine_serial)}
+                              </Badge>
+                            )}
                             {tx.brand && <span className="text-[10px] text-muted-foreground">{tx.brand}</span>}
-                            {tx.sale_time && (
-                              <span className="text-[10px] text-muted-foreground">
-                                <Clock className="h-2.5 w-2.5 inline mr-0.5" />{tx.sale_time}
-                              </span>
-                            )}
-                            {tx.machine_serial && (
-                              <span className="text-[10px] text-muted-foreground font-mono tabular-nums truncate max-w-[100px]" title={tx.machine_serial}>
-                                {tx.machine_serial.slice(-6)}
-                              </span>
-                            )}
                           </div>
                         </div>
                       </div>
