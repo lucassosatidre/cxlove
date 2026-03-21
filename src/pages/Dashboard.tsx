@@ -231,6 +231,19 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
+                      {closingImports.length === 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEmptyClosing(closing.id);
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Badge
                         variant={closing.status === 'completed' ? 'default' : 'secondary'}
                         className={closing.status === 'completed' ? 'bg-success text-success-foreground' : 'bg-warning/15 text-warning border-warning/30'}
