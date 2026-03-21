@@ -148,13 +148,20 @@ function getTargetAmounts(order: SalonOrderForMatching, classification: OrderCla
   const total = order.total_amount;
 
   if (classification.isMixed) {
-    // For mixed orders, we don't know the exact card portion.
-    // The card portion = total - cash portion. But we don't know cash portion.
-    // So we accept any match <= total as a partial match candidate.
-    // We'll handle this specially in matching.
+    // For mixed orders, add both total and estimated card-only portion
     targets.push(total);
     if (order.discount_amount > 0.01) {
       targets.push(Math.round((total + order.discount_amount) * 100) / 100);
+    }
+    // Add estimated card portion: total * (cardLines / totalMethods)
+    const totalMethods = classification.cardMethods.length + classification.externalMethods.length;
+    if (totalMethods > 0 && classification.expectedCardLines < totalMethods) {
+      const cardPortion = Math.round((total * classification.expectedCardLines / totalMethods) * 100) / 100;
+      targets.push(cardPortion);
+      if (order.discount_amount > 0.01) {
+        const totalWithDiscount = total + order.discount_amount;
+        targets.push(Math.round((totalWithDiscount * classification.expectedCardLines / totalMethods) * 100) / 100);
+      }
     }
   } else {
     targets.push(total);
