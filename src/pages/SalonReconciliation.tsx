@@ -16,6 +16,7 @@ import AppSidebar from '@/components/AppSidebar';
 import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
+import { buildWaiterMap } from '@/lib/waiter-labels';
 import { useUserRole } from '@/hooks/useUserRole';
 
 interface SalonOrder {
