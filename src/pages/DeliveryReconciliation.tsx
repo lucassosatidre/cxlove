@@ -10,12 +10,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
-  Banknote
+  Banknote, ShieldCheck, RotateCcw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
+import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
 
 interface Order {
@@ -54,6 +55,7 @@ interface UndoAction {
 export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -62,6 +64,7 @@ export default function DeliveryReconciliation() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [closingDate, setClosingDate] = useState('');
+  const [reconciliationStatus, setReconciliationStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const [filterMatch, setFilterMatch] = useState('all');
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState('all');
@@ -81,7 +84,7 @@ export default function DeliveryReconciliation() {
 
   const loadData = async () => {
     const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
-      supabase.from('daily_closings').select('closing_date').eq('id', id!).single(),
+      supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
         .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
         .eq('daily_closing_id', id!),
@@ -95,6 +98,7 @@ export default function DeliveryReconciliation() {
 
     const dateStr = closing?.closing_date || '';
     setClosingDate(dateStr);
+    setReconciliationStatus(closing?.reconciliation_status || 'pending');
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
@@ -443,6 +447,34 @@ export default function DeliveryReconciliation() {
       setDragTxId(null);
     }
   }, [dragTxId, manualMatch]);
+
+  const handleFinalizeReconciliation = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const { error } = await supabase
+      .from('daily_closings')
+      .update({ reconciliation_status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) {
+      setReconciliationStatus('completed');
+      toast.success('Conciliação finalizada com sucesso.');
+    } else {
+      toast.error('Erro ao finalizar conciliação.');
+    }
+  }, [id, isAdmin]);
+
+  const handleReopenReconciliation = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const { error } = await supabase
+      .from('daily_closings')
+      .update({ reconciliation_status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (!error) {
+      setReconciliationStatus('pending');
+      toast.success('Conciliação reaberta com sucesso.');
+    } else {
+      toast.error('Erro ao reabrir conciliação.');
+    }
+  }, [id, isAdmin]);
 
   const formatDate = (d: string) => {
     if (!d) return '';
@@ -985,6 +1017,32 @@ export default function DeliveryReconciliation() {
           </div>
         </div>
       </div>
+      {/* Sticky footer - Admin reconciliation controls */}
+      {isAdmin && (
+        <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border px-6 py-3 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <Badge className={reconciliationStatus === 'completed' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}>
+              {reconciliationStatus === 'completed' ? '✅ Conciliação concluída' : `⏳ ${stats.matched}/${stats.total} conciliados`}
+            </Badge>
+            {reconciliationStatus !== 'completed' && stats.pending === 0 && stats.txUnmatched === 0 && stats.total > 0 && (
+              <span className="text-xs text-success font-medium">Todos conciliados — pronto para concluir!</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {reconciliationStatus === 'completed' ? (
+              <Button variant="outline" size="sm" onClick={handleReopenReconciliation}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Reabrir Conciliação
+              </Button>
+            ) : (
+              <Button onClick={handleFinalizeReconciliation} className="bg-success hover:bg-success/90 text-success-foreground" size="sm">
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                Concluir Conciliação
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
