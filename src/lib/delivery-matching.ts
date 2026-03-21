@@ -203,6 +203,8 @@ export function matchTransactionsToOrders(
 
     for (const order of eligibleOrders) {
       if (isOrderFullyMatched(order.id)) continue;
+      // Transaction must be after order time
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
 
       const methods = order.payment_method.split(',').map(m => m.trim().toLowerCase());
       const hasVoucherDesconto = methods.some(m => m.includes('voucher parceiro desconto'));
