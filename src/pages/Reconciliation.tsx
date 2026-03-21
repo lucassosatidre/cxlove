@@ -56,6 +56,7 @@ export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isCaixaTele, isAdmin } = useUserRole();
+  const { isTestMode } = useTestMode();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
