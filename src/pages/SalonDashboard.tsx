@@ -114,6 +114,21 @@ export default function SalonDashboard() {
     }
   };
 
+  const handleDeleteEmptyClosing = async (closingId: string) => {
+    const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
+    if (!confirmed) return;
+    try {
+      // Clean up any card transactions referencing this closing
+      await supabase.from('salon_card_transactions').delete().eq('salon_closing_id', closingId);
+      await supabase.from('salon_closings').delete().eq('id', closingId);
+      toast.success('Fechamento removido com sucesso.');
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar fechamento.');
+      console.error(err);
+    }
+  };
+
   const today = new Date();
   const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   const weekday = today.toLocaleDateString('pt-BR', { weekday: 'long' });
@@ -211,6 +226,16 @@ export default function SalonDashboard() {
                       >
                         {closing.status === 'completed' ? 'Concluído' : 'Pendente'}
                       </Badge>
+                      {closingImports.length === 0 && closing.status !== 'completed' && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteEmptyClosing(closing.id); }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </button>
