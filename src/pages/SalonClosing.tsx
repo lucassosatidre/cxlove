@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2, ShieldCheck, RotateCcw, Banknote, Calculator } from 'lucide-react';
+import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
@@ -14,16 +14,11 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import SalonPaymentEditor from '@/components/SalonPaymentEditor';
 
 interface SalonOrder {
   id: string;
@@ -32,19 +27,12 @@ interface SalonOrder {
   sale_date: string | null;
   payment_method: string;
   total_amount: number;
-  is_confirmed: boolean;
 }
 
 interface ClosingData {
   id: string;
   closing_date: string;
   status: string;
-}
-
-interface PaymentEntry {
-  id?: string;
-  payment_method: string;
-  amount: number;
 }
 
 export default function SalonClosing() {
@@ -57,12 +45,6 @@ export default function SalonClosing() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [showErrors, setShowErrors] = useState(false);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [finalizing, setFinalizing] = useState(false);
-  
-  // Map of orderId -> PaymentEntry[]
-  const [orderPayments, setOrderPayments] = useState<Record<string, PaymentEntry[]>>({});
 
   // Cash calculator state - Abertura
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
@@ -92,51 +74,9 @@ export default function SalonClosing() {
       supabase.from('salon_orders').select('*').eq('salon_closing_id', id!).order('sale_time', { ascending: true }),
     ]);
     setClosing(closingData as ClosingData | null);
-    const ordersList = (ordersData as SalonOrder[]) || [];
-    setOrders(ordersList);
+    setOrders((ordersData as SalonOrder[]) || []);
 
-    // Load all payments for these orders
-    if (ordersList.length > 0) {
-      const orderIds = ordersList.map(o => o.id);
-      const { data: paymentsData } = await supabase
-        .from('salon_order_payments')
-        .select('*')
-        .in('salon_order_id', orderIds);
-
-      const map: Record<string, PaymentEntry[]> = {};
-      if (paymentsData) {
-        paymentsData.forEach((p: any) => {
-          if (!map[p.salon_order_id]) map[p.salon_order_id] = [];
-          map[p.salon_order_id].push({
-            id: p.id,
-            payment_method: p.payment_method,
-            amount: Number(p.amount),
-          });
-        });
-      }
-
-      // Pre-populate orders with split payments from Saipos that have no saved payments
-      ordersList.forEach(order => {
-        if (map[order.id] && map[order.id].length > 0) return; // already has saved payments
-        const methods = order.payment_method
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean);
-        if (methods.length > 1) {
-          const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
-          map[order.id] = methods.map((m, i) => ({
-            payment_method: m,
-            amount: i === methods.length - 1
-              ? Math.round((order.total_amount - splitAmount * (methods.length - 1)) * 100) / 100
-              : splitAmount,
-          }));
-        }
-      });
-
-      setOrderPayments(map);
-    }
-
-    // Load saved cash snapshots (abertura + fechamento) for salon
+    // Load saved cash snapshots
     if (id) {
       const { data: snapList } = await supabase
         .from('cash_snapshots')
@@ -173,18 +113,12 @@ export default function SalonClosing() {
     for (const [k, v] of Object.entries(cashCountsAbertura)) {
       if (v > 0) countsJson[k] = v;
     }
-
     const { error } = await supabase
       .from('cash_snapshots')
       .upsert({
-        salon_closing_id: id,
-        user_id: user.id,
-        counts: countsJson,
-        total: cashTotalAbertura,
-        updated_at: new Date().toISOString(),
-        snapshot_type: 'abertura',
+        salon_closing_id: id, user_id: user.id, counts: countsJson,
+        total: cashTotalAbertura, updated_at: new Date().toISOString(), snapshot_type: 'abertura',
       }, { onConflict: 'salon_closing_id,user_id,snapshot_type' });
-
     if (error) {
       toast.error('Erro ao salvar contagem de abertura.');
     } else {
@@ -203,18 +137,12 @@ export default function SalonClosing() {
     for (const [k, v] of Object.entries(cashCountsFechamento)) {
       if (v > 0) countsJson[k] = v;
     }
-
     const { error } = await supabase
       .from('cash_snapshots')
       .upsert({
-        salon_closing_id: id,
-        user_id: user.id,
-        counts: countsJson,
-        total: cashTotalFechamento,
-        updated_at: new Date().toISOString(),
-        snapshot_type: 'fechamento',
+        salon_closing_id: id, user_id: user.id, counts: countsJson,
+        total: cashTotalFechamento, updated_at: new Date().toISOString(), snapshot_type: 'fechamento',
       }, { onConflict: 'salon_closing_id,user_id,snapshot_type' });
-
     if (error) {
       toast.error('Erro ao salvar contagem de fechamento.');
     } else {
@@ -238,7 +166,8 @@ export default function SalonClosing() {
       if (search) {
         const s = search.toLowerCase();
         if (!o.order_type.toLowerCase().includes(s) &&
-            !(o.sale_time || '').includes(s)) return false;
+            !(o.sale_time || '').includes(s) &&
+            !o.payment_method.toLowerCase().includes(s)) return false;
       }
       if (filterType && filterType !== '__all__' && o.order_type !== filterType) return false;
       return true;
@@ -247,70 +176,59 @@ export default function SalonClosing() {
 
   const totalAmount = useMemo(() => filtered.reduce((sum, o) => sum + o.total_amount, 0), [filtered]);
 
-  // Payment summary from manually entered payments only
+  // Build display rows: split rateio into separate lines
+  const displayRows = useMemo(() => {
+    const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number }[] = [];
+    filtered.forEach(order => {
+      const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
+      if (methods.length > 1) {
+        const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
+        methods.forEach((method, i) => {
+          const amount = i === methods.length - 1
+            ? Math.round((order.total_amount - splitAmount * (methods.length - 1)) * 100) / 100
+            : splitAmount;
+          rows.push({
+            orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
+            payment_method: method, amount, isRateio: true, rateioIndex: i, rateioTotal: methods.length,
+          });
+        });
+      } else {
+        rows.push({
+          orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
+          payment_method: methods[0] || order.payment_method, amount: order.total_amount,
+          isRateio: false, rateioIndex: 0, rateioTotal: 1,
+        });
+      }
+    });
+    return rows;
+  }, [filtered]);
+
+  // Payment summary from Saipos data
   const paymentSummary = useMemo(() => {
     const map: Record<string, { count: number; total: number }> = {};
-    Object.values(orderPayments).flat().forEach(p => {
-      if (!p.payment_method) return;
-      if (!map[p.payment_method]) map[p.payment_method] = { count: 0, total: 0 };
-      map[p.payment_method].count++;
-      map[p.payment_method].total += p.amount;
+    displayRows.forEach(r => {
+      if (!r.payment_method) return;
+      if (!map[r.payment_method]) map[r.payment_method] = { count: 0, total: 0 };
+      map[r.payment_method].count++;
+      map[r.payment_method].total += r.amount;
     });
     return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
-  }, [orderPayments]);
+  }, [displayRows]);
 
-  const totalAssigned = useMemo(() => {
-    return Object.values(orderPayments).flat().reduce((sum, p) => sum + p.amount, 0);
-  }, [orderPayments]);
+  const getOrderTypeBadge = (orderType: string) => {
+    const isNumber = /^\d+$/.test(orderType.trim());
+    if (orderType.toLowerCase() === 'ficha') return <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>;
+    if (isNumber) return <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>;
+    if (orderType.toLowerCase() === 'salão' || orderType.toLowerCase() === 'salao') return <Badge className="bg-warning text-foreground border-transparent text-xs">Salão</Badge>;
+    return <Badge variant="outline" className="text-xs">{orderType}</Badge>;
+  };
 
-  // Dinheiro total from payments
-  const dinheiroTotal = useMemo(() => {
-    return Object.values(orderPayments).flat()
-      .filter(p => p.payment_method?.toLowerCase() === 'dinheiro')
-      .reduce((sum, p) => sum + p.amount, 0);
-  }, [orderPayments]);
-
-  const handlePaymentsChanged = useCallback((orderId: string, payments: PaymentEntry[]) => {
-    setOrderPayments(prev => ({ ...prev, [orderId]: payments }));
-  }, []);
-
-  const getOrderPaymentStatus = useCallback((orderId: string, totalAmount: number) => {
-    const payments = orderPayments[orderId] || [];
-    if (payments.length === 0) return 'pending';
-    const sum = payments.reduce((acc, p) => acc + p.amount, 0);
-    return Math.abs(totalAmount - sum) < 0.01 ? 'complete' : 'partial';
-  }, [orderPayments]);
-
-  const handleAdminForceFinalize = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    setFinalizing(true);
-    const { error } = await supabase
-      .from('salon_closings')
-      .update({ status: 'completed', updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) {
-      toast.error('Erro ao forçar fechamento');
-    } else {
-      toast.success('Fechamento forçado pelo administrador.');
-      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
-      setShowErrors(false);
-    }
-    setFinalizing(false);
-  }, [id, isAdmin]);
-
-  const handleReopenClosing = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    const { error } = await supabase
-      .from('salon_closings')
-      .update({ status: 'pending', updated_at: new Date().toISOString() })
-      .eq('id', id);
-    if (!error) {
-      setClosing(prev => prev ? { ...prev, status: 'pending' } : prev);
-      toast.success('Fechamento reaberto com sucesso.');
-    } else {
-      toast.error('Erro ao reabrir fechamento.');
-    }
-  }, [id, isAdmin]);
+  const getFilterLabel = (t: string) => {
+    if (t.toLowerCase() === 'ficha') return 'Ficha';
+    if (/^\d+$/.test(t.trim())) return 'Retirada';
+    if (t.toLowerCase() === 'salão' || t.toLowerCase() === 'salao') return 'Salão';
+    return t;
+  };
 
   if (loading) {
     return (
@@ -330,45 +248,7 @@ export default function SalonClosing() {
     );
   }
 
-  const completedCount = orders.filter(o => getOrderPaymentStatus(o.id, o.total_amount) === 'complete').length;
   const isCompleted = closing?.status === 'completed';
-
-  const handleFinalize = async () => {
-    const errs: string[] = [];
-
-    if (!cashSnapshotSavedAbertura) errs.push('Contagem de Dinheiro na Abertura não salva.');
-    if (!cashSnapshotSavedFechamento) errs.push('Contagem de Dinheiro no Fechamento não salva.');
-
-    orders.forEach((order) => {
-      const status = getOrderPaymentStatus(order.id, order.total_amount);
-      if (status !== 'complete') {
-        const label = order.order_type.toLowerCase() === 'ficha' ? 'Ficha'
-          : /^\d+$/.test(order.order_type.trim()) ? `Retirada`
-          : order.order_type;
-        errs.push(`${label} (${order.sale_time || 'sem hora'}) — pagamento ${status === 'partial' ? 'parcial' : 'pendente'}`);
-      }
-    });
-
-    if (errs.length > 0) {
-      setErrors(errs);
-      setShowErrors(true);
-      return;
-    }
-
-    setFinalizing(true);
-    const { error } = await supabase
-      .from('salon_closings')
-      .update({ status: 'completed', updated_at: new Date().toISOString() })
-      .eq('id', id!);
-
-    if (error) {
-      toast.error('Erro ao finalizar conferência');
-    } else {
-      toast.success('Conferência concluída com sucesso!');
-      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
-    }
-    setFinalizing(false);
-  };
 
   return (
     <AppLayout
@@ -387,7 +267,7 @@ export default function SalonClosing() {
       }
     >
       {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-card rounded-xl shadow-card p-4 border border-border">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Total Vendas</p>
           <p className="text-2xl font-bold text-foreground">
@@ -395,19 +275,13 @@ export default function SalonClosing() {
           </p>
         </div>
         <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Total Lançado</p>
-          <p className="text-2xl font-bold text-foreground">
-            R$ {totalAssigned.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Preenchidos</p>
-          <p className="text-2xl font-bold text-foreground">{completedCount} / {filtered.length}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Pedidos</p>
+          <p className="text-2xl font-bold text-foreground">{filtered.length}</p>
         </div>
         <div className="bg-card rounded-xl shadow-card p-4 border border-border">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Status</p>
-          <Badge className={closing.status === 'completed' ? 'bg-success text-success-foreground' : 'bg-warning/15 text-warning border-warning/30'}>
-            {closing.status === 'completed' ? 'Concluído' : 'Pendente'}
+          <Badge className={isCompleted ? 'bg-success text-success-foreground' : 'bg-warning/15 text-warning border-warning/30'}>
+            {isCompleted ? 'Concluído' : 'Pendente'}
           </Badge>
         </div>
       </div>
@@ -420,34 +294,24 @@ export default function SalonClosing() {
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro na Abertura</span>
           </div>
           {cashSnapshotSavedAbertura ? (
-            <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Salvo
-            </span>
+            <span className="flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Salvo</span>
           ) : (
-            <span className="flex items-center gap-1 text-xs text-warning">
-              <AlertCircle className="h-3.5 w-3.5" />
-              Não salvo
-            </span>
+            <span className="flex items-center gap-1 text-xs text-warning"><AlertCircle className="h-3.5 w-3.5" />Não salvo</span>
           )}
         </div>
         {cashSnapshotDataAbertura ? (
           <div className="mt-2 flex items-center gap-4">
             <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataAbertura.total)}</span>
-            <span className="text-xs text-muted-foreground">
-              Salvo em {new Date(cashSnapshotDataAbertura.updated_at).toLocaleString('pt-BR')}
-            </span>
+            <span className="text-xs text-muted-foreground">Salvo em {new Date(cashSnapshotDataAbertura.updated_at).toLocaleString('pt-BR')}</span>
             <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalcAbertura(true)}>
-              <Calculator className="h-3.5 w-3.5 mr-1" />
-              Ver detalhes
+              <Calculator className="h-3.5 w-3.5 mr-1" />Ver detalhes
             </Button>
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-3">
             <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
             <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalcAbertura(true)}>
-              <Calculator className="h-3.5 w-3.5 mr-1" />
-              Abrir Calculadora
+              <Calculator className="h-3.5 w-3.5 mr-1" />Abrir Calculadora
             </Button>
           </div>
         )}
@@ -461,34 +325,24 @@ export default function SalonClosing() {
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
           </div>
           {cashSnapshotSavedFechamento ? (
-            <span className="flex items-center gap-1 text-xs text-success">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Salvo
-            </span>
+            <span className="flex items-center gap-1 text-xs text-success"><CheckCircle2 className="h-3.5 w-3.5" />Salvo</span>
           ) : (
-            <span className="flex items-center gap-1 text-xs text-warning">
-              <AlertCircle className="h-3.5 w-3.5" />
-              Não salvo
-            </span>
+            <span className="flex items-center gap-1 text-xs text-warning"><AlertCircle className="h-3.5 w-3.5" />Não salvo</span>
           )}
         </div>
         {cashSnapshotDataFechamento ? (
           <div className="mt-2 flex items-center gap-4">
             <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
-            <span className="text-xs text-muted-foreground">
-              Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
-            </span>
+            <span className="text-xs text-muted-foreground">Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}</span>
             <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashCalcFechamento(true)}>
-              <Calculator className="h-3.5 w-3.5 mr-1" />
-              Ver detalhes
+              <Calculator className="h-3.5 w-3.5 mr-1" />Ver detalhes
             </Button>
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-3">
             <span className="text-xs text-muted-foreground">Nenhuma contagem salva ainda.</span>
             <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowCashCalcFechamento(true)}>
-              <Calculator className="h-3.5 w-3.5 mr-1" />
-              Abrir Calculadora
+              <Calculator className="h-3.5 w-3.5 mr-1" />Abrir Calculadora
             </Button>
           </div>
         )}
@@ -497,7 +351,7 @@ export default function SalonClosing() {
       {/* Payment summary */}
       {paymentSummary.length > 0 && (
         <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Resumo por Pagamento</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-3">Resumo por Forma de Pagamento (Saipos)</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {paymentSummary.map(([method, data]) => (
               <div key={method} className="bg-muted/50 rounded-lg px-3 py-2">
@@ -518,12 +372,7 @@ export default function SalonClosing() {
       <div className="flex flex-wrap gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+          <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
         <Select value={filterType} onValueChange={setFilterType}>
           <SelectTrigger className="w-[160px]">
@@ -531,33 +380,14 @@ export default function SalonClosing() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">Todos os tipos</SelectItem>
-            {orderTypes.map(t => {
-              const isNumber = /^\d+$/.test(t.trim());
-              const label = t.toLowerCase() === 'ficha' ? 'Ficha'
-                : isNumber ? 'Retirada'
-                : (t.toLowerCase() === 'salão' || t.toLowerCase() === 'salao') ? 'Salão'
-                : t;
-              return (
-                <SelectItem key={t} value={t}>
-                  <span className={
-                    t.toLowerCase() === 'ficha'
-                      ? 'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-foreground text-background'
-                      : isNumber
-                      ? 'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-foreground text-warning'
-                      : (t.toLowerCase() === 'salão' || t.toLowerCase() === 'salao')
-                      ? 'inline-block rounded-full px-2 py-0.5 text-[11px] font-medium bg-warning text-foreground'
-                      : ''
-                  }>
-                    {label}
-                  </span>
-                </SelectItem>
-              );
-            })}
+            {orderTypes.map(t => (
+              <SelectItem key={t} value={t}>{getFilterLabel(t)}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      {/* Table */}
+      {/* Table - Read-only */}
       <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
@@ -565,146 +395,46 @@ export default function SalonClosing() {
               <TableRow>
                 <TableHead className="w-[80px]">Tipo</TableHead>
                 <TableHead className="w-[60px]">Hora</TableHead>
-                <TableHead className="w-[120px]">Pgto Saipos</TableHead>
-                <TableHead>Pagamento</TableHead>
-                <TableHead className="text-right w-[100px]">Total</TableHead>
-                <TableHead className="w-[90px]">Status</TableHead>
+                <TableHead>Pgto Saipos</TableHead>
+                <TableHead className="text-right w-[120px]">Valor</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.length === 0 ? (
+              {displayRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((order) => {
-                  const status = getOrderPaymentStatus(order.id, order.total_amount);
-                  const payments = orderPayments[order.id] || [];
-                  const isNumber = /^\d+$/.test(order.order_type.trim());
-
-                  return (
-                    <TableRow key={order.id}>
-                      <TableCell>
-                        {order.order_type.toLowerCase() === 'ficha' ? (
-                          <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>
-                        ) : isNumber ? (
-                          <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>
-                        ) : order.order_type.toLowerCase() === 'salão' || order.order_type.toLowerCase() === 'salao' ? (
-                          <Badge className="bg-warning text-foreground border-transparent text-xs">Salão</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-xs">{order.order_type}</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {order.sale_time || '—'}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]" title={order.payment_method || ''}>
-                        {order.payment_method || '—'}
-                      </TableCell>
-                      <TableCell className="py-2">
-                        <SalonPaymentEditor
-                          orderId={order.id}
-                          totalAmount={order.total_amount}
-                          payments={payments}
-                          onPaymentsChanged={(p) => handlePaymentsChanged(order.id, p)}
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums text-sm">
-                        R$ {order.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell>
-                        {status === 'complete' ? (
-                          <Badge className="bg-success/15 text-success border-success/30 text-[10px]">
-                            ✅ OK
-                          </Badge>
-                        ) : status === 'partial' ? (
-                          <Badge className="bg-warning/15 text-warning border-warning/30 text-[10px]">
-                            ⚠️ Parcial
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-muted text-muted-foreground text-[10px]">
-                            Pendente
+                displayRows.map((row, idx) => (
+                  <TableRow key={`${row.orderId}-${row.rateioIndex}`} className={row.isRateio && row.rateioIndex > 0 ? 'border-t-0' : ''}>
+                    <TableCell>
+                      {row.rateioIndex === 0 ? getOrderTypeBadge(row.order_type) : null}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.rateioIndex === 0 ? (row.sale_time || '—') : null}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-foreground">{row.payment_method}</span>
+                        {row.isRateio && (
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-muted-foreground/30">
+                            {row.rateioIndex + 1}/{row.rateioTotal}
                           </Badge>
                         )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums text-sm">
+                      R$ {row.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>
         </div>
       </div>
-
-      {/* Sticky footer */}
-      <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border px-5 py-3 flex items-center justify-between mt-6 rounded-b-xl shadow-card">
-        <div className="flex items-center gap-3">
-          <Badge className={isCompleted ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}>
-            {isCompleted ? '✅ Conferência concluída' : `⏳ ${completedCount}/${orders.length} preenchidos`}
-          </Badge>
-          {!isCompleted && completedCount === orders.length && orders.length > 0 && (
-            <span className="text-xs text-success font-medium">Todos preenchidos — pronto para concluir!</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {isAdmin && isCompleted && (
-            <Button variant="outline" size="sm" onClick={handleReopenClosing}>
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Reabrir
-            </Button>
-          )}
-          {isAdmin && !isCompleted && (
-            <Button variant="outline" size="sm" onClick={handleAdminForceFinalize} disabled={finalizing} className="text-warning border-warning/30 hover:bg-warning/10">
-              <ShieldCheck className="h-4 w-4 mr-1" />
-              Forçar Fechamento
-            </Button>
-          )}
-          <Button
-            onClick={handleFinalize}
-            disabled={finalizing || isCompleted}
-            className="bg-success hover:bg-success/90 text-success-foreground"
-          >
-            <CheckCircle2 className="h-4 w-4 mr-2" />
-            {isCompleted ? 'Conferência Concluída' : finalizing ? 'Concluindo...' : 'Concluir Conferência'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Error dialog */}
-      <Dialog open={showErrors} onOpenChange={setShowErrors}>
-        <DialogContent className="sm:max-w-lg max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertCircle className="h-5 w-5" />
-              Pendências na Conferência
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {errors.length} pendência(s) encontrada(s):
-          </p>
-          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
-            {errors.map((err, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm bg-destructive/10 text-destructive rounded-md px-3 py-2">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{err}</span>
-              </div>
-            ))}
-          </div>
-          <DialogFooter>
-            {isAdmin && (
-              <Button variant="destructive" onClick={handleAdminForceFinalize} disabled={finalizing}>
-                <ShieldCheck className="h-4 w-4 mr-1" />
-                Forçar Fechamento (Admin)
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => setShowErrors(false)}>
-              Entendi
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Cash Calculator Dialog - Abertura */}
       <Dialog open={showCashCalcAbertura} onOpenChange={setShowCashCalcAbertura}>
@@ -717,9 +447,7 @@ export default function SalonClosing() {
           </DialogHeader>
           <div className="space-y-2">
             <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
-              <span>Cédula/Moeda</span>
-              <span className="text-center">Qtd</span>
-              <span className="text-right">Subtotal</span>
+              <span>Cédula/Moeda</span><span className="text-center">Qtd</span><span className="text-right">Subtotal</span>
             </div>
             {CASH_DENOMINATIONS.map(denom => (
               <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
@@ -737,7 +465,7 @@ export default function SalonClosing() {
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setCashCountsAbertura({})}>Limpar</Button>
-            <Button size="sm" onClick={handleSaveCashSnapshotAbertura} disabled={savingCashAbertura || isCompleted}>
+            <Button size="sm" onClick={handleSaveCashSnapshotAbertura} disabled={savingCashAbertura}>
               {savingCashAbertura ? 'Salvando...' : cashSnapshotSavedAbertura ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
@@ -755,9 +483,7 @@ export default function SalonClosing() {
           </DialogHeader>
           <div className="space-y-2">
             <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
-              <span>Cédula/Moeda</span>
-              <span className="text-center">Qtd</span>
-              <span className="text-right">Subtotal</span>
+              <span>Cédula/Moeda</span><span className="text-center">Qtd</span><span className="text-right">Subtotal</span>
             </div>
             {CASH_DENOMINATIONS.map(denom => (
               <div key={denom} className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center">
@@ -772,16 +498,10 @@ export default function SalonClosing() {
               <span className="text-sm font-semibold text-foreground">Total em espécie:</span>
               <span className="text-xl font-bold text-primary font-mono">{formatCurrency(cashTotalFechamento)}</span>
             </div>
-            {dinheiroTotal > 0 && (
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-xs text-muted-foreground">Dinheiro lançado nos pedidos:</span>
-                <span className="text-sm font-medium text-muted-foreground font-mono">{formatCurrency(dinheiroTotal)}</span>
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setCashCountsFechamento({})}>Limpar</Button>
-            <Button size="sm" onClick={handleSaveCashSnapshotFechamento} disabled={savingCashFechamento || isCompleted}>
+            <Button size="sm" onClick={handleSaveCashSnapshotFechamento} disabled={savingCashFechamento}>
               {savingCashFechamento ? 'Salvando...' : cashSnapshotSavedFechamento ? 'Atualizar Contagem' : 'Salvar Contagem'}
             </Button>
           </DialogFooter>
