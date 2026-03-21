@@ -546,6 +546,7 @@ export default function SalonClosing() {
               <TableRow>
                 <TableHead className="w-[80px]">Tipo</TableHead>
                 <TableHead className="w-[60px]">Hora</TableHead>
+                <TableHead className="w-[120px]">Pgto Saipos</TableHead>
                 <TableHead>Pagamento</TableHead>
                 <TableHead className="text-right w-[100px]">Total</TableHead>
                 <TableHead className="w-[90px]">Status</TableHead>
@@ -554,7 +555,7 @@ export default function SalonClosing() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
@@ -579,6 +580,9 @@ export default function SalonClosing() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {order.sale_time || '—'}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-[140px]" title={order.payment_method || ''}>
+                        {order.payment_method || '—'}
                       </TableCell>
                       <TableCell className="py-2">
                         <SalonPaymentEditor
