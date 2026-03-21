@@ -320,23 +320,6 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
             </div>
-            {newRole === 'operador' && (
-              <div className="space-y-3">
-                <Label>Permissões de acesso</Label>
-                <div className="space-y-2">
-                  {ALL_PERMISSIONS.map(p => (
-                    <div key={p.key} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`new-${p.key}`}
-                        checked={newPermissions.includes(p.key)}
-                        onCheckedChange={() => togglePermission(newPermissions, p.key, setNewPermissions)}
-                      />
-                      <label htmlFor={`new-${p.key}`} className="text-sm cursor-pointer">{p.label}</label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
