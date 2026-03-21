@@ -701,12 +701,14 @@ export default function SalonReconciliation() {
                             <Badge
                               variant="secondary"
                               className={`text-[9px] ${
-                                confidence === 'high' ? 'bg-success/10 text-success'
+                                matchedTxs[0]?.match_type === 'combined_mixed' ? 'bg-blue-500/10 text-blue-600'
+                                  : confidence === 'high' ? 'bg-success/10 text-success'
                                   : confidence === 'medium' ? 'bg-primary/10 text-primary'
                                   : 'bg-warning/10 text-warning'
                               }`}
                             >
                               {matchedTxs[0]?.match_type === 'manual' ? 'Manual'
+                                : matchedTxs[0]?.match_type === 'combined_mixed' ? 'Match combinado com dinheiro parcial'
                                 : matchedTxs[0]?.match_type === 'combined' ? 'Match combinado'
                                 : matchedTxs[0]?.match_type === 'approximate' ? 'Match aproximado'
                                 : confidence === 'high' ? 'Match exato'
@@ -716,6 +718,13 @@ export default function SalonReconciliation() {
                             {isCombined && (
                               <span className="text-[10px] text-muted-foreground">
                                 Soma: <span className="font-mono tabular-nums font-medium">{formatCurrency(totalMatchedAmount)}</span>
+                              </span>
+                            )}
+                            {matchedTxs[0]?.match_type === 'combined_mixed' && (
+                              <span className="text-[10px] text-blue-600">
+                                Maquininha: <span className="font-mono tabular-nums font-medium">{formatCurrency(totalMatchedAmount)}</span>
+                                {' + Dinheiro: '}
+                                <span className="font-mono tabular-nums font-medium">{formatCurrency(order.total_amount - totalMatchedAmount)}</span>
                               </span>
                             )}
                           </div>
