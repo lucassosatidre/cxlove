@@ -651,6 +651,32 @@ export default function SalonReconciliation() {
             </div>
           </div>
         </div>
+      {/* Sticky footer - Admin reconciliation controls */}
+      {isAdmin && (
+        <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border px-6 py-3 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <Badge className={reconciliationStatus === 'completed' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}>
+              {reconciliationStatus === 'completed' ? '✅ Conciliação concluída' : `⏳ ${stats.matched}/${stats.total} conciliados`}
+            </Badge>
+            {reconciliationStatus !== 'completed' && stats.pending === 0 && stats.txUnmatched === 0 && stats.total > 0 && (
+              <span className="text-xs text-success font-medium">Todos conciliados — pronto para concluir!</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {reconciliationStatus === 'completed' ? (
+              <Button variant="outline" size="sm" onClick={handleReopenReconciliation}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Reabrir Conciliação
+              </Button>
+            ) : (
+              <Button onClick={handleFinalizeReconciliation} className="bg-success hover:bg-success/90 text-success-foreground" size="sm">
+                <ShieldCheck className="h-4 w-4 mr-1" />
+                Concluir Conciliação
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
