@@ -833,9 +833,27 @@ export default function DeliveryReconciliation() {
                               <Link2 className="h-3 w-3 text-success" />
                               <span className="text-muted-foreground">
                                 {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''}
-                                {tx.machine_serial && serialToDeliveryPerson.has(tx.machine_serial) && (
-                                  <span className="text-primary font-medium"> • {serialToDeliveryPerson.get(tx.machine_serial)}</span>
-                                )}
+                                {(() => {
+                                  const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(tx.machine_serial) : null;
+                                  const orderPerson = order.delivery_person?.trim().toLowerCase();
+                                  const inferredLower = inferredPerson?.trim().toLowerCase();
+                                  const isDivergent = !!(inferredPerson && orderPerson && inferredLower !== orderPerson);
+                                  return inferredPerson ? (
+                                    <>
+                                      <span className={`font-medium ${isDivergent ? 'text-destructive' : 'text-primary'}`}> • {inferredPerson}</span>
+                                      {isDivergent && (
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <AlertTriangle className="h-3 w-3 text-destructive inline ml-1 cursor-help" />
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p className="text-xs">Motoboy divergente: comanda registra <strong>{order.delivery_person}</strong>, mas a máquina é associada a <strong>{inferredPerson}</strong></p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )}
+                                    </>
+                                  ) : null;
+                                })()}
                                 {' '}— <span className="font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
                               </span>
                               {idx === 0 && (
