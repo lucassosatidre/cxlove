@@ -321,14 +321,6 @@ export default function Overview() {
     <AppLayout
       title="Visão Geral"
       subtitle="Acompanhamento diário — Conferência, Conciliação & Cofre"
-      headerActions={
-        isAdmin ? (
-          <Button onClick={() => setShowCashExpectation(true)} variant="outline">
-            <Vault className="h-4 w-4 mr-2" />
-            Abrir Caixa
-          </Button>
-        ) : undefined
-      }
     >
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="mb-6">
@@ -340,6 +332,12 @@ export default function Overview() {
             <TabsTrigger value="vault">
               <Vault className="h-4 w-4 mr-2" />
               Controle de Caixa
+            </TabsTrigger>
+          )}
+          {isAdmin && (
+            <TabsTrigger value="cash-expectation" onClick={(e) => { e.preventDefault(); setShowCashExpectation(true); }}>
+              <Vault className="h-4 w-4 mr-2" />
+              Abrir Caixa
             </TabsTrigger>
           )}
         </TabsList>
