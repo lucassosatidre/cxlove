@@ -33,13 +33,13 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
   } else {
     const allNavItems = [
       { icon: LayoutDashboard, label: 'Visão Geral', path: '/', permission: 'dashboard' },
+      ...(isAdmin ? [{ icon: Vault, label: 'Controle de Caixa', path: '/cash-control', permission: 'dashboard' }] : []),
       { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
       { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
       { icon: Upload, label: 'Importar', path: '/import', permission: 'import' },
     ];
     navItems = allNavItems.filter(item => hasPermission(item.permission));
     if (isAdmin) {
-      navItems.push({ icon: Vault, label: 'Controle de Caixa', path: '/cash-control', permission: 'dashboard' });
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }
   }
