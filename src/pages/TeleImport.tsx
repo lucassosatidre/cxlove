@@ -89,6 +89,7 @@ export default function TeleImport() {
           duplicate_rows: duplicateCount,
           daily_closing_id: closingId,
           status: 'completed',
+          is_test: isTestMode,
         })
         .select('id')
         .single();
