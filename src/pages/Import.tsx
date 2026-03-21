@@ -44,7 +44,6 @@ export default function Import() {
           .from('daily_closings')
           .select('id')
           .eq('closing_date', deliveryDate)
-          .eq('user_id', user.id)
           .maybeSingle();
 
         if (!dc) {
