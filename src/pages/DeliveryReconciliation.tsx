@@ -58,6 +58,7 @@ export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { isTestMode } = useTestMode();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
