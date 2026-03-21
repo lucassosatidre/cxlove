@@ -377,6 +377,34 @@ export default function Reconciliation() {
     setCompleting(false);
   }, [id, orders, breakdownValidity]);
 
+  const handleAdminForceFinalize = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
+    if (!confirmed) return;
+    setCompleting(true);
+    const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
+    if (error) {
+      toast.error('Erro ao finalizar fechamento.');
+    } else {
+      setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
+      toast.success('Fechamento finalizado pelo administrador.');
+    }
+    setCompleting(false);
+  }, [id, isAdmin]);
+
+  const handleReopenClosing = useCallback(async () => {
+    if (!id || !isAdmin) return;
+    const confirmed = window.confirm('Deseja reabrir este fechamento? O status voltará para pendente.');
+    if (!confirmed) return;
+    const { error } = await supabase.from('daily_closings').update({ status: 'pending' }).eq('id', id);
+    if (error) {
+      toast.error('Erro ao reabrir fechamento.');
+    } else {
+      setClosingData(prev => prev ? { ...prev, status: 'pending' } : prev);
+      toast.success('Fechamento reaberto com sucesso.');
+    }
+  }, [id, isAdmin]);
+
   const handleSaveCashSnapshotAbertura = useCallback(async () => {
     if (!id || !user) return;
     setSavingCashAbertura(true);
