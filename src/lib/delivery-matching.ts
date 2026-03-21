@@ -275,6 +275,10 @@ export function matchTransactionsToOrders(
 
         if (diff > COMBINED_TOLERANCE) continue;
 
+        // Both transactions must be after order time
+        if (!isTransactionAfterOrder(tx1.sale_time, order.sale_time || null)) continue;
+        if (!isTransactionAfterOrder(tx2.sale_time, order.sale_time || null)) continue;
+
         let score = 0;
         if (tx1.machine_serial && tx1.machine_serial === tx2.machine_serial) score++;
 
