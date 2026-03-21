@@ -47,6 +47,7 @@ interface PaymentEntry {
 
 export default function SalonClosing() {
   const { id } = useParams<{ id: string }>();
+  const { isAdmin } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<SalonOrder[]>([]);
   const [closing, setClosing] = useState<ClosingData | null>(null);
