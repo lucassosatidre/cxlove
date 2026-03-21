@@ -117,8 +117,9 @@ export type Database = {
         Row: {
           counts: Json
           created_at: string
-          daily_closing_id: string
+          daily_closing_id: string | null
           id: string
+          salon_closing_id: string | null
           snapshot_type: string
           total: number
           updated_at: string
@@ -127,8 +128,9 @@ export type Database = {
         Insert: {
           counts?: Json
           created_at?: string
-          daily_closing_id: string
+          daily_closing_id?: string | null
           id?: string
+          salon_closing_id?: string | null
           snapshot_type?: string
           total?: number
           updated_at?: string
@@ -137,8 +139,9 @@ export type Database = {
         Update: {
           counts?: Json
           created_at?: string
-          daily_closing_id?: string
+          daily_closing_id?: string | null
           id?: string
+          salon_closing_id?: string | null
           snapshot_type?: string
           total?: number
           updated_at?: string
@@ -150,6 +153,13 @@ export type Database = {
             columns: ["daily_closing_id"]
             isOneToOne: false
             referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_snapshots_salon_closing_id_fkey"
+            columns: ["salon_closing_id"]
+            isOneToOne: false
+            referencedRelation: "salon_closings"
             referencedColumns: ["id"]
           },
         ]

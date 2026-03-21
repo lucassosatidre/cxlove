@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
-  ShieldCheck, RotateCcw,
+  ShieldCheck, RotateCcw, Banknote,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
@@ -71,6 +71,8 @@ export default function SalonReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
+  const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
+  const [cashSnapshotFechamento, setCashSnapshotFechamento] = useState<{ total: number; updated_at: string } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -97,6 +99,23 @@ export default function SalonReconciliation() {
         .select('salon_order_id, payment_method, amount')
         .in('salon_order_id', orderIds);
       setPayments((payData || []).map(p => ({ ...p, amount: Number(p.amount) })));
+    }
+
+    // Load cash snapshots for this salon closing (read-only display)
+    if (id) {
+      const { data: snapList } = await supabase
+        .from('cash_snapshots')
+        .select('total, updated_at, snapshot_type')
+        .eq('salon_closing_id', id);
+
+      for (const snap of (snapList || [])) {
+        const type = (snap as any).snapshot_type || 'abertura';
+        if (type === 'abertura') {
+          setCashSnapshotAbertura({ total: Number(snap.total), updated_at: snap.updated_at });
+        } else if (type === 'fechamento') {
+          setCashSnapshotFechamento({ total: Number(snap.total), updated_at: snap.updated_at });
+        }
+      }
     }
 
     setLoading(false);
@@ -447,6 +466,32 @@ export default function SalonReconciliation() {
             </div>
           </div>
         </div>
+
+        {/* Cash Snapshots (read-only) */}
+        {(cashSnapshotAbertura || cashSnapshotFechamento) && (
+          <div className="border-b border-border bg-card">
+            <div className="px-6 py-3 flex flex-wrap gap-4">
+              {cashSnapshotAbertura && (
+                <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2.5 border border-border">
+                  <Banknote className="h-4 w-4 text-success" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">Abertura (Dinheiro)</p>
+                    <p className="text-sm font-semibold text-foreground font-mono tabular-nums">{formatCurrency(cashSnapshotAbertura.total)}</p>
+                  </div>
+                </div>
+              )}
+              {cashSnapshotFechamento && (
+                <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2.5 border border-border">
+                  <Banknote className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">Fechamento (Dinheiro)</p>
+                    <p className="text-sm font-semibold text-foreground font-mono tabular-nums">{formatCurrency(cashSnapshotFechamento.total)}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="border-b border-border bg-card">
