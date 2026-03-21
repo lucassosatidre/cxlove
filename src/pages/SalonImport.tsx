@@ -47,7 +47,6 @@ export default function SalonImport() {
         .from('salon_closings')
         .select('id')
         .eq('closing_date', firstDate)
-        .eq('user_id', user.id)
         .maybeSingle();
 
       let closingId: string;
