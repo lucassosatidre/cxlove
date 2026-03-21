@@ -21,6 +21,7 @@ interface ImportSummary {
 export default function TeleImport() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isTestMode } = useTestMode();
   const [dragging, setDragging] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
