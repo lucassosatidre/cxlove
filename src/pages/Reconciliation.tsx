@@ -53,7 +53,7 @@ interface ImportRecord {
 export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { isCaixaTele } = useUserRole();
+  const { isCaixaTele, isAdmin } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
