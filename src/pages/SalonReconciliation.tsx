@@ -85,6 +85,7 @@ export default function SalonReconciliation() {
     ]);
 
     setClosingDate(closing?.closing_date || '');
+    setReconciliationStatus(closing?.reconciliation_status || 'pending');
     const ordersList = (ordData || []) as SalonOrder[];
     setOrders(ordersList);
     setTransactions((txData || []) as SalonCardTx[]);

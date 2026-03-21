@@ -98,6 +98,7 @@ export default function DeliveryReconciliation() {
 
     const dateStr = closing?.closing_date || '';
     setClosingDate(dateStr);
+    setReconciliationStatus(closing?.reconciliation_status || 'pending');
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
