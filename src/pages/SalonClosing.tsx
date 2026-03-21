@@ -5,8 +5,9 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Search, AlertTriangle, AlertCircle, CheckCircle2, ShieldCheck, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useUserRole } from '@/hooks/useUserRole';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
