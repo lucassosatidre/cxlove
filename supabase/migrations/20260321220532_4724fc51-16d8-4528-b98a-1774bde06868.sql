@@ -1,0 +1,1 @@
+ALTER TABLE public.salon_orders ADD COLUMN IF NOT EXISTS discount_amount numeric NOT NULL DEFAULT 0;
