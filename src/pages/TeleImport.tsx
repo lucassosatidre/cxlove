@@ -156,7 +156,8 @@ export default function TeleImport() {
   };
 
   return (
-    <AppLayout title="Importar Tele" subtitle="Importe relatórios de vendas da tele-entrega">
+    <AppLayout title={isTestMode ? "Importar Tele Teste" : "Importar Tele"} subtitle="Importe relatórios de vendas da tele-entrega">
+      {isTestMode && <TestBanner />}
       {!summary ? (
         <div className="max-w-xl mx-auto">
           <div
