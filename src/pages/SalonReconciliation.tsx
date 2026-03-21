@@ -9,12 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
-  ShieldCheck, RotateCcw, Banknote,
+  ShieldCheck, RotateCcw, Banknote, DollarSign, Globe,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
-import { matchSalonTransactionsToOrders } from '@/lib/salon-matching';
+import { matchSalonTransactionsToOrders, classifyOrder, type OrderClassification, type PendingReason } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
 import { buildWaiterMap } from '@/lib/waiter-labels';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -24,6 +24,8 @@ interface SalonOrder {
   order_type: string;
   sale_time: string | null;
   total_amount: number;
+  payment_method: string;
+  discount_amount: number;
 }
 
 interface SalonPayment {
@@ -55,6 +57,17 @@ interface UndoAction {
   previousConfidence: string | null;
 }
 
+const PENDING_REASON_LABELS: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  external_cash: { label: 'Pagamento em Dinheiro', icon: <DollarSign className="h-3 w-3" />, color: 'bg-muted text-muted-foreground' },
+  external_online: { label: 'Pagamento Online/Externo', icon: <Globe className="h-3 w-3" />, color: 'bg-muted text-muted-foreground' },
+  mixed_partial: { label: 'Pgto misto (parte cartão)', icon: <CreditCard className="h-3 w-3" />, color: 'bg-primary/10 text-primary' },
+  awaiting_group_2: { label: 'Aguardando grupo de 2 linhas', icon: <AlertTriangle className="h-3 w-3" />, color: 'bg-warning/10 text-warning' },
+  awaiting_group_3: { label: 'Aguardando grupo de 3 linhas', icon: <AlertTriangle className="h-3 w-3" />, color: 'bg-warning/10 text-warning' },
+  awaiting_group_4: { label: 'Aguardando grupo de 4+ linhas', icon: <AlertTriangle className="h-3 w-3" />, color: 'bg-warning/10 text-warning' },
+  approx_possible: { label: 'Match aproximado possível', icon: <Search className="h-3 w-3" />, color: 'bg-accent text-accent-foreground' },
+  divergence: { label: 'Divergência real', icon: <AlertTriangle className="h-3 w-3" />, color: 'bg-destructive/10 text-destructive' },
+};
+
 export default function SalonReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -74,6 +87,7 @@ export default function SalonReconciliation() {
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
   const [cashSnapshotFechamento, setCashSnapshotFechamento] = useState<{ total: number; updated_at: string } | null>(null);
+  const [orderClassifications, setOrderClassifications] = useState<Map<string, OrderClassification>>(new Map());
 
   useEffect(() => {
     if (!id) return;
@@ -83,13 +97,16 @@ export default function SalonReconciliation() {
   const loadData = async () => {
     const [{ data: closing }, { data: ordData }, { data: txData }] = await Promise.all([
       supabase.from('salon_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
-      supabase.from('salon_orders').select('id, order_type, sale_time, total_amount').eq('salon_closing_id', id!),
+      supabase.from('salon_orders').select('id, order_type, sale_time, total_amount, payment_method, discount_amount').eq('salon_closing_id', id!),
       supabase.from('salon_card_transactions').select('*').eq('salon_closing_id', id!),
     ]);
 
     setClosingDate(closing?.closing_date || '');
     setReconciliationStatus(closing?.reconciliation_status || 'pending');
-    const ordersList = (ordData || []) as SalonOrder[];
+    const ordersList = (ordData || []).map((o: any) => ({
+      ...o,
+      discount_amount: Number(o.discount_amount || 0),
+    })) as SalonOrder[];
     setOrders(ordersList);
     setTransactions((txData || []) as SalonCardTx[]);
 
@@ -102,7 +119,17 @@ export default function SalonReconciliation() {
       setPayments((payData || []).map(p => ({ ...p, amount: Number(p.amount) })));
     }
 
-    // Load cash snapshots for this salon closing (read-only display)
+    // Classify orders
+    const clsMap = new Map<string, OrderClassification>();
+    for (const o of ordersList) {
+      clsMap.set(o.id, classifyOrder({
+        id: o.id, order_type: o.order_type, total_amount: o.total_amount,
+        discount_amount: o.discount_amount, sale_time: o.sale_time, payment_method: o.payment_method,
+      }));
+    }
+    setOrderClassifications(clsMap);
+
+    // Load cash snapshots
     if (id) {
       const { data: snapList } = await supabase
         .from('cash_snapshots')
@@ -122,7 +149,6 @@ export default function SalonReconciliation() {
     setLoading(false);
   };
 
-  // Show all orders for reconciliation (matching uses payments when available)
   const eligibleOrders = useMemo(() => orders, [orders]);
 
   const matchedOrderIds = useMemo(() => {
@@ -144,28 +170,39 @@ export default function SalonReconciliation() {
     buildWaiterMap(transactions.map(tx => tx.machine_serial)), [transactions]);
 
   const stats = useMemo(() => {
-    const total = eligibleOrders.length;
-    const matched = eligibleOrders.filter(o => matchedOrderIds.has(o.id)).length;
+    const machineOrders = eligibleOrders.filter(o => {
+      const cls = orderClassifications.get(o.id);
+      return !cls?.isExternal;
+    });
+    const externalOrders = eligibleOrders.filter(o => {
+      const cls = orderClassifications.get(o.id);
+      return cls?.isExternal;
+    });
+    const matched = machineOrders.filter(o => matchedOrderIds.has(o.id)).length;
     return {
-      total,
+      total: eligibleOrders.length,
+      machineTotal: machineOrders.length,
       matched,
-      pending: total - matched,
+      pending: machineOrders.length - matched,
+      external: externalOrders.length,
       txTotal: transactions.length,
       txUnmatched: unmatchedTransactions.length,
     };
-  }, [eligibleOrders, matchedOrderIds, transactions, unmatchedTransactions]);
+  }, [eligibleOrders, matchedOrderIds, transactions, unmatchedTransactions, orderClassifications]);
 
   const filtered = useMemo(() => {
     return eligibleOrders.filter(o => {
       if (search) {
         const s = search.toLowerCase();
-        if (!o.order_type.toLowerCase().includes(s) && !(o.sale_time || '').includes(s)) return false;
+        if (!o.order_type.toLowerCase().includes(s) && !(o.sale_time || '').includes(s) && !o.payment_method.toLowerCase().includes(s)) return false;
       }
+      const cls = orderClassifications.get(o.id);
       if (filterMatch === 'matched' && !matchedOrderIds.has(o.id)) return false;
-      if (filterMatch === 'unmatched' && matchedOrderIds.has(o.id)) return false;
+      if (filterMatch === 'unmatched' && (matchedOrderIds.has(o.id) || cls?.isExternal)) return false;
+      if (filterMatch === 'external' && !cls?.isExternal) return false;
       return true;
     });
-  }, [eligibleOrders, search, filterMatch, matchedOrderIds]);
+  }, [eligibleOrders, search, filterMatch, matchedOrderIds, orderClassifications]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -198,7 +235,7 @@ export default function SalonReconciliation() {
       const newTxs = (inserted || []) as SalonCardTx[];
 
       // Auto-matching
-      const matchResults = matchSalonTransactionsToOrders(
+      const { results: matchResults, classifications } = matchSalonTransactionsToOrders(
         newTxs.map(tx => ({
           id: tx.id,
           gross_amount: tx.gross_amount,
@@ -210,11 +247,15 @@ export default function SalonReconciliation() {
           id: o.id,
           order_type: o.order_type,
           total_amount: o.total_amount,
+          discount_amount: o.discount_amount,
           sale_time: o.sale_time,
+          payment_method: o.payment_method,
         })),
         payments,
         new Set(),
       );
+
+      setOrderClassifications(classifications);
 
       for (const match of matchResults) {
         await supabase
@@ -367,7 +408,7 @@ export default function SalonReconciliation() {
     );
   }
 
-  const percent = stats.total > 0 ? Math.round((stats.matched / stats.total) * 100) : 0;
+  const percent = stats.machineTotal > 0 ? Math.round((stats.matched / stats.machineTotal) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -456,10 +497,11 @@ export default function SalonReconciliation() {
 
         {/* Stats */}
         <div className="border-b border-border bg-card">
-          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <StatCard label="Pedidos com Pgto" value={stats.total} icon={<Store className="h-4 w-4" />} color="text-foreground" />
+          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-6 gap-3">
+            <StatCard label="Total Pedidos" value={stats.total} icon={<Store className="h-4 w-4" />} color="text-foreground" />
             <StatCard label="Conciliados" value={stats.matched} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
             <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
+            <StatCard label="Fora Maquininha" value={stats.external} icon={<DollarSign className="h-4 w-4" />} color="text-muted-foreground" />
             <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
             <div className="bg-muted rounded-xl p-3 border border-border">
               <p className="text-xs text-muted-foreground mb-1">Progresso</p>
@@ -505,11 +547,12 @@ export default function SalonReconciliation() {
               <Input placeholder="Buscar pedido..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
             </div>
             <Select value={filterMatch} onValueChange={setFilterMatch}>
-              <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-[200px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todas</SelectItem>
                 <SelectItem value="matched">Conciliadas</SelectItem>
-                <SelectItem value="unmatched">Pendentes</SelectItem>
+                <SelectItem value="unmatched">Pendentes (maquininha)</SelectItem>
+                <SelectItem value="external">Fora da maquininha</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -532,33 +575,42 @@ export default function SalonReconciliation() {
                   const totalMatchedAmount = matchedTxs?.reduce((s, t) => s + t.gross_amount, 0) || 0;
                   const orderPayments = payments.filter(p => p.salon_order_id === order.id);
                   const { label: typeLabel, cls: typeCls } = getOrderLabel(order.order_type);
+                  const classification = orderClassifications.get(order.id);
+                  const isExternal = classification?.isExternal;
+                  const pendingReason = classification?.pendingReason;
 
                   return (
                     <div
                       key={order.id}
                       className={`bg-card rounded-lg border p-3 transition-all duration-150 ${
-                        isMatched
-                          ? confidence === 'high'
-                            ? 'border-success/50 bg-success/5'
-                            : confidence === 'medium'
-                              ? 'border-primary/50 bg-primary/5'
-                              : 'border-warning/50 bg-warning/5'
-                          : 'border-border hover:border-primary/30'
+                        isExternal
+                          ? 'border-border/50 bg-muted/30 opacity-75'
+                          : isMatched
+                            ? confidence === 'high'
+                              ? 'border-success/50 bg-success/5'
+                              : confidence === 'medium'
+                                ? 'border-primary/50 bg-primary/5'
+                                : 'border-warning/50 bg-warning/5'
+                            : 'border-border hover:border-primary/30'
                       }`}
-                      onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-primary'); }}
+                      onDragOver={(e) => { if (!isExternal) { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-primary'); } }}
                       onDragLeave={(e) => { e.currentTarget.classList.remove('ring-2', 'ring-primary'); }}
                       onDrop={(e) => {
                         e.preventDefault();
                         e.currentTarget.classList.remove('ring-2', 'ring-primary');
-                        handleDrop(order.id);
+                        if (!isExternal) handleDrop(order.id);
                       }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className={`h-6 w-6 rounded-full flex items-center justify-center ${
-                            isMatched ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'
+                            isExternal ? 'bg-muted text-muted-foreground'
+                              : isMatched ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'
                           }`}>
-                            {isMatched ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">?</span>}
+                            {isExternal
+                              ? <DollarSign className="h-3.5 w-3.5" />
+                              : isMatched ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">?</span>
+                            }
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge className={`${typeCls} border-transparent text-xs`}>{typeLabel}</Badge>
@@ -567,12 +619,21 @@ export default function SalonReconciliation() {
                                 <Clock className="h-3 w-3 inline mr-0.5" />{order.sale_time}
                               </span>
                             )}
+                            {/* Payment method from Saipos */}
+                            <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">
+                              {order.payment_method}
+                            </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-mono tabular-nums font-medium text-foreground">
                             {formatCurrency(order.total_amount)}
                           </span>
+                          {order.discount_amount > 0 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              (desc {formatCurrency(order.discount_amount)})
+                            </span>
+                          )}
                           {orderPayments.length > 0 && (
                             <div className="flex gap-1">
                               {orderPayments.map((p, i) => (
@@ -584,6 +645,20 @@ export default function SalonReconciliation() {
                           )}
                         </div>
                       </div>
+
+                      {/* External order badge */}
+                      {isExternal && pendingReason && (
+                        <div className="mt-2 pt-2 border-t border-border/50">
+                          <PendingReasonBadge reason={pendingReason} />
+                        </div>
+                      )}
+
+                      {/* Pending reason for unmatched machine orders */}
+                      {!isExternal && !isMatched && pendingReason && (
+                        <div className="mt-2 pt-2 border-t border-border/50">
+                          <PendingReasonBadge reason={pendingReason} />
+                        </div>
+                      )}
 
                       {isMatched && matchedTxs && (
                         <div className="mt-2 pt-2 border-t border-border/50">
@@ -633,8 +708,9 @@ export default function SalonReconciliation() {
                             >
                               {matchedTxs[0]?.match_type === 'manual' ? 'Manual'
                                 : matchedTxs[0]?.match_type === 'combined' ? 'Match combinado'
+                                : matchedTxs[0]?.match_type === 'approximate' ? 'Match aproximado'
                                 : confidence === 'high' ? 'Match exato'
-                                : confidence === 'medium' ? 'Match aproximado'
+                                : confidence === 'medium' ? 'Match exato'
                                 : 'Baixa confiança'}
                             </Badge>
                             {isCombined && (
@@ -651,7 +727,7 @@ export default function SalonReconciliation() {
 
                 {filtered.length === 0 && (
                   <div className="text-center py-8 text-muted-foreground text-sm">
-                    Nenhum pedido com pagamento preenchido encontrado.
+                    Nenhum pedido encontrado.
                   </div>
                 )}
               </div>
@@ -725,10 +801,13 @@ export default function SalonReconciliation() {
         <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border px-6 py-3 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
             <Badge className={reconciliationStatus === 'completed' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}>
-              {reconciliationStatus === 'completed' ? '✅ Conciliação concluída' : `⏳ ${stats.matched}/${stats.total} conciliados`}
+              {reconciliationStatus === 'completed' ? '✅ Conciliação concluída' : `⏳ ${stats.matched}/${stats.machineTotal} conciliados`}
             </Badge>
-            {reconciliationStatus !== 'completed' && stats.pending === 0 && stats.txUnmatched === 0 && stats.total > 0 && (
+            {reconciliationStatus !== 'completed' && stats.pending === 0 && stats.txUnmatched === 0 && stats.machineTotal > 0 && (
               <span className="text-xs text-success font-medium">Todos conciliados — pronto para concluir!</span>
+            )}
+            {stats.external > 0 && (
+              <span className="text-xs text-muted-foreground">{stats.external} fora da maquininha</span>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -748,6 +827,18 @@ export default function SalonReconciliation() {
       )}
       </div>
     </div>
+  );
+}
+
+function PendingReasonBadge({ reason }: { reason: PendingReason }) {
+  if (!reason) return null;
+  const info = PENDING_REASON_LABELS[reason];
+  if (!info) return null;
+  return (
+    <Badge variant="secondary" className={`text-[10px] gap-1 ${info.color}`}>
+      {info.icon}
+      {info.label}
+    </Badge>
   );
 }
 
