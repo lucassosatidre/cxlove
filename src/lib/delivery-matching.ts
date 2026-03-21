@@ -57,6 +57,19 @@ function parseTimeToMinutes(time: string): number {
 }
 
 /**
+ * Returns true if the transaction time is >= order time.
+ * A payment can only happen after the order is placed.
+ * Returns true if either time is missing (can't validate).
+ */
+function isTransactionAfterOrder(txTime: string | null, orderTime: string | null): boolean {
+  if (!txTime || !orderTime) return true; // can't validate, allow
+  const txMin = parseTimeToMinutes(txTime);
+  const orderMin = parseTimeToMinutes(orderTime);
+  if (txMin < 0 || orderMin < 0) return true; // can't parse, allow
+  return txMin >= orderMin;
+}
+
+/**
  * Build a serial-to-delivery-person map based on which serial
  * appears most with which delivery person (from already matched data)
  */
