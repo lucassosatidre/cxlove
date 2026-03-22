@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/components/AppLayout';
 import TestBanner from '@/components/TestBanner';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ImportSummary {
   totalRead: number;
@@ -16,6 +17,7 @@ interface ImportSummary {
   newOrders: number;
   closingDate: string;
   isNewClosing: boolean;
+  skippedNonTele: number;
 }
 
 export default function TeleImport() {
@@ -35,7 +37,7 @@ export default function TeleImport() {
     setFileName(file.name);
 
     try {
-      const orders = await parseExcelFile(file);
+      const { orders, skippedNonTele } = await parseExcelFile(file);
       if (orders.length === 0) {
         setError('Nenhum pedido encontrado no arquivo.');
         setProcessing(false);
@@ -58,6 +60,46 @@ export default function TeleImport() {
 
       if (existingClosing) {
         closingId = existingClosing.id;
+
+        if (isTestMode) {
+          const { data: existingImports } = await supabase
+            .from('imports')
+            .select('id')
+            .eq('daily_closing_id', closingId);
+
+          const existingImportIds = (existingImports || []).map(item => item.id);
+
+          if (existingImportIds.length > 0) {
+            const { data: existingOrderRows } = await supabase
+              .from('imported_orders')
+              .select('id')
+              .in('import_id', existingImportIds);
+
+            const existingOrderIds = (existingOrderRows || []).map(item => item.id);
+
+            if (existingOrderIds.length > 0) {
+              await supabase
+                .from('card_transactions')
+                .update({ matched_order_id: null, match_type: null, match_confidence: null })
+                .in('matched_order_id', existingOrderIds);
+
+              await supabase
+                .from('order_payment_breakdowns')
+                .delete()
+                .in('imported_order_id', existingOrderIds);
+
+              await supabase
+                .from('imported_orders')
+                .delete()
+                .in('import_id', existingImportIds);
+            }
+
+            await supabase
+              .from('imports')
+              .delete()
+              .in('id', existingImportIds);
+          }
+        }
       } else {
         const { data: newClosing, error: closingErr } = await supabase
           .from('daily_closings')
@@ -130,6 +172,7 @@ export default function TeleImport() {
         newOrders: newOrders.length,
         closingDate: firstDate,
         isNewClosing,
+        skippedNonTele,
       });
     } catch (err: any) {
       setError(err.message || 'Erro ao processar o arquivo.');
@@ -201,6 +244,12 @@ export default function TeleImport() {
             </div>
           )}
 
+          <Alert className="mt-4">
+            <AlertDescription>
+              Na Tele{isTestMode ? ' Teste' : ''}, só entram pedidos de tele entrega. Linhas de balcão, retirada, ficha ou salão são ignoradas automaticamente.
+            </AlertDescription>
+          </Alert>
+
           <div className="mt-6 p-4 bg-muted/50 rounded-xl">
             <p className="text-xs font-semibold text-muted-foreground mb-2">Colunas utilizadas (Saipos):</p>
             <ul className="text-xs text-muted-foreground space-y-1">
@@ -230,6 +279,14 @@ export default function TeleImport() {
             <SummaryCard icon={<CheckCircle2 className="h-5 w-5 text-success" />} label="Novos" value={summary.newOrders} />
             <SummaryCard icon={<AlertCircle className="h-5 w-5 text-muted-foreground" />} label="Duplicados" value={summary.existing} />
           </div>
+
+          {summary.skippedNonTele > 0 && (
+            <Alert>
+              <AlertDescription>
+                {summary.skippedNonTele} linha(s) foram ignoradas por não pertencerem à tele entrega.
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => setSummary(null)} className="flex-1">
