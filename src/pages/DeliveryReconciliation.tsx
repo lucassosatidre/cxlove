@@ -680,10 +680,46 @@ export default function DeliveryReconciliation() {
                 Reprocessando com trava por método…
               </Badge>
             )}
+            {isTestMode && (
+              <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border">
+                <Button
+                  variant={activeTab === 'classic' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setActiveTab('classic')}
+                >
+                  Conciliação Clássica
+                </Button>
+                <Button
+                  variant={activeTab === 'atlas' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setActiveTab('atlas')}
+                >
+                  <Rocket className="h-3.5 w-3.5 mr-1" />
+                  Atlas Musk
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
+      {/* Atlas Musk View */}
+      {isTestMode && activeTab === 'atlas' ? (
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <AtlasMuskView
+            closingDate={closingDate}
+            orders={orders}
+            transactions={transactions}
+            breakdowns={breakdowns}
+            serialToDeliveryPerson={serialToDeliveryPerson}
+            onManualMatch={manualMatch}
+            onUnmatch={unmatch}
+          />
+        </div>
+      ) : (
+      <>
       {/* Payment Method Summary */}
       {transactions.length > 0 && (() => {
         const methodSummary = new Map<string, { total: number; count: number }>();
