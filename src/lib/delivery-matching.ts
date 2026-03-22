@@ -3,6 +3,12 @@
  * Matches card machine transactions to imported orders.
  */
 
+import {
+  canCoverExpectedMethods,
+  getDeliveryAutoMatchContext,
+  isTransactionMethodCompatible,
+} from './delivery-method-utils';
+
 interface OrderForMatching {
   id: string;
   order_number: string;
@@ -36,17 +42,6 @@ export interface MatchResult {
   amountDiff: number;
   /** For combined matches, the ID of the other transaction in the pair */
   combinedWithTransactionId?: string;
-}
-
-// Payment methods that are offline and should be reconciled (excluding cash)
-const OFFLINE_CARD_METHODS = ['crédito', 'credito', 'débito', 'debito', 'pix', 'voucher'];
-
-function isOfflineCardPayment(method: string): boolean {
-  const lower = method.toLowerCase();
-  if (lower.includes('online') || lower.includes('(pago)') || lower.includes('anotaai')) return false;
-  if (lower === 'dinheiro') return false;
-  if (lower.includes('voucher parceiro desconto')) return false;
-  return OFFLINE_CARD_METHODS.some(m => lower.includes(m));
 }
 
 function parseTimeToMinutes(time: string): number {
@@ -137,100 +132,90 @@ export function matchTransactionsToOrders(
 ): MatchResult[] {
   const results: MatchResult[] = [];
   const matchedTxIds = new Set<string>(existingMatches);
-  // Track how many matches each order has gotten vs how many it needs
-  const orderMatchCounts = new Map<string, number>();
-  const orderMatchTargets = new Map<string, number>();
+  const orderContexts = orders
+    .map(order => ({ order, context: getDeliveryAutoMatchContext(order, breakdowns) }))
+    .filter(({ context }) => context.profile.physicalMethods.length > 0);
 
-  // Only consider offline card payment orders (exclude cash and online)
-  const eligibleOrders = orders.filter(o => {
-    const methods = o.payment_method.split(',').map(m => m.trim());
-    return methods.some(m => isOfflineCardPayment(m));
-  });
-
-  // Pre-compute matchable amounts for each order
-  const orderAmounts = new Map<string, number[]>();
-  for (const order of eligibleOrders) {
-    const amounts = getMatchableAmounts(order, breakdowns);
-    orderAmounts.set(order.id, amounts);
-    orderMatchTargets.set(order.id, amounts.length);
-    orderMatchCounts.set(order.id, 0);
-  }
+  const matchedTargetIndexes = new Map<string, Set<number>>();
+  const combinedMatchedOrders = new Set<string>();
 
   const isOrderFullyMatched = (orderId: string) => {
-    return (orderMatchCounts.get(orderId) || 0) >= (orderMatchTargets.get(orderId) || 1);
+    const orderContext = orderContexts.find(({ order }) => order.id === orderId)?.context;
+    if (!orderContext) return true;
+    if (combinedMatchedOrders.has(orderId)) return true;
+    if (orderContext.exactTargets.length === 0) return false;
+    return (matchedTargetIndexes.get(orderId)?.size || 0) >= orderContext.exactTargets.length;
   };
 
-  // Phase 1: Exact amount matches (using breakdown amounts)
+  // Phase 1: exact 1:1 matches with hard method compatibility block
   for (const tx of transactions) {
     if (matchedTxIds.has(tx.id)) continue;
 
-    for (const order of eligibleOrders) {
-      if (isOrderFullyMatched(order.id)) continue;
-      // Transaction must be after order time
+    for (const { order, context } of orderContexts) {
+      if (context.isStructuralPending || context.exactTargets.length === 0 || isOrderFullyMatched(order.id)) continue;
       if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
-      
-      const amounts = orderAmounts.get(order.id) || [order.total_amount];
-      const matchedCount = orderMatchCounts.get(order.id) || 0;
-      
-      // Try to match against each unmatched amount
-      for (let i = matchedCount; i < amounts.length; i++) {
-        const targetAmount = amounts[i];
-        const diff = Math.abs(tx.gross_amount - targetAmount);
-        if (diff < 0.01) {
-          results.push({
-            transactionId: tx.id,
-            orderId: order.id,
-            matchType: 'exact',
-            confidence: 'high',
-            amountDiff: 0,
-          });
-          matchedTxIds.add(tx.id);
-          orderMatchCounts.set(order.id, matchedCount + 1);
-          break;
-        }
+
+      const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
+
+      for (let i = 0; i < context.exactTargets.length; i++) {
+        if (usedTargets.has(i)) continue;
+        const target = context.exactTargets[i];
+        if (!isTransactionMethodCompatible(tx.payment_method, target.method)) continue;
+        if (Math.abs(tx.gross_amount - target.amount) >= 0.01) continue;
+
+        results.push({
+          transactionId: tx.id,
+          orderId: order.id,
+          matchType: 'exact',
+          confidence: 'high',
+          amountDiff: 0,
+        });
+
+        matchedTxIds.add(tx.id);
+        usedTargets.add(i);
+        matchedTargetIndexes.set(order.id, usedTargets);
+        break;
       }
+
       if (matchedTxIds.has(tx.id)) break;
     }
   }
 
-  // Phase 2: Approximate matches for rateio cases
+  // Phase 2: approximate only when the method is compatible and there is no structural ambiguity
   const TOLERANCE = 0.5;
 
   for (const tx of transactions) {
     if (matchedTxIds.has(tx.id)) continue;
 
-    let bestMatch: { order: OrderForMatching; diff: number; confidence: 'medium' | 'low' } | null = null;
+    let bestMatch: { order: OrderForMatching; targetIndex: number; diff: number; confidence: 'medium' | 'low'; candidateCount: number } | null = null;
 
-    for (const order of eligibleOrders) {
-      if (isOrderFullyMatched(order.id)) continue;
-      // Transaction must be after order time
+    for (const { order, context } of orderContexts) {
+      if (context.isStructuralPending || !context.allowsApproximate || isOrderFullyMatched(order.id)) continue;
       if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
 
-      const methods = order.payment_method.split(',').map(m => m.trim().toLowerCase());
-      const hasVoucherDesconto = methods.some(m => m.includes('voucher parceiro desconto'));
-      const hasMultipleMethods = methods.length > 1;
+      const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
+      const candidates = context.exactTargets
+        .map((target, targetIndex) => ({ target, targetIndex }))
+        .filter(({ target, targetIndex }) => {
+          if (usedTargets.has(targetIndex)) return false;
+          if (!isTransactionMethodCompatible(tx.payment_method, target.method)) return false;
+          const diff = Math.abs(tx.gross_amount - target.amount);
+          return diff > 0 && diff <= TOLERANCE;
+        });
 
-      if (!hasMultipleMethods) continue;
+      if (candidates.length === 0) continue;
 
-      const diff = order.total_amount - tx.gross_amount;
-      if (diff < -TOLERANCE || diff > order.total_amount * 0.5) continue;
+      for (const { target, targetIndex } of candidates) {
+        const diff = Math.abs(tx.gross_amount - target.amount);
+        const confidence: 'medium' | 'low' = candidates.length > 1 ? 'low' : 'medium';
 
-      const txMinutes = parseTimeToMinutes(tx.sale_time);
-      const orderMinutes = parseTimeToMinutes(order.sale_time || '');
-      const timeDiff = txMinutes >= 0 && orderMinutes >= 0 ? Math.abs(txMinutes - orderMinutes) : 999;
-      
-      let confidence: 'medium' | 'low' = hasVoucherDesconto ? 'medium' : 'low';
-      
-      if (timeDiff <= 30) {
-        confidence = 'medium';
-      }
-
-      if (!bestMatch || diff < bestMatch.diff) {
-        bestMatch = { order, diff, confidence };
+        if (!bestMatch || diff < bestMatch.diff) {
+          bestMatch = { order, targetIndex, diff, confidence, candidateCount: candidates.length };
+        }
       }
     }
 
-    if (bestMatch && bestMatch.diff <= bestMatch.order.total_amount * 0.3) {
+    if (bestMatch) {
       results.push({
         transactionId: tx.id,
         orderId: bestMatch.order.id,
@@ -239,22 +224,19 @@ export function matchTransactionsToOrders(
         amountDiff: bestMatch.diff,
       });
       matchedTxIds.add(tx.id);
-      const count = orderMatchCounts.get(bestMatch.order.id) || 0;
-      orderMatchCounts.set(bestMatch.order.id, count + 1);
+      const usedTargets = matchedTargetIndexes.get(bestMatch.order.id) || new Set<number>();
+      usedTargets.add(bestMatch.targetIndex);
+      matchedTargetIndexes.set(bestMatch.order.id, usedTargets);
     }
   }
 
-  // Phase 3: Combined matches — two unmatched transactions that sum to an unmatched order amount
+  // Phase 3: combined exact matches only when the expected method structure is also respected
   const COMBINED_TOLERANCE = 0.50;
 
-  for (const order of eligibleOrders) {
-    if (isOrderFullyMatched(order.id)) continue;
+  for (const { order, context } of orderContexts) {
+    if (isOrderFullyMatched(order.id) || context.isStructuralPending || context.combinedTargetAmount === null) continue;
 
-    const amounts = orderAmounts.get(order.id) || [order.total_amount];
-    const matchedCount = orderMatchCounts.get(order.id) || 0;
-    
-    // For combined, try against unmatched target amounts or the total
-    const targetAmount = matchedCount < amounts.length ? amounts[matchedCount] : order.total_amount;
+    const targetAmount = context.combinedTargetAmount;
 
     const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
     if (remainingTxs.length < 2) break;
@@ -274,6 +256,7 @@ export function matchTransactionsToOrders(
         const diff = Math.abs(sum - targetAmount);
 
         if (diff > COMBINED_TOLERANCE) continue;
+        if (!canCoverExpectedMethods([tx1.payment_method, tx2.payment_method], context.expectedCombinedMethods)) continue;
 
         // Both transactions must be after order time
         if (!isTransactionAfterOrder(tx1.sale_time, order.sale_time || null)) continue;
@@ -319,8 +302,7 @@ export function matchTransactionsToOrders(
       });
       matchedTxIds.add(bestPair.tx1.id);
       matchedTxIds.add(bestPair.tx2.id);
-      const count = orderMatchCounts.get(order.id) || 0;
-      orderMatchCounts.set(order.id, count + 2);
+      combinedMatchedOrders.add(order.id);
     }
   }
 
