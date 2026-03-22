@@ -1239,7 +1239,6 @@ export default function DeliveryReconciliation() {
       )}
       </div>
     </div>
-    </div>
   );
 }
 
