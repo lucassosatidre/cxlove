@@ -18,6 +18,12 @@ import AppSidebar from '@/components/AppSidebar';
 import TestBanner from '@/components/TestBanner';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
+import {
+  getDeliveryAutoMatchContext,
+  getDeliveryDisplayAmount,
+  getDeliveryDisplayMethods,
+  isTransactionMethodCompatible,
+} from '@/lib/delivery-method-utils';
 import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
 
@@ -79,13 +85,16 @@ export default function DeliveryReconciliation() {
   const [expectedCash, setExpectedCash] = useState<{ counts: Record<string, number>; total: number } | null>(null);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+  const [hasAutoReprocessed, setHasAutoReprocessed] = useState(false);
 
   useEffect(() => {
     if (!id) return;
     loadData();
+    setHasAutoReprocessed(false);
   }, [id]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
@@ -143,7 +152,7 @@ export default function DeliveryReconciliation() {
     }
 
     setLoading(false);
-  };
+  }, [id]);
 
   // Filter orders to only show offline card payments (not cash, not online)
   // Prioritize breakdowns (operator-entered data) over raw Saipos payment_method
@@ -212,6 +221,104 @@ export default function DeliveryReconciliation() {
   const unmatchedTransactions = useMemo(() =>
     transactions.filter(tx => !tx.matched_order_id), [transactions]
   );
+
+  const orderContexts = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getDeliveryAutoMatchContext>>();
+    offlineOrders.forEach(order => {
+      map.set(order.id, getDeliveryAutoMatchContext(order, breakdowns));
+    });
+    return map;
+  }, [offlineOrders, breakdowns]);
+
+  const pendingMeta = useMemo(() => {
+    const meta = new Map<string, { label: string; tone: string; suggestions: string[] }>();
+
+    offlineOrders.forEach(order => {
+      if (matchedOrderIds.has(order.id)) return;
+
+      const context = orderContexts.get(order.id);
+      if (!context) return;
+
+      const suggestions: string[] = [];
+
+      if (context.isStructuralPending) {
+        suggestions.push('Pedido com Voucher Parceiro Desconto precisa do valor físico conciliável antes do vínculo automático.');
+        meta.set(order.id, {
+          label: 'Pendente estrutural',
+          tone: 'bg-warning/10 text-warning border-warning/20',
+          suggestions,
+        });
+        return;
+      }
+
+      const exactCandidates = context.exactTargets.length > 0
+        ? context.exactTargets
+        : context.combinedTargetAmount !== null
+          ? [{ amount: context.combinedTargetAmount, method: null as never, label: getDeliveryDisplayMethods(order, breakdowns) }]
+          : [];
+
+      const consumedCompatible = transactions.filter(tx => {
+        if (!tx.matched_order_id || tx.matched_order_id === order.id) return false;
+        if (context.combinedTargetAmount !== null && context.expectedCombinedMethods.length > 1) {
+          return false;
+        }
+        return exactCandidates.some(target =>
+          target.method &&
+          Math.abs(tx.gross_amount - target.amount) < 0.01 &&
+          isTransactionMethodCompatible(tx.payment_method, target.method)
+        );
+      });
+
+      if (consumedCompatible.length > 0) {
+        const stolen = consumedCompatible[0];
+        suggestions.push(
+          `Existe transação exata compatível atualmente consumida em outra comanda (${stolen.payment_method} ${formatCurrency(stolen.gross_amount)} às ${stolen.sale_time || '—'}).`
+        );
+        meta.set(order.id, {
+          label: 'Pendente por transação roubada',
+          tone: 'bg-primary/10 text-primary border-primary/20',
+          suggestions,
+        });
+        return;
+      }
+
+      const incompatibleExact = unmatchedTransactions.filter(tx =>
+        exactCandidates.some(target => {
+          if (!target.method) return false;
+          return Math.abs(tx.gross_amount - target.amount) < 0.01 && !isTransactionMethodCompatible(tx.payment_method, target.method);
+        })
+      );
+
+      if (incompatibleExact.length > 0) {
+        const first = incompatibleExact[0];
+        suggestions.push(`Existe transação no mesmo valor, mas o método é incompatível (${first.payment_method}).`);
+      }
+
+      const approximateCompatible = unmatchedTransactions.filter(tx =>
+        context.exactTargets.some(target => {
+          const diff = Math.abs(tx.gross_amount - target.amount);
+          return diff > 0 && diff <= 0.5 && isTransactionMethodCompatible(tx.payment_method, target.method);
+        })
+      );
+
+      if (approximateCompatible.length > 0) {
+        const first = approximateCompatible[0];
+        suggestions.push(`Existe transação próxima e compatível (${first.payment_method} ${formatCurrency(first.gross_amount)}), mas ainda sem segurança para auto-match.`);
+      }
+
+      if (suggestions.length === 0) {
+        suggestions.push('Nenhuma transação compatível suficiente encontrada para fechamento automático seguro.');
+      }
+
+      meta.set(order.id, {
+        label: 'Pendente real',
+        tone: 'bg-destructive/10 text-destructive border-destructive/20',
+        suggestions,
+      });
+    });
+
+    return meta;
+  }, [breakdowns, matchedOrderIds, offlineOrders, orderContexts, transactions, unmatchedTransactions]);
 
   const stats = useMemo(() => {
     const total = offlineOrders.length;
@@ -341,7 +448,84 @@ export default function DeliveryReconciliation() {
     } finally {
       setImporting(false);
     }
-  }, [user, id, orders]);
+  }, [user, id, orders, breakdowns, loadData]);
+
+  const reprocessAutomaticMatches = useCallback(async () => {
+    if (!id || !isTestMode || isReprocessing || transactions.length === 0) return;
+
+    setIsReprocessing(true);
+
+    try {
+      const manualMatchedTransactions = transactions.filter(tx => tx.match_type === 'manual' && tx.matched_order_id);
+      const manualTransactionIds = new Set(manualMatchedTransactions.map(tx => tx.id));
+      const manualOrderIds = new Set(manualMatchedTransactions.map(tx => tx.matched_order_id!));
+      const automaticMatches = transactions.filter(tx => tx.matched_order_id && tx.match_type !== 'manual');
+
+      if (automaticMatches.length > 0) {
+        const { error: clearError } = await supabase
+          .from('card_transactions')
+          .update({ matched_order_id: null, match_type: null, match_confidence: null })
+          .in('id', automaticMatches.map(tx => tx.id));
+
+        if (clearError) throw clearError;
+      }
+
+      const reprocessedMatches = matchTransactionsToOrders(
+        transactions
+          .filter(tx => !manualTransactionIds.has(tx.id))
+          .map(tx => ({
+            id: tx.id,
+            gross_amount: tx.gross_amount,
+            payment_method: tx.payment_method,
+            machine_serial: tx.machine_serial || '',
+            sale_time: tx.sale_time || '',
+          })),
+        orders
+          .filter(order => !manualOrderIds.has(order.id))
+          .map(order => ({
+            id: order.id,
+            order_number: order.order_number,
+            payment_method: order.payment_method,
+            total_amount: order.total_amount,
+            delivery_person: order.delivery_person,
+            sale_time: order.sale_time,
+            is_confirmed: order.is_confirmed,
+          })),
+        manualTransactionIds,
+        breakdowns
+      );
+
+      await Promise.all(
+        reprocessedMatches.map(match =>
+          supabase
+            .from('card_transactions')
+            .update({
+              matched_order_id: match.orderId,
+              match_type: match.matchType,
+              match_confidence: match.confidence,
+            })
+            .eq('id', match.transactionId)
+        )
+      );
+
+      if (automaticMatches.length > 0 || reprocessedMatches.length > 0) {
+        toast.success(`Tele Teste reprocessada com trava real por método (${reprocessedMatches.length} vínculos automáticos).`);
+      }
+
+      await loadData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao reprocessar a Tele Teste.');
+    } finally {
+      setIsReprocessing(false);
+      setHasAutoReprocessed(true);
+    }
+  }, [breakdowns, id, isReprocessing, isTestMode, loadData, orders, transactions]);
+
+  useEffect(() => {
+    if (!isTestMode || loading || hasAutoReprocessed || transactions.length === 0) return;
+    void reprocessAutomaticMatches();
+  }, [hasAutoReprocessed, isTestMode, loading, reprocessAutomaticMatches, transactions.length]);
 
   const manualMatch = useCallback(async (transactionId: string, orderId: string) => {
     // Save undo info
@@ -543,6 +727,11 @@ export default function DeliveryReconciliation() {
                 }}
               />
             </div>
+            {isTestMode && isReprocessing && (
+              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
+                Reprocessando com trava por método…
+              </Badge>
+            )}
           </div>
         </div>
       </header>
@@ -801,6 +990,7 @@ export default function DeliveryReconciliation() {
                 const confidence = matchedTxs?.[0]?.match_confidence;
                 const isCombined = matchedTxs && matchedTxs.length > 1;
                 const totalMatchedAmount = matchedTxs?.reduce((s, t) => s + t.gross_amount, 0) || 0;
+                const pendingInfo = pendingMeta.get(order.id);
 
                 return (
                   <div
@@ -841,24 +1031,16 @@ export default function DeliveryReconciliation() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-mono-tabular font-medium text-foreground">
-                          {(() => {
-                            const orderBks = breakdowns.filter(b => b.imported_order_id === order.id && b.payment_type === 'fisico');
-                            if (orderBks.length > 0) {
-                              const totalPhysical = orderBks.reduce((s, b) => s + b.amount, 0);
-                              return formatCurrency(totalPhysical);
-                            }
-                            return formatCurrency(order.total_amount);
-                          })()}
+                          {formatCurrency(getDeliveryDisplayAmount(order, breakdowns))}
                         </span>
                         <Badge variant="secondary" className="text-[10px]">
-                          {(() => {
-                            const orderBks = breakdowns.filter(b => b.imported_order_id === order.id && b.payment_type === 'fisico');
-                            if (orderBks.length > 0) {
-                              return orderBks.map(b => b.payment_method_name).join(', ');
-                            }
-                            return order.payment_method;
-                          })()}
+                          {getDeliveryDisplayMethods(order, breakdowns)}
                         </Badge>
+                        {!isMatched && pendingInfo && (
+                          <Badge variant="secondary" className={`text-[10px] border ${pendingInfo.tone}`}>
+                            {pendingInfo.label}
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
@@ -942,6 +1124,17 @@ export default function DeliveryReconciliation() {
                             Δ {formatCurrency(Math.abs(order.total_amount - matchedTxs[0].gross_amount))}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {!isMatched && pendingInfo && isTestMode && (
+                      <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
+                        {pendingInfo.suggestions.map((suggestion, index) => (
+                          <div key={`${order.id}-suggestion-${index}`} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                            <AlertTriangle className="h-3 w-3 mt-0.5 text-warning shrink-0" />
+                            <span>{suggestion}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
