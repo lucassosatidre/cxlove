@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import TestBanner from '@/components/TestBanner';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
-import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
+import { matchTransactionsToOrders, MatchResult, MatchType } from '@/lib/delivery-matching';
 import {
   getDeliveryAutoMatchContext,
   getDeliveryDisplayAmount,
