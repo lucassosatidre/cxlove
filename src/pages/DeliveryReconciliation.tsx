@@ -231,7 +231,7 @@ export default function DeliveryReconciliation() {
   }, [offlineOrders, breakdowns]);
 
   const pendingMeta = useMemo(() => {
-    const meta = new Map<string, { label: string; tone: string; suggestions: string[] }>();
+    const meta = new Map<string, ReturnType<typeof classifyPendingOrder>>();
 
     offlineOrders.forEach(order => {
       if (matchedOrderIds.has(order.id)) return;
@@ -239,86 +239,25 @@ export default function DeliveryReconciliation() {
       const context = orderContexts.get(order.id);
       if (!context) return;
 
-      const suggestions: string[] = [];
-
-      if (context.isStructuralPending) {
-        suggestions.push('Pedido com Voucher Parceiro Desconto precisa do valor físico conciliável antes do vínculo automático.');
-        meta.set(order.id, {
-          label: 'Pendente estrutural',
-          tone: 'bg-warning/10 text-warning border-warning/20',
-          suggestions,
-        });
-        return;
-      }
-
-      const exactCandidates = context.exactTargets.length > 0
-        ? context.exactTargets
-        : context.combinedTargetAmount !== null
-          ? [{ amount: context.combinedTargetAmount, method: null as never, label: getDeliveryDisplayMethods(order, breakdowns) }]
-          : [];
-
-      const consumedCompatible = transactions.filter(tx => {
-        if (!tx.matched_order_id || tx.matched_order_id === order.id) return false;
-        if (context.combinedTargetAmount !== null && context.expectedCombinedMethods.length > 1) {
-          return false;
-        }
-        return exactCandidates.some(target =>
-          target.method &&
-          Math.abs(tx.gross_amount - target.amount) < 0.01 &&
-          isTransactionMethodCompatible(tx.payment_method, target.method)
-        );
-      });
-
-      if (consumedCompatible.length > 0) {
-        const stolen = consumedCompatible[0];
-        suggestions.push(
-          `Existe transação exata compatível atualmente consumida em outra comanda (${stolen.payment_method} ${formatCurrency(stolen.gross_amount)} às ${stolen.sale_time || '—'}).`
-        );
-        meta.set(order.id, {
-          label: 'Pendente por transação roubada',
-          tone: 'bg-primary/10 text-primary border-primary/20',
-          suggestions,
-        });
-        return;
-      }
-
-      const incompatibleExact = unmatchedTransactions.filter(tx =>
-        exactCandidates.some(target => {
-          if (!target.method) return false;
-          return Math.abs(tx.gross_amount - target.amount) < 0.01 && !isTransactionMethodCompatible(tx.payment_method, target.method);
-        })
+      const classification = classifyPendingOrder(
+        order,
+        context,
+        transactions.map(tx => ({
+          id: tx.id,
+          gross_amount: tx.gross_amount,
+          payment_method: tx.payment_method,
+          sale_time: tx.sale_time,
+          matched_order_id: tx.matched_order_id,
+          machine_serial: tx.machine_serial,
+        })),
+        breakdowns,
       );
 
-      if (incompatibleExact.length > 0) {
-        const first = incompatibleExact[0];
-        suggestions.push(`Existe transação no mesmo valor, mas o método é incompatível (${first.payment_method}).`);
-      }
-
-      const approximateCompatible = unmatchedTransactions.filter(tx =>
-        context.exactTargets.some(target => {
-          const diff = Math.abs(tx.gross_amount - target.amount);
-          return diff > 0 && diff <= 0.5 && isTransactionMethodCompatible(tx.payment_method, target.method);
-        })
-      );
-
-      if (approximateCompatible.length > 0) {
-        const first = approximateCompatible[0];
-        suggestions.push(`Existe transação próxima e compatível (${first.payment_method} ${formatCurrency(first.gross_amount)}), mas ainda sem segurança para auto-match.`);
-      }
-
-      if (suggestions.length === 0) {
-        suggestions.push('Nenhuma transação compatível suficiente encontrada para fechamento automático seguro.');
-      }
-
-      meta.set(order.id, {
-        label: 'Pendente real',
-        tone: 'bg-destructive/10 text-destructive border-destructive/20',
-        suggestions,
-      });
+      meta.set(order.id, classification);
     });
 
     return meta;
-  }, [breakdowns, matchedOrderIds, offlineOrders, orderContexts, transactions, unmatchedTransactions]);
+  }, [breakdowns, matchedOrderIds, offlineOrders, orderContexts, transactions]);
 
   const stats = useMemo(() => {
     const total = offlineOrders.length;
