@@ -11,11 +11,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
-  Banknote, ShieldCheck, RotateCcw
+  Banknote, ShieldCheck, RotateCcw, Rocket
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import TestBanner from '@/components/TestBanner';
+import AtlasMuskView from '@/components/AtlasMuskView';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult, MatchType } from '@/lib/delivery-matching';
 import {
@@ -26,6 +27,11 @@ import {
 import { classifyPendingOrder } from '@/lib/delivery-pending-classifier';
 import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
+import {
+  exportMatchesXLSX,
+  exportPendingXLSX,
+  exportDriverSummaryXLSX,
+} from '@/lib/delivery-export';
 
 interface Order {
   id: string;
@@ -87,6 +93,7 @@ export default function DeliveryReconciliation() {
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [hasAutoReprocessed, setHasAutoReprocessed] = useState(false);
+  const [activeTab, setActiveTab] = useState<'classic' | 'atlas'>('classic');
 
   useEffect(() => {
     if (!id) return;
@@ -673,10 +680,46 @@ export default function DeliveryReconciliation() {
                 Reprocessando com trava por método…
               </Badge>
             )}
+            {isTestMode && (
+              <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border">
+                <Button
+                  variant={activeTab === 'classic' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setActiveTab('classic')}
+                >
+                  Conciliação Clássica
+                </Button>
+                <Button
+                  variant={activeTab === 'atlas' ? 'default' : 'ghost'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setActiveTab('atlas')}
+                >
+                  <Rocket className="h-3.5 w-3.5 mr-1" />
+                  Atlas Musk
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
+      {/* Atlas Musk View */}
+      {isTestMode && activeTab === 'atlas' ? (
+        <div className="flex-1 overflow-auto px-6 py-4">
+          <AtlasMuskView
+            closingDate={closingDate}
+            orders={orders}
+            transactions={transactions}
+            breakdowns={breakdowns}
+            serialToDeliveryPerson={serialToDeliveryPerson}
+            onManualMatch={manualMatch}
+            onUnmatch={unmatch}
+          />
+        </div>
+      ) : (
+      <>
       {/* Payment Method Summary */}
       {transactions.length > 0 && (() => {
         const methodSummary = new Map<string, { total: number; count: number }>();
@@ -1191,6 +1234,8 @@ export default function DeliveryReconciliation() {
             )}
           </div>
         </div>
+      )}
+      </>
       )}
       </div>
     </div>
