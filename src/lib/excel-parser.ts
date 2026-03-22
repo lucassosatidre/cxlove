@@ -11,6 +11,12 @@ export interface ParsedOrder {
   partner_order_number: string;
 }
 
+export interface ParseExcelResult {
+  orders: ParsedOrder[];
+  skippedCancelled: number;
+  skippedNonTele: number;
+}
+
 const HEADER_NAMES: Record<string, string> = {
   'Pedido': 'order_number',
   'Pagamento': 'payment_method',
@@ -29,6 +35,9 @@ const SALES_CHANNEL_FALLBACK_INDEX = 5;
 const PARTNER_ORDER_HEADER_NAMES = ['Pedido Parceiro', 'Nº Parceiro', 'Número do pedido no parceiro', 'Pedido parceiro'];
 const PARTNER_ORDER_FALLBACK_INDEX = 7;
 
+const ORDER_TYPE_HEADER_NAMES = ['Tipo', 'Tipo do Pedido', 'Tipo do pedido', 'Tipo Pedido'];
+const NON_TELE_CHANNELS = new Set(['balcao', 'balcão', 'retirada', 'salao', 'salão', 'ficha']);
+
 // Fallback column indices (0-based): A=0, I=8, L=11, R=17, Y=24
 const FALLBACK_INDICES: Record<number, string> = {
   0: 'order_number',
@@ -38,6 +47,27 @@ const FALLBACK_INDICES: Record<number, string> = {
 };
 
 const SALE_DATE_FALLBACK_INDEX = 8; // Column I
+
+function normalizeText(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isTeleOrder(orderType: string, salesChannel: string, deliveryPerson: string): boolean {
+  const normalizedType = normalizeText(orderType).toUpperCase();
+  if (normalizedType) {
+    return normalizedType.startsWith('D');
+  }
+
+  if (NON_TELE_CHANNELS.has(normalizeText(salesChannel))) {
+    return false;
+  }
+
+  return deliveryPerson.trim().length > 0;
+}
 
 function parseCurrency(value: unknown): number {
   if (typeof value === 'number') return value;
@@ -108,7 +138,7 @@ function parseTime(value: unknown): string {
   return '';
 }
 
-export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
+export function parseExcelFile(file: File): Promise<ParseExcelResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -128,6 +158,7 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
         let saleDateIndex: number | undefined;
         let salesChannelIndex: number | undefined;
         let partnerOrderIndex: number | undefined;
+        let orderTypeIndex: number | undefined;
 
         // Try to find columns by header name
         headerRow.forEach((cell, index) => {
@@ -143,6 +174,9 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
           }
           if (PARTNER_ORDER_HEADER_NAMES.some(h => cellStr.toLowerCase() === h.toLowerCase())) {
             partnerOrderIndex = index;
+          }
+          if (ORDER_TYPE_HEADER_NAMES.some(h => cellStr.toLowerCase() === h.toLowerCase())) {
+            orderTypeIndex = index;
           }
         });
 
@@ -184,6 +218,7 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
 
         const orders: ParsedOrder[] = [];
         let skippedCancelled = 0;
+        let skippedNonTele = 0;
         for (let i = 1; i < jsonData.length; i++) {
           const row = jsonData[i] as unknown[];
           if (!row || row.length === 0) continue;
@@ -201,16 +236,23 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
           // Skip rows where column A is not a pure number (e.g. "Salão", "Retirada")
           if (!/^\d+$/.test(orderNumber)) continue;
 
+          const deliveryPerson = String(row[columnMap.delivery_person] ?? '').trim();
           const saleDate = saleDateIndex !== undefined ? parseDate(row[saleDateIndex]) : '';
           const saleTime = saleDateIndex !== undefined ? parseTime(row[saleDateIndex]) : '';
           const salesChannel = salesChannelIndex !== undefined ? String(row[salesChannelIndex] ?? '').trim() : '';
           const partnerOrderNumber = partnerOrderIndex !== undefined ? String(row[partnerOrderIndex] ?? '').trim() : '';
+          const orderType = orderTypeIndex !== undefined ? String(row[orderTypeIndex] ?? '').trim() : '';
+
+          if (!isTeleOrder(orderType, salesChannel, deliveryPerson)) {
+            skippedNonTele++;
+            continue;
+          }
 
           orders.push({
             order_number: orderNumber,
             payment_method: String(row[columnMap.payment_method] ?? '').trim(),
             total_amount: parseCurrency(row[columnMap.total_amount]),
-            delivery_person: String(row[columnMap.delivery_person] ?? '').trim(),
+            delivery_person: deliveryPerson,
             sale_date: saleDate,
             sale_time: saleTime,
             sales_channel: salesChannel,
@@ -219,11 +261,15 @@ export function parseExcelFile(file: File): Promise<ParsedOrder[]> {
         }
 
         if (orders.length === 0) {
+          if (skippedNonTele > 0) {
+            reject(new Error(`Nenhum pedido de tele entrega encontrado no arquivo. ${skippedNonTele} linha(s) foram ignoradas por não pertencerem à tele.`));
+            return;
+          }
           reject(new Error('Nenhum pedido encontrado no arquivo.'));
           return;
         }
 
-        resolve(orders);
+        resolve({ orders, skippedCancelled, skippedNonTele });
       } catch (err) {
         reject(new Error('Erro ao ler o arquivo Excel. Verifique se o formato está correto.'));
       }
