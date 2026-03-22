@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { matchTransactionsToOrders } from '@/lib/delivery-matching';
 
-describe('delivery matching strict method compatibility', () => {
-  it('bloqueia match automático quando o valor é igual, mas o método é incompatível', () => {
+describe('delivery matching — global allocation with method divergence', () => {
+  it('permite match exato quando valor bate mas método diverge (exact_method_divergence)', () => {
     const matches = matchTransactionsToOrders(
       [
         {
@@ -29,7 +29,13 @@ describe('delivery matching strict method compatibility', () => {
       []
     );
 
-    expect(matches).toHaveLength(0);
+    // Should match with method divergence instead of blocking
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({
+      matchType: 'exact_method_divergence',
+      confidence: 'medium',
+      orderId: 'order-credito',
+    });
   });
 
   it('mantém match exato quando valor e método batem', () => {
@@ -89,5 +95,47 @@ describe('delivery matching strict method compatibility', () => {
     );
 
     expect(matches).toHaveLength(0);
+  });
+
+  it('prioriza match com método compatível sobre divergente para o mesmo valor', () => {
+    const matches = matchTransactionsToOrders(
+      [
+        {
+          id: 'tx-credito',
+          gross_amount: 100.00,
+          payment_method: 'Credito',
+          machine_serial: 'SERIAL-A',
+          sale_time: '14:00:00',
+        },
+        {
+          id: 'tx-debito',
+          gross_amount: 100.00,
+          payment_method: 'Debito',
+          machine_serial: 'SERIAL-A',
+          sale_time: '14:05:00',
+        },
+      ],
+      [
+        {
+          id: 'order-credito',
+          order_number: '10',
+          payment_method: 'Crédito',
+          total_amount: 100.00,
+          delivery_person: 'João',
+          sale_time: '13:50',
+          is_confirmed: true,
+        },
+      ],
+      new Set(),
+      []
+    );
+
+    expect(matches).toHaveLength(1);
+    // Should pick the credit transaction (method-compatible) over debit
+    expect(matches[0]).toMatchObject({
+      transactionId: 'tx-credito',
+      matchType: 'exact',
+      confidence: 'high',
+    });
   });
 });
