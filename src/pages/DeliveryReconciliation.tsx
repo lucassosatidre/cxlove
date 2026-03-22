@@ -93,6 +93,7 @@ export default function DeliveryReconciliation() {
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [hasAutoReprocessed, setHasAutoReprocessed] = useState(false);
+  const [activeTab, setActiveTab] = useState<'classic' | 'atlas'>('classic');
 
   useEffect(() => {
     if (!id) return;
