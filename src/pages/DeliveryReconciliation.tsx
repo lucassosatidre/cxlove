@@ -17,7 +17,7 @@ import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import TestBanner from '@/components/TestBanner';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
-import { matchTransactionsToOrders, MatchResult } from '@/lib/delivery-matching';
+import { matchTransactionsToOrders, MatchResult, MatchType } from '@/lib/delivery-matching';
 import {
   getDeliveryAutoMatchContext,
   getDeliveryDisplayAmount,
@@ -450,7 +450,7 @@ export default function DeliveryReconciliation() {
       );
 
       if (automaticMatches.length > 0 || reprocessedMatches.length > 0) {
-        toast.success(`Tele Teste reprocessada com trava real por método (${reprocessedMatches.length} vínculos automáticos).`);
+        toast.success(`Tele Teste reprocessada com alocação global (${reprocessedMatches.length} vínculos automáticos).`);
       }
 
       await loadData();
@@ -1016,28 +1016,38 @@ export default function DeliveryReconciliation() {
                                 })()}
                                 {' '}— <span className="font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
                               </span>
-                              {idx === 0 && (
-                                <Badge
-                                  variant="secondary"
-                                  className={`text-[9px] ${
-                                    confidence === 'high'
+                              {idx === 0 && (() => {
+                                const matchLabel = (() => {
+                                  switch (tx.match_type) {
+                                    case 'manual': return 'Manual';
+                                    case 'combined': return 'Match combinado';
+                                    case 'combined_undeclared': return 'Match combinado não declarado';
+                                    case 'exact_method_divergence': return 'Match exato · método divergente';
+                                    case 'exact_structure_divergence': return 'Match exato · estrutura divergente';
+                                    case 'exact': return 'Match exato';
+                                    case 'approximate': return 'Match aproximado';
+                                    default:
+                                      return confidence === 'high' ? 'Match exato'
+                                        : confidence === 'medium' ? 'Match aproximado'
+                                        : 'Baixa confiança';
+                                  }
+                                })();
+                                const isDivergence = tx.match_type === 'exact_method_divergence' || tx.match_type === 'exact_structure_divergence';
+                                const badgeColor = isDivergence
+                                  ? 'bg-amber-500/10 text-amber-600'
+                                  : tx.match_type === 'combined_undeclared'
+                                    ? 'bg-violet-500/10 text-violet-600'
+                                    : confidence === 'high'
                                       ? 'bg-success/10 text-success'
                                       : confidence === 'medium'
                                         ? 'bg-primary/10 text-primary'
-                                        : 'bg-warning/10 text-warning'
-                                  }`}
-                                >
-                                  {tx.match_type === 'manual'
-                                    ? 'Manual'
-                                    : tx.match_type === 'combined'
-                                      ? 'Match combinado'
-                                      : confidence === 'high'
-                                        ? 'Match exato'
-                                        : confidence === 'medium'
-                                          ? 'Match aproximado'
-                                          : 'Baixa confiança'}
-                                </Badge>
-                              )}
+                                        : 'bg-warning/10 text-warning';
+                                return (
+                                  <Badge variant="secondary" className={`text-[9px] ${badgeColor}`}>
+                                    {matchLabel}
+                                  </Badge>
+                                );
+                              })()}
                             </div>
                             <Button
                               variant="ghost"
