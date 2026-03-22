@@ -432,7 +432,8 @@ export default function DeliveryReconciliation() {
             is_confirmed: order.is_confirmed,
           })),
         manualTransactionIds,
-        breakdowns
+        breakdowns,
+        serialToDeliveryPerson
       );
 
       await Promise.all(
