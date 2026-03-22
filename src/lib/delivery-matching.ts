@@ -7,6 +7,7 @@ import {
   canCoverExpectedMethods,
   getDeliveryAutoMatchContext,
   isTransactionMethodCompatible,
+  normalizeDeliveryMethod,
 } from './delivery-method-utils';
 
 interface OrderForMatching {
@@ -57,10 +58,10 @@ function parseTimeToMinutes(time: string): number {
  * Returns true if either time is missing (can't validate).
  */
 function isTransactionAfterOrder(txTime: string | null, orderTime: string | null): boolean {
-  if (!txTime || !orderTime) return true; // can't validate, allow
+  if (!txTime || !orderTime) return true;
   const txMin = parseTimeToMinutes(txTime);
   const orderMin = parseTimeToMinutes(orderTime);
-  if (txMin < 0 || orderMin < 0) return true; // can't parse, allow
+  if (txMin < 0 || orderMin < 0) return true;
   return txMin >= orderMin;
 }
 
@@ -96,39 +97,58 @@ export function buildSerialDeliveryMap(
 }
 
 /**
- * Get the amounts to match for an order.
- * If breakdowns exist with physical methods, use those individual amounts.
- * Otherwise, use the order total.
+ * Infer delivery person from serial using a pre-built map.
  */
-function getMatchableAmounts(
-  order: OrderForMatching,
-  breakdowns: BreakdownForMatching[]
-): number[] {
-  const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === order.id);
-  
-  if (orderBreakdowns.length > 0) {
-    // Use physical breakdown amounts for matching
-    const physicalAmounts = orderBreakdowns
-      .filter(b => b.payment_type === 'fisico' && b.amount > 0)
-      .map(b => b.amount);
-    
-    if (physicalAmounts.length > 0) {
-      return physicalAmounts;
-    }
-  }
-  
-  // Fallback: use total amount
-  return [order.total_amount];
+function inferDeliveryPerson(
+  serial: string,
+  serialMap: Map<string, string>
+): string | null {
+  return serial ? (serialMap.get(serial) || null) : null;
 }
 
 /**
- * Main matching algorithm
+ * Score how well a transaction matches an order contextually (delivery person, time).
+ * Higher is better. Used for tiebreaking.
+ */
+function contextScore(
+  tx: TransactionForMatching,
+  order: OrderForMatching,
+  serialMap: Map<string, string>
+): number {
+  let score = 0;
+
+  // Delivery person match via serial
+  const inferred = inferDeliveryPerson(tx.machine_serial, serialMap);
+  if (inferred && order.delivery_person) {
+    if (inferred.trim().toLowerCase() === order.delivery_person.trim().toLowerCase()) {
+      score += 3; // strong signal
+    } else {
+      score -= 1; // mismatch penalty
+    }
+  }
+
+  // Time proximity
+  const txMin = parseTimeToMinutes(tx.sale_time);
+  const orderMin = parseTimeToMinutes(order.sale_time || '');
+  if (txMin >= 0 && orderMin >= 0) {
+    const diff = Math.abs(txMin - orderMin);
+    if (diff <= 15) score += 2;
+    else if (diff <= 30) score += 1;
+    else if (diff > 120) score -= 1;
+  }
+
+  return score;
+}
+
+/**
+ * Main matching algorithm with orphan recovery and strict approximate rules.
  */
 export function matchTransactionsToOrders(
   transactions: TransactionForMatching[],
   orders: OrderForMatching[],
   existingMatches: Set<string>,
-  breakdowns: BreakdownForMatching[] = []
+  breakdowns: BreakdownForMatching[] = [],
+  serialDeliveryMap?: Map<string, string>
 ): MatchResult[] {
   const results: MatchResult[] = [];
   const matchedTxIds = new Set<string>(existingMatches);
@@ -138,6 +158,7 @@ export function matchTransactionsToOrders(
 
   const matchedTargetIndexes = new Map<string, Set<number>>();
   const combinedMatchedOrders = new Set<string>();
+  const serialMap = serialDeliveryMap || new Map<string, string>();
 
   const isOrderFullyMatched = (orderId: string) => {
     const orderContext = orderContexts.find(({ order }) => order.id === orderId)?.context;
@@ -147,97 +168,67 @@ export function matchTransactionsToOrders(
     return (matchedTargetIndexes.get(orderId)?.size || 0) >= orderContext.exactTargets.length;
   };
 
-  // Phase 1: exact 1:1 matches with hard method compatibility block
+  // ═══════════════════════════════════════════════════════════
+  // Phase 1: Exact 1:1 matches with hard method block + context tiebreaker
+  // ═══════════════════════════════════════════════════════════
+  // Build candidate map: for each (orderIndex, targetIndex), find all exact-compatible txs
+  interface ExactCandidate {
+    tx: TransactionForMatching;
+    orderIdx: number;
+    targetIdx: number;
+    ctxScore: number;
+  }
+
+  const exactCandidates: ExactCandidate[] = [];
+
   for (const tx of transactions) {
     if (matchedTxIds.has(tx.id)) continue;
-
-    for (const { order, context } of orderContexts) {
+    for (let oi = 0; oi < orderContexts.length; oi++) {
+      const { order, context } = orderContexts[oi];
       if (context.isStructuralPending || context.exactTargets.length === 0 || isOrderFullyMatched(order.id)) continue;
       if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
 
-      const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
-
-      for (let i = 0; i < context.exactTargets.length; i++) {
-        if (usedTargets.has(i)) continue;
-        const target = context.exactTargets[i];
+      for (let ti = 0; ti < context.exactTargets.length; ti++) {
+        const target = context.exactTargets[ti];
         if (!isTransactionMethodCompatible(tx.payment_method, target.method)) continue;
         if (Math.abs(tx.gross_amount - target.amount) >= 0.01) continue;
-
-        results.push({
-          transactionId: tx.id,
-          orderId: order.id,
-          matchType: 'exact',
-          confidence: 'high',
-          amountDiff: 0,
-        });
-
-        matchedTxIds.add(tx.id);
-        usedTargets.add(i);
-        matchedTargetIndexes.set(order.id, usedTargets);
-        break;
+        exactCandidates.push({ tx, orderIdx: oi, targetIdx: ti, ctxScore: contextScore(tx, order, serialMap) });
       }
-
-      if (matchedTxIds.has(tx.id)) break;
     }
   }
 
-  // Phase 2: approximate only when the method is compatible and there is no structural ambiguity
-  const TOLERANCE = 0.5;
+  // Sort by context score descending so best matches go first
+  exactCandidates.sort((a, b) => b.ctxScore - a.ctxScore);
 
-  for (const tx of transactions) {
-    if (matchedTxIds.has(tx.id)) continue;
+  for (const candidate of exactCandidates) {
+    if (matchedTxIds.has(candidate.tx.id)) continue;
+    const { order } = orderContexts[candidate.orderIdx];
+    if (isOrderFullyMatched(order.id)) continue;
+    const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
+    if (usedTargets.has(candidate.targetIdx)) continue;
 
-    let bestMatch: { order: OrderForMatching; targetIndex: number; diff: number; confidence: 'medium' | 'low'; candidateCount: number } | null = null;
+    results.push({
+      transactionId: candidate.tx.id,
+      orderId: order.id,
+      matchType: 'exact',
+      confidence: 'high',
+      amountDiff: 0,
+    });
 
-    for (const { order, context } of orderContexts) {
-      if (context.isStructuralPending || !context.allowsApproximate || isOrderFullyMatched(order.id)) continue;
-      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
-
-      const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
-      const candidates = context.exactTargets
-        .map((target, targetIndex) => ({ target, targetIndex }))
-        .filter(({ target, targetIndex }) => {
-          if (usedTargets.has(targetIndex)) return false;
-          if (!isTransactionMethodCompatible(tx.payment_method, target.method)) return false;
-          const diff = Math.abs(tx.gross_amount - target.amount);
-          return diff > 0 && diff <= TOLERANCE;
-        });
-
-      if (candidates.length === 0) continue;
-
-      for (const { target, targetIndex } of candidates) {
-        const diff = Math.abs(tx.gross_amount - target.amount);
-        const confidence: 'medium' | 'low' = candidates.length > 1 ? 'low' : 'medium';
-
-        if (!bestMatch || diff < bestMatch.diff) {
-          bestMatch = { order, targetIndex, diff, confidence, candidateCount: candidates.length };
-        }
-      }
-    }
-
-    if (bestMatch) {
-      results.push({
-        transactionId: tx.id,
-        orderId: bestMatch.order.id,
-        matchType: 'approximate',
-        confidence: bestMatch.confidence,
-        amountDiff: bestMatch.diff,
-      });
-      matchedTxIds.add(tx.id);
-      const usedTargets = matchedTargetIndexes.get(bestMatch.order.id) || new Set<number>();
-      usedTargets.add(bestMatch.targetIndex);
-      matchedTargetIndexes.set(bestMatch.order.id, usedTargets);
-    }
+    matchedTxIds.add(candidate.tx.id);
+    usedTargets.add(candidate.targetIdx);
+    matchedTargetIndexes.set(order.id, usedTargets);
   }
 
-  // Phase 3: combined exact matches only when the expected method structure is also respected
+  // ═══════════════════════════════════════════════════════════
+  // Phase 2: Combined exact matches (method-compatible)
+  // ═══════════════════════════════════════════════════════════
   const COMBINED_TOLERANCE = 0.50;
 
   for (const { order, context } of orderContexts) {
     if (isOrderFullyMatched(order.id) || context.isStructuralPending || context.combinedTargetAmount === null) continue;
 
     const targetAmount = context.combinedTargetAmount;
-
     const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
     if (remainingTxs.length < 2) break;
 
@@ -246,6 +237,7 @@ export function matchTransactionsToOrders(
       tx2: TransactionForMatching;
       confidence: 'high' | 'medium' | 'low';
       diff: number;
+      score: number;
     } | null = null;
 
     for (let i = 0; i < remainingTxs.length; i++) {
@@ -257,8 +249,6 @@ export function matchTransactionsToOrders(
 
         if (diff > COMBINED_TOLERANCE) continue;
         if (!canCoverExpectedMethods([tx1.payment_method, tx2.payment_method], context.expectedCombinedMethods)) continue;
-
-        // Both transactions must be after order time
         if (!isTransactionAfterOrder(tx1.sale_time, order.sale_time || null)) continue;
         if (!isTransactionAfterOrder(tx2.sale_time, order.sale_time || null)) continue;
 
@@ -275,10 +265,14 @@ export function matchTransactionsToOrders(
           if (Math.abs(avgTxMin - orderMin) <= 30) score++;
         }
 
-        const confidence: 'high' | 'medium' | 'low' = score >= 2 ? 'high' : score === 1 ? 'medium' : 'low';
+        // Delivery person context
+        score += contextScore(tx1, order, serialMap);
+        score += contextScore(tx2, order, serialMap);
 
-        if (!bestPair || score > (bestPair.confidence === 'high' ? 2 : bestPair.confidence === 'medium' ? 1 : 0) || (diff < bestPair.diff)) {
-          bestPair = { tx1, tx2, confidence, diff };
+        const confidence: 'high' | 'medium' | 'low' = score >= 4 ? 'high' : score >= 2 ? 'medium' : 'low';
+
+        if (!bestPair || score > bestPair.score || (score === bestPair.score && diff < bestPair.diff)) {
+          bestPair = { tx1, tx2, confidence, diff, score };
         }
       }
     }
@@ -303,6 +297,112 @@ export function matchTransactionsToOrders(
       matchedTxIds.add(bestPair.tx1.id);
       matchedTxIds.add(bestPair.tx2.id);
       combinedMatchedOrders.add(order.id);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Phase 3: Orphan recovery — re-check unmatched orders for exact txs
+  // that may have been freed by earlier phases or missed due to ordering
+  // ═══════════════════════════════════════════════════════════
+  for (const { order, context } of orderContexts) {
+    if (isOrderFullyMatched(order.id) || context.isStructuralPending || context.exactTargets.length === 0) continue;
+
+    const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
+
+    for (let ti = 0; ti < context.exactTargets.length; ti++) {
+      if (usedTargets.has(ti)) continue;
+      const target = context.exactTargets[ti];
+
+      // Find best available exact tx with context tiebreaker
+      let bestTx: TransactionForMatching | null = null;
+      let bestScore = -Infinity;
+
+      for (const tx of transactions) {
+        if (matchedTxIds.has(tx.id)) continue;
+        if (!isTransactionMethodCompatible(tx.payment_method, target.method)) continue;
+        if (Math.abs(tx.gross_amount - target.amount) >= 0.01) continue;
+        if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
+
+        const score = contextScore(tx, order, serialMap);
+        if (!bestTx || score > bestScore) {
+          bestTx = tx;
+          bestScore = score;
+        }
+      }
+
+      if (bestTx) {
+        results.push({
+          transactionId: bestTx.id,
+          orderId: order.id,
+          matchType: 'exact',
+          confidence: 'high',
+          amountDiff: 0,
+        });
+        matchedTxIds.add(bestTx.id);
+        usedTargets.add(ti);
+        matchedTargetIndexes.set(order.id, usedTargets);
+      }
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Phase 4: Strict approximate matching — only when all criteria align
+  // ═══════════════════════════════════════════════════════════
+  const APPROX_STRONG = 0.20;
+  const APPROX_MAX = 0.50;
+
+  for (const tx of transactions) {
+    if (matchedTxIds.has(tx.id)) continue;
+
+    let bestMatch: {
+      order: OrderForMatching;
+      targetIndex: number;
+      diff: number;
+      confidence: 'medium' | 'low';
+      totalScore: number;
+    } | null = null;
+
+    for (const { order, context } of orderContexts) {
+      if (context.isStructuralPending || !context.allowsApproximate || isOrderFullyMatched(order.id)) continue;
+      if (!isTransactionAfterOrder(tx.sale_time, order.sale_time)) continue;
+
+      const usedTargets = matchedTargetIndexes.get(order.id) || new Set<number>();
+
+      for (let ti = 0; ti < context.exactTargets.length; ti++) {
+        if (usedTargets.has(ti)) continue;
+        const target = context.exactTargets[ti];
+        if (!isTransactionMethodCompatible(tx.payment_method, target.method)) continue;
+
+        const diff = Math.abs(tx.gross_amount - target.amount);
+        if (diff < 0.01 || diff > APPROX_MAX) continue;
+
+        const ctxSc = contextScore(tx, order, serialMap);
+
+        // For diffs > APPROX_STRONG, require strong context (delivery person + time)
+        if (diff > APPROX_STRONG && ctxSc < 3) continue;
+
+        const totalScore = ctxSc * 100 - diff * 1000; // context dominates, then diff
+
+        const confidence: 'medium' | 'low' = diff <= APPROX_STRONG ? 'medium' : 'low';
+
+        if (!bestMatch || totalScore > bestMatch.totalScore) {
+          bestMatch = { order, targetIndex: ti, diff, confidence, totalScore };
+        }
+      }
+    }
+
+    if (bestMatch) {
+      results.push({
+        transactionId: tx.id,
+        orderId: bestMatch.order.id,
+        matchType: 'approximate',
+        confidence: bestMatch.confidence,
+        amountDiff: bestMatch.diff,
+      });
+      matchedTxIds.add(tx.id);
+      const usedTargets = matchedTargetIndexes.get(bestMatch.order.id) || new Set<number>();
+      usedTargets.add(bestMatch.targetIndex);
+      matchedTargetIndexes.set(bestMatch.order.id, usedTargets);
     }
   }
 
