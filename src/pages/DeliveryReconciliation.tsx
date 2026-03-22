@@ -343,7 +343,7 @@ export default function DeliveryReconciliation() {
 
       const newTxs = (inserted || []) as CardTransaction[];
 
-      // Run auto-matching
+      // Run auto-matching with serial map for delivery person context
       const matchResults = matchTransactionsToOrders(
         newTxs.map(tx => ({
           id: tx.id,
@@ -362,7 +362,8 @@ export default function DeliveryReconciliation() {
           is_confirmed: o.is_confirmed,
         })),
         new Set(),
-        breakdowns
+        breakdowns,
+        serialToDeliveryPerson
       );
 
       // Apply matches
