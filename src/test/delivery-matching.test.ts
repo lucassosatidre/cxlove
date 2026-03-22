@@ -50,7 +50,7 @@ describe('delivery matching strict method compatibility', () => {
           payment_method: 'Débito',
           total_amount: 77,
           delivery_person: 'Luiz',
-          sale_time: '18:54',
+          sale_time: '18:10',
           is_confirmed: true,
         },
       ],
