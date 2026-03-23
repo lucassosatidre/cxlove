@@ -363,25 +363,56 @@ export default function SalonClosing() {
       subtitle={`${orders.length} pedidos`}
       headerActions={
         <div className="flex items-center gap-2">
-          <div className="relative group">
-            <Button
-              variant="default"
-              onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
-              disabled={!canNavigateReconciliation}
-            >
-              Conciliação Salão
-            </Button>
-            {!canNavigateReconciliation && (
-              <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
-                {validationAlerts.map((alert, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                    {alert}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {isCompleted ? (
+            isAdmin && (
+              <Button variant="outline" onClick={handleReopen} disabled={finalizing}>
+                <Unlock className="h-4 w-4 mr-1" />
+                {finalizing ? 'Reabrindo...' : 'Reabrir Fechamento'}
+              </Button>
+            )
+          ) : (
+            <div className="relative group">
+              <Button
+                variant="default"
+                onClick={handleFinalize}
+                disabled={!canFinalize || finalizing}
+              >
+                <Lock className="h-4 w-4 mr-1" />
+                {finalizing ? 'Finalizando...' : 'Finalizar Fechamento'}
+              </Button>
+              {!canFinalize && (
+                <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
+                  {validationAlerts.map((alert, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {alert}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="relative group">
+              <Button
+                variant="secondary"
+                onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
+                disabled={!canNavigateReconciliation}
+              >
+                Conciliação Salão
+              </Button>
+              {!canNavigateReconciliation && (
+                <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
+                  {validationAlerts.map((alert, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {alert}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <Button variant="outline" onClick={() => navigate('/salon')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
