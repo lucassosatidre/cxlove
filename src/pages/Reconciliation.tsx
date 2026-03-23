@@ -216,6 +216,51 @@ export default function Reconciliation() {
     setLoading(false);
   };
 
+  const toggleImportSelection = (importId: string) => {
+    setSelectedImports(prev => {
+      const next = new Set(prev);
+      if (next.has(importId)) next.delete(importId);
+      else next.add(importId);
+      return next;
+    });
+  };
+
+  const handleDeleteSelectedImports = async () => {
+    if (selectedImports.size === 0) return;
+    const confirmed = window.confirm(`Tem certeza que deseja apagar ${selectedImports.size} importação(ões)? Os pedidos associados serão removidos, mas contagens de dinheiro e maquininhas serão preservadas.`);
+    if (!confirmed) return;
+
+    setDeletingImports(true);
+    try {
+      const importIds = Array.from(selectedImports);
+
+      const { data: ordersToDelete } = await supabase
+        .from('imported_orders')
+        .select('id')
+        .in('import_id', importIds);
+
+      if (ordersToDelete && ordersToDelete.length > 0) {
+        const orderIds = ordersToDelete.map(o => o.id);
+        await supabase.from('card_transactions')
+          .update({ matched_order_id: null, match_type: null, match_confidence: null })
+          .in('matched_order_id', orderIds);
+        await supabase.from('order_payment_breakdowns').delete().in('imported_order_id', orderIds);
+        await supabase.from('imported_orders').delete().in('import_id', importIds);
+      }
+
+      await supabase.from('imports').delete().in('id', importIds);
+
+      toast.success(`${importIds.length} importação(ões) removida(s). Contagens e maquininhas preservadas.`);
+      setSelectedImports(new Set());
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar importações.');
+      console.error(err);
+    } finally {
+      setDeletingImports(false);
+    }
+  };
+
   const toggleConfirm = useCallback(async (orderId: string, current: boolean, skipValidation = false) => {
     if (!user) return;
 
