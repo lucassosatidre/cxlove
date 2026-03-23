@@ -234,8 +234,10 @@ export default function Overview() {
     setChangeTele(String(closing.change_tele));
     setVaultEntry(String(closing.vault_entry));
     setVaultEntryDesc(closing.vault_entry_description || '');
+    setVaultEntryCounts(closing.vault_entry_counts || null);
     setVaultExit(String(closing.vault_exit));
     setVaultExitDesc(closing.vault_exit_description || '');
+    setVaultExitCounts(closing.vault_exit_counts || null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
