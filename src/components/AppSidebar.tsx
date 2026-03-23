@@ -60,10 +60,10 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         open ? 'translate-x-0' : '-translate-x-full'
       }`}
     >
-      {/* App header with Propósito logo + app name */}
-      <div className="px-4 pt-4 pb-2 flex items-start justify-between">
+      {/* App header */}
+      <div className="px-4 pt-5 pb-2 flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-lg bg-muted/10 border border-white/10 flex items-center justify-center p-1.5 shrink-0">
+          <div className="h-10 w-10 rounded-lg bg-sidebar-accent border border-sidebar-border flex items-center justify-center p-1.5 shrink-0">
             <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
           </div>
           <div>
@@ -72,35 +72,34 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
           </div>
         </div>
         {isMobile && (
-          <button onClick={onClose} className="text-sidebar-foreground">
+          <button onClick={onClose} className="text-sidebar-foreground hover:text-sidebar-accent-foreground">
             <X className="h-5 w-5" />
           </button>
         )}
       </div>
 
       {/* Cliente Ativo */}
-      <div className="mx-3 mt-1 mb-3 px-3 py-2.5 bg-sidebar-accent rounded-lg flex items-center gap-2.5">
+      <div className="mx-3 mt-2 mb-3 px-3 py-2.5 bg-sidebar-accent rounded-lg flex items-center gap-2.5">
         <div className="h-8 w-8 rounded-md overflow-hidden shrink-0">
           <img src={estrelaLogo} alt="Pizzaria Estrela da Ilha" className="h-full w-full object-cover" />
         </div>
         <div>
-          <p className="text-[9px] uppercase tracking-wider text-sidebar-foreground/60 font-semibold">Cliente Ativo</p>
+          <p className="text-[9px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">Cliente Ativo</p>
           <p className="text-xs font-semibold text-sidebar-accent-foreground leading-tight">Pizzaria Estrela da Ilha</p>
         </div>
       </div>
 
-      <div className="mx-3 mb-3 border-b border-white/5" />
+      <div className="mx-3 mb-3 border-b border-sidebar-border" />
 
       {/* User info */}
-      <div className="mx-3 mb-3 px-3 py-2 bg-sidebar-accent/50 rounded-lg">
-        <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 font-medium">Usuário</p>
+      <div className="mx-3 mb-4 px-3 py-2 bg-sidebar-accent/50 rounded-lg">
+        <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-medium">Usuário</p>
         <p className="text-xs font-semibold text-sidebar-accent-foreground truncate mt-0.5">
           {userName}
         </p>
       </div>
 
-
-      <nav className="flex-1 px-3 space-y-1">
+      <nav className="flex-1 px-3 space-y-0.5">
         {navItems.map((item) => {
           const active = isActive(item.path);
           return (
@@ -109,7 +108,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
               onClick={() => handleNav(item.path)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
                 active
-                  ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
               }`}
             >
@@ -120,7 +119,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
         })}
       </nav>
 
-      <div className="px-3 pb-4 space-y-1">
+      <div className="px-3 pb-5 space-y-1">
         <button
           onClick={signOut}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground row-transition"
