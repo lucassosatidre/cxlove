@@ -884,6 +884,11 @@ export default function Reconciliation() {
                   {importRecords.map((imp) => (
                     <div key={imp.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
                       <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={selectedImports.has(imp.id)}
+                          onCheckedChange={() => toggleImportSelection(imp.id)}
+                          className="h-4 w-4"
+                        />
                         <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-foreground font-medium">{imp.file_name}</span>
                       </div>
@@ -895,6 +900,26 @@ export default function Reconciliation() {
                       </div>
                     </div>
                   ))}
+                  {selectedImports.size > 0 && (
+                    <div className="flex items-center gap-3 pt-2">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleDeleteSelectedImports}
+                        disabled={deletingImports}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        {deletingImports ? 'Apagando...' : `Apagar ${selectedImports.size} importação(ões)`}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedImports(new Set())}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
