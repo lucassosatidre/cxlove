@@ -51,8 +51,10 @@ interface VaultClosing {
   change_tele: number;
   vault_entry: number;
   vault_entry_description: string | null;
+  vault_entry_counts: Record<string, number> | null;
   vault_exit: number;
   vault_exit_description: string | null;
+  vault_exit_counts: Record<string, number> | null;
   balance: number;
   user_id: string;
   created_at: string;
