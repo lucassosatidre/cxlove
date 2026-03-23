@@ -153,10 +153,18 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
             )}
           </div>
           {!isCompleted && (
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Adicionar Maquininha
-            </Button>
+            <div className="flex items-center gap-2">
+              {validationError && (
+                <span className="flex items-center gap-1 text-xs text-destructive">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationError}
+                </span>
+              )}
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Adicionar Maquininha
+              </Button>
+            </div>
           )}
         </div>
 
