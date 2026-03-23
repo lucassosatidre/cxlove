@@ -535,7 +535,7 @@ export default function SalonClosing() {
         </div>
       )}
 
-      {/* Offline Payment Totals - same layout as Tele */}
+      {/* Payment Totals */}
       <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo por Forma de Pagamento</p>
         <div className="flex flex-wrap gap-3">
@@ -558,6 +558,15 @@ export default function SalonClosing() {
               </div>
             );
           })}
+          {onlineCategories.map(([name, total]) => (
+            <div key={name} className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20 min-w-[150px]">
+              <Globe className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-[10px] text-primary/70 leading-tight">{name}</p>
+                <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
