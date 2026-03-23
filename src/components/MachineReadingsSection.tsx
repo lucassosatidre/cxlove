@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CreditCard, Plus, Trash2, Eye } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface MachineReading {
@@ -35,6 +35,8 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [validationError, setValidationError] = useState('');
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
   useEffect(() => {
@@ -60,6 +62,15 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
 
   const addReading = async () => {
     if (!user) return;
+    // Validate last block
+    if (readings.length > 0) {
+      const last = readings[readings.length - 1];
+      if (!last.machine_serial.trim() || !last.delivery_person.trim()) {
+        setValidationError('Preencha o S/N e o entregador antes de adicionar uma nova maquininha');
+        return;
+      }
+    }
+    setValidationError('');
     const { data, error } = await supabase
       .from('machine_readings')
       .insert({
@@ -75,7 +86,10 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
       .select('id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount')
       .single();
     if (error) { toast.error('Erro ao adicionar maquininha'); return; }
-    if (data) setReadings(prev => [...prev, { ...data, debit_amount: 0, credit_amount: 0, voucher_amount: 0, pix_amount: 0 }]);
+    if (data) {
+      setReadings(prev => [...prev, { ...data, debit_amount: 0, credit_amount: 0, voucher_amount: 0, pix_amount: 0 }]);
+      setExpandedIds(prev => new Set(prev).add(data.id));
+    }
   };
 
   const removeReading = async (id: string) => {
@@ -139,82 +153,129 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
             )}
           </div>
           {!isCompleted && (
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              Adicionar Maquininha
-            </Button>
+            <div className="flex items-center gap-2">
+              {validationError && (
+                <span className="flex items-center gap-1 text-xs text-destructive">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationError}
+                </span>
+              )}
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Adicionar Maquininha
+              </Button>
+            </div>
           )}
         </div>
 
         {readings.length === 0 ? (
           <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
         ) : (
-          <div className="space-y-3">
-            {readings.map((r) => (
-              <div key={r.id} className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 flex items-center gap-2">
-                    <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
-                    <div className="flex items-center gap-0">
-                      <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
-                        {SERIAL_PREFIX}
-                      </span>
-                      <Input
-                        value={r.machine_serial}
-                        onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
-                        className="h-8 text-xs w-24 rounded-l-none font-mono"
-                        placeholder="000"
-                        disabled={isCompleted}
-                      />
-                    </div>
+          <div className="space-y-2">
+            {readings.map((r) => {
+              const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
+              const isExpanded = expandedIds.has(r.id) || !isFilled;
+              const blockTotal = r.debit_amount + r.credit_amount + r.voucher_amount + r.pix_amount;
+              const toggleExpand = () => {
+                if (!isFilled) return; // can't collapse unfilled
+                setExpandedIds(prev => {
+                  const next = new Set(prev);
+                  next.has(r.id) ? next.delete(r.id) : next.add(r.id);
+                  return next;
+                });
+              };
+
+              return (
+                <div key={r.id} className="border border-border rounded-lg bg-muted/30">
+                  {/* Summary row - always visible */}
+                  <div
+                    className={`flex items-center gap-2 px-3 py-2 ${isFilled ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                    onClick={isFilled ? toggleExpand : undefined}
+                  >
+                    {isFilled ? (
+                      isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    )}
+                    <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                    <span className="text-xs text-foreground font-medium">{r.delivery_person || 'Sem entregador'}</span>
+                    <span className="ml-auto text-xs font-bold font-mono text-foreground">{formatCurrency(blockTotal)}</span>
+                    {!isCompleted && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-destructive shrink-0"
+                        onClick={(e) => { e.stopPropagation(); removeReading(r.id); }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex-1 flex items-center gap-2">
-                    <label className="text-xs text-muted-foreground whitespace-nowrap">👤 Entregador</label>
-                    <Select
-                      value={r.delivery_person}
-                      onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
-                      disabled={isCompleted}
-                    >
-                      <SelectTrigger className="h-8 text-xs flex-1">
-                        <SelectValue placeholder="Selecione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {deliveryPersons.map(d => (
-                          <SelectItem key={d} value={d}>{d}</SelectItem>
+
+                  {/* Expanded content */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 space-y-2 border-t border-border">
+                      <div className="flex items-center gap-2 pt-2">
+                        <div className="flex-1 flex items-center gap-2">
+                          <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
+                          <div className="flex items-center gap-0">
+                            <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
+                              {SERIAL_PREFIX}
+                            </span>
+                            <Input
+                              value={r.machine_serial}
+                              onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
+                              className="h-8 text-xs w-24 rounded-l-none font-mono"
+                              placeholder="000"
+                              disabled={isCompleted}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex-1 flex items-center gap-2">
+                          <label className="text-xs text-muted-foreground whitespace-nowrap">👤 Entregador</label>
+                          <Select
+                            value={r.delivery_person}
+                            onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
+                            disabled={isCompleted}
+                          >
+                            <SelectTrigger className="h-8 text-xs flex-1">
+                              <SelectValue placeholder="Selecione..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {deliveryPersons.map(d => (
+                                <SelectItem key={d} value={d}>{d}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2">
+                        {[
+                          { label: '💳 Débito', field: 'debit_amount' as const },
+                          { label: '💳 Crédito', field: 'credit_amount' as const },
+                          { label: '🎟️ Voucher', field: 'voucher_amount' as const },
+                          { label: '📱 (COBRAR) Pix', field: 'pix_amount' as const },
+                        ].map(({ label, field }) => (
+                          <div key={field} className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground">{label}</label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={r[field] || ''}
+                              onChange={(e) => updateField(r.id, field, parseFloat(e.target.value) || 0)}
+                              className="h-8 text-xs font-mono"
+                              placeholder="0,00"
+                              disabled={isCompleted}
+                            />
+                          </div>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {!isCompleted && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeReading(r.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { label: '💳 Débito', field: 'debit_amount' as const },
-                    { label: '💳 Crédito', field: 'credit_amount' as const },
-                    { label: '🎟️ Voucher', field: 'voucher_amount' as const },
-                    { label: '📱 (COBRAR) Pix', field: 'pix_amount' as const },
-                  ].map(({ label, field }) => (
-                    <div key={field} className="space-y-1">
-                      <label className="text-[10px] text-muted-foreground">{label}</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={r[field] || ''}
-                        onChange={(e) => updateField(r.id, field, parseFloat(e.target.value) || 0)}
-                        className="h-8 text-xs font-mono"
-                        placeholder="0,00"
-                        disabled={isCompleted}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {/* Totals */}
             <div className="border border-border rounded-lg p-3 bg-primary/5">
