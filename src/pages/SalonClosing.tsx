@@ -116,53 +116,88 @@ export default function SalonClosing() {
     setLoading(false);
   };
 
-  const handleSaveCashSnapshotAbertura = useCallback(async () => {
-    if (!id || !user) return;
-    setSavingCashAbertura(true);
+  const saveCashSnapshot = useCallback(async (
+    snapshotType: 'abertura' | 'fechamento',
+    counts: Record<number, number>,
+    total: number,
+  ) => {
+    if (!id || !user) return { error: new Error('Missing closing or user') };
+
     const countsJson: Record<string, number> = {};
-    for (const [k, v] of Object.entries(cashCountsAbertura)) {
+    for (const [k, v] of Object.entries(counts)) {
       if (v > 0) countsJson[k] = v;
     }
+
+    const now = new Date().toISOString();
+    const basePayload = {
+      salon_closing_id: id,
+      user_id: user.id,
+      counts: countsJson,
+      total,
+      updated_at: now,
+      snapshot_type: snapshotType,
+    };
+
+    const { data: existingSnapshot, error: fetchError } = await supabase
+      .from('cash_snapshots')
+      .select('id')
+      .eq('salon_closing_id', id)
+      .eq('user_id', user.id)
+      .eq('snapshot_type', snapshotType)
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchError) {
+      return { error: fetchError };
+    }
+
+    if (existingSnapshot?.id) {
+      const { error } = await supabase
+        .from('cash_snapshots')
+        .update(basePayload)
+        .eq('id', existingSnapshot.id);
+
+      return { error, countsJson, updatedAt: now };
+    }
+
     const { error } = await supabase
       .from('cash_snapshots')
-      .upsert({
-        salon_closing_id: id, user_id: user.id, counts: countsJson,
-        total: cashTotalAbertura, updated_at: new Date().toISOString(), snapshot_type: 'abertura',
-      }, { onConflict: 'salon_closing_id,user_id,snapshot_type' });
-    if (error) {
+      .insert(basePayload);
+
+    return { error, countsJson, updatedAt: now };
+  }, [id, user]);
+
+  const handleSaveCashSnapshotAbertura = useCallback(async () => {
+    setSavingCashAbertura(true);
+    const result = await saveCashSnapshot('abertura', cashCountsAbertura, cashTotalAbertura);
+
+    if (result.error) {
       toast.error('Erro ao salvar contagem de abertura.');
     } else {
       setCashSnapshotSavedAbertura(true);
-      setCashSnapshotDataAbertura({ counts: countsJson, total: cashTotalAbertura, updated_at: new Date().toISOString() });
+      setCashSnapshotDataAbertura({ counts: result.countsJson || {}, total: cashTotalAbertura, updated_at: result.updatedAt || new Date().toISOString() });
       toast.success(`Contagem abertura salva: ${formatCurrency(cashTotalAbertura)}`);
       setShowCashCalcAbertura(false);
     }
+
     setSavingCashAbertura(false);
-  }, [id, user, cashCountsAbertura, cashTotalAbertura]);
+  }, [saveCashSnapshot, cashCountsAbertura, cashTotalAbertura]);
 
   const handleSaveCashSnapshotFechamento = useCallback(async () => {
-    if (!id || !user) return;
     setSavingCashFechamento(true);
-    const countsJson: Record<string, number> = {};
-    for (const [k, v] of Object.entries(cashCountsFechamento)) {
-      if (v > 0) countsJson[k] = v;
-    }
-    const { error } = await supabase
-      .from('cash_snapshots')
-      .upsert({
-        salon_closing_id: id, user_id: user.id, counts: countsJson,
-        total: cashTotalFechamento, updated_at: new Date().toISOString(), snapshot_type: 'fechamento',
-      }, { onConflict: 'salon_closing_id,user_id,snapshot_type' });
-    if (error) {
+    const result = await saveCashSnapshot('fechamento', cashCountsFechamento, cashTotalFechamento);
+
+    if (result.error) {
       toast.error('Erro ao salvar contagem de fechamento.');
     } else {
       setCashSnapshotSavedFechamento(true);
-      setCashSnapshotDataFechamento({ counts: countsJson, total: cashTotalFechamento, updated_at: new Date().toISOString() });
+      setCashSnapshotDataFechamento({ counts: result.countsJson || {}, total: cashTotalFechamento, updated_at: result.updatedAt || new Date().toISOString() });
       toast.success(`Contagem fechamento salva: ${formatCurrency(cashTotalFechamento)}`);
       setShowCashCalcFechamento(false);
     }
+
     setSavingCashFechamento(false);
-  }, [id, user, cashCountsFechamento, cashTotalFechamento]);
+  }, [saveCashSnapshot, cashCountsFechamento, cashTotalFechamento]);
 
   const formatDate = (dateStr: string) => {
     const [y, m, d] = dateStr.split('-');
