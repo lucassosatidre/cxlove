@@ -10,6 +10,7 @@ import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator } fr
 import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
+import MachineReadingsSection from '@/components/MachineReadingsSection';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
