@@ -220,9 +220,8 @@ export default function Reconciliation() {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
-    // When confirming (not unchecking), validate that physical payments have breakdowns filled
-    // In test mode, skip breakdown validation — checkbox confirms delivery directly
-    if (!current && !skipValidation && !isTestMode) {
+    // Checkbox confirms delivery directly — no breakdown validation needed
+    if (false) {
       const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       const hasPhysical = methods.some(m => !isOnlinePayment(m));
       
