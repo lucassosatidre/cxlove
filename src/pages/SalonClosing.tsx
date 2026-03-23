@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock, QrCode, CreditCard } from 'lucide-react';
+import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock, QrCode, CreditCard, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -252,31 +252,34 @@ export default function SalonClosing() {
   // Payment summary from Saipos data
   const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
-  const offlineMethodTotals = useMemo(() => {
+  const { offlineMethodTotals, onlineCategories } = useMemo(() => {
     const totals: Record<string, number> = {};
     OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+    const onlineMap: Record<string, number> = {};
 
     displayRows.forEach(r => {
-      const pm = (r.payment_method || '').toLowerCase();
-      if (pm.includes('dinheiro')) totals['Dinheiro'] += r.amount;
-      else if (pm.includes('pix')) totals['(COBRAR) Pix'] += r.amount;
-      else if (pm.includes('créd') || pm.includes('cred')) totals['Crédito'] += r.amount;
-      else if (pm.includes('déb') || pm.includes('deb')) totals['Débito'] += r.amount;
-      else if (pm.includes('voucher') || pm.includes('vale') || pm.includes('vr') || pm.includes('va')) totals['Voucher'] += r.amount;
+      const pm = (r.payment_method || '');
+      const pmLower = pm.toLowerCase();
+      const isOnline = pmLower.includes('online') || pmLower.includes('(pago)') || pmLower.includes('pago online');
+
+      if (isOnline) {
+        if (!onlineMap[pm]) onlineMap[pm] = 0;
+        onlineMap[pm] += r.amount;
+      } else if (pmLower.includes('dinheiro')) {
+        totals['Dinheiro'] += r.amount;
+      } else if (pmLower.includes('pix')) {
+        totals['(COBRAR) Pix'] += r.amount;
+      } else if (pmLower.includes('créd') || pmLower.includes('cred')) {
+        totals['Crédito'] += r.amount;
+      } else if (pmLower.includes('déb') || pmLower.includes('deb')) {
+        totals['Débito'] += r.amount;
+      } else if (pmLower.includes('voucher') || pmLower.includes('vale') || pmLower.includes('vr') || pmLower.includes('va')) {
+        totals['Voucher'] += r.amount;
+      }
     });
 
-    return totals;
-  }, [displayRows]);
-
-  const paymentSummary = useMemo(() => {
-    const map: Record<string, { count: number; total: number }> = {};
-    displayRows.forEach(r => {
-      if (!r.payment_method) return;
-      if (!map[r.payment_method]) map[r.payment_method] = { count: 0, total: 0 };
-      map[r.payment_method].count++;
-      map[r.payment_method].total += r.amount;
-    });
-    return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
+    const onlineSorted = Object.entries(onlineMap).sort((a, b) => b[1] - a[1]);
+    return { offlineMethodTotals: totals, onlineCategories: onlineSorted };
   }, [displayRows]);
 
   const getOrderTypeBadge = (orderType: string) => {
@@ -532,7 +535,7 @@ export default function SalonClosing() {
         </div>
       )}
 
-      {/* Offline Payment Totals - same layout as Tele */}
+      {/* Payment Totals */}
       <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo por Forma de Pagamento</p>
         <div className="flex flex-wrap gap-3">
@@ -555,6 +558,15 @@ export default function SalonClosing() {
               </div>
             );
           })}
+          {onlineCategories.map(([name, total]) => (
+            <div key={name} className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20 min-w-[150px]">
+              <Globe className="h-4 w-4 text-primary" />
+              <div>
+                <p className="text-[10px] text-primary/70 leading-tight">{name}</p>
+                <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
