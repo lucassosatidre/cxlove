@@ -26,6 +26,8 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import CashExpectationDialog from '@/components/CashExpectationDialog';
+import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
+import { Calculator, Eye } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────
 
