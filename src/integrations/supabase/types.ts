@@ -314,41 +314,53 @@ export type Database = {
         Row: {
           created_at: string
           credit_amount: number
+          credit_count: number
           daily_closing_id: string
           debit_amount: number
+          debit_count: number
           delivery_person: string
           id: string
           machine_serial: string
           pix_amount: number
+          pix_count: number
           updated_at: string
           user_id: string
           voucher_amount: number
+          voucher_count: number
         }
         Insert: {
           created_at?: string
           credit_amount?: number
+          credit_count?: number
           daily_closing_id: string
           debit_amount?: number
+          debit_count?: number
           delivery_person?: string
           id?: string
           machine_serial?: string
           pix_amount?: number
+          pix_count?: number
           updated_at?: string
           user_id: string
           voucher_amount?: number
+          voucher_count?: number
         }
         Update: {
           created_at?: string
           credit_amount?: number
+          credit_count?: number
           daily_closing_id?: string
           debit_amount?: number
+          debit_count?: number
           delivery_person?: string
           id?: string
           machine_serial?: string
           pix_amount?: number
+          pix_count?: number
           updated_at?: string
           user_id?: string
           voucher_amount?: number
+          voucher_count?: number
         }
         Relationships: [
           {
