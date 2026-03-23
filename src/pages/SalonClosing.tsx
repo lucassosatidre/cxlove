@@ -375,12 +375,12 @@ export default function SalonClosing() {
               <Button
                 variant="default"
                 onClick={handleFinalize}
-                disabled={!canFinalize || finalizing}
+                disabled={(!canFinalize && !isAdmin) || finalizing}
               >
                 <Lock className="h-4 w-4 mr-1" />
                 {finalizing ? 'Finalizando...' : 'Finalizar Fechamento'}
               </Button>
-              {!canFinalize && (
+              {!canFinalize && !isAdmin && (
                 <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
                   {validationAlerts.map((alert, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
