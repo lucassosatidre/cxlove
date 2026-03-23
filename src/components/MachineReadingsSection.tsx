@@ -35,6 +35,8 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [validationError, setValidationError] = useState('');
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
   useEffect(() => {
