@@ -250,6 +250,24 @@ export default function SalonClosing() {
   }, [filtered]);
 
   // Payment summary from Saipos data
+  const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+
+  const offlineMethodTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+
+    displayRows.forEach(r => {
+      const pm = (r.payment_method || '').toLowerCase();
+      if (pm.includes('dinheiro')) totals['Dinheiro'] += r.amount;
+      else if (pm.includes('pix')) totals['(COBRAR) Pix'] += r.amount;
+      else if (pm.includes('créd') || pm.includes('cred')) totals['Crédito'] += r.amount;
+      else if (pm.includes('déb') || pm.includes('deb')) totals['Débito'] += r.amount;
+      else if (pm.includes('voucher') || pm.includes('vale') || pm.includes('vr') || pm.includes('va')) totals['Voucher'] += r.amount;
+    });
+
+    return totals;
+  }, [displayRows]);
+
   const paymentSummary = useMemo(() => {
     const map: Record<string, { count: number; total: number }> = {};
     displayRows.forEach(r => {
