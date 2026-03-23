@@ -260,15 +260,59 @@ export default function SalonClosing() {
 
   const isCompleted = closing?.status === 'completed';
 
+  // Validation for Conciliação button
+  const validationAlerts: string[] = [];
+  if (!cashSnapshotSavedAbertura) validationAlerts.push('Preencha a contagem de abertura');
+  if (!cashSnapshotSavedFechamento) validationAlerts.push('Preencha a contagem de fechamento');
+  if (machineReadingsCount === 0) validationAlerts.push('Adicione ao menos uma maquininha');
+  const canNavigateReconciliation = validationAlerts.length === 0;
+
+  const handleDeleteSelectedImports = async () => {
+    const importIds = Array.from(selectedImports);
+    if (importIds.length === 0) return;
+
+    const { data: ordersToDelete } = await supabase
+      .from('salon_orders')
+      .select('id')
+      .in('salon_import_id', importIds);
+
+    if (ordersToDelete?.length) {
+      const orderIds = ordersToDelete.map(o => o.id);
+      await supabase.from('salon_order_payments').delete().in('salon_order_id', orderIds);
+      await supabase.from('salon_orders').delete().in('salon_import_id', importIds);
+    }
+    await supabase.from('salon_imports').delete().in('id', importIds);
+
+    setSelectedImports(new Set());
+    toast.success(`${importIds.length} importação(ões) excluída(s)`);
+    loadData();
+  };
+
   return (
     <AppLayout
       title={`Salão — ${formatDate(closing.closing_date)}`}
       subtitle={`${orders.length} pedidos`}
       headerActions={
         <div className="flex items-center gap-2">
-          <Button variant="default" onClick={() => navigate(`/salon/reconciliation/${id}`)}>
-            Conciliação Salão
-          </Button>
+          <div className="relative group">
+            <Button
+              variant="default"
+              onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
+              disabled={!canNavigateReconciliation}
+            >
+              Conciliação Salão
+            </Button>
+            {!canNavigateReconciliation && (
+              <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
+                {validationAlerts.map((alert, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {alert}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <Button variant="outline" onClick={() => navigate('/salon')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
