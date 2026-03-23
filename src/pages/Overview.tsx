@@ -87,8 +87,13 @@ export default function Overview() {
   const [changeTele, setChangeTele] = useState('');
   const [vaultEntry, setVaultEntry] = useState('');
   const [vaultEntryDesc, setVaultEntryDesc] = useState('');
+  const [vaultEntryCounts, setVaultEntryCounts] = useState<Record<string, number> | null>(null);
   const [vaultExit, setVaultExit] = useState('');
   const [vaultExitDesc, setVaultExitDesc] = useState('');
+  const [vaultExitCounts, setVaultExitCounts] = useState<Record<string, number> | null>(null);
+  const [showEntryCalc, setShowEntryCalc] = useState(false);
+  const [showExitCalc, setShowExitCalc] = useState(false);
+  const [showBalanceDetail, setShowBalanceDetail] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
