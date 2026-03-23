@@ -323,7 +323,7 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                                   min="0"
                                   value={r[countField] || ''}
                                   onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
-                                  className="h-8 text-xs font-mono w-14 text-center"
+                                  className={`h-8 text-xs font-mono w-14 text-center ${countMissing ? 'border-destructive ring-1 ring-destructive' : ''}`}
                                   placeholder="Qtd"
                                   disabled={countDisabled}
                                   title="Qtd operações"
