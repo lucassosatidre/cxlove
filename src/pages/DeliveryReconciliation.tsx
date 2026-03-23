@@ -703,7 +703,7 @@ export default function DeliveryReconciliation() {
       </header>
 
       {/* Atlas Musk View */}
-      {isTestMode && activeTab === 'atlas' ? (
+      {activeTab === 'atlas' ? (
         <div className="flex-1 overflow-auto px-6 py-4">
           <AtlasMuskView
             closingDate={closingDate}
