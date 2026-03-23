@@ -646,7 +646,6 @@ export default function Reconciliation() {
               </Button>
               <div>
                 <h1 className="text-base font-semibold text-foreground">
-                  {isTestMode && <span className="text-amber-600 mr-1">[TESTE]</span>}
                   Fechamento {closingData ? formatDate(closingData.closing_date) : ''}
                 </h1>
                 <p className="text-xs text-muted-foreground">{orders.length} pedidos • {importRecords.length} importação(ões)</p>
