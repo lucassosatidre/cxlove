@@ -938,7 +938,7 @@ export default function Reconciliation() {
                     {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
                     {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
                     <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valores</th>
+                    {!isTestMode && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valores</th>}
                     <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                   </tr>
