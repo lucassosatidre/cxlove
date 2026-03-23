@@ -746,6 +746,27 @@ export default function Overview() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <VaultCashCalculator
+        open={showEntryCalc}
+        onOpenChange={setShowEntryCalc}
+        title="Contagem — Entrada Cofre"
+        initialCounts={vaultEntryCounts || undefined}
+        onSave={(counts, total) => { setVaultEntryCounts(counts); setVaultEntry(String(total)); }}
+      />
+      <VaultCashCalculator
+        open={showExitCalc}
+        onOpenChange={setShowExitCalc}
+        title="Contagem — Saída Cofre"
+        initialCounts={vaultExitCounts || undefined}
+        onSave={(counts, total) => { setVaultExitCounts(counts); setVaultExit(String(total)); }}
+      />
+      <VaultBalanceDetail
+        open={showBalanceDetail}
+        onOpenChange={setShowBalanceDetail}
+        balance={monthlySummary.currentBalance}
+        entryCounts={lastEntryCounts}
+      />
     </AppLayout>
   );
 }
