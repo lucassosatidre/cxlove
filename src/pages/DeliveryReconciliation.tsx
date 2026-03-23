@@ -468,7 +468,7 @@ export default function DeliveryReconciliation() {
       setIsReprocessing(false);
       setHasAutoReprocessed(true);
     }
-  }, [breakdowns, id, isReprocessing, isTestMode, loadData, orders, transactions]);
+  }, [breakdowns, id, isReprocessing, loadData, orders, transactions]);
 
   useEffect(() => {
     if (!isTestMode || loading || hasAutoReprocessed || transactions.length === 0) return;
