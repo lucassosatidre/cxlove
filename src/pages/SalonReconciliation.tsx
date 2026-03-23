@@ -503,10 +503,10 @@ export default function SalonReconciliation() {
             <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
             <StatCard label="Fora Maquininha" value={stats.external} icon={<DollarSign className="h-4 w-4" />} color="text-muted-foreground" />
             <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
-            <div className="bg-muted rounded-xl p-3 border border-border">
-              <p className="text-xs text-muted-foreground mb-1">Progresso</p>
-              <p className="text-2xl font-semibold text-foreground font-mono tabular-nums">{percent}%</p>
-              <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
+            <div className="bg-card rounded-lg p-3 border border-border shadow-card">
+              <p className="section-title mb-1">Progresso</p>
+              <p className="text-2xl font-bold text-foreground font-mono-tabular">{percent}%</p>
+              <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
               </div>
             </div>
