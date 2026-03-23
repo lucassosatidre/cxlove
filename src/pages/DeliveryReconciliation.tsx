@@ -398,7 +398,7 @@ export default function DeliveryReconciliation() {
   }, [user, id, orders, breakdowns, loadData]);
 
   const reprocessAutomaticMatches = useCallback(async () => {
-    if (!id || !isTestMode || isReprocessing || transactions.length === 0) return;
+    if (!id || isReprocessing || transactions.length === 0) return;
 
     setIsReprocessing(true);
 
