@@ -8,15 +8,11 @@ import { useUserRole } from "@/hooks/useUserRole";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
-import DashboardTest from "./pages/DashboardTest";
 import Import from "./pages/Import";
 import TeleImport from "./pages/TeleImport";
-import TeleImportTest from "./pages/TeleImportTest";
 import Reconciliation from "./pages/Reconciliation";
-import ReconciliationTest from "./pages/ReconciliationTest";
 import ReconciliationLegacy from "./pages/ReconciliationLegacy";
 import DeliveryReconciliation from "./pages/DeliveryReconciliation";
-import DeliveryReconciliationTest from "./pages/DeliveryReconciliationTest";
 import UserManagement from "./pages/UserManagement";
 import SalonDashboard from "./pages/SalonDashboard";
 import SalonImport from "./pages/SalonImport";
@@ -68,17 +64,17 @@ const App = () => (
             <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
-            {/* Tele Teste routes */}
-            <Route path="/tele-teste" element={<ProtectedRoute><DashboardTest /></ProtectedRoute>} />
-            <Route path="/tele-teste/import" element={<ProtectedRoute><TeleImportTest /></ProtectedRoute>} />
-            <Route path="/reconciliation-teste/:id" element={<ProtectedRoute><ReconciliationTest /></ProtectedRoute>} />
-            <Route path="/delivery-reconciliation-teste/:id" element={<ProtectedRoute><DeliveryReconciliationTest /></ProtectedRoute>} />
             <Route path="/salon" element={<ProtectedRoute><SalonDashboard /></ProtectedRoute>} />
             <Route path="/salon/import" element={<ProtectedRoute><SalonImport /></ProtectedRoute>} />
             <Route path="/salon/closing/:id" element={<ProtectedRoute><SalonClosing /></ProtectedRoute>} />
             <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SalonReconciliation /></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+            {/* Redirect old test routes */}
+            <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
+            <Route path="/tele-teste/import" element={<Navigate to="/tele/import" replace />} />
+            <Route path="/reconciliation-teste/:id" element={<Navigate to="/reconciliation/:id" replace />} />
+            <Route path="/delivery-reconciliation-teste/:id" element={<Navigate to="/delivery-reconciliation/:id" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

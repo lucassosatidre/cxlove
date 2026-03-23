@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useTestMode } from '@/hooks/useTestMode';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
-import TestBanner from '@/components/TestBanner';
+
 import AtlasMuskView from '@/components/AtlasMuskView';
 import { parseCardTransactionFile, ParsedCardTransaction } from '@/lib/card-transaction-parser';
 import { matchTransactionsToOrders, MatchResult, MatchType } from '@/lib/delivery-matching';
@@ -70,7 +70,7 @@ export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
-  const { isTestMode } = useTestMode();
+  
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<Order[]>([]);
@@ -398,7 +398,7 @@ export default function DeliveryReconciliation() {
   }, [user, id, orders, breakdowns, loadData]);
 
   const reprocessAutomaticMatches = useCallback(async () => {
-    if (!id || !isTestMode || isReprocessing || transactions.length === 0) return;
+    if (!id || isReprocessing || transactions.length === 0) return;
 
     setIsReprocessing(true);
 
@@ -457,23 +457,23 @@ export default function DeliveryReconciliation() {
       );
 
       if (automaticMatches.length > 0 || reprocessedMatches.length > 0) {
-        toast.success(`Tele Teste reprocessada com alocação global (${reprocessedMatches.length} vínculos automáticos).`);
+        toast.success(`Conciliação reprocessada com alocação global (${reprocessedMatches.length} vínculos automáticos).`);
       }
 
       await loadData();
     } catch (error) {
       console.error(error);
-      toast.error('Erro ao reprocessar a Tele Teste.');
+      toast.error('Erro ao reprocessar a conciliação.');
     } finally {
       setIsReprocessing(false);
       setHasAutoReprocessed(true);
     }
-  }, [breakdowns, id, isReprocessing, isTestMode, loadData, orders, transactions]);
+  }, [breakdowns, id, isReprocessing, loadData, orders, transactions]);
 
   useEffect(() => {
-    if (!isTestMode || loading || hasAutoReprocessed || transactions.length === 0) return;
+    if (loading || hasAutoReprocessed || transactions.length === 0) return;
     void reprocessAutomaticMatches();
-  }, [hasAutoReprocessed, isTestMode, loading, reprocessAutomaticMatches, transactions.length]);
+  }, [hasAutoReprocessed, loading, reprocessAutomaticMatches, transactions.length]);
 
   const manualMatch = useCallback(async (transactionId: string, orderId: string) => {
     // Save undo info
@@ -631,17 +631,16 @@ export default function DeliveryReconciliation() {
     <div className="min-h-screen bg-background flex flex-col">
       <AppSidebar />
       <div className="ml-56 flex flex-col flex-1">
-      {isTestMode && <div className="px-6 pt-4"><TestBanner /></div>}
+      
       {/* Header */}
       <header className="border-b border-border bg-card sticky top-0 z-10">
         <div className="px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate(`${isTestMode ? '/reconciliation-teste' : '/reconciliation'}/${id}`)}>
+            <Button variant="ghost" size="sm" onClick={() => navigate(`/reconciliation/${id}`)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
               <h1 className="text-base font-semibold text-foreground">
-                {isTestMode && <span className="text-amber-600 mr-1">[TESTE]</span>}
                 Conciliação do Delivery — {formatDate(closingDate)}
               </h1>
               <p className="text-xs text-muted-foreground">
@@ -675,13 +674,12 @@ export default function DeliveryReconciliation() {
                 }}
               />
             </div>
-            {isTestMode && isReprocessing && (
+            {isReprocessing && (
               <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
                 Reprocessando com trava por método…
               </Badge>
             )}
-            {isTestMode && (
-              <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border">
+            <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border">
                 <Button
                   variant={activeTab === 'classic' ? 'default' : 'ghost'}
                   size="sm"
@@ -700,13 +698,12 @@ export default function DeliveryReconciliation() {
                   Atlas Musk
                 </Button>
               </div>
-            )}
           </div>
         </div>
       </header>
 
       {/* Atlas Musk View */}
-      {isTestMode && activeTab === 'atlas' ? (
+      {activeTab === 'atlas' ? (
         <div className="flex-1 overflow-auto px-6 py-4">
           <AtlasMuskView
             closingDate={closingDate}
@@ -1121,7 +1118,7 @@ export default function DeliveryReconciliation() {
                       </div>
                     )}
 
-                    {!isMatched && pendingInfo && isTestMode && (
+                    {!isMatched && pendingInfo && (
                       <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                         {pendingInfo.suggestions.map((suggestion, index) => (
                           <div key={`${order.id}-suggestion-${index}`} className="text-[11px] text-muted-foreground flex items-start gap-1.5">

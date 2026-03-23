@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
-import { useTestMode } from '@/hooks/useTestMode';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,7 +14,7 @@ import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, Che
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
-import TestBanner from '@/components/TestBanner';
+
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 
@@ -57,7 +57,7 @@ export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isCaixaTele, isAdmin } = useUserRole();
-  const { isTestMode } = useTestMode();
+  
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
@@ -220,9 +220,8 @@ export default function Reconciliation() {
     const order = orders.find(o => o.id === orderId);
     if (!order) return;
 
-    // When confirming (not unchecking), validate that physical payments have breakdowns filled
-    // In test mode, skip breakdown validation — checkbox confirms delivery directly
-    if (!current && !skipValidation && !isTestMode) {
+    // Checkbox confirms delivery directly — no breakdown validation needed
+    if (false) {
       const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       const hasPhysical = methods.some(m => !isOnlinePayment(m));
       
@@ -259,7 +258,7 @@ export default function Reconciliation() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_confirmed: current } : o));
       toast.error('Erro ao atualizar pedido.');
     }
-  }, [user, orders, breakdownValidity, allBreakdowns, isTestMode]);
+  }, [user, orders, breakdownValidity, allBreakdowns]);
 
   const handleRowClick = useCallback((order: Order) => {
     if (needsBreakdown(order.payment_method)) {
@@ -637,28 +636,27 @@ export default function Reconciliation() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="ml-56 flex flex-col flex-1">
-        {isTestMode && <div className="ml-56 px-6 pt-4"><TestBanner /></div>}
+        
         {/* Header */}
         <header className="border-b border-border bg-card sticky top-0 z-10">
           <div className="px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button variant="ghost" size="sm" onClick={() => navigate(isTestMode ? '/tele-teste' : '/')}>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/tele')}>
                 <ArrowLeft className="h-4 w-4" />
               </Button>
               <div>
                 <h1 className="text-base font-semibold text-foreground">
-                  {isTestMode && <span className="text-amber-600 mr-1">[TESTE]</span>}
                   Fechamento {closingData ? formatDate(closingData.closing_date) : ''}
                 </h1>
                 <p className="text-xs text-muted-foreground">{orders.length} pedidos • {importRecords.length} importação(ões)</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="default" size="sm" onClick={() => navigate(`${isTestMode ? '/delivery-reconciliation-teste' : '/delivery-reconciliation'}/${id}`)} className="bg-primary hover:bg-primary/90">
+              <Button variant="default" size="sm" onClick={() => navigate(`/delivery-reconciliation/${id}`)} className="bg-primary hover:bg-primary/90">
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={() => navigate(isTestMode ? '/tele-teste/import' : (isCaixaTele ? '/tele/import' : '/import'))} disabled={isCompleted}>
+              <Button variant="outline" size="sm" onClick={() => navigate(isCaixaTele ? '/tele/import' : '/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
@@ -815,8 +813,8 @@ export default function Reconciliation() {
 
 
 
-        {/* Machine Readings - Test Mode Only */}
-        {isTestMode && id && (
+        {/* Machine Readings */}
+        {id && (
           <MachineReadingsSection
             dailyClosingId={id}
             deliveryPersons={deliveryPersons}
@@ -947,7 +945,6 @@ export default function Reconciliation() {
                     {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
                     {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
                     <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                    {!isTestMode && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valores</th>}
                     <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                   </tr>
@@ -972,7 +969,7 @@ export default function Reconciliation() {
                         isCompleted={isCompleted}
                         isAutoOnline={autoOnline}
                         hasBreakdowns={hasBreakdowns}
-                        isTestMode={isTestMode}
+                        isTestMode={true}
                         visibleColumns={visibleColumns}
                         orderBreakdowns={allBreakdowns.filter(b => b.imported_order_id === order.id)}
                         onRowClick={() => handleRowClick(order)}

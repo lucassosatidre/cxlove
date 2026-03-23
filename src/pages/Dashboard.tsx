@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useTestMode } from '@/hooks/useTestMode';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import AppLayout from '@/components/AppLayout';
-import TestBanner from '@/components/TestBanner';
 import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -32,9 +30,8 @@ interface ImportRow {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isTestMode } = useTestMode();
-  const routePrefix = isTestMode ? '/tele-teste' : '';
-  const reconciliationPrefix = isTestMode ? '/reconciliation-teste' : '/reconciliation';
+  const routePrefix = '';
+  const reconciliationPrefix = '/reconciliation';
   const [closings, setClosings] = useState<DailyClosing[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,8 +45,8 @@ export default function Dashboard() {
 
   const loadData = async () => {
     const [{ data: closingsData }, { data: importsData }] = await Promise.all([
-      supabase.from('daily_closings').select('*').eq('is_test', isTestMode).order('closing_date', { ascending: false }),
-      supabase.from('imports').select('*').eq('is_test', isTestMode).order('created_at', { ascending: false }),
+      supabase.from('daily_closings').select('*').order('closing_date', { ascending: false }),
+      supabase.from('imports').select('*').order('created_at', { ascending: false }),
     ]);
     setClosings(closingsData || []);
     setImports(importsData || []);
@@ -151,16 +148,15 @@ export default function Dashboard() {
 
   return (
     <AppLayout
-      title={isTestMode ? "Tele Teste" : "Tele"}
+      title="Tele"
       subtitle={`📅 ${dateStr} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        <Button onClick={() => navigate(isTestMode ? '/tele-teste/import' : '/tele/import')} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => navigate('/tele/import')} className="bg-primary hover:bg-primary/90">
           <Plus className="h-4 w-4 mr-2" />
           Nova Importação
         </Button>
       }
     >
-      {isTestMode && <TestBanner />}
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="bg-card rounded-xl shadow-card p-5 border border-border">
@@ -201,7 +197,7 @@ export default function Dashboard() {
             <FileSpreadsheet className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-lg font-medium text-foreground mb-2">Nenhum fechamento realizado</h3>
             <p className="text-sm text-muted-foreground mb-6">Importe seu primeiro relatório para começar.</p>
-            <Button onClick={() => navigate(isTestMode ? '/tele-teste/import' : '/tele/import')} className="bg-primary hover:bg-primary/90">
+            <Button onClick={() => navigate('/tele/import')} className="bg-primary hover:bg-primary/90">
               <Plus className="h-4 w-4 mr-2" />
               Nova Importação
             </Button>

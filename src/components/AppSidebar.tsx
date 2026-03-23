@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
-import { Bike, LogOut, X, Users, Store, LayoutDashboard, FlaskConical } from 'lucide-react';
+import { Bike, LogOut, X, Users, Store, LayoutDashboard } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import propositoLogo from '@/assets/proposito-logo.png';
 import estrelaLogo from '@/assets/estrela-logo.png';
@@ -34,7 +34,6 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     const allNavItems = [
       { icon: LayoutDashboard, label: 'Painel', path: '/', permission: 'dashboard' },
       { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
-      { icon: FlaskConical, label: 'Tele Teste', path: '/tele-teste', permission: 'dashboard' },
       { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
     ];
     navItems = allNavItems.filter(item => hasPermission(item.permission));
