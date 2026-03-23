@@ -252,31 +252,34 @@ export default function SalonClosing() {
   // Payment summary from Saipos data
   const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
-  const offlineMethodTotals = useMemo(() => {
+  const { offlineMethodTotals, onlineCategories } = useMemo(() => {
     const totals: Record<string, number> = {};
     OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+    const onlineMap: Record<string, number> = {};
 
     displayRows.forEach(r => {
-      const pm = (r.payment_method || '').toLowerCase();
-      if (pm.includes('dinheiro')) totals['Dinheiro'] += r.amount;
-      else if (pm.includes('pix')) totals['(COBRAR) Pix'] += r.amount;
-      else if (pm.includes('créd') || pm.includes('cred')) totals['Crédito'] += r.amount;
-      else if (pm.includes('déb') || pm.includes('deb')) totals['Débito'] += r.amount;
-      else if (pm.includes('voucher') || pm.includes('vale') || pm.includes('vr') || pm.includes('va')) totals['Voucher'] += r.amount;
+      const pm = (r.payment_method || '');
+      const pmLower = pm.toLowerCase();
+      const isOnline = pmLower.includes('online') || pmLower.includes('(pago)') || pmLower.includes('pago online');
+
+      if (isOnline) {
+        if (!onlineMap[pm]) onlineMap[pm] = 0;
+        onlineMap[pm] += r.amount;
+      } else if (pmLower.includes('dinheiro')) {
+        totals['Dinheiro'] += r.amount;
+      } else if (pmLower.includes('pix')) {
+        totals['(COBRAR) Pix'] += r.amount;
+      } else if (pmLower.includes('créd') || pmLower.includes('cred')) {
+        totals['Crédito'] += r.amount;
+      } else if (pmLower.includes('déb') || pmLower.includes('deb')) {
+        totals['Débito'] += r.amount;
+      } else if (pmLower.includes('voucher') || pmLower.includes('vale') || pmLower.includes('vr') || pmLower.includes('va')) {
+        totals['Voucher'] += r.amount;
+      }
     });
 
-    return totals;
-  }, [displayRows]);
-
-  const paymentSummary = useMemo(() => {
-    const map: Record<string, { count: number; total: number }> = {};
-    displayRows.forEach(r => {
-      if (!r.payment_method) return;
-      if (!map[r.payment_method]) map[r.payment_method] = { count: 0, total: 0 };
-      map[r.payment_method].count++;
-      map[r.payment_method].total += r.amount;
-    });
-    return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
+    const onlineSorted = Object.entries(onlineMap).sort((a, b) => b[1] - a[1]);
+    return { offlineMethodTotals: totals, onlineCategories: onlineSorted };
   }, [displayRows]);
 
   const getOrderTypeBadge = (orderType: string) => {
