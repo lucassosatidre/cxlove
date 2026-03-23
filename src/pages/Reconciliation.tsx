@@ -815,6 +815,15 @@ export default function Reconciliation() {
 
 
 
+        {/* Machine Readings - Test Mode Only */}
+        {isTestMode && id && (
+          <MachineReadingsSection
+            dailyClosingId={id}
+            deliveryPersons={deliveryPersons}
+            isCompleted={isCompleted}
+          />
+        )}
+
         {/* Import History Toggle */}
         {importRecords.length > 0 && (
           <div className="border-b border-border bg-card">
