@@ -57,46 +57,6 @@ export default function TeleImport() {
 
       if (existingClosing) {
         closingId = existingClosing.id;
-
-        if (isTestMode) {
-          const { data: existingImports } = await supabase
-            .from('imports')
-            .select('id')
-            .eq('daily_closing_id', closingId);
-
-          const existingImportIds = (existingImports || []).map(item => item.id);
-
-          if (existingImportIds.length > 0) {
-            const { data: existingOrderRows } = await supabase
-              .from('imported_orders')
-              .select('id')
-              .in('import_id', existingImportIds);
-
-            const existingOrderIds = (existingOrderRows || []).map(item => item.id);
-
-            if (existingOrderIds.length > 0) {
-              await supabase
-                .from('card_transactions')
-                .update({ matched_order_id: null, match_type: null, match_confidence: null })
-                .in('matched_order_id', existingOrderIds);
-
-              await supabase
-                .from('order_payment_breakdowns')
-                .delete()
-                .in('imported_order_id', existingOrderIds);
-
-              await supabase
-                .from('imported_orders')
-                .delete()
-                .in('import_id', existingImportIds);
-            }
-
-            await supabase
-              .from('imports')
-              .delete()
-              .in('id', existingImportIds);
-          }
-        }
       } else {
         const { data: newClosing, error: closingErr } = await supabase
           .from('daily_closings')
