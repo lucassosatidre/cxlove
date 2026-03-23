@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useTestMode } from '@/hooks/useTestMode';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import AppLayout from '@/components/AppLayout';
-import TestBanner from '@/components/TestBanner';
 import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
