@@ -564,7 +564,15 @@ export default function Overview() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>⬇️ Saída Cofre (R$)</Label>
-                    <Input type="number" step="0.01" placeholder="0,00" value={vaultExit} onChange={e => setVaultExit(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Input type="number" step="0.01" placeholder="0,00" value={vaultExit} onChange={e => { setVaultExit(e.target.value); setVaultExitCounts(null); }} className="flex-1" />
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowExitCalc(true)} title="Calculadora de cédulas">
+                        <Calculator className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {vaultExitCounts && Object.keys(vaultExitCounts).length > 0 && (
+                      <p className="text-[10px] text-emerald-600">✓ Contagem detalhada salva</p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Descrição saída (obrigatório)</Label>
