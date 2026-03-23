@@ -220,12 +220,12 @@ export default function Reconciliation() {
     if (!order) return;
 
     // When confirming (not unchecking), validate that physical payments have breakdowns filled
-    if (!current && !skipValidation) {
+    // In test mode, skip breakdown validation — checkbox confirms delivery directly
+    if (!current && !skipValidation && !isTestMode) {
       const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       const hasPhysical = methods.some(m => !isOnlinePayment(m));
       
       if (hasPhysical) {
-        // Check if breakdowns exist for this order
         const orderBks = allBreakdowns.filter(b => b.imported_order_id === orderId);
         const physicalBks = orderBks.filter(b => b.payment_type === 'fisico');
         
@@ -234,7 +234,6 @@ export default function Reconciliation() {
           return;
         }
         
-        // Also check total validity for multi-payment
         if (needsBreakdown(order.payment_method) && !breakdownValidity[orderId]) {
           toast.error('Preencha o detalhamento das formas de pagamento antes de confirmar.');
           setExpandedOrderId(orderId);
@@ -259,7 +258,7 @@ export default function Reconciliation() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_confirmed: current } : o));
       toast.error('Erro ao atualizar pedido.');
     }
-  }, [user, orders, breakdownValidity, allBreakdowns]);
+  }, [user, orders, breakdownValidity, allBreakdowns, isTestMode]);
 
   const handleRowClick = useCallback((order: Order) => {
     if (needsBreakdown(order.payment_method)) {
@@ -938,7 +937,7 @@ export default function Reconciliation() {
                     {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
                     {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
                     <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valores</th>
+                    {!isTestMode && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Valores</th>}
                     <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
                   </tr>
@@ -1518,7 +1517,7 @@ function isUnidentifiedPayment(method: string): boolean {
 }
 
 function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, isTestMode: rowTestMode, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onAutoConfirm, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
-  const colCount = 6 + Object.values(visibleColumns).filter(Boolean).length;
+  const colCount = (rowTestMode ? 5 : 6) + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
   const [editingField, setEditingField] = useState<'payment_method' | 'delivery_person' | null>(null);
@@ -1729,34 +1728,23 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             )}
           </div>
         </td>
-        <td className={`p-3 text-sm ${cellClass}`} onClick={(e) => e.stopPropagation()}>
-          {rowTestMode ? (
-            // Test mode: show breakdowns if they exist, otherwise dash
-            orderBreakdowns.length > 0 ? (
-              <div className="flex flex-col gap-0.5">
-                {orderBreakdowns.filter(b => b.amount > 0).map((b, i) => (
-                  <span key={i} className="text-xs font-medium text-foreground">
-                    {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
-                  </span>
-                ))}
-              </div>
+        {!rowTestMode && (
+          <td className={`p-3 text-sm ${cellClass}`} onClick={(e) => e.stopPropagation()}>
+            {isUnidentified ? (
+              <ValoresCell
+                order={order}
+                orderBreakdowns={orderBreakdowns}
+                hasMultiple={hasMultiple}
+                isCompleted={isCompleted}
+                offlinePaymentMethods={offlinePaymentMethods}
+                onSaved={onBreakdownSaved}
+                onAutoConfirm={onAutoConfirm}
+              />
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
-            )
-          ) : isUnidentified ? (
-            <ValoresCell
-              order={order}
-              orderBreakdowns={orderBreakdowns}
-              hasMultiple={hasMultiple}
-              isCompleted={isCompleted}
-              offlinePaymentMethods={offlinePaymentMethods}
-              onSaved={onBreakdownSaved}
-              onAutoConfirm={onAutoConfirm}
-            />
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )}
-        </td>
+            )}
+          </td>
+        )}
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
