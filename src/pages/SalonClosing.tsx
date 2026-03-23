@@ -294,6 +294,7 @@ export default function SalonClosing() {
   }
 
   const isCompleted = closing?.status === 'completed';
+  const [finalizing, setFinalizing] = useState(false);
 
   // Validation for Conciliação button
   const validationAlerts: string[] = [];
@@ -301,6 +302,39 @@ export default function SalonClosing() {
   if (!cashSnapshotSavedFechamento) validationAlerts.push('Preencha a contagem de fechamento');
   if (machineReadingsCount === 0) validationAlerts.push('Adicione ao menos uma maquininha');
   const canNavigateReconciliation = validationAlerts.length === 0;
+  const canFinalize = canNavigateReconciliation;
+
+  const handleFinalize = async () => {
+    if (!id) return;
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error('Erro ao finalizar fechamento.');
+    } else {
+      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
+      toast.success('Fechamento finalizado com sucesso!');
+    }
+    setFinalizing(false);
+  };
+
+  const handleReopen = async () => {
+    if (!id) return;
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error('Erro ao reabrir fechamento.');
+    } else {
+      setClosing(prev => prev ? { ...prev, status: 'pending' } : prev);
+      toast.success('Fechamento reaberto.');
+    }
+    setFinalizing(false);
+  };
 
   const handleDeleteSelectedImports = async () => {
     const importIds = Array.from(selectedImports);
