@@ -89,6 +89,13 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
         setValidationError('Preencha o S/N e o entregador antes de adicionar uma nova maquininha');
         return;
       }
+      // Validate count fields: if amount > 0, count must be >= 1
+      for (const pf of PAYMENT_FIELDS) {
+        if (last[pf.amountField] > 0 && last[pf.countField] < 1) {
+          setValidationError(`Informe a quantidade de operações de ${pf.label.replace(/^[^\s]+\s/, '')} antes de adicionar`);
+          return;
+        }
+      }
     }
     setValidationError('');
     const { data, error } = await supabase
