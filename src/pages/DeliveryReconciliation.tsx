@@ -1241,12 +1241,12 @@ export default function DeliveryReconciliation() {
 
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
-    <div className="bg-muted rounded-xl p-3 border border-border">
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className={color}>{icon}</span>
-        <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="bg-card rounded-lg p-3 border border-border shadow-card">
+      <div className="flex items-center justify-between mb-1">
+        <p className="section-title">{label}</p>
+        <span className={`${color} opacity-60`}>{icon}</span>
       </div>
-      <p className={`text-2xl font-semibold font-mono-tabular ${color}`}>{value}</p>
+      <p className={`text-2xl font-bold font-mono-tabular ${color}`}>{value}</p>
     </div>
   );
 }
