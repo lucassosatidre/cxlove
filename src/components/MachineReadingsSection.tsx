@@ -62,6 +62,15 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
 
   const addReading = async () => {
     if (!user) return;
+    // Validate last block
+    if (readings.length > 0) {
+      const last = readings[readings.length - 1];
+      if (!last.machine_serial.trim() || !last.delivery_person.trim()) {
+        setValidationError('Preencha o S/N e o entregador antes de adicionar uma nova maquininha');
+        return;
+      }
+    }
+    setValidationError('');
     const { data, error } = await supabase
       .from('machine_readings')
       .insert({
@@ -77,7 +86,10 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
       .select('id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount')
       .single();
     if (error) { toast.error('Erro ao adicionar maquininha'); return; }
-    if (data) setReadings(prev => [...prev, { ...data, debit_amount: 0, credit_amount: 0, voucher_amount: 0, pix_amount: 0 }]);
+    if (data) {
+      setReadings(prev => [...prev, { ...data, debit_amount: 0, credit_amount: 0, voucher_amount: 0, pix_amount: 0 }]);
+      setExpandedIds(prev => new Set(prev).add(data.id));
+    }
   };
 
   const removeReading = async (id: string) => {
