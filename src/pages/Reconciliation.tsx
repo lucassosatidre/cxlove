@@ -1248,11 +1248,12 @@ interface OrderRowProps {
   hasMultiple: boolean;
   badgeType: PaymentBadgeType;
   isExpanded: boolean;
-  breakdownValid: boolean;
+  breakdownValid?: boolean;
   isCompleted: boolean;
   isAutoOnline: boolean;
   hasBreakdowns: boolean;
-  visibleColumns: ColumnVisibility;
+  isTestMode?: boolean;
+  visibleColumns: Record<string, boolean>;
   orderBreakdowns: Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
