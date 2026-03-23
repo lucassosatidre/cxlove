@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock } from 'lucide-react';
+import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock, QrCode, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -250,6 +250,24 @@ export default function SalonClosing() {
   }, [filtered]);
 
   // Payment summary from Saipos data
+  const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+
+  const offlineMethodTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+
+    displayRows.forEach(r => {
+      const pm = (r.payment_method || '').toLowerCase();
+      if (pm.includes('dinheiro')) totals['Dinheiro'] += r.amount;
+      else if (pm.includes('pix')) totals['(COBRAR) Pix'] += r.amount;
+      else if (pm.includes('créd') || pm.includes('cred')) totals['Crédito'] += r.amount;
+      else if (pm.includes('déb') || pm.includes('deb')) totals['Débito'] += r.amount;
+      else if (pm.includes('voucher') || pm.includes('vale') || pm.includes('vr') || pm.includes('va')) totals['Voucher'] += r.amount;
+    });
+
+    return totals;
+  }, [displayRows]);
+
   const paymentSummary = useMemo(() => {
     const map: Record<string, { count: number; total: number }> = {};
     displayRows.forEach(r => {
@@ -514,25 +532,31 @@ export default function SalonClosing() {
         </div>
       )}
 
-      {/* Payment summary */}
-      {paymentSummary.length > 0 && (
-        <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Resumo por Forma de Pagamento (Saipos)</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {paymentSummary.map(([method, data]) => (
-              <div key={method} className="bg-muted/50 rounded-lg px-3 py-2">
-                <p className="text-xs font-medium text-foreground truncate">{method}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-muted-foreground">{data.count}x</span>
-                  <span className="text-xs font-semibold text-foreground">
-                    R$ {data.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
+      {/* Offline Payment Totals - same layout as Tele */}
+      <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo por Forma de Pagamento</p>
+        <div className="flex flex-wrap gap-3">
+          {OFFLINE_CATEGORIES.map(cat => {
+            const total = offlineMethodTotals[cat];
+            const iconMap: Record<string, React.ReactNode> = {
+              'Dinheiro': <Banknote className="h-4 w-4 text-success" />,
+              '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
+              'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+              'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+              'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+            };
+            return (
+              <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                {iconMap[cat]}
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
+                  <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* Validation alerts */}
       {validationAlerts.length > 0 && (
