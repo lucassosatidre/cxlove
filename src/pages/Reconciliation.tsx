@@ -14,7 +14,7 @@ import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, Che
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
-import TestBanner from '@/components/TestBanner';
+
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 
