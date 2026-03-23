@@ -349,6 +349,18 @@ export default function SalonClosing() {
         )}
       </div>
 
+      {/* Machine Readings */}
+      {id && (
+        <div className="bg-card rounded-xl shadow-card border border-border mb-6 overflow-hidden">
+          <MachineReadingsSection
+            salonClosingId={id}
+            deliveryPersons={[]}
+            isCompleted={isCompleted}
+            personLabel="Garçom"
+          />
+        </div>
+      )}
+
       {/* Payment summary */}
       {paymentSummary.length > 0 && (
         <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
