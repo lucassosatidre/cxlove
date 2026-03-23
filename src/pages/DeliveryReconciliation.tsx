@@ -471,7 +471,7 @@ export default function DeliveryReconciliation() {
   }, [breakdowns, id, isReprocessing, loadData, orders, transactions]);
 
   useEffect(() => {
-    if (!isTestMode || loading || hasAutoReprocessed || transactions.length === 0) return;
+    if (loading || hasAutoReprocessed || transactions.length === 0) return;
     void reprocessAutomaticMatches();
   }, [hasAutoReprocessed, isTestMode, loading, reprocessAutomaticMatches, transactions.length]);
 
