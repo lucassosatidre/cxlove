@@ -89,6 +89,13 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
         setValidationError('Preencha o S/N e o entregador antes de adicionar uma nova maquininha');
         return;
       }
+      // Validate count fields: if amount > 0, count must be >= 1
+      for (const pf of PAYMENT_FIELDS) {
+        if (last[pf.amountField] > 0 && last[pf.countField] < 1) {
+          setValidationError(`Informe a quantidade de operações de ${pf.label.replace(/^[^\s]+\s/, '')} antes de adicionar`);
+          return;
+        }
+      }
     }
     setValidationError('');
     const { data, error } = await supabase
@@ -295,6 +302,7 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                         {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
                           const amountVal = r[amountField];
                           const countDisabled = isCompleted || amountVal === 0;
+                          const countMissing = amountVal > 0 && r[countField] < 1;
                           return (
                             <div key={amountField} className="space-y-1">
                               <label className="text-[10px] text-muted-foreground">{label}</label>
@@ -315,7 +323,7 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                                   min="0"
                                   value={r[countField] || ''}
                                   onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
-                                  className="h-8 text-xs font-mono w-14 text-center"
+                                  className={`h-8 text-xs font-mono w-14 text-center ${countMissing ? 'border-destructive ring-1 ring-destructive' : ''}`}
                                   placeholder="Qtd"
                                   disabled={countDisabled}
                                   title="Qtd operações"
