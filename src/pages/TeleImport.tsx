@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import AppLayout from '@/components/AppLayout';
 import { Upload, FileSpreadsheet, CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 
 interface ImportSummary {
   totalRead: number;
