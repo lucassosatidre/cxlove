@@ -136,6 +136,7 @@ export default function DeliveryReconciliation() {
         .from('cash_expectations')
         .select('counts, total')
         .eq('closing_date', dateStr)
+        .eq('sector', 'tele')
         .maybeSingle();
       if (expData) {
         const loadedCounts: Record<string, number> = {};

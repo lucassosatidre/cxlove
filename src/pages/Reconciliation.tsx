@@ -203,6 +203,7 @@ export default function Reconciliation() {
         .from('cash_expectations')
         .select('counts, total')
         .eq('closing_date', closing.closing_date)
+        .eq('sector', 'tele')
         .maybeSingle();
 
       if (expectation) {
