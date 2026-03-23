@@ -679,8 +679,7 @@ export default function DeliveryReconciliation() {
                 Reprocessando com trava por método…
               </Badge>
             )}
-            {isTestMode && (
-              <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border">
+            <div className="flex items-center bg-muted rounded-lg p-0.5 border border-border">
                 <Button
                   variant={activeTab === 'classic' ? 'default' : 'ghost'}
                   size="sm"
