@@ -295,7 +295,6 @@ export default function SalonClosing() {
   }
 
   const isCompleted = closing?.status === 'completed';
-  const [finalizing, setFinalizing] = useState(false);
 
   // Validation for Conciliação button
   const validationAlerts: string[] = [];
