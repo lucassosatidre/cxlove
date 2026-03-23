@@ -16,6 +16,10 @@ interface MachineReading {
   credit_amount: number;
   voucher_amount: number;
   pix_amount: number;
+  debit_count: number;
+  credit_count: number;
+  voucher_count: number;
+  pix_count: number;
 }
 
 interface Props {
@@ -26,8 +30,29 @@ interface Props {
 
 const SERIAL_PREFIX = 'S1F2-000';
 
+const PAYMENT_FIELDS = [
+  { label: '💳 Débito', amountField: 'debit_amount' as const, countField: 'debit_count' as const },
+  { label: '💳 Crédito', amountField: 'credit_amount' as const, countField: 'credit_count' as const },
+  { label: '🎟️ Voucher', amountField: 'voucher_amount' as const, countField: 'voucher_count' as const },
+  { label: '📱 (COBRAR) Pix', amountField: 'pix_amount' as const, countField: 'pix_count' as const },
+];
+
 function formatCurrency(value: number) {
   return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function parseRow(r: any): MachineReading {
+  return {
+    ...r,
+    debit_amount: Number(r.debit_amount),
+    credit_amount: Number(r.credit_amount),
+    voucher_amount: Number(r.voucher_amount),
+    pix_amount: Number(r.pix_amount),
+    debit_count: Number(r.debit_count) || 0,
+    credit_count: Number(r.credit_count) || 0,
+    voucher_count: Number(r.voucher_count) || 0,
+    pix_count: Number(r.pix_count) || 0,
+  };
 }
 
 export default function MachineReadingsSection({ dailyClosingId, deliveryPersons, isCompleted }: Props) {
@@ -44,25 +69,20 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
   }, [dailyClosingId]);
 
+  const SELECT_COLS = 'id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount, debit_count, credit_count, voucher_count, pix_count';
+
   const loadReadings = async () => {
     const { data } = await supabase
       .from('machine_readings')
-      .select('id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount')
+      .select(SELECT_COLS)
       .eq('daily_closing_id', dailyClosingId)
       .order('created_at', { ascending: true });
-    setReadings((data || []).map(r => ({
-      ...r,
-      debit_amount: Number(r.debit_amount),
-      credit_amount: Number(r.credit_amount),
-      voucher_amount: Number(r.voucher_amount),
-      pix_amount: Number(r.pix_amount),
-    })));
+    setReadings((data || []).map(parseRow));
     setLoading(false);
   };
 
   const addReading = async () => {
     if (!user) return;
-    // Validate last block
     if (readings.length > 0) {
       const last = readings[readings.length - 1];
       if (!last.machine_serial.trim() || !last.delivery_person.trim()) {
@@ -78,16 +98,12 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
         user_id: user.id,
         machine_serial: '',
         delivery_person: '',
-        debit_amount: 0,
-        credit_amount: 0,
-        voucher_amount: 0,
-        pix_amount: 0,
       })
-      .select('id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount')
+      .select(SELECT_COLS)
       .single();
     if (error) { toast.error('Erro ao adicionar maquininha'); return; }
     if (data) {
-      setReadings(prev => [...prev, { ...data, debit_amount: 0, credit_amount: 0, voucher_amount: 0, pix_amount: 0 }]);
+      setReadings(prev => [...prev, parseRow(data)]);
       setExpandedIds(prev => new Set(prev).add(data.id));
     }
   };
@@ -108,7 +124,18 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
   }, []);
 
   const updateField = (id: string, field: keyof MachineReading, value: string | number) => {
-    setReadings(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+    setReadings(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const updated = { ...r, [field]: value };
+      // Auto-zero count when amount is 0
+      for (const pf of PAYMENT_FIELDS) {
+        if (field === pf.amountField && (value === 0 || value === '')) {
+          updated[pf.countField] = 0;
+          debouncedSave(id, pf.countField, 0);
+        }
+      }
+      return updated;
+    }));
     debouncedSave(id, field, value);
   };
 
@@ -118,26 +145,38 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
       credit: acc.credit + r.credit_amount,
       voucher: acc.voucher + r.voucher_amount,
       pix: acc.pix + r.pix_amount,
-    }), { debit: 0, credit: 0, voucher: 0, pix: 0 });
+      debitCount: acc.debitCount + r.debit_count,
+      creditCount: acc.creditCount + r.credit_count,
+      voucherCount: acc.voucherCount + r.voucher_count,
+      pixCount: acc.pixCount + r.pix_count,
+    }), { debit: 0, credit: 0, voucher: 0, pix: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0 });
   }, [readings]);
 
   const totalGeral = totals.debit + totals.credit + totals.voucher + totals.pix;
+  const totalCountGeral = totals.debitCount + totals.creditCount + totals.voucherCount + totals.pixCount;
 
   const byDriver = useMemo(() => {
-    const map: Record<string, { debit: number; credit: number; voucher: number; pix: number; count: number }> = {};
+    const map: Record<string, { debit: number; credit: number; voucher: number; pix: number; debitCount: number; creditCount: number; voucherCount: number; pixCount: number; count: number }> = {};
     for (const r of readings) {
       const name = r.delivery_person || 'Sem entregador';
-      if (!map[name]) map[name] = { debit: 0, credit: 0, voucher: 0, pix: 0, count: 0 };
+      if (!map[name]) map[name] = { debit: 0, credit: 0, voucher: 0, pix: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0, count: 0 };
       map[name].debit += r.debit_amount;
       map[name].credit += r.credit_amount;
       map[name].voucher += r.voucher_amount;
       map[name].pix += r.pix_amount;
+      map[name].debitCount += r.debit_count;
+      map[name].creditCount += r.credit_count;
+      map[name].voucherCount += r.voucher_count;
+      map[name].pixCount += r.pix_count;
       map[name].count++;
     }
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
   }, [readings]);
 
   if (loading) return null;
+
+  const blockTotal = (r: MachineReading) => r.debit_amount + r.credit_amount + r.voucher_amount + r.pix_amount;
+  const blockOps = (r: MachineReading) => r.debit_count + r.credit_count + r.voucher_count + r.pix_count;
 
   return (
     <div className="border-b border-border bg-card">
@@ -175,9 +214,8 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
             {readings.map((r) => {
               const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
               const isExpanded = expandedIds.has(r.id) || !isFilled;
-              const blockTotal = r.debit_amount + r.credit_amount + r.voucher_amount + r.pix_amount;
               const toggleExpand = () => {
-                if (!isFilled) return; // can't collapse unfilled
+                if (!isFilled) return;
                 setExpandedIds(prev => {
                   const next = new Set(prev);
                   next.has(r.id) ? next.delete(r.id) : next.add(r.id);
@@ -187,19 +225,23 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
 
               return (
                 <div key={r.id} className="border border-border rounded-lg bg-muted/30">
-                  {/* Summary row - always visible */}
+                  {/* Summary row */}
                   <div
                     className={`flex items-center gap-2 px-3 py-2 ${isFilled ? 'cursor-pointer hover:bg-muted/50' : ''}`}
                     onClick={isFilled ? toggleExpand : undefined}
                   >
-                    {isFilled ? (
-                      isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    )}
+                    {isExpanded
+                      ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    }
                     <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
                     <span className="text-xs text-foreground font-medium">{r.delivery_person || 'Sem entregador'}</span>
-                    <span className="ml-auto text-xs font-bold font-mono text-foreground">{formatCurrency(blockTotal)}</span>
+                    <span className="ml-auto text-xs font-bold font-mono text-foreground">
+                      {formatCurrency(blockTotal(r))}
+                      {blockOps(r) > 0 && (
+                        <span className="font-normal text-muted-foreground ml-1">({blockOps(r)} op.)</span>
+                      )}
+                    </span>
                     {!isCompleted && (
                       <Button
                         variant="ghost"
@@ -250,26 +292,38 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                         </div>
                       </div>
                       <div className="grid grid-cols-4 gap-2">
-                        {[
-                          { label: '💳 Débito', field: 'debit_amount' as const },
-                          { label: '💳 Crédito', field: 'credit_amount' as const },
-                          { label: '🎟️ Voucher', field: 'voucher_amount' as const },
-                          { label: '📱 (COBRAR) Pix', field: 'pix_amount' as const },
-                        ].map(({ label, field }) => (
-                          <div key={field} className="space-y-1">
-                            <label className="text-[10px] text-muted-foreground">{label}</label>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={r[field] || ''}
-                              onChange={(e) => updateField(r.id, field, parseFloat(e.target.value) || 0)}
-                              className="h-8 text-xs font-mono"
-                              placeholder="0,00"
-                              disabled={isCompleted}
-                            />
-                          </div>
-                        ))}
+                        {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
+                          const amountVal = r[amountField];
+                          const countDisabled = isCompleted || amountVal === 0;
+                          return (
+                            <div key={amountField} className="space-y-1">
+                              <label className="text-[10px] text-muted-foreground">{label}</label>
+                              <div className="flex gap-1">
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={amountVal || ''}
+                                  onChange={(e) => updateField(r.id, amountField, parseFloat(e.target.value) || 0)}
+                                  className="h-8 text-xs font-mono flex-1"
+                                  placeholder="0,00"
+                                  disabled={isCompleted}
+                                />
+                                <Input
+                                  type="number"
+                                  step="1"
+                                  min="0"
+                                  value={r[countField] || ''}
+                                  onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
+                                  className="h-8 text-xs font-mono w-14 text-center"
+                                  placeholder="Qtd"
+                                  disabled={countDisabled}
+                                  title="Qtd operações"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -288,17 +342,18 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
               </div>
               <div className="grid grid-cols-5 gap-3">
                 {[
-                  { label: 'Débito', value: totals.debit },
-                  { label: 'Crédito', value: totals.credit },
-                  { label: 'Voucher', value: totals.voucher },
-                  { label: '(COBRAR) Pix', value: totals.pix },
-                  { label: 'Total Geral', value: totalGeral },
-                ].map(({ label, value }) => (
+                  { label: 'Débito', value: totals.debit, count: totals.debitCount },
+                  { label: 'Crédito', value: totals.credit, count: totals.creditCount },
+                  { label: 'Voucher', value: totals.voucher, count: totals.voucherCount },
+                  { label: '(COBRAR) Pix', value: totals.pix, count: totals.pixCount },
+                  { label: 'Total Geral', value: totalGeral, count: totalCountGeral },
+                ].map(({ label, value, count }) => (
                   <div key={label} className="text-center">
                     <div className="text-[10px] text-muted-foreground">{label}</div>
                     <div className={`text-sm font-bold font-mono ${label === 'Total Geral' ? 'text-primary' : 'text-foreground'}`}>
                       {formatCurrency(value)}
                     </div>
+                    <div className="text-[10px] text-muted-foreground">{count} op.</div>
                   </div>
                 ))}
               </div>
@@ -322,15 +377,16 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                 </div>
                 <div className="grid grid-cols-5 gap-2 text-center">
                   {[
-                    { label: 'Débito', value: vals.debit },
-                    { label: 'Crédito', value: vals.credit },
-                    { label: 'Voucher', value: vals.voucher },
-                    { label: 'Pix', value: vals.pix },
-                    { label: 'Total', value: vals.debit + vals.credit + vals.voucher + vals.pix },
-                  ].map(({ label, value }) => (
+                    { label: 'Débito', value: vals.debit, count: vals.debitCount },
+                    { label: 'Crédito', value: vals.credit, count: vals.creditCount },
+                    { label: 'Voucher', value: vals.voucher, count: vals.voucherCount },
+                    { label: 'Pix', value: vals.pix, count: vals.pixCount },
+                    { label: 'Total', value: vals.debit + vals.credit + vals.voucher + vals.pix, count: vals.debitCount + vals.creditCount + vals.voucherCount + vals.pixCount },
+                  ].map(({ label, value, count }) => (
                     <div key={label}>
                       <div className="text-[10px] text-muted-foreground">{label}</div>
                       <div className="text-xs font-bold font-mono text-foreground">{formatCurrency(value)}</div>
+                      <div className="text-[10px] text-muted-foreground">{count} op.</div>
                     </div>
                   ))}
                 </div>
