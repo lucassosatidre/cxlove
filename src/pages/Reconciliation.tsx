@@ -963,6 +963,7 @@ export default function Reconciliation() {
                         isCompleted={isCompleted}
                         isAutoOnline={autoOnline}
                         hasBreakdowns={hasBreakdowns}
+                        isTestMode={isTestMode}
                         visibleColumns={visibleColumns}
                         orderBreakdowns={allBreakdowns.filter(b => b.imported_order_id === order.id)}
                         onRowClick={() => handleRowClick(order)}
@@ -1248,11 +1249,12 @@ interface OrderRowProps {
   hasMultiple: boolean;
   badgeType: PaymentBadgeType;
   isExpanded: boolean;
-  breakdownValid: boolean;
+  breakdownValid?: boolean;
   isCompleted: boolean;
   isAutoOnline: boolean;
   hasBreakdowns: boolean;
-  visibleColumns: ColumnVisibility;
+  isTestMode?: boolean;
+  visibleColumns: Record<string, boolean>;
   orderBreakdowns: Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>;
   onRowClick: () => void;
   onCheckboxClick: (e: React.MouseEvent) => void;
@@ -1515,7 +1517,7 @@ function isUnidentifiedPayment(method: string): boolean {
   return true;
 }
 
-function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onAutoConfirm, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
+function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, isCompleted, isAutoOnline, hasBreakdowns, isTestMode: rowTestMode, visibleColumns, orderBreakdowns, onRowClick, onCheckboxClick, onBreakdownValid, onBreakdownSaved, onAutoConfirm, onUpdateField, allPaymentMethods, offlinePaymentMethods, allDeliveryPersons }: OrderRowProps) {
   const colCount = 6 + Object.values(visibleColumns).filter(Boolean).length;
   const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
@@ -1623,7 +1625,33 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
               }
               setPaymentPopoverOpen(open);
             }}>
-              {isUnidentified ? (
+              {rowTestMode ? (
+                <>
+                  {/* Test mode: show imported payment_method as plain text */}
+                  <span className="text-xs text-foreground">{order.payment_method}</span>
+                  {isAllOnline(order.payment_method) && <PaymentBadge type="online" />}
+                  {hasBreakdowns && orderBreakdowns.length > 1 && (
+                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 bg-warning/15 text-warning border border-warning/30">
+                      <AlertTriangle className="h-3 w-3" />
+                      Rateio
+                    </span>
+                  )}
+                  {!isCompleted && (
+                    <PopoverTrigger asChild>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const current = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+                          setSelectedMethods(current);
+                        }}
+                        className="text-[10px] text-primary hover:underline shrink-0"
+                      >
+                        ✏️ Alterar
+                      </button>
+                    </PopoverTrigger>
+                  )}
+                </>
+              ) : isUnidentified ? (
                 <>
                   {hasOnlineComponent && <PaymentBadge type="online" />}
                   {hasPhysicalComponent && (
@@ -1678,20 +1706,23 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
                     </label>
                   ))}
                 </div>
-                <div className="p-2 border-t border-border flex justify-end">
+                <div className="p-2 border-t border-border flex justify-end gap-2">
+                  {rowTestMode && selectedMethods.length > 1 && (
+                    <span className="text-[10px] text-muted-foreground self-center mr-auto">Múltiplas formas → rateio</span>
+                  )}
                   <Button size="sm" className="h-7 text-xs" onClick={savePaymentMethods}>
                     Confirmar
                   </Button>
                 </div>
               </PopoverContent>
             </Popover>
-            {!isUnidentified && <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />}
+            {!rowTestMode && !isUnidentified && <PaymentBadge type={badgeType} breakdownValid={breakdownValid} />}
             {hasMultiple && (
               isExpanded
                 ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             )}
-            {!isCompleted && !isUnidentified && (
+            {!isCompleted && !rowTestMode && !isUnidentified && (
               <button onClick={(e) => startEdit(e, 'payment_method')} className="shrink-0">
                 <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-50 transition-opacity" />
               </button>
@@ -1699,7 +1730,20 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
           </div>
         </td>
         <td className={`p-3 text-sm ${cellClass}`} onClick={(e) => e.stopPropagation()}>
-          {isUnidentified ? (
+          {rowTestMode ? (
+            // Test mode: show breakdowns if they exist, otherwise dash
+            orderBreakdowns.length > 0 ? (
+              <div className="flex flex-col gap-0.5">
+                {orderBreakdowns.filter(b => b.amount > 0).map((b, i) => (
+                  <span key={i} className="text-xs font-medium text-foreground">
+                    {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )
+          ) : isUnidentified ? (
             <ValoresCell
               order={order}
               orderBreakdowns={orderBreakdowns}
