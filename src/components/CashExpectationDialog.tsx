@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calculator, CalendarDays, Save, Trash2 } from 'lucide-react';
+import { Calculator, CalendarDays, Save, Trash2, Store, Bike } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
@@ -22,7 +22,8 @@ interface CashExpectationDialogProps {
 
 export default function CashExpectationDialog({ open, onOpenChange, onSaved }: CashExpectationDialogProps) {
   const { user } = useAuth();
-  const [step, setStep] = useState<'date' | 'calculator'>('date');
+  const [step, setStep] = useState<'sector' | 'date' | 'calculator'>('sector');
+  const [selectedSector, setSelectedSector] = useState<'tele' | 'salao' | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [counts, setCounts] = useState<Record<number, number>>({});
   const [saving, setSaving] = useState(false);
@@ -38,18 +39,24 @@ export default function CashExpectationDialog({ open, onOpenChange, onSaved }: C
   // Reset when dialog opens/closes
   useEffect(() => {
     if (!open) {
-      setStep('date');
+      setStep('sector');
+      setSelectedSector(null);
       setSelectedDate(undefined);
       setCounts({});
       setExistingId(null);
     }
   }, [open]);
 
+  const handleSectorSelect = (sector: 'tele' | 'salao') => {
+    setSelectedSector(sector);
+    setStep('date');
+  };
+
   // Load existing expectation when date is selected
   const handleDateSelect = async (date: Date | undefined) => {
     setSelectedDate(date);
     setDatePickerOpen(false);
-    if (!date) return;
+    if (!date || !selectedSector) return;
 
     setLoading(true);
     const dateStr = format(date, 'yyyy-MM-dd');
@@ -57,6 +64,7 @@ export default function CashExpectationDialog({ open, onOpenChange, onSaved }: C
       .from('cash_expectations')
       .select('*')
       .eq('closing_date', dateStr)
+      .eq('sector', selectedSector)
       .maybeSingle();
 
     if (data) {
@@ -77,7 +85,7 @@ export default function CashExpectationDialog({ open, onOpenChange, onSaved }: C
   };
 
   const handleSave = async () => {
-    if (!selectedDate || !user) return;
+    if (!selectedDate || !user || !selectedSector) return;
     setSaving(true);
 
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -86,23 +94,44 @@ export default function CashExpectationDialog({ open, onOpenChange, onSaved }: C
       if (Number(v) > 0) countsJson[k] = Number(v);
     }
 
-    const { error } = await supabase
-      .from('cash_expectations')
-      .upsert({
-        closing_date: dateStr,
-        created_by: user.id,
-        counts: countsJson,
-        total,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'closing_date' });
+    if (existingId) {
+      const { error } = await supabase
+        .from('cash_expectations')
+        .update({
+          created_by: user.id,
+          counts: countsJson,
+          total,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existingId);
 
-    if (error) {
-      toast.error('Erro ao salvar valor esperado.');
-      console.error(error);
+      if (error) {
+        toast.error('Erro ao salvar valor esperado.');
+        console.error(error);
+      } else {
+        toast.success(`Valor esperado ${selectedSector === 'salao' ? 'Salão' : 'Tele'} salvo para ${format(selectedDate, 'dd/MM/yyyy')}: ${formatCurrency(total)}`);
+        onOpenChange(false);
+        onSaved?.();
+      }
     } else {
-      toast.success(`Valor esperado salvo para ${format(selectedDate, 'dd/MM/yyyy')}: ${formatCurrency(total)}`);
-      onOpenChange(false);
-      onSaved?.();
+      const { error } = await supabase
+        .from('cash_expectations')
+        .insert({
+          closing_date: dateStr,
+          created_by: user.id,
+          counts: countsJson,
+          total,
+          sector: selectedSector,
+        });
+
+      if (error) {
+        toast.error('Erro ao salvar valor esperado.');
+        console.error(error);
+      } else {
+        toast.success(`Valor esperado ${selectedSector === 'salao' ? 'Salão' : 'Tele'} salvo para ${format(selectedDate, 'dd/MM/yyyy')}: ${formatCurrency(total)}`);
+        onOpenChange(false);
+        onSaved?.();
+      }
     }
     setSaving(false);
   };
@@ -122,20 +151,50 @@ export default function CashExpectationDialog({ open, onOpenChange, onSaved }: C
     }
   };
 
+  const sectorLabel = selectedSector === 'salao' ? 'Salão' : 'Tele';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calculator className="h-5 w-5" />
-            {step === 'date' ? 'Abrir Caixa — Escolha a Data' : `Valor Esperado — ${selectedDate ? format(selectedDate, 'dd/MM/yyyy') : ''}`}
+            {step === 'sector'
+              ? 'Abrir Caixa — Escolha o Setor'
+              : step === 'date'
+              ? `Abrir Caixa ${sectorLabel} — Escolha a Data`
+              : `Valor Esperado ${sectorLabel} — ${selectedDate ? format(selectedDate, 'dd/MM/yyyy') : ''}`}
           </DialogTitle>
         </DialogHeader>
 
-        {step === 'date' ? (
+        {step === 'sector' ? (
           <div className="flex flex-col items-center gap-4 py-4">
             <p className="text-sm text-muted-foreground text-center">
-              Selecione a data para definir o valor esperado de abertura do caixa Tele.
+              Selecione o setor para definir o valor esperado de abertura.
+            </p>
+            <div className="grid grid-cols-2 gap-4 w-full">
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center gap-2 hover:border-primary hover:bg-primary/5"
+                onClick={() => handleSectorSelect('tele')}
+              >
+                <Bike className="h-8 w-8 text-primary" />
+                <span className="font-semibold">Tele</span>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center gap-2 hover:border-primary hover:bg-primary/5"
+                onClick={() => handleSectorSelect('salao')}
+              >
+                <Store className="h-8 w-8 text-primary" />
+                <span className="font-semibold">Salão</span>
+              </Button>
+            </div>
+          </div>
+        ) : step === 'date' ? (
+          <div className="flex flex-col items-center gap-4 py-4">
+            <p className="text-sm text-muted-foreground text-center">
+              Selecione a data para definir o valor esperado de abertura do caixa {sectorLabel}.
             </p>
             <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
               <PopoverTrigger asChild>
@@ -150,9 +209,13 @@ export default function CashExpectationDialog({ open, onOpenChange, onSaved }: C
                   selected={selectedDate}
                   onSelect={handleDateSelect}
                   locale={ptBR}
+                  className="p-3 pointer-events-auto"
                 />
               </PopoverContent>
             </Popover>
+            <Button variant="ghost" size="sm" onClick={() => { setStep('sector'); setSelectedSector(null); }}>
+              ← Voltar ao setor
+            </Button>
           </div>
         ) : loading ? (
           <div className="flex justify-center py-8">
