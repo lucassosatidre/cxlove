@@ -1728,34 +1728,23 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             )}
           </div>
         </td>
-        <td className={`p-3 text-sm ${cellClass}`} onClick={(e) => e.stopPropagation()}>
-          {rowTestMode ? (
-            // Test mode: show breakdowns if they exist, otherwise dash
-            orderBreakdowns.length > 0 ? (
-              <div className="flex flex-col gap-0.5">
-                {orderBreakdowns.filter(b => b.amount > 0).map((b, i) => (
-                  <span key={i} className="text-xs font-medium text-foreground">
-                    {b.payment_method_name} / <span className="font-mono-tabular">{formatCurrency(b.amount)}</span>
-                  </span>
-                ))}
-              </div>
+        {!rowTestMode && (
+          <td className={`p-3 text-sm ${cellClass}`} onClick={(e) => e.stopPropagation()}>
+            {isUnidentified ? (
+              <ValoresCell
+                order={order}
+                orderBreakdowns={orderBreakdowns}
+                hasMultiple={hasMultiple}
+                isCompleted={isCompleted}
+                offlinePaymentMethods={offlinePaymentMethods}
+                onSaved={onBreakdownSaved}
+                onAutoConfirm={onAutoConfirm}
+              />
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
-            )
-          ) : isUnidentified ? (
-            <ValoresCell
-              order={order}
-              orderBreakdowns={orderBreakdowns}
-              hasMultiple={hasMultiple}
-              isCompleted={isCompleted}
-              offlinePaymentMethods={offlinePaymentMethods}
-              onSaved={onBreakdownSaved}
-              onAutoConfirm={onAutoConfirm}
-            />
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          )}
-        </td>
+            )}
+          </td>
+        )}
         <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
           {formatCurrency(order.total_amount)}
         </td>
