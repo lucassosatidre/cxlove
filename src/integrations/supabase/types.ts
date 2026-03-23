@@ -310,6 +310,56 @@ export type Database = {
           },
         ]
       }
+      machine_readings: {
+        Row: {
+          created_at: string
+          credit_amount: number
+          daily_closing_id: string
+          debit_amount: number
+          delivery_person: string
+          id: string
+          machine_serial: string
+          pix_amount: number
+          updated_at: string
+          user_id: string
+          voucher_amount: number
+        }
+        Insert: {
+          created_at?: string
+          credit_amount?: number
+          daily_closing_id: string
+          debit_amount?: number
+          delivery_person?: string
+          id?: string
+          machine_serial?: string
+          pix_amount?: number
+          updated_at?: string
+          user_id: string
+          voucher_amount?: number
+        }
+        Update: {
+          created_at?: string
+          credit_amount?: number
+          daily_closing_id?: string
+          debit_amount?: number
+          delivery_person?: string
+          id?: string
+          machine_serial?: string
+          pix_amount?: number
+          updated_at?: string
+          user_id?: string
+          voucher_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "machine_readings_daily_closing_id_fkey"
+            columns: ["daily_closing_id"]
+            isOneToOne: false
+            referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_payment_breakdowns: {
         Row: {
           amount: number

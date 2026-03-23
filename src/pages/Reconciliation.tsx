@@ -16,6 +16,7 @@ import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
 import TestBanner from '@/components/TestBanner';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
+import MachineReadingsSection from '@/components/MachineReadingsSection';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
@@ -813,6 +814,15 @@ export default function Reconciliation() {
 
 
 
+
+        {/* Machine Readings - Test Mode Only */}
+        {isTestMode && id && (
+          <MachineReadingsSection
+            dailyClosingId={id}
+            deliveryPersons={deliveryPersons}
+            isCompleted={isCompleted}
+          />
+        )}
 
         {/* Import History Toggle */}
         {importRecords.length > 0 && (
