@@ -813,8 +813,8 @@ export default function Reconciliation() {
 
 
 
-        {/* Machine Readings - Test Mode Only */}
-        {isTestMode && id && (
+        {/* Machine Readings */}
+        {id && (
           <MachineReadingsSection
             dailyClosingId={id}
             deliveryPersons={deliveryPersons}
