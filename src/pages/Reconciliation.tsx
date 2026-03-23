@@ -220,12 +220,12 @@ export default function Reconciliation() {
     if (!order) return;
 
     // When confirming (not unchecking), validate that physical payments have breakdowns filled
-    if (!current && !skipValidation) {
+    // In test mode, skip breakdown validation — checkbox confirms delivery directly
+    if (!current && !skipValidation && !isTestMode) {
       const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
       const hasPhysical = methods.some(m => !isOnlinePayment(m));
       
       if (hasPhysical) {
-        // Check if breakdowns exist for this order
         const orderBks = allBreakdowns.filter(b => b.imported_order_id === orderId);
         const physicalBks = orderBks.filter(b => b.payment_type === 'fisico');
         
@@ -234,7 +234,6 @@ export default function Reconciliation() {
           return;
         }
         
-        // Also check total validity for multi-payment
         if (needsBreakdown(order.payment_method) && !breakdownValidity[orderId]) {
           toast.error('Preencha o detalhamento das formas de pagamento antes de confirmar.');
           setExpandedOrderId(orderId);
