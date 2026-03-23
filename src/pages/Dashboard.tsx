@@ -148,16 +148,15 @@ export default function Dashboard() {
 
   return (
     <AppLayout
-      title={isTestMode ? "Tele Teste" : "Tele"}
+      title="Tele"
       subtitle={`📅 ${dateStr} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        <Button onClick={() => navigate(isTestMode ? '/tele-teste/import' : '/tele/import')} className="bg-primary hover:bg-primary/90">
+        <Button onClick={() => navigate('/tele/import')} className="bg-primary hover:bg-primary/90">
           <Plus className="h-4 w-4 mr-2" />
           Nova Importação
         </Button>
       }
     >
-      {isTestMode && <TestBanner />}
       {/* Stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="bg-card rounded-xl shadow-card p-5 border border-border">
