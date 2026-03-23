@@ -473,7 +473,7 @@ export default function DeliveryReconciliation() {
   useEffect(() => {
     if (loading || hasAutoReprocessed || transactions.length === 0) return;
     void reprocessAutomaticMatches();
-  }, [hasAutoReprocessed, isTestMode, loading, reprocessAutomaticMatches, transactions.length]);
+  }, [hasAutoReprocessed, loading, reprocessAutomaticMatches, transactions.length]);
 
   const manualMatch = useCallback(async (transactionId: string, orderId: string) => {
     // Save undo info
