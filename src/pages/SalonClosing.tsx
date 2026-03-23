@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react';
+import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -51,6 +51,7 @@ export default function SalonClosing() {
   const [imports, setImports] = useState<any[]>([]);
   const [showImports, setShowImports] = useState(false);
   const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
+  const [finalizing, setFinalizing] = useState(false);
 
   // Cash calculator state - Abertura
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
@@ -301,6 +302,39 @@ export default function SalonClosing() {
   if (!cashSnapshotSavedFechamento) validationAlerts.push('Preencha a contagem de fechamento');
   if (machineReadingsCount === 0) validationAlerts.push('Adicione ao menos uma maquininha');
   const canNavigateReconciliation = validationAlerts.length === 0;
+  const canFinalize = canNavigateReconciliation;
+
+  const handleFinalize = async () => {
+    if (!id) return;
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error('Erro ao finalizar fechamento.');
+    } else {
+      setClosing(prev => prev ? { ...prev, status: 'completed' } : prev);
+      toast.success('Fechamento finalizado com sucesso!');
+    }
+    setFinalizing(false);
+  };
+
+  const handleReopen = async () => {
+    if (!id) return;
+    setFinalizing(true);
+    const { error } = await supabase
+      .from('salon_closings')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error('Erro ao reabrir fechamento.');
+    } else {
+      setClosing(prev => prev ? { ...prev, status: 'pending' } : prev);
+      toast.success('Fechamento reaberto.');
+    }
+    setFinalizing(false);
+  };
 
   const handleDeleteSelectedImports = async () => {
     const importIds = Array.from(selectedImports);
@@ -329,25 +363,56 @@ export default function SalonClosing() {
       subtitle={`${orders.length} pedidos`}
       headerActions={
         <div className="flex items-center gap-2">
-          <div className="relative group">
-            <Button
-              variant="default"
-              onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
-              disabled={!canNavigateReconciliation}
-            >
-              Conciliação Salão
-            </Button>
-            {!canNavigateReconciliation && (
-              <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
-                {validationAlerts.map((alert, i) => (
-                  <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
-                    <AlertCircle className="h-3 w-3 shrink-0" />
-                    {alert}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          {isCompleted ? (
+            isAdmin && (
+              <Button variant="outline" onClick={handleReopen} disabled={finalizing}>
+                <Unlock className="h-4 w-4 mr-1" />
+                {finalizing ? 'Reabrindo...' : 'Reabrir Fechamento'}
+              </Button>
+            )
+          ) : (
+            <div className="relative group">
+              <Button
+                variant="default"
+                onClick={handleFinalize}
+                disabled={!canFinalize || finalizing}
+              >
+                <Lock className="h-4 w-4 mr-1" />
+                {finalizing ? 'Finalizando...' : 'Finalizar Fechamento'}
+              </Button>
+              {!canFinalize && (
+                <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
+                  {validationAlerts.map((alert, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {alert}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="relative group">
+              <Button
+                variant="secondary"
+                onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
+                disabled={!canNavigateReconciliation}
+              >
+                Conciliação Salão
+              </Button>
+              {!canNavigateReconciliation && (
+                <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
+                  {validationAlerts.map((alert, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
+                      <AlertCircle className="h-3 w-3 shrink-0" />
+                      {alert}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <Button variant="outline" onClick={() => navigate('/salon')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
