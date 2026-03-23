@@ -457,7 +457,7 @@ export default function DeliveryReconciliation() {
       );
 
       if (automaticMatches.length > 0 || reprocessedMatches.length > 0) {
-        toast.success(`Tele Teste reprocessada com alocação global (${reprocessedMatches.length} vínculos automáticos).`);
+        toast.success(`Conciliação reprocessada com alocação global (${reprocessedMatches.length} vínculos automáticos).`);
       }
 
       await loadData();
