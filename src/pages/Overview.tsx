@@ -489,6 +489,9 @@ export default function Overview() {
                   <p className={cn("text-2xl font-bold", monthlySummary.currentBalance >= 0 ? 'text-emerald-500' : 'text-destructive')}>
                     {fmt(monthlySummary.currentBalance)}
                   </p>
+                  <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs text-muted-foreground" onClick={() => setShowBalanceDetail(true)}>
+                    <Eye className="h-3 w-3 mr-1" /> Ver detalhes
+                  </Button>
                 </CardContent>
               </Card>
               <Card>
