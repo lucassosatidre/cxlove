@@ -532,25 +532,31 @@ export default function SalonClosing() {
         </div>
       )}
 
-      {/* Payment summary */}
-      {paymentSummary.length > 0 && (
-        <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
-          <h3 className="text-sm font-semibold text-foreground mb-3">Resumo por Forma de Pagamento (Saipos)</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-            {paymentSummary.map(([method, data]) => (
-              <div key={method} className="bg-muted/50 rounded-lg px-3 py-2">
-                <p className="text-xs font-medium text-foreground truncate">{method}</p>
-                <div className="flex items-center justify-between mt-1">
-                  <span className="text-xs text-muted-foreground">{data.count}x</span>
-                  <span className="text-xs font-semibold text-foreground">
-                    R$ {data.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </span>
+      {/* Offline Payment Totals - same layout as Tele */}
+      <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo por Forma de Pagamento</p>
+        <div className="flex flex-wrap gap-3">
+          {OFFLINE_CATEGORIES.map(cat => {
+            const total = offlineMethodTotals[cat];
+            const iconMap: Record<string, React.ReactNode> = {
+              'Dinheiro': <Banknote className="h-4 w-4 text-success" />,
+              '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
+              'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+              'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+              'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+            };
+            return (
+              <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                {iconMap[cat]}
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
+                  <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
                 </div>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      )}
+      </div>
 
       {/* Validation alerts */}
       {validationAlerts.length > 0 && (
