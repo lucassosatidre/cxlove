@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -73,6 +73,8 @@ export default function Reconciliation() {
   const [sortField, setSortField] = useState<SortField>('order_number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showImportHistory, setShowImportHistory] = useState(false);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
+  const [deletingImports, setDeletingImports] = useState(false);
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [allBreakdowns, setAllBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [visibleColumns, setVisibleColumns] = useState({
@@ -212,6 +214,51 @@ export default function Reconciliation() {
     }
 
     setLoading(false);
+  };
+
+  const toggleImportSelection = (importId: string) => {
+    setSelectedImports(prev => {
+      const next = new Set(prev);
+      if (next.has(importId)) next.delete(importId);
+      else next.add(importId);
+      return next;
+    });
+  };
+
+  const handleDeleteSelectedImports = async () => {
+    if (selectedImports.size === 0) return;
+    const confirmed = window.confirm(`Tem certeza que deseja apagar ${selectedImports.size} importação(ões)? Os pedidos associados serão removidos, mas contagens de dinheiro e maquininhas serão preservadas.`);
+    if (!confirmed) return;
+
+    setDeletingImports(true);
+    try {
+      const importIds = Array.from(selectedImports);
+
+      const { data: ordersToDelete } = await supabase
+        .from('imported_orders')
+        .select('id')
+        .in('import_id', importIds);
+
+      if (ordersToDelete && ordersToDelete.length > 0) {
+        const orderIds = ordersToDelete.map(o => o.id);
+        await supabase.from('card_transactions')
+          .update({ matched_order_id: null, match_type: null, match_confidence: null })
+          .in('matched_order_id', orderIds);
+        await supabase.from('order_payment_breakdowns').delete().in('imported_order_id', orderIds);
+        await supabase.from('imported_orders').delete().in('import_id', importIds);
+      }
+
+      await supabase.from('imports').delete().in('id', importIds);
+
+      toast.success(`${importIds.length} importação(ões) removida(s). Contagens e maquininhas preservadas.`);
+      setSelectedImports(new Set());
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao apagar importações.');
+      console.error(err);
+    } finally {
+      setDeletingImports(false);
+    }
   };
 
   const toggleConfirm = useCallback(async (orderId: string, current: boolean, skipValidation = false) => {
@@ -837,6 +884,11 @@ export default function Reconciliation() {
                   {importRecords.map((imp) => (
                     <div key={imp.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
                       <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={selectedImports.has(imp.id)}
+                          onCheckedChange={() => toggleImportSelection(imp.id)}
+                          className="h-4 w-4"
+                        />
                         <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
                         <span className="text-foreground font-medium">{imp.file_name}</span>
                       </div>
@@ -848,6 +900,26 @@ export default function Reconciliation() {
                       </div>
                     </div>
                   ))}
+                  {selectedImports.size > 0 && (
+                    <div className="flex items-center gap-3 pt-2">
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={handleDeleteSelectedImports}
+                        disabled={deletingImports}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        {deletingImports ? 'Apagando...' : `Apagar ${selectedImports.size} importação(ões)`}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedImports(new Set())}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
