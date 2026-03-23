@@ -248,8 +248,10 @@ export default function Overview() {
     setChangeTele('');
     setVaultEntry('');
     setVaultEntryDesc('');
+    setVaultEntryCounts(null);
     setVaultExit('');
     setVaultExitDesc('');
+    setVaultExitCounts(null);
   };
 
   const handleSave = async () => {
