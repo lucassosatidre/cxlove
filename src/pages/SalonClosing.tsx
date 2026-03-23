@@ -434,6 +434,78 @@ export default function SalonClosing() {
         </div>
       )}
 
+      {/* Validation alerts */}
+      {validationAlerts.length > 0 && (
+        <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 mb-4 space-y-1">
+          {validationAlerts.map((alert, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {alert}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Import History */}
+      <div className="bg-card rounded-xl shadow-card border border-border mb-4 overflow-hidden">
+        <button
+          className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors"
+          onClick={() => setShowImports(!showImports)}
+        >
+          {showImports ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Histórico de Importações
+          </span>
+          <span className="text-xs text-muted-foreground">({imports.length})</span>
+        </button>
+        {showImports && (
+          <div className="border-t border-border px-4 py-3 space-y-2">
+            {imports.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma importação encontrada.</p>
+            ) : (
+              <>
+                {imports.map((imp) => (
+                  <div key={imp.id} className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2">
+                    <Checkbox
+                      checked={selectedImports.has(imp.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedImports(prev => {
+                          const next = new Set(prev);
+                          checked ? next.add(imp.id) : next.delete(imp.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{imp.file_name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {imp.total_rows} lidos · {imp.new_rows} novos · {imp.duplicate_rows} duplicados
+                        {' · '}
+                        {new Date(imp.created_at).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">{imp.status}</Badge>
+                  </div>
+                ))}
+                {selectedImports.size > 0 && (
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                    <span className="text-xs text-muted-foreground">{selectedImports.size} selecionada(s)</span>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setSelectedImports(new Set())}>
+                      Cancelar
+                    </Button>
+                    <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={handleDeleteSelectedImports}>
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Apagar
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
         <div className="relative flex-1 min-w-[200px]">
