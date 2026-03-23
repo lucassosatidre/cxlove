@@ -47,6 +47,10 @@ export default function SalonClosing() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [machineReadingsCount, setMachineReadingsCount] = useState(0);
+  const [imports, setImports] = useState<any[]>([]);
+  const [showImports, setShowImports] = useState(false);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
 
   // Cash calculator state - Abertura
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
