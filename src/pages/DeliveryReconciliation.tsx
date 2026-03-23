@@ -1118,7 +1118,7 @@ export default function DeliveryReconciliation() {
                       </div>
                     )}
 
-                    {!isMatched && pendingInfo && isTestMode && (
+                    {!isMatched && pendingInfo && (
                       <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
                         {pendingInfo.suggestions.map((suggestion, index) => (
                           <div key={`${order.id}-suggestion-${index}`} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
