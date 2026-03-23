@@ -115,6 +115,23 @@ export default function SalonClosing() {
       }
     }
 
+    // Load admin's expected cash for salon sector
+    if (closingData?.closing_date) {
+      const { data: expectation } = await supabase
+        .from('cash_expectations')
+        .select('counts, total')
+        .eq('closing_date', closingData.closing_date)
+        .eq('sector', 'salao')
+        .maybeSingle();
+
+      if (expectation) {
+        setExpectedCash({
+          counts: expectation.counts as Record<string, number>,
+          total: Number(expectation.total),
+        });
+      }
+    }
+
     setLoading(false);
   };
 
