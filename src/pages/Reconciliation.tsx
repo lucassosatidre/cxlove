@@ -970,7 +970,7 @@ export default function Reconciliation() {
                         isCompleted={isCompleted}
                         isAutoOnline={autoOnline}
                         hasBreakdowns={hasBreakdowns}
-                        isTestMode={isTestMode}
+                        isTestMode={true}
                         visibleColumns={visibleColumns}
                         orderBreakdowns={allBreakdowns.filter(b => b.imported_order_id === order.id)}
                         onRowClick={() => handleRowClick(order)}
