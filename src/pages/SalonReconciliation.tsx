@@ -503,10 +503,10 @@ export default function SalonReconciliation() {
             <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
             <StatCard label="Fora Maquininha" value={stats.external} icon={<DollarSign className="h-4 w-4" />} color="text-muted-foreground" />
             <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
-            <div className="bg-muted rounded-xl p-3 border border-border">
-              <p className="text-xs text-muted-foreground mb-1">Progresso</p>
-              <p className="text-2xl font-semibold text-foreground font-mono tabular-nums">{percent}%</p>
-              <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
+            <div className="bg-card rounded-lg p-3 border border-border shadow-card">
+              <p className="section-title mb-1">Progresso</p>
+              <p className="text-2xl font-bold text-foreground font-mono-tabular">{percent}%</p>
+              <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
                 <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
               </div>
             </div>
@@ -853,12 +853,12 @@ function PendingReasonBadge({ reason }: { reason: PendingReason }) {
 
 function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
-    <div className="bg-muted rounded-xl p-3 border border-border">
-      <div className="flex items-center gap-1.5 mb-1">
-        <span className={color}>{icon}</span>
-        <p className="text-xs text-muted-foreground">{label}</p>
+    <div className="bg-card rounded-lg p-3 border border-border shadow-card">
+      <div className="flex items-center justify-between mb-1">
+        <p className="section-title">{label}</p>
+        <span className={`${color} opacity-60`}>{icon}</span>
       </div>
-      <p className={`text-2xl font-semibold font-mono tabular-nums ${color}`}>{value}</p>
+      <p className={`text-2xl font-bold font-mono-tabular ${color}`}>{value}</p>
     </div>
   );
 }
