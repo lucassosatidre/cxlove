@@ -674,7 +674,7 @@ export default function DeliveryReconciliation() {
                 }}
               />
             </div>
-            {isTestMode && isReprocessing && (
+            {isReprocessing && (
               <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20">
                 Reprocessando com trava por método…
               </Badge>
