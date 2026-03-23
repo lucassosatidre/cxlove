@@ -23,9 +23,12 @@ interface MachineReading {
 }
 
 interface Props {
-  dailyClosingId: string;
+  dailyClosingId?: string;
+  salonClosingId?: string;
   deliveryPersons: string[];
   isCompleted: boolean;
+  /** Label for the person field: "Entregador" or "Garçom" */
+  personLabel?: string;
 }
 
 const SERIAL_PREFIX = 'S1F2-000';
@@ -55,7 +58,7 @@ function parseRow(r: any): MachineReading {
   };
 }
 
-export default function MachineReadingsSection({ dailyClosingId, deliveryPersons, isCompleted }: Props) {
+export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador' }: Props) {
   const { user } = useAuth();
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,32 +67,35 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
   const [validationError, setValidationError] = useState('');
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
+  const closingId = dailyClosingId || salonClosingId || '';
+  const closingField = dailyClosingId ? 'daily_closing_id' : 'salon_closing_id';
+
   useEffect(() => {
     loadReadings();
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
-  }, [dailyClosingId]);
+  }, [closingId]);
 
   const SELECT_COLS = 'id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount, debit_count, credit_count, voucher_count, pix_count';
 
   const loadReadings = async () => {
+    if (!closingId) { setLoading(false); return; }
     const { data } = await supabase
       .from('machine_readings')
       .select(SELECT_COLS)
-      .eq('daily_closing_id', dailyClosingId)
+      .eq(closingField, closingId)
       .order('created_at', { ascending: true });
     setReadings((data || []).map(parseRow));
     setLoading(false);
   };
 
   const addReading = async () => {
-    if (!user) return;
+    if (!user || !closingId) return;
     if (readings.length > 0) {
       const last = readings[readings.length - 1];
       if (!last.machine_serial.trim() || !last.delivery_person.trim()) {
-        setValidationError('Preencha o S/N e o entregador antes de adicionar uma nova maquininha');
+        setValidationError(`Preencha o S/N e o ${personLabel.toLowerCase()} antes de adicionar uma nova maquininha`);
         return;
       }
-      // Validate count fields: if amount > 0, count must be >= 1
       for (const pf of PAYMENT_FIELDS) {
         if (last[pf.amountField] > 0 && last[pf.countField] < 1) {
           setValidationError(`Informe a quantidade de operações de ${pf.label.replace(/^[^\s]+\s/, '')} antes de adicionar`);
@@ -98,14 +104,15 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
       }
     }
     setValidationError('');
+    const insertData: Record<string, unknown> = {
+      user_id: user.id,
+      machine_serial: '',
+      delivery_person: '',
+      [closingField]: closingId,
+    };
     const { data, error } = await supabase
       .from('machine_readings')
-      .insert({
-        daily_closing_id: dailyClosingId,
-        user_id: user.id,
-        machine_serial: '',
-        delivery_person: '',
-      })
+      .insert(insertData as any)
       .select(SELECT_COLS)
       .single();
     if (error) { toast.error('Erro ao adicionar maquininha'); return; }
@@ -134,7 +141,6 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
     setReadings(prev => prev.map(r => {
       if (r.id !== id) return r;
       const updated = { ...r, [field]: value };
-      // Auto-zero count when amount is 0
       for (const pf of PAYMENT_FIELDS) {
         if (field === pf.amountField && (value === 0 || value === '')) {
           updated[pf.countField] = 0;
@@ -162,10 +168,12 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
   const totalGeral = totals.debit + totals.credit + totals.voucher + totals.pix;
   const totalCountGeral = totals.debitCount + totals.creditCount + totals.voucherCount + totals.pixCount;
 
+  const noPersonLabel = `Sem ${personLabel.toLowerCase()}`;
+
   const byDriver = useMemo(() => {
     const map: Record<string, { debit: number; credit: number; voucher: number; pix: number; debitCount: number; creditCount: number; voucherCount: number; pixCount: number; count: number }> = {};
     for (const r of readings) {
-      const name = r.delivery_person || 'Sem entregador';
+      const name = r.delivery_person || noPersonLabel;
       if (!map[name]) map[name] = { debit: 0, credit: 0, voucher: 0, pix: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0, count: 0 };
       map[name].debit += r.debit_amount;
       map[name].credit += r.credit_amount;
@@ -242,7 +250,7 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                       : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                     }
                     <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
-                    <span className="text-xs text-foreground font-medium">{r.delivery_person || 'Sem entregador'}</span>
+                    <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
                     <span className="ml-auto text-xs font-bold font-mono text-foreground">
                       {formatCurrency(blockTotal(r))}
                       {blockOps(r) > 0 && (
@@ -281,21 +289,31 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                           </div>
                         </div>
                         <div className="flex-1 flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground whitespace-nowrap">👤 Entregador</label>
-                          <Select
-                            value={r.delivery_person}
-                            onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
-                            disabled={isCompleted}
-                          >
-                            <SelectTrigger className="h-8 text-xs flex-1">
-                              <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {deliveryPersons.map(d => (
-                                <SelectItem key={d} value={d}>{d}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
+                          {deliveryPersons.length > 0 ? (
+                            <Select
+                              value={r.delivery_person}
+                              onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
+                              disabled={isCompleted}
+                            >
+                              <SelectTrigger className="h-8 text-xs flex-1">
+                                <SelectValue placeholder="Selecione..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {deliveryPersons.map(d => (
+                                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              value={r.delivery_person}
+                              onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
+                              className="h-8 text-xs flex-1"
+                              placeholder={`Nome do ${personLabel.toLowerCase()}...`}
+                              disabled={isCompleted}
+                            />
+                          )}
                         </div>
                       </div>
                       <div className="grid grid-cols-4 gap-2">
@@ -345,7 +363,7 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                 <span className="text-xs font-semibold text-foreground">Totais via Maquininha</span>
                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowByDriver(true)}>
                   <Eye className="h-3 w-3 mr-1" />
-                  Ver por entregador
+                  Ver por {personLabel.toLowerCase()}
                 </Button>
               </div>
               <div className="grid grid-cols-5 gap-3">
@@ -370,11 +388,11 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
         )}
       </div>
 
-      {/* By Driver Dialog */}
+      {/* By Person Dialog */}
       <Dialog open={showByDriver} onOpenChange={setShowByDriver}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Totais por Entregador</DialogTitle>
+            <DialogTitle>Totais por {personLabel}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
             {byDriver.map(([name, vals]) => (
