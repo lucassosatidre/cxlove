@@ -75,12 +75,16 @@ export default function SalonClosing() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: closingData }, { data: ordersData }] = await Promise.all([
+    const [{ data: closingData }, { data: ordersData }, { data: machineData }, { data: importsData }] = await Promise.all([
       supabase.from('salon_closings').select('*').eq('id', id!).single(),
       supabase.from('salon_orders').select('*').eq('salon_closing_id', id!).order('sale_time', { ascending: true }),
+      supabase.from('machine_readings').select('id').eq('salon_closing_id', id!),
+      supabase.from('salon_imports').select('*').eq('salon_closing_id', id!).order('created_at', { ascending: false }),
     ]);
     setClosing(closingData as ClosingData | null);
     setOrders((ordersData as SalonOrder[]) || []);
+    setMachineReadingsCount((machineData || []).length);
+    setImports(importsData || []);
 
     // Load saved cash snapshots
     if (id) {
