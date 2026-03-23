@@ -302,6 +302,7 @@ export default function MachineReadingsSection({ dailyClosingId, deliveryPersons
                         {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
                           const amountVal = r[amountField];
                           const countDisabled = isCompleted || amountVal === 0;
+                          const countMissing = amountVal > 0 && r[countField] < 1;
                           return (
                             <div key={amountField} className="space-y-1">
                               <label className="text-[10px] text-muted-foreground">{label}</label>
