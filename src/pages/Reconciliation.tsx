@@ -258,7 +258,7 @@ export default function Reconciliation() {
       setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_confirmed: current } : o));
       toast.error('Erro ao atualizar pedido.');
     }
-  }, [user, orders, breakdownValidity, allBreakdowns]);
+  }, [user, orders, breakdownValidity, allBreakdowns, isTestMode]);
 
   const handleRowClick = useCallback((order: Order) => {
     if (needsBreakdown(order.payment_method)) {
