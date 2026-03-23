@@ -548,7 +548,15 @@ export default function Overview() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>⬆️ Entrada Cofre (R$)</Label>
-                    <Input type="number" step="0.01" placeholder="0,00" value={vaultEntry} onChange={e => setVaultEntry(e.target.value)} />
+                    <div className="flex gap-2">
+                      <Input type="number" step="0.01" placeholder="0,00" value={vaultEntry} onChange={e => { setVaultEntry(e.target.value); setVaultEntryCounts(null); }} className="flex-1" />
+                      <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowEntryCalc(true)} title="Calculadora de cédulas">
+                        <Calculator className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {vaultEntryCounts && Object.keys(vaultEntryCounts).length > 0 && (
+                      <p className="text-[10px] text-emerald-600">✓ Contagem detalhada salva</p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <Label>Descrição entrada (opcional)</Label>
