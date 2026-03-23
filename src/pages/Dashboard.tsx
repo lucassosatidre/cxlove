@@ -45,8 +45,8 @@ export default function Dashboard() {
 
   const loadData = async () => {
     const [{ data: closingsData }, { data: importsData }] = await Promise.all([
-      supabase.from('daily_closings').select('*').eq('is_test', isTestMode).order('closing_date', { ascending: false }),
-      supabase.from('imports').select('*').eq('is_test', isTestMode).order('created_at', { ascending: false }),
+      supabase.from('daily_closings').select('*').order('closing_date', { ascending: false }),
+      supabase.from('imports').select('*').order('created_at', { ascending: false }),
     ]);
     setClosings(closingsData || []);
     setImports(importsData || []);
