@@ -708,8 +708,10 @@ export type Database = {
           updated_at: string
           user_id: string
           vault_entry: number
+          vault_entry_counts: Json | null
           vault_entry_description: string | null
           vault_exit: number
+          vault_exit_counts: Json | null
           vault_exit_description: string | null
         }
         Insert: {
@@ -722,8 +724,10 @@ export type Database = {
           updated_at?: string
           user_id: string
           vault_entry?: number
+          vault_entry_counts?: Json | null
           vault_entry_description?: string | null
           vault_exit?: number
+          vault_exit_counts?: Json | null
           vault_exit_description?: string | null
         }
         Update: {
@@ -736,8 +740,10 @@ export type Database = {
           updated_at?: string
           user_id?: string
           vault_entry?: number
+          vault_entry_counts?: Json | null
           vault_entry_description?: string | null
           vault_exit?: number
+          vault_exit_counts?: Json | null
           vault_exit_description?: string | null
         }
         Relationships: []
