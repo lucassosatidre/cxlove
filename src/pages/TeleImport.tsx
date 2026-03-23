@@ -201,7 +201,7 @@ export default function TeleImport() {
 
           <Alert className="mt-4">
             <AlertDescription>
-              Na Tele{isTestMode ? ' Teste' : ''}, só entram pedidos de tele entrega. Linhas de balcão, retirada, ficha ou salão são ignoradas automaticamente.
+              Na Tele, só entram pedidos de tele entrega. Linhas de balcão, retirada, ficha ou salão são ignoradas automaticamente.
             </AlertDescription>
           </Alert>
 
