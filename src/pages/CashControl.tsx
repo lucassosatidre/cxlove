@@ -14,9 +14,10 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Plus, Vault, ArrowUpCircle, ArrowDownCircle, DollarSign, Trash2 } from 'lucide-react';
+import { CalendarIcon, Plus, Vault, ArrowUpCircle, ArrowDownCircle, Trash2, Calculator, Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
 
 interface VaultClosing {
   id: string;
@@ -25,8 +26,10 @@ interface VaultClosing {
   change_tele: number;
   vault_entry: number;
   vault_entry_description: string | null;
+  vault_entry_counts: Record<string, number> | null;
   vault_exit: number;
   vault_exit_description: string | null;
+  vault_exit_counts: Record<string, number> | null;
   balance: number;
   user_id: string;
   created_at: string;
@@ -51,10 +54,17 @@ export default function CashControl() {
   const [changeTele, setChangeTele] = useState('');
   const [vaultEntry, setVaultEntry] = useState('');
   const [vaultEntryDesc, setVaultEntryDesc] = useState('');
+  const [vaultEntryCounts, setVaultEntryCounts] = useState<Record<string, number> | null>(null);
   const [vaultExit, setVaultExit] = useState('');
   const [vaultExitDesc, setVaultExitDesc] = useState('');
+  const [vaultExitCounts, setVaultExitCounts] = useState<Record<string, number> | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Calculator dialogs
+  const [showEntryCalc, setShowEntryCalc] = useState(false);
+  const [showExitCalc, setShowExitCalc] = useState(false);
+  const [showBalanceDetail, setShowBalanceDetail] = useState(false);
 
   // Misc expense dialog
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
@@ -85,7 +95,6 @@ export default function CashControl() {
 
   useEffect(() => { loadData(); }, []);
 
-  // Calculate previous balance (sum of all closings before the selected date)
   const previousBalance = useMemo(() => {
     const dateStr = format(formDate, 'yyyy-MM-dd');
     const sorted = [...closings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
@@ -93,7 +102,6 @@ export default function CashControl() {
     return prev.length > 0 ? prev[prev.length - 1].balance : 0;
   }, [closings, formDate]);
 
-  // Expenses for the selected form date
   const dayExpenses = useMemo(() => {
     const dateStr = format(formDate, 'yyyy-MM-dd');
     return expenses.filter(e => e.expense_date === dateStr);
@@ -101,7 +109,6 @@ export default function CashControl() {
 
   const totalDayExpenses = useMemo(() => dayExpenses.reduce((s, e) => s + Number(e.amount), 0), [dayExpenses]);
 
-  // Calculated balance
   const calculatedBalance = useMemo(() => {
     const entry = parseFloat(vaultEntry) || 0;
     const exit = parseFloat(vaultExit) || 0;
@@ -110,7 +117,6 @@ export default function CashControl() {
     return previousBalance + entry - exit - cs - ct - totalDayExpenses;
   }, [previousBalance, vaultEntry, vaultExit, changeSalon, changeTele, totalDayExpenses]);
 
-  // Monthly summary
   const monthlySummary = useMemo(() => {
     const now = new Date();
     const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
@@ -129,7 +135,13 @@ export default function CashControl() {
     return { currentBalance, totalEntries, totalExits };
   }, [closings, expenses]);
 
-  // Filtered history
+  // Last entry counts for balance detail
+  const lastEntryCounts = useMemo(() => {
+    const sorted = [...closings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
+    if (sorted.length === 0) return null;
+    return sorted[sorted.length - 1].vault_entry_counts || null;
+  }, [closings]);
+
   const filteredClosings = useMemo(() => {
     let filtered = closings;
     if (filterStart) {
@@ -150,8 +162,10 @@ export default function CashControl() {
     setChangeTele(String(closing.change_tele));
     setVaultEntry(String(closing.vault_entry));
     setVaultEntryDesc(closing.vault_entry_description || '');
+    setVaultEntryCounts(closing.vault_entry_counts || null);
     setVaultExit(String(closing.vault_exit));
     setVaultExitDesc(closing.vault_exit_description || '');
+    setVaultExitCounts(closing.vault_exit_counts || null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -162,8 +176,10 @@ export default function CashControl() {
     setChangeTele('');
     setVaultEntry('');
     setVaultEntryDesc('');
+    setVaultEntryCounts(null);
     setVaultExit('');
     setVaultExitDesc('');
+    setVaultExitCounts(null);
   };
 
   const handleSave = async () => {
@@ -175,14 +191,16 @@ export default function CashControl() {
     }
 
     setSaving(true);
-    const record = {
+    const record: any = {
       closing_date: format(formDate, 'yyyy-MM-dd'),
       change_salon: parseFloat(changeSalon) || 0,
       change_tele: parseFloat(changeTele) || 0,
       vault_entry: parseFloat(vaultEntry) || 0,
       vault_entry_description: vaultEntryDesc.trim() || null,
+      vault_entry_counts: vaultEntryCounts || {},
       vault_exit: exitVal,
       vault_exit_description: vaultExitDesc.trim() || null,
+      vault_exit_counts: vaultExitCounts || {},
       balance: calculatedBalance,
       user_id: user.id,
       updated_at: new Date().toISOString(),
@@ -266,6 +284,9 @@ export default function CashControl() {
             <p className={cn("text-2xl font-bold", monthlySummary.currentBalance >= 0 ? 'text-emerald-500' : 'text-destructive')}>
               {fmt(monthlySummary.currentBalance)}
             </p>
+            <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs text-muted-foreground" onClick={() => setShowBalanceDetail(true)}>
+              <Eye className="h-3 w-3 mr-1" /> Ver detalhes
+            </Button>
           </CardContent>
         </Card>
         <Card>
@@ -328,20 +349,36 @@ export default function CashControl() {
               <Input type="number" step="0.01" placeholder="0,00" value={changeTele} onChange={e => setChangeTele(e.target.value)} />
             </div>
 
-            {/* Entrada cofre */}
+            {/* Entrada cofre - with calculator */}
             <div className="space-y-1.5">
               <Label>⬆️ Entrada Cofre (R$)</Label>
-              <Input type="number" step="0.01" placeholder="0,00" value={vaultEntry} onChange={e => setVaultEntry(e.target.value)} />
+              <div className="flex gap-2">
+                <Input type="number" step="0.01" placeholder="0,00" value={vaultEntry} onChange={e => { setVaultEntry(e.target.value); setVaultEntryCounts(null); }} className="flex-1" />
+                <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowEntryCalc(true)} title="Calculadora de cédulas">
+                  <Calculator className="h-4 w-4" />
+                </Button>
+              </div>
+              {vaultEntryCounts && Object.keys(vaultEntryCounts).length > 0 && (
+                <p className="text-[10px] text-emerald-600">✓ Contagem detalhada salva</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Descrição entrada (opcional)</Label>
               <Input placeholder="Ex: depósito do dia" value={vaultEntryDesc} onChange={e => setVaultEntryDesc(e.target.value)} />
             </div>
 
-            {/* Saída cofre */}
+            {/* Saída cofre - with calculator */}
             <div className="space-y-1.5">
               <Label>⬇️ Saída Cofre (R$)</Label>
-              <Input type="number" step="0.01" placeholder="0,00" value={vaultExit} onChange={e => setVaultExit(e.target.value)} />
+              <div className="flex gap-2">
+                <Input type="number" step="0.01" placeholder="0,00" value={vaultExit} onChange={e => { setVaultExit(e.target.value); setVaultExitCounts(null); }} className="flex-1" />
+                <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowExitCalc(true)} title="Calculadora de cédulas">
+                  <Calculator className="h-4 w-4" />
+                </Button>
+              </div>
+              {vaultExitCounts && Object.keys(vaultExitCounts).length > 0 && (
+                <p className="text-[10px] text-emerald-600">✓ Contagem detalhada salva</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Descrição saída (obrigatório)</Label>
@@ -517,6 +554,40 @@ export default function CashControl() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Entry Cash Calculator */}
+      <VaultCashCalculator
+        open={showEntryCalc}
+        onOpenChange={setShowEntryCalc}
+        title="Contagem de Cédulas — Entrada Cofre"
+        initialCounts={vaultEntryCounts || undefined}
+        onSave={(counts, total) => {
+          setVaultEntryCounts(counts);
+          setVaultEntry(String(total));
+          toast.success('Contagem de entrada salva!');
+        }}
+      />
+
+      {/* Exit Cash Calculator */}
+      <VaultCashCalculator
+        open={showExitCalc}
+        onOpenChange={setShowExitCalc}
+        title="Contagem de Cédulas — Saída Cofre"
+        initialCounts={vaultExitCounts || undefined}
+        onSave={(counts, total) => {
+          setVaultExitCounts(counts);
+          setVaultExit(String(total));
+          toast.success('Contagem de saída salva!');
+        }}
+      />
+
+      {/* Balance Detail */}
+      <VaultBalanceDetail
+        open={showBalanceDetail}
+        onOpenChange={setShowBalanceDetail}
+        balance={monthlySummary.currentBalance}
+        entryCounts={lastEntryCounts}
+      />
     </AppLayout>
   );
 }
