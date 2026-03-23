@@ -227,6 +227,13 @@ export default function Overview() {
     return filtered;
   }, [vaultClosings, filterStart, filterEnd]);
 
+  // Last entry counts for balance detail
+  const lastEntryCounts = useMemo(() => {
+    const sorted = [...vaultClosings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
+    if (sorted.length === 0) return null;
+    return sorted[sorted.length - 1].vault_entry_counts || null;
+  }, [vaultClosings]);
+
   const loadClosingForEdit = (closing: VaultClosing) => {
     setEditingId(closing.id);
     setFormDate(parseISO(closing.closing_date));
