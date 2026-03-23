@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CreditCard, Plus, Trash2, Eye } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface MachineReading {
