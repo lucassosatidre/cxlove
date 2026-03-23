@@ -463,7 +463,7 @@ export default function DeliveryReconciliation() {
       await loadData();
     } catch (error) {
       console.error(error);
-      toast.error('Erro ao reprocessar a Tele Teste.');
+      toast.error('Erro ao reprocessar a conciliação.');
     } finally {
       setIsReprocessing(false);
       setHasAutoReprocessed(true);
