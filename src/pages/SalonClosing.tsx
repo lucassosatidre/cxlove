@@ -6,8 +6,9 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator } from 'lucide-react';
+import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
@@ -46,6 +47,10 @@ export default function SalonClosing() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [machineReadingsCount, setMachineReadingsCount] = useState(0);
+  const [imports, setImports] = useState<any[]>([]);
+  const [showImports, setShowImports] = useState(false);
+  const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
 
   // Cash calculator state - Abertura
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
@@ -70,12 +75,16 @@ export default function SalonClosing() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: closingData }, { data: ordersData }] = await Promise.all([
+    const [{ data: closingData }, { data: ordersData }, { data: machineData }, { data: importsData }] = await Promise.all([
       supabase.from('salon_closings').select('*').eq('id', id!).single(),
       supabase.from('salon_orders').select('*').eq('salon_closing_id', id!).order('sale_time', { ascending: true }),
+      supabase.from('machine_readings').select('id').eq('salon_closing_id', id!),
+      supabase.from('salon_imports').select('*').eq('salon_closing_id', id!).order('created_at', { ascending: false }),
     ]);
     setClosing(closingData as ClosingData | null);
     setOrders((ordersData as SalonOrder[]) || []);
+    setMachineReadingsCount((machineData || []).length);
+    setImports(importsData || []);
 
     // Load saved cash snapshots
     if (id) {
@@ -251,15 +260,59 @@ export default function SalonClosing() {
 
   const isCompleted = closing?.status === 'completed';
 
+  // Validation for Conciliação button
+  const validationAlerts: string[] = [];
+  if (!cashSnapshotSavedAbertura) validationAlerts.push('Preencha a contagem de abertura');
+  if (!cashSnapshotSavedFechamento) validationAlerts.push('Preencha a contagem de fechamento');
+  if (machineReadingsCount === 0) validationAlerts.push('Adicione ao menos uma maquininha');
+  const canNavigateReconciliation = validationAlerts.length === 0;
+
+  const handleDeleteSelectedImports = async () => {
+    const importIds = Array.from(selectedImports);
+    if (importIds.length === 0) return;
+
+    const { data: ordersToDelete } = await supabase
+      .from('salon_orders')
+      .select('id')
+      .in('salon_import_id', importIds);
+
+    if (ordersToDelete?.length) {
+      const orderIds = ordersToDelete.map(o => o.id);
+      await supabase.from('salon_order_payments').delete().in('salon_order_id', orderIds);
+      await supabase.from('salon_orders').delete().in('salon_import_id', importIds);
+    }
+    await supabase.from('salon_imports').delete().in('id', importIds);
+
+    setSelectedImports(new Set());
+    toast.success(`${importIds.length} importação(ões) excluída(s)`);
+    loadData();
+  };
+
   return (
     <AppLayout
       title={`Salão — ${formatDate(closing.closing_date)}`}
       subtitle={`${orders.length} pedidos`}
       headerActions={
         <div className="flex items-center gap-2">
-          <Button variant="default" onClick={() => navigate(`/salon/reconciliation/${id}`)}>
-            Conciliação Salão
-          </Button>
+          <div className="relative group">
+            <Button
+              variant="default"
+              onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
+              disabled={!canNavigateReconciliation}
+            >
+              Conciliação Salão
+            </Button>
+            {!canNavigateReconciliation && (
+              <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
+                {validationAlerts.map((alert, i) => (
+                  <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
+                    <AlertCircle className="h-3 w-3 shrink-0" />
+                    {alert}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <Button variant="outline" onClick={() => navigate('/salon')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
@@ -380,6 +433,78 @@ export default function SalonClosing() {
           </div>
         </div>
       )}
+
+      {/* Validation alerts */}
+      {validationAlerts.length > 0 && (
+        <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-3 mb-4 space-y-1">
+          {validationAlerts.map((alert, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs text-destructive">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {alert}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Import History */}
+      <div className="bg-card rounded-xl shadow-card border border-border mb-4 overflow-hidden">
+        <button
+          className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors"
+          onClick={() => setShowImports(!showImports)}
+        >
+          {showImports ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+          <FileText className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Histórico de Importações
+          </span>
+          <span className="text-xs text-muted-foreground">({imports.length})</span>
+        </button>
+        {showImports && (
+          <div className="border-t border-border px-4 py-3 space-y-2">
+            {imports.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma importação encontrada.</p>
+            ) : (
+              <>
+                {imports.map((imp) => (
+                  <div key={imp.id} className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2">
+                    <Checkbox
+                      checked={selectedImports.has(imp.id)}
+                      onCheckedChange={(checked) => {
+                        setSelectedImports(prev => {
+                          const next = new Set(prev);
+                          checked ? next.add(imp.id) : next.delete(imp.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate">{imp.file_name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {imp.total_rows} lidos · {imp.new_rows} novos · {imp.duplicate_rows} duplicados
+                        {' · '}
+                        {new Date(imp.created_at).toLocaleString('pt-BR')}
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px]">{imp.status}</Badge>
+                  </div>
+                ))}
+                {selectedImports.size > 0 && (
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                    <span className="text-xs text-muted-foreground">{selectedImports.size} selecionada(s)</span>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setSelectedImports(new Set())}>
+                      Cancelar
+                    </Button>
+                    <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={handleDeleteSelectedImports}>
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Apagar
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
