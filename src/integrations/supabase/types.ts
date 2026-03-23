@@ -315,7 +315,7 @@ export type Database = {
           created_at: string
           credit_amount: number
           credit_count: number
-          daily_closing_id: string
+          daily_closing_id: string | null
           debit_amount: number
           debit_count: number
           delivery_person: string
@@ -323,6 +323,7 @@ export type Database = {
           machine_serial: string
           pix_amount: number
           pix_count: number
+          salon_closing_id: string | null
           updated_at: string
           user_id: string
           voucher_amount: number
@@ -332,7 +333,7 @@ export type Database = {
           created_at?: string
           credit_amount?: number
           credit_count?: number
-          daily_closing_id: string
+          daily_closing_id?: string | null
           debit_amount?: number
           debit_count?: number
           delivery_person?: string
@@ -340,6 +341,7 @@ export type Database = {
           machine_serial?: string
           pix_amount?: number
           pix_count?: number
+          salon_closing_id?: string | null
           updated_at?: string
           user_id: string
           voucher_amount?: number
@@ -349,7 +351,7 @@ export type Database = {
           created_at?: string
           credit_amount?: number
           credit_count?: number
-          daily_closing_id?: string
+          daily_closing_id?: string | null
           debit_amount?: number
           debit_count?: number
           delivery_person?: string
@@ -357,6 +359,7 @@ export type Database = {
           machine_serial?: string
           pix_amount?: number
           pix_count?: number
+          salon_closing_id?: string | null
           updated_at?: string
           user_id?: string
           voucher_amount?: number
@@ -368,6 +371,13 @@ export type Database = {
             columns: ["daily_closing_id"]
             isOneToOne: false
             referencedRelation: "daily_closings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "machine_readings_salon_closing_id_fkey"
+            columns: ["salon_closing_id"]
+            isOneToOne: false
+            referencedRelation: "salon_closings"
             referencedColumns: ["id"]
           },
         ]
