@@ -118,9 +118,7 @@ export default function Dashboard() {
     const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
     if (!confirmed) return;
     try {
-      // Delete any cash snapshots linked to this closing
-      await supabase.from('cash_snapshots').delete().eq('daily_closing_id', closingId);
-      // Delete any card transactions linked to this closing
+      // Delete card transactions linked to this closing (but NEVER cash_snapshots or machine_readings)
       await supabase.from('card_transactions').delete().eq('daily_closing_id', closingId);
       // Delete the closing itself
       const { error } = await supabase.from('daily_closings').delete().eq('id', closingId);

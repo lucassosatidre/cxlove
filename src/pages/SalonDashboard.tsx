@@ -91,17 +91,8 @@ export default function SalonDashboard() {
 
       await supabase.from('salon_imports').delete().in('id', importIds);
 
-      // Check if any closing now has zero imports and delete it
-      const affectedClosingIds = [...new Set(
-        imports.filter(i => importIds.includes(i.id) && i.salon_closing_id).map(i => i.salon_closing_id!)
-      )];
-
-      for (const closingId of affectedClosingIds) {
-        const remaining = imports.filter(i => i.salon_closing_id === closingId && !importIds.includes(i.id));
-        if (remaining.length === 0) {
-          await supabase.from('salon_closings').delete().eq('id', closingId);
-        }
-      }
+      // Note: closings are NOT deleted when imports are removed
+      // Cash snapshots and machine readings must be preserved independently
 
       toast.success(`${importIds.length} importação(ões) removida(s) com sucesso.`);
       setSelectedImports(new Set());
