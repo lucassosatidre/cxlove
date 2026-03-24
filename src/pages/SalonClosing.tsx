@@ -435,8 +435,7 @@ export default function SalonClosing() {
             <div className="relative group">
               <Button
                 variant="secondary"
-                onClick={() => canNavigateReconciliation && navigate(`/salon/reconciliation/${id}`)}
-                disabled={!canNavigateReconciliation}
+                onClick={() => navigate(`/salon/reconciliation/${id}`)}
               >
                 Conciliação Salão
               </Button>
