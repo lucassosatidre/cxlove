@@ -642,7 +642,7 @@ export default function Reconciliation() {
   const percent = useMemo(() => filtered.length ? Math.round((confirmed / filtered.length) * 100) : 0, [filtered, confirmed]);
 
   // Offline payment method totals for confirmed orders
-  const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+  const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
   const offlineMethodTotals = useMemo(() => {
     const totals: Record<string, number> = {};
