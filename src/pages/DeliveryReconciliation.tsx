@@ -32,6 +32,7 @@ import {
   exportPendingXLSX,
   exportDriverSummaryXLSX,
 } from '@/lib/delivery-export';
+import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 
 interface Order {
   id: string;
@@ -112,7 +113,8 @@ export default function DeliveryReconciliation() {
         .eq('daily_closing_id', id!),
       supabase.from('cash_snapshots')
         .select('counts, total, updated_at, snapshot_type')
-        .eq('daily_closing_id', id!),
+        .eq('daily_closing_id', id!)
+        .order('updated_at', { ascending: false }),
     ]);
 
     const dateStr = closing?.closing_date || '';
@@ -121,13 +123,24 @@ export default function DeliveryReconciliation() {
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
-    for (const snap of (snapData || [])) {
-      const type = (snap as any).snapshot_type || 'abertura';
-      if (type === 'abertura') {
-        setCashSnapshotDataAbertura({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
-      } else if (type === 'fechamento') {
-        setCashSnapshotDataFechamento({ counts: snap.counts as Record<string, number>, total: Number(snap.total), updated_at: snap.updated_at });
-      }
+    setCashSnapshotDataAbertura(null);
+    setCashSnapshotDataFechamento(null);
+    const latestSnapshots = getLatestCashSnapshots(snapData || []);
+
+    if (latestSnapshots.abertura) {
+      setCashSnapshotDataAbertura({
+        counts: latestSnapshots.abertura.counts as Record<string, number>,
+        total: Number(latestSnapshots.abertura.total),
+        updated_at: latestSnapshots.abertura.updated_at,
+      });
+    }
+
+    if (latestSnapshots.fechamento) {
+      setCashSnapshotDataFechamento({
+        counts: latestSnapshots.fechamento.counts as Record<string, number>,
+        total: Number(latestSnapshots.fechamento.total),
+        updated_at: latestSnapshots.fechamento.updated_at,
+      });
     }
 
     // Load expected cash from admin
