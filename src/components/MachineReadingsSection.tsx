@@ -360,7 +360,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
             {/* Totals */}
             <div className="border border-border rounded-lg p-3 bg-primary/5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-foreground">Totais via Maquininha</span>
+                <span className="text-xs font-semibold text-foreground">Total Recebido via Maquininhas</span>
                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowByDriver(true)}>
                   <Eye className="h-3 w-3 mr-1" />
                   Ver por {personLabel.toLowerCase()}

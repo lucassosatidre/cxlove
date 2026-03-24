@@ -290,7 +290,7 @@ export default function SalonClosing() {
   }, [filtered]);
 
   // Payment summary from Saipos data
-  const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+  const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
   const { offlineMethodTotals, onlineCategories } = useMemo(() => {
     const totals: Record<string, number> = {};
@@ -576,7 +576,7 @@ export default function SalonClosing() {
 
       {/* Payment Totals */}
       <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-6">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo por Forma de Pagamento</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Teórico via Saipos</p>
         <div className="flex flex-wrap gap-3">
           {OFFLINE_CATEGORIES.map(cat => {
             const total = offlineMethodTotals[cat];
