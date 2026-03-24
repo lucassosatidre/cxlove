@@ -290,7 +290,7 @@ export default function SalonClosing() {
   }, [filtered]);
 
   // Payment summary from Saipos data
-  const OFFLINE_CATEGORIES = ['Dinheiro', '(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+  const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
   const { offlineMethodTotals, onlineCategories } = useMemo(() => {
     const totals: Record<string, number> = {};
