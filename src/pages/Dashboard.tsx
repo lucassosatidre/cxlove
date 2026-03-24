@@ -100,17 +100,8 @@ export default function Dashboard() {
       // Delete imports
       await supabase.from('imports').delete().in('id', importIds);
 
-      // Check if any closing now has zero imports and delete it
-      const affectedClosingIds = [...new Set(
-        imports.filter(i => importIds.includes(i.id) && i.daily_closing_id).map(i => i.daily_closing_id!)
-      )];
-
-      for (const closingId of affectedClosingIds) {
-        const remaining = imports.filter(i => i.daily_closing_id === closingId && !importIds.includes(i.id));
-        if (remaining.length === 0) {
-          await supabase.from('daily_closings').delete().eq('id', closingId);
-        }
-      }
+      // Note: closings are NOT deleted when imports are removed
+      // Cash snapshots and machine readings must be preserved independently
 
       toast.success(`${importIds.length} importação(ões) removida(s) com sucesso.`);
       setSelectedImports(new Set());
@@ -127,9 +118,7 @@ export default function Dashboard() {
     const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
     if (!confirmed) return;
     try {
-      // Delete any cash snapshots linked to this closing
-      await supabase.from('cash_snapshots').delete().eq('daily_closing_id', closingId);
-      // Delete any card transactions linked to this closing
+      // Delete card transactions linked to this closing (but NEVER cash_snapshots or machine_readings)
       await supabase.from('card_transactions').delete().eq('daily_closing_id', closingId);
       // Delete the closing itself
       const { error } = await supabase.from('daily_closings').delete().eq('id', closingId);
