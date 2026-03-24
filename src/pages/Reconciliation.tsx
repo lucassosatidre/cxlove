@@ -753,7 +753,7 @@ export default function Reconciliation() {
         {/* Offline Payment Totals */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Recebimentos Offline (Confirmados)</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Teórico via Saipos</p>
             <div className="flex flex-wrap gap-3">
               {OFFLINE_CATEGORIES.map(cat => {
                 const total = offlineMethodTotals[cat];
