@@ -18,6 +18,7 @@ import { matchSalonTransactionsToOrders, classifyOrder, type OrderClassification
 import { formatCurrency } from '@/lib/payment-utils';
 import { buildWaiterMap } from '@/lib/waiter-labels';
 import { useUserRole } from '@/hooks/useUserRole';
+import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 
 interface SalonOrder {
   id: string;
@@ -134,15 +135,25 @@ export default function SalonReconciliation() {
       const { data: snapList } = await supabase
         .from('cash_snapshots')
         .select('total, updated_at, snapshot_type')
-        .eq('salon_closing_id', id);
+        .eq('salon_closing_id', id)
+        .order('updated_at', { ascending: false });
 
-      for (const snap of (snapList || [])) {
-        const type = (snap as any).snapshot_type || 'abertura';
-        if (type === 'abertura') {
-          setCashSnapshotAbertura({ total: Number(snap.total), updated_at: snap.updated_at });
-        } else if (type === 'fechamento') {
-          setCashSnapshotFechamento({ total: Number(snap.total), updated_at: snap.updated_at });
-        }
+      setCashSnapshotAbertura(null);
+      setCashSnapshotFechamento(null);
+      const latestSnapshots = getLatestCashSnapshots(snapList || []);
+
+      if (latestSnapshots.abertura) {
+        setCashSnapshotAbertura({
+          total: Number(latestSnapshots.abertura.total),
+          updated_at: latestSnapshots.abertura.updated_at,
+        });
+      }
+
+      if (latestSnapshots.fechamento) {
+        setCashSnapshotFechamento({
+          total: Number(latestSnapshots.fechamento.total),
+          updated_at: latestSnapshots.fechamento.updated_at,
+        });
       }
     }
 

@@ -17,6 +17,7 @@ import AppSidebar from '@/components/AppSidebar';
 
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
+import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
@@ -178,22 +179,43 @@ export default function Reconciliation() {
         .eq('daily_closing_id', id)
         .order('updated_at', { ascending: false });
 
-      for (const snap of (snapList || [])) {
-        const counts = snap.counts as Record<string, number>;
+      setCashSnapshotDataAbertura(null);
+      setCashSnapshotSavedAbertura(false);
+      setCashCountsAbertura({});
+      setCashSnapshotDataFechamento(null);
+      setCashSnapshotSavedFechamento(false);
+      setCashCountsFechamento({});
+
+      const latestSnapshots = getLatestCashSnapshots(snapList || []);
+
+      if (latestSnapshots.abertura) {
+        const counts = latestSnapshots.abertura.counts as Record<string, number>;
         const restored: Record<number, number> = {};
         for (const [k, v] of Object.entries(counts)) {
           restored[parseFloat(k)] = v;
         }
-        const type = (snap as any).snapshot_type || 'abertura';
-        if (type === 'abertura') {
-          setCashSnapshotDataAbertura({ counts, total: Number(snap.total), updated_at: snap.updated_at });
-          setCashSnapshotSavedAbertura(true);
-          setCashCountsAbertura(restored);
-        } else if (type === 'fechamento') {
-          setCashSnapshotDataFechamento({ counts, total: Number(snap.total), updated_at: snap.updated_at });
-          setCashSnapshotSavedFechamento(true);
-          setCashCountsFechamento(restored);
+        setCashSnapshotDataAbertura({
+          counts,
+          total: Number(latestSnapshots.abertura.total),
+          updated_at: latestSnapshots.abertura.updated_at,
+        });
+        setCashSnapshotSavedAbertura(true);
+        setCashCountsAbertura(restored);
+      }
+
+      if (latestSnapshots.fechamento) {
+        const counts = latestSnapshots.fechamento.counts as Record<string, number>;
+        const restored: Record<number, number> = {};
+        for (const [k, v] of Object.entries(counts)) {
+          restored[parseFloat(k)] = v;
         }
+        setCashSnapshotDataFechamento({
+          counts,
+          total: Number(latestSnapshots.fechamento.total),
+          updated_at: latestSnapshots.fechamento.updated_at,
+        });
+        setCashSnapshotSavedFechamento(true);
+        setCashCountsFechamento(restored);
       }
     }
 
