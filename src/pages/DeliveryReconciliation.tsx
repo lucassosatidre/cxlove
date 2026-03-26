@@ -291,6 +291,54 @@ export default function DeliveryReconciliation() {
     return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
   }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
 
+  const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+
+  const offlineMethodTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+
+    const breakdownsByOrder = new Map<string, typeof breakdowns>();
+    breakdowns.forEach(b => {
+      if (!breakdownsByOrder.has(b.imported_order_id)) breakdownsByOrder.set(b.imported_order_id, []);
+      breakdownsByOrder.get(b.imported_order_id)!.push(b);
+    });
+
+    const matchCategory = (methodName: string): string | null => {
+      const lower = methodName.toLowerCase().trim();
+      if (lower.includes('pago online') || lower.includes('(pago)') || lower.includes('online')) return null;
+      if (lower === 'dinheiro') return null;
+      if (lower.includes('(cobrar) pix') || lower === '(cobrar) pix') return '(COBRAR) Pix';
+      if (lower.includes('crédit') || lower.includes('crédito') || lower === 'credito') return 'Crédito';
+      if (lower.includes('débit') || lower.includes('débito') || lower === 'debito') return 'Débito';
+      if (lower.includes('voucher') && !lower.includes('voucher parceiro')) return 'Voucher';
+      return null;
+    };
+
+    for (const order of orders) {
+      const orderBks = breakdownsByOrder.get(order.id);
+      if (orderBks && orderBks.length > 0) {
+        for (const b of orderBks) {
+          const cat = matchCategory(b.payment_method_name);
+          if (cat) totals[cat] += b.amount;
+        }
+      } else {
+        const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+        if (methods.length === 1) {
+          const cat = matchCategory(methods[0]);
+          if (cat) totals[cat] += order.total_amount;
+        }
+      }
+    }
+
+    return totals;
+  }, [orders, breakdowns]);
+
+  const allDeliveryPersons = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
+    return Array.from(set).sort();
+  }, [orders]);
+
   const deliveryPersons = useMemo(() => {
     const set = new Set<string>();
     offlineOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
