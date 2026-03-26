@@ -282,12 +282,31 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build debug_salon with first 5 of each type
+    const debugSalon: any[] = [];
+    for (const typeId of [3, 2, 4]) {
+      const ofType = allSales.filter((s: any) => s.id_sale_type === typeId).slice(0, 5);
+      for (const s of ofType) {
+        debugSalon.push({
+          id_sale_type: s.id_sale_type,
+          sale_number: s.sale_number,
+          desc_sale: s.desc_sale,
+          total_amount: s.total_amount,
+          table_order: s.table_order || null,
+          ticket: s.ticket || null,
+          created_at: s.created_at,
+          canceled: s.canceled,
+        });
+      }
+    }
+
     return new Response(
       JSON.stringify({
         total: allSales.length,
         new_orders: newSales.length,
         duplicates: duplicateCount,
         backfilled: backfillCount,
+        debug_salon: debugSalon,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
