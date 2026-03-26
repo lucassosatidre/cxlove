@@ -26,7 +26,7 @@ import {
 } from '@/lib/delivery-method-utils';
 import { classifyPendingOrder } from '@/lib/delivery-pending-classifier';
 import { useUserRole } from '@/hooks/useUserRole';
-import { formatCurrency } from '@/lib/payment-utils';
+import { formatCurrency, isAllOnline } from '@/lib/payment-utils';
 import {
   exportMatchesXLSX,
   exportPendingXLSX,
