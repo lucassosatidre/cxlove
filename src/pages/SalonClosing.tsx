@@ -782,6 +782,7 @@ export default function SalonClosing() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[80px]">Tipo</TableHead>
+                <TableHead className="w-[100px]">Mesa/Comanda</TableHead>
                 <TableHead className="w-[60px]">Hora</TableHead>
                 <TableHead>Pgto Saipos</TableHead>
                 <TableHead className="text-right w-[120px]">Valor</TableHead>
@@ -790,15 +791,28 @@ export default function SalonClosing() {
             <TableBody>
               {displayRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                displayRows.map((row, idx) => (
+                displayRows.map((row, idx) => {
+                  const getMesaComanda = () => {
+                    const ot = row.order_type.toLowerCase();
+                    if (ot === 'salão' || ot === 'salao') {
+                      const parts = [row.table_number ? `Mesa ${row.table_number}` : null, row.card_number ? `Cmd ${row.card_number}` : null].filter(Boolean);
+                      return parts.length > 0 ? parts.join(' / ') : '—';
+                    }
+                    if (ot === 'ficha') return row.ticket_number ? `Ficha ${row.ticket_number}` : '—';
+                    return '—';
+                  };
+                  return (
                   <TableRow key={`${row.orderId}-${row.rateioIndex}`} className={row.isRateio && row.rateioIndex > 0 ? 'border-t-0' : ''}>
                     <TableCell>
                       {row.rateioIndex === 0 ? getOrderTypeBadge(row.order_type) : null}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.rateioIndex === 0 ? getMesaComanda() : null}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {row.rateioIndex === 0 ? (row.sale_time || '—') : null}
@@ -817,7 +831,8 @@ export default function SalonClosing() {
                       R$ {row.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
