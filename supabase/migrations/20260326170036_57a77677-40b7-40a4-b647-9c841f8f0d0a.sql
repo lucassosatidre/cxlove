@@ -1,0 +1,1 @@
+ALTER TABLE public.salon_orders ADD COLUMN saipos_sale_id text;
