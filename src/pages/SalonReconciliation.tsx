@@ -9,8 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
-  ShieldCheck, RotateCcw, Banknote, DollarSign, Globe,
+  ShieldCheck, RotateCcw, Banknote, DollarSign, Globe, QrCode, Wallet,
+  ChevronUp, ChevronDown,
 } from 'lucide-react';
+import MachineReadingsSection from '@/components/MachineReadingsSection';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
