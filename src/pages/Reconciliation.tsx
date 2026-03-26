@@ -998,15 +998,38 @@ export default function Reconciliation() {
 
         {/* 2. Stats (pedidos) */}
         <div className="border-b border-border bg-card">
-          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
-            <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
-            <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-            <div className="bg-muted rounded-xl p-3 border border-border">
-              <p className="text-xs text-muted-foreground mb-1">Progresso</p>
-              <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
-              <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
+          <div className="px-6 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Total</p>
+                  <p className="text-sm font-semibold text-foreground font-mono-tabular">{filtered.length}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Confirmados</p>
+                  <p className="text-sm font-semibold text-success font-mono-tabular">{confirmed}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Pendentes</p>
+                  <p className="text-sm font-semibold text-warning font-mono-tabular">{pending}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                <div className="flex-1">
+                  <p className="text-[10px] text-primary font-semibold leading-tight">Progresso</p>
+                  <p className="text-sm font-bold text-primary font-mono-tabular">{percent}%</p>
+                  <div className="mt-1 h-1 bg-border rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
