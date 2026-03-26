@@ -230,6 +230,8 @@ Deno.serve(async (req) => {
             }
           } else {
             salesChannel = "Telefone";
+          }
+
           return {
             import_id: importRecord.id,
             daily_closing_id,
