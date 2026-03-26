@@ -66,6 +66,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [conferenceCollapsed, setConferenceCollapsed] = useState(true);
   const [validationError, setValidationError] = useState('');
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
@@ -242,8 +243,16 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       {showConference && (
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
+            {/* Collapsible header */}
+            <div className="flex items-center justify-between">
+              <div
+                className="flex items-center gap-2 cursor-pointer select-none flex-1"
+                onClick={() => setConferenceCollapsed(prev => !prev)}
+              >
+                {conferenceCollapsed
+                  ? <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                  : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                }
                 <CreditCard className="h-4 w-4 text-primary" />
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Conferência de Maquininhas
@@ -251,16 +260,25 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                 {readings.length > 0 && (
                   <span className="text-xs text-muted-foreground">({readings.length})</span>
                 )}
+                {conferenceCollapsed && readings.length > 0 && (
+                  <span className="ml-auto text-sm font-bold font-mono text-foreground mr-3">
+                    {formatCurrency(totalGeral)}
+                  </span>
+                )}
               </div>
               {!isCompleted && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   {validationError && (
                     <span className="flex items-center gap-1 text-xs text-destructive">
                       <AlertCircle className="h-3 w-3" />
                       {validationError}
                     </span>
                   )}
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => {
+                    e.stopPropagation();
+                    setConferenceCollapsed(false);
+                    addReading();
+                  }}>
                     <Plus className="h-3.5 w-3.5 mr-1" />
                     Adicionar Maquininha
                   </Button>
@@ -268,138 +286,143 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
               )}
             </div>
 
-            {readings.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
-            ) : (
-              <div className="space-y-2">
-                {readings.map((r) => {
-                  const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
-                  const isExpanded = expandedIds.has(r.id) || !isFilled;
-                  const toggleExpand = () => {
-                    if (!isFilled) return;
-                    setExpandedIds(prev => {
-                      const next = new Set(prev);
-                      next.has(r.id) ? next.delete(r.id) : next.add(r.id);
-                      return next;
-                    });
-                  };
+            {/* Collapsible content */}
+            {!conferenceCollapsed && (
+              <div className="mt-3">
+                {readings.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {readings.map((r) => {
+                      const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
+                      const isExpanded = expandedIds.has(r.id) || !isFilled;
+                      const toggleExpand = () => {
+                        if (!isFilled) return;
+                        setExpandedIds(prev => {
+                          const next = new Set(prev);
+                          next.has(r.id) ? next.delete(r.id) : next.add(r.id);
+                          return next;
+                        });
+                      };
 
-                  return (
-                    <div key={r.id} className="border border-border rounded-lg bg-muted/30">
-                      <div
-                        className={`flex items-center gap-2 px-3 py-2 ${isFilled ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                        onClick={isFilled ? toggleExpand : undefined}
-                      >
-                        {isExpanded
-                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        }
-                        <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
-                        <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
-                        <span className="ml-auto text-xs font-bold font-mono text-foreground">
-                          {formatCurrency(blockTotal(r))}
-                          {blockOps(r) > 0 && (
-                            <span className="font-normal text-muted-foreground ml-1">({blockOps(r)} op.)</span>
-                          )}
-                        </span>
-                        {!isCompleted && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-destructive shrink-0"
-                            onClick={(e) => { e.stopPropagation(); removeReading(r.id); }}
+                      return (
+                        <div key={r.id} className="border border-border rounded-lg bg-muted/30">
+                          <div
+                            className={`flex items-center gap-2 px-3 py-2 ${isFilled ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                            onClick={isFilled ? toggleExpand : undefined}
                           >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-
-                      {isExpanded && (
-                        <div className="px-3 pb-3 space-y-2 border-t border-border">
-                          <div className="flex items-center gap-2 pt-2">
-                            <div className="flex-1 flex items-center gap-2">
-                              <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
-                              <div className="flex items-center gap-0">
-                                <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
-                                  {SERIAL_PREFIX}
-                                </span>
-                                <Input
-                                  value={r.machine_serial}
-                                  onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
-                                  className="h-8 text-xs w-24 rounded-l-none font-mono"
-                                  placeholder="000"
-                                  disabled={isCompleted}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex-1 flex items-center gap-2">
-                              <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
-                              {deliveryPersons.length > 0 ? (
-                                <Select
-                                  value={r.delivery_person}
-                                  onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
-                                  disabled={isCompleted}
-                                >
-                                  <SelectTrigger className="h-8 text-xs flex-1">
-                                    <SelectValue placeholder="Selecione..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {deliveryPersons.map(d => (
-                                      <SelectItem key={d} value={d}>{d}</SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : (
-                                <Input
-                                  value={r.delivery_person}
-                                  onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
-                                  className="h-8 text-xs flex-1"
-                                  placeholder={`Nome do ${personLabel.toLowerCase()}...`}
-                                  disabled={isCompleted}
-                                />
+                            {isExpanded
+                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            }
+                            <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                            <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
+                            <span className="ml-auto text-xs font-bold font-mono text-foreground">
+                              {formatCurrency(blockTotal(r))}
+                              {blockOps(r) > 0 && (
+                                <span className="font-normal text-muted-foreground ml-1">({blockOps(r)} op.)</span>
                               )}
-                            </div>
+                            </span>
+                            {!isCompleted && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive shrink-0"
+                                onClick={(e) => { e.stopPropagation(); removeReading(r.id); }}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
-                          <div className="grid grid-cols-4 gap-2">
-                            {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
-                              const amountVal = r[amountField];
-                              const countDisabled = isCompleted || amountVal === 0;
-                              const countMissing = amountVal > 0 && r[countField] < 1;
-                              return (
-                                <div key={amountField} className="space-y-1">
-                                  <label className="text-[10px] text-muted-foreground">{label}</label>
-                                  <div className="flex gap-1">
+
+                          {isExpanded && (
+                            <div className="px-3 pb-3 space-y-2 border-t border-border">
+                              <div className="flex items-center gap-2 pt-2">
+                                <div className="flex-1 flex items-center gap-2">
+                                  <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
+                                  <div className="flex items-center gap-0">
+                                    <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
+                                      {SERIAL_PREFIX}
+                                    </span>
                                     <Input
-                                      type="number"
-                                      step="0.01"
-                                      min="0"
-                                      value={amountVal || ''}
-                                      onChange={(e) => updateField(r.id, amountField, parseFloat(e.target.value) || 0)}
-                                      className="h-8 text-xs font-mono flex-1"
-                                      placeholder="0,00"
+                                      value={r.machine_serial}
+                                      onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
+                                      className="h-8 text-xs w-24 rounded-l-none font-mono"
+                                      placeholder="000"
                                       disabled={isCompleted}
-                                    />
-                                    <Input
-                                      type="number"
-                                      step="1"
-                                      min="0"
-                                      value={r[countField] || ''}
-                                      onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
-                                      className={`h-8 text-xs font-mono w-14 text-center ${countMissing ? 'border-destructive ring-1 ring-destructive' : ''}`}
-                                      placeholder="Qtd"
-                                      disabled={countDisabled}
-                                      title="Qtd operações"
                                     />
                                   </div>
                                 </div>
-                              );
-                            })}
-                          </div>
+                                <div className="flex-1 flex items-center gap-2">
+                                  <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
+                                  {deliveryPersons.length > 0 ? (
+                                    <Select
+                                      value={r.delivery_person}
+                                      onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
+                                      disabled={isCompleted}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs flex-1">
+                                        <SelectValue placeholder="Selecione..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {deliveryPersons.map(d => (
+                                          <SelectItem key={d} value={d}>{d}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : (
+                                    <Input
+                                      value={r.delivery_person}
+                                      onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
+                                      className="h-8 text-xs flex-1"
+                                      placeholder={`Nome do ${personLabel.toLowerCase()}...`}
+                                      disabled={isCompleted}
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-4 gap-2">
+                                {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
+                                  const amountVal = r[amountField];
+                                  const countDisabled = isCompleted || amountVal === 0;
+                                  const countMissing = amountVal > 0 && r[countField] < 1;
+                                  return (
+                                    <div key={amountField} className="space-y-1">
+                                      <label className="text-[10px] text-muted-foreground">{label}</label>
+                                      <div className="flex gap-1">
+                                        <Input
+                                          type="number"
+                                          step="0.01"
+                                          min="0"
+                                          value={amountVal || ''}
+                                          onChange={(e) => updateField(r.id, amountField, parseFloat(e.target.value) || 0)}
+                                          className="h-8 text-xs font-mono flex-1"
+                                          placeholder="0,00"
+                                          disabled={isCompleted}
+                                        />
+                                        <Input
+                                          type="number"
+                                          step="1"
+                                          min="0"
+                                          value={r[countField] || ''}
+                                          onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
+                                          className={`h-8 text-xs font-mono w-14 text-center ${countMissing ? 'border-destructive ring-1 ring-destructive' : ''}`}
+                                          placeholder="Qtd"
+                                          disabled={countDisabled}
+                                          title="Qtd operações"
+                                        />
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
