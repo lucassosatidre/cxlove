@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
     if (allSales.length === 0) {
       // Create import record with zero
       await supabaseAdmin.from("imports").insert({
-        user_id: user.id,
+        user_id: userId,
         file_name: `saipos-api-${closing_date}`,
         total_rows: 0,
         new_rows: 0,
@@ -162,7 +162,7 @@ Deno.serve(async (req) => {
     const { data: importRecord, error: importErr } = await supabaseAdmin
       .from("imports")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         file_name: `saipos-api-${closing_date}`,
         total_rows: allSales.length,
         new_rows: newSales.length,
@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
             partner_order_number: partnerSale.cod_sale2 || null,
             is_confirmed: allOnline,
             confirmed_at: allOnline ? new Date().toISOString() : null,
-            confirmed_by: allOnline ? user.id : null,
+            confirmed_by: allOnline ? userId : null,
           };
         });
 
