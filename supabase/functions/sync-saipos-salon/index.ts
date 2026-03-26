@@ -95,9 +95,9 @@ Deno.serve(async (req) => {
       const data = await apiRes.json();
       const sales = Array.isArray(data) ? data : data.data || data.results || [];
 
-      // Filter: salon types (2=Retirada, 3=Salão, 4=Ficha) and not canceled
+      // Filter: salon types (2=Retirada, 3=Salão, 4=Ficha), not canceled, and non-zero amount
       const filtered = sales.filter(
-        (s: any) => [2, 3, 4].includes(s.id_sale_type) && s.canceled !== "Y"
+        (s: any) => [2, 3, 4].includes(s.id_sale_type) && s.canceled !== "Y" && (s.total_amount || 0) !== 0
       );
       allSales.push(...filtered);
 
