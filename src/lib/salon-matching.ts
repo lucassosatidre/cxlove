@@ -155,7 +155,7 @@ function timeGapMinutes(txTime: string, orderTime: string | null): number {
 
 // ─── Target amount helpers ───
 
-function getTargetAmounts(order: SalonOrderForMatching, classification: OrderClassification): number[] {
+function getTargetAmounts(order: SalonOrderForMatching, classification: OrderClassification, payments?: SalonPaymentForMatching[]): number[] {
   const targets: number[] = [];
   const total = order.total_amount;
 
@@ -165,14 +165,24 @@ function getTargetAmounts(order: SalonOrderForMatching, classification: OrderCla
     if (order.discount_amount > 0.01) {
       targets.push(Math.round((total + order.discount_amount) * 100) / 100);
     }
-    // Add estimated card portion: total * (cardLines / totalMethods)
-    const totalMethods = classification.cardMethods.length + classification.externalMethods.length;
-    if (totalMethods > 0 && classification.expectedCardLines < totalMethods) {
-      const cardPortion = Math.round((total * classification.expectedCardLines / totalMethods) * 100) / 100;
-      targets.push(cardPortion);
+
+    // Prefer real breakdown sum when available
+    const realCardPortion = payments ? getCardPortionFromPayments(order.id, payments) : null;
+    if (realCardPortion !== null && realCardPortion > 0) {
+      targets.push(realCardPortion);
       if (order.discount_amount > 0.01) {
-        const totalWithDiscount = total + order.discount_amount;
-        targets.push(Math.round((totalWithDiscount * classification.expectedCardLines / totalMethods) * 100) / 100);
+        targets.push(Math.round((realCardPortion + order.discount_amount) * 100) / 100);
+      }
+    } else {
+      // Fallback: proportional estimate
+      const totalMethods = classification.cardMethods.length + classification.externalMethods.length;
+      if (totalMethods > 0 && classification.expectedCardLines < totalMethods) {
+        const cardPortion = Math.round((total * classification.expectedCardLines / totalMethods) * 100) / 100;
+        targets.push(cardPortion);
+        if (order.discount_amount > 0.01) {
+          const totalWithDiscount = total + order.discount_amount;
+          targets.push(Math.round((totalWithDiscount * classification.expectedCardLines / totalMethods) * 100) / 100);
+        }
       }
     }
   } else {
