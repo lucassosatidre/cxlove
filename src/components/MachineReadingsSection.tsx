@@ -60,7 +60,7 @@ function parseRow(r: any): MachineReading {
   };
 }
 
-export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador' }: Props) {
+export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all' }: Props) {
   const { user } = useAuth();
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
