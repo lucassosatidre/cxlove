@@ -357,31 +357,37 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
               );
             })}
 
-            {/* Totals */}
-            <div className="border border-border rounded-lg p-3 bg-primary/5">
+            {/* Totals - matching Saipos panel layout */}
+            <div className="border border-border rounded-lg p-3 bg-card">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold text-foreground">Total Recebido via Maquininhas</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Recebido via Maquininhas</span>
                 <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowByDriver(true)}>
                   <Eye className="h-3 w-3 mr-1" />
                   Ver por {personLabel.toLowerCase()}
                 </Button>
               </div>
-              <div className="grid grid-cols-5 gap-3">
+              <div className="flex flex-wrap gap-3">
                 {[
-                  { label: 'Débito', value: totals.debit, count: totals.debitCount },
-                  { label: 'Crédito', value: totals.credit, count: totals.creditCount },
-                  { label: 'Voucher', value: totals.voucher, count: totals.voucherCount },
-                  { label: '(COBRAR) Pix', value: totals.pix, count: totals.pixCount },
-                  { label: 'Total Geral', value: totalGeral, count: totalCountGeral },
-                ].map(({ label, value, count }) => (
-                  <div key={label} className="text-center">
-                    <div className="text-[10px] text-muted-foreground">{label}</div>
-                    <div className={`text-sm font-bold font-mono ${label === 'Total Geral' ? 'text-primary' : 'text-foreground'}`}>
-                      {formatCurrency(value)}
+                  { label: '(COBRAR) Pix', value: totals.pix, icon: <span className="text-primary">📱</span> },
+                  { label: 'Crédito', value: totals.credit, icon: <span>💳</span> },
+                  { label: 'Débito', value: totals.debit, icon: <span>💳</span> },
+                  { label: 'Voucher', value: totals.voucher, icon: <span>🎟️</span> },
+                ].map(({ label, value, icon }) => (
+                  <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                    <span className="text-base">{icon}</span>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
+                      <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(value)}</p>
                     </div>
-                    <div className="text-[10px] text-muted-foreground">{count} op.</div>
                   </div>
                 ))}
+                <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                  <span className="text-base">💰</span>
+                  <div>
+                    <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
+                    <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalGeral)}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
