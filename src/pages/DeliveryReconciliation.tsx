@@ -41,6 +41,9 @@ interface Order {
   total_amount: number;
   delivery_person: string | null;
   sale_time: string | null;
+  sale_date: string | null;
+  sales_channel: string | null;
+  partner_order_number: string | null;
   is_confirmed: boolean;
 }
 
