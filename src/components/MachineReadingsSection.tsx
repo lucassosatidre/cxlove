@@ -66,6 +66,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [conferenceCollapsed, setConferenceCollapsed] = useState(true);
   const [validationError, setValidationError] = useState('');
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
