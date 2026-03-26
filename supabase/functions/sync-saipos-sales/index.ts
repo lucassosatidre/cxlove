@@ -129,6 +129,16 @@ Deno.serve(async (req) => {
       offset += limit;
     }
 
+    // Debug: log first 3 sales for delivery person mapping
+    const sample = allSales.slice(0, 3);
+    sample.forEach((s: any, i: number) => {
+      console.log(`Pedido ${i + 1} - sale_number: ${s.sale_number}`);
+      console.log(`  delivery_man:`, JSON.stringify(s.delivery_man));
+      console.log(`  partner_sale:`, JSON.stringify(s.partner_sale));
+      console.log(`  partner_delivery:`, JSON.stringify(s.partner_delivery));
+      console.log(`  id_sale_type:`, s.id_sale_type);
+    });
+
     if (allSales.length === 0) {
       // Create import record with zero
       await supabaseAdmin.from("imports").insert({
