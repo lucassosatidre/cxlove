@@ -171,20 +171,17 @@ Deno.serve(async (req) => {
       (existingOrders || []).map((o: any) => String(o.order_number))
     );
 
-    // Build map for resync of delivery_person on existing orders with null
-    const existingNullDelivery = new Map<string, string>();
+    // Resync delivery_person for ALL existing orders
+    const existingMap = new Map<string, string>();
     for (const o of (existingOrders || [])) {
-      if (!o.delivery_person) {
-        existingNullDelivery.set(String(o.order_number), o.id);
-      }
+      existingMap.set(String(o.order_number), o.id);
     }
 
-    // Resync delivery_person for existing orders
-    if (existingNullDelivery.size > 0) {
+    if (existingMap.size > 0) {
       let updatedCount = 0;
       for (const sale of allSales) {
         const orderNum = String(sale.sale_number);
-        const orderId = existingNullDelivery.get(orderNum);
+        const orderId = existingMap.get(orderNum);
         if (!orderId) continue;
 
         let dp: string | null = null;
@@ -194,13 +191,11 @@ Deno.serve(async (req) => {
           dp = 'Entrega Parceiro';
         }
 
-        if (dp) {
-          await supabaseAdmin
-            .from("imported_orders")
-            .update({ delivery_person: dp })
-            .eq("id", orderId);
-          updatedCount++;
-        }
+        await supabaseAdmin
+          .from("imported_orders")
+          .update({ delivery_person: dp })
+          .eq("id", orderId);
+        updatedCount++;
       }
       if (updatedCount > 0) {
         console.log(`Resync: updated delivery_person for ${updatedCount} existing orders`);
