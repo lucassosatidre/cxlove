@@ -31,6 +31,8 @@ interface Props {
   personLabel?: string;
   /** Render mode: 'all' (default), 'totals' (only summary), 'conference' (only detail) */
   mode?: 'all' | 'totals' | 'conference';
+  /** Called when readings count changes */
+  onCountChange?: (count: number) => void;
 }
 
 const SERIAL_PREFIX = 'S1F2-000';
