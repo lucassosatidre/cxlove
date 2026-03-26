@@ -449,6 +449,7 @@ export default function SalonClosing() {
   };
 
 
+  return (
     <AppLayout
       title={`Salão — ${formatDate(closing.closing_date)}`}
       subtitle={`${orders.length} pedidos`}
