@@ -574,7 +574,7 @@ export default function Reconciliation() {
       for (const order of orders) {
         if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
         if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
-        if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) errors.push(`Comanda #${order.order_number}: rateio pendente.`);
+        
       }
 
       if (errors.length === 0) {
