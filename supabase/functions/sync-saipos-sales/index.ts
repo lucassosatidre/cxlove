@@ -200,11 +200,13 @@ Deno.serve(async (req) => {
           dp = 'Entrega Parceiro';
         }
 
-        await supabaseAdmin
-          .from("imported_orders")
-          .update({ delivery_person: dp })
-          .eq("id", orderId);
-        updatedCount++;
+        if (dp !== null) {
+          await supabaseAdmin
+            .from("imported_orders")
+            .update({ delivery_person: dp })
+            .eq("id", orderId);
+          updatedCount++;
+        }
       }
       if (updatedCount > 0) {
         console.log(`Resync: updated delivery_person for ${updatedCount} existing orders`);
