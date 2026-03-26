@@ -597,6 +597,13 @@ export default function SalonClosing() {
               </div>
             );
           })}
+          <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+            <Wallet className="h-4 w-4 text-primary" />
+            <div>
+              <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
+              <p className="text-sm font-bold text-primary font-mono">{formatCurrency(OFFLINE_CATEGORIES.reduce((sum, cat) => sum + (offlineMethodTotals[cat] || 0), 0))}</p>
+            </div>
+          </div>
           {onlineCategories.map(([name, total]) => (
             <div key={name} className="flex items-center gap-2 bg-primary/5 rounded-lg px-3 py-2 border border-primary/20 min-w-[150px]">
               <Globe className="h-4 w-4 text-primary" />
