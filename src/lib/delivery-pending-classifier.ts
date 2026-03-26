@@ -107,7 +107,7 @@ export function classifyPendingOrder(
   const approxCompatible = unmatchedTxs.filter(tx =>
     exactTargets.some(target => {
       const diff = Math.abs(tx.gross_amount - target.amount);
-      return diff > 0 && diff <= 0.50;
+      return diff > 0 && diff <= 1.00;
     })
   );
 
