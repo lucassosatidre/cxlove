@@ -252,6 +252,7 @@ export default function Dashboard() {
                 mode="single"
                 selected={abrirCaixaDate}
                 onSelect={setAbrirCaixaDate}
+                today={undefined}
                 initialFocus
                 className={cn("p-3 pointer-events-auto")}
               />
