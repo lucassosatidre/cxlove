@@ -70,12 +70,29 @@ export default function TeleImport() {
       // Check for existing orders to avoid duplicates
       const { data: existingOrders } = await supabase
         .from('imported_orders')
-        .select('order_number')
+        .select('id, order_number, delivery_person, sale_date, sale_time, sales_channel, partner_order_number')
         .eq('daily_closing_id', closingId);
 
-      const existingSet = new Set((existingOrders || []).map(o => o.order_number));
-      const newOrders = orders.filter(o => !existingSet.has(o.order_number));
+      const existingMap = new Map((existingOrders || []).map(o => [o.order_number, o]));
+      const newOrders = orders.filter(o => !existingMap.has(o.order_number));
       const duplicateCount = orders.length - newOrders.length;
+
+      // Update null fields on existing duplicate orders with data from Excel
+      const duplicateOrders = orders.filter(o => existingMap.has(o.order_number));
+      for (const excelOrder of duplicateOrders) {
+        const existing = existingMap.get(excelOrder.order_number)!;
+        const updates: Record<string, string | null> = {};
+
+        if (!existing.delivery_person && excelOrder.delivery_person) updates.delivery_person = excelOrder.delivery_person;
+        if (!existing.sale_date && excelOrder.sale_date) updates.sale_date = excelOrder.sale_date;
+        if (!existing.sale_time && excelOrder.sale_time) updates.sale_time = excelOrder.sale_time;
+        if (!existing.sales_channel && excelOrder.sales_channel) updates.sales_channel = excelOrder.sales_channel;
+        if (!existing.partner_order_number && excelOrder.partner_order_number) updates.partner_order_number = excelOrder.partner_order_number;
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('imported_orders').update(updates).eq('id', existing.id);
+        }
+      }
 
       // Create import record
       const { data: importRecord, error: importErr } = await supabase
