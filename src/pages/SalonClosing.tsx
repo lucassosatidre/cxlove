@@ -6,7 +6,7 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock, QrCode, CreditCard, Globe, Wallet } from 'lucide-react';
+import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, ChevronDown, ChevronRight, FileText, Trash2, Lock, Unlock, QrCode, CreditCard, Globe, Wallet, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -30,6 +30,10 @@ interface SalonOrder {
   sale_date: string | null;
   payment_method: string;
   total_amount: number;
+  table_number: string | null;
+  card_number: string | null;
+  ticket_number: string | null;
+  sale_number: string | null;
 }
 
 interface ClosingData {
@@ -53,6 +57,8 @@ export default function SalonClosing() {
   const [showImports, setShowImports] = useState(false);
   const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
   const [finalizing, setFinalizing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
 
   // Cash calculator state - Abertura
   const CASH_DENOMINATIONS = [200, 100, 50, 20, 10, 5, 2, 1, 0.50, 0.25, 0.10, 0.05];
@@ -88,6 +94,12 @@ export default function SalonClosing() {
     setOrders((ordersData as SalonOrder[]) || []);
     setMachineReadingsCount((machineData || []).length);
     setImports(importsData || []);
+
+    // Detect last Saipos sync
+    const saiposImport = (importsData || []).find((imp: any) => imp.file_name?.startsWith('saipos-salon-api-'));
+    if (saiposImport) {
+      setLastSync(saiposImport.created_at);
+    }
 
     // Load saved cash snapshots
     if (id) {
@@ -264,9 +276,10 @@ export default function SalonClosing() {
 
   // Build display rows: split rateio into separate lines
   const displayRows = useMemo(() => {
-    const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number }[] = [];
+    const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number; table_number: string | null; card_number: string | null; ticket_number: string | null }[] = [];
     filtered.forEach(order => {
       const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
+      const extra = { table_number: order.table_number, card_number: order.card_number, ticket_number: order.ticket_number };
       if (methods.length > 1) {
         const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
         methods.forEach((method, i) => {
@@ -276,6 +289,7 @@ export default function SalonClosing() {
           rows.push({
             orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
             payment_method: method, amount, isRateio: true, rateioIndex: i, rateioTotal: methods.length,
+            ...extra,
           });
         });
       } else {
@@ -283,6 +297,7 @@ export default function SalonClosing() {
           orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
           payment_method: methods[0] || order.payment_method, amount: order.total_amount,
           isRateio: false, rateioIndex: 0, rateioTotal: 1,
+          ...extra,
         });
       }
     });
@@ -417,6 +432,25 @@ export default function SalonClosing() {
     toast.success(`${importIds.length} importação(ões) excluída(s)`);
     loadData();
   };
+  const handleSyncSaipos = async () => {
+    if (!closing || !id) return;
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-saipos-salon', {
+        body: { closing_date: closing.closing_date, salon_closing_id: id },
+      });
+      if (error) throw error;
+      console.log("SALON SYNC RESPONSE:", JSON.stringify(data));
+      toast.success(`Sincronizado: ${data.new_orders} novos, ${data.duplicates} existentes`);
+      setLastSync(new Date().toISOString());
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sincronizar');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
 
   return (
     <AppLayout
@@ -472,6 +506,15 @@ export default function SalonClosing() {
                 </div>
               )}
             </div>
+          )}
+          <Button variant="outline" onClick={handleSyncSaipos} disabled={syncing || isCompleted}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar via Saipos'}
+          </Button>
+          {lastSync && (
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              Última sync: {new Date(lastSync).toLocaleString('pt-BR')}
+            </span>
           )}
           <Button variant="outline" onClick={() => navigate('/salon')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -739,6 +782,7 @@ export default function SalonClosing() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[80px]">Tipo</TableHead>
+                <TableHead className="w-[100px]">Mesa/Comanda</TableHead>
                 <TableHead className="w-[60px]">Hora</TableHead>
                 <TableHead>Pgto Saipos</TableHead>
                 <TableHead className="text-right w-[120px]">Valor</TableHead>
@@ -747,15 +791,28 @@ export default function SalonClosing() {
             <TableBody>
               {displayRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     Nenhum pedido encontrado.
                   </TableCell>
                 </TableRow>
               ) : (
-                displayRows.map((row, idx) => (
+                displayRows.map((row, idx) => {
+                  const getMesaComanda = () => {
+                    const ot = row.order_type.toLowerCase();
+                    if (ot === 'salão' || ot === 'salao') {
+                      const parts = [row.table_number ? `Mesa ${row.table_number}` : null, row.card_number ? `Cmd ${row.card_number}` : null].filter(Boolean);
+                      return parts.length > 0 ? parts.join(' / ') : '—';
+                    }
+                    if (ot === 'ficha') return row.ticket_number ? `Ficha ${row.ticket_number}` : '—';
+                    return '—';
+                  };
+                  return (
                   <TableRow key={`${row.orderId}-${row.rateioIndex}`} className={row.isRateio && row.rateioIndex > 0 ? 'border-t-0' : ''}>
                     <TableCell>
                       {row.rateioIndex === 0 ? getOrderTypeBadge(row.order_type) : null}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {row.rateioIndex === 0 ? getMesaComanda() : null}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {row.rateioIndex === 0 ? (row.sale_time || '—') : null}
@@ -774,7 +831,8 @@ export default function SalonClosing() {
                       R$ {row.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
