@@ -615,6 +615,7 @@ export type Database = {
           is_confirmed: boolean
           order_type: string
           payment_method: string
+          saipos_sale_id: string | null
           sale_date: string | null
           sale_number: string | null
           sale_time: string | null
@@ -635,6 +636,7 @@ export type Database = {
           is_confirmed?: boolean
           order_type: string
           payment_method?: string
+          saipos_sale_id?: string | null
           sale_date?: string | null
           sale_number?: string | null
           sale_time?: string | null
@@ -655,6 +657,7 @@ export type Database = {
           is_confirmed?: boolean
           order_type?: string
           payment_method?: string
+          saipos_sale_id?: string | null
           sale_date?: string | null
           sale_number?: string | null
           sale_time?: string | null
