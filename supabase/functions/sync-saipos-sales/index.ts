@@ -275,15 +275,10 @@ Deno.serve(async (req) => {
 
           const partnerSale = sale.partner_sale || null;
 
-          // Determine sales channel based on partner_sale
+          // Determine sales channel using desc_partner_sale (direct name from Saipos)
           let salesChannel: string | null = null;
-          if (partnerSale && partnerSale.desc_store_partner) {
-            const desc = (partnerSale.desc_store_partner || "").toLowerCase();
-            if (desc.includes("campeche")) {
-              salesChannel = "Brendi";
-            } else {
-              salesChannel = "iFood";
-            }
+          if (partnerSale && partnerSale.desc_partner_sale) {
+            salesChannel = partnerSale.desc_partner_sale; // "iFood", "Brendi", etc.
           } else {
             salesChannel = "Telefone";
           }
@@ -291,7 +286,7 @@ Deno.serve(async (req) => {
           let deliveryPerson: string | null = null;
           if (sale.delivery_man?.delivery_man_name) {
             deliveryPerson = sale.delivery_man.delivery_man_name;
-          } else if (sale.partner_delivery?.partner_order_id) {
+          } else if (sale.delivery?.delivery_by === "PARTNER" || sale.partner_delivery?.partner_order_id) {
             deliveryPerson = 'Entrega Parceiro';
           } else {
             deliveryPerson = null;
