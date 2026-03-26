@@ -195,6 +195,9 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const blockTotal = (r: MachineReading) => r.debit_amount + r.credit_amount + r.voucher_amount + r.pix_amount;
   const blockOps = (r: MachineReading) => r.debit_count + r.credit_count + r.voucher_count + r.pix_count;
 
+  const showTotals = mode === 'all' || mode === 'totals';
+  const showConference = mode === 'all' || mode === 'conference';
+
   return (
     <div className="border-b border-border bg-card">
       <div className="px-6 py-3">
