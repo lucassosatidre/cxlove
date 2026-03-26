@@ -50,22 +50,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate caller using getClaims
+    // Use service role key for all DB operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Validate caller using getUser
     const token = authHeader.replace("Bearer ", "");
-    const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: claimsData, error: claimsErr } = await supabaseUser.auth.getClaims(token);
-    if (claimsErr || !claimsData?.claims) {
+    const { data: { user: callerUser }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+    if (userErr || !callerUser) {
+      console.error("Auth error:", userErr?.message);
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const userId = claimsData.claims.sub as string;
-
-    // Use service role key for all DB operations
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const userId = callerUser.id;
 
     const { closing_date, daily_closing_id } = await req.json();
     if (!closing_date || !daily_closing_id) {
