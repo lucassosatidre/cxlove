@@ -513,89 +513,207 @@ export default function SalonReconciliation() {
           </div>
         </header>
 
-        {/* Payment Method Summary */}
+        {/* 1. Contagem de Dinheiro na Abertura */}
+        {cashSnapshotAbertura && (
+          <div className="border-b border-border bg-card">
+            <div className="px-6 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-success" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro na Abertura</span>
+                </div>
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Salvo
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotAbertura.total)}</span>
+                <span className="text-xs text-muted-foreground">
+                  Salvo em {new Date(cashSnapshotAbertura.updated_at).toLocaleString('pt-BR')}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 2. Total Teórico via Saipos */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Teórico via Saipos</p>
+            <div className="flex flex-wrap gap-3">
+              {OFFLINE_CATEGORIES.map(cat => {
+                const total = offlineMethodTotals[cat] || 0;
+                const iconMap: Record<string, React.ReactNode> = {
+                  '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
+                  'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+                  'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+                  'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+                };
+                return (
+                  <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                    {iconMap[cat]}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
+                      <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {(() => {
+                const totalGeral = OFFLINE_CATEGORIES.reduce((sum, cat) => sum + (offlineMethodTotals[cat] || 0), 0);
+                return (
+                  <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    <div>
+                      <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
+                      <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalGeral)}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Total Recebido via Maquininhas (Manual) */}
+        {id && (
+          <MachineReadingsSection
+            salonClosingId={id}
+            deliveryPersons={[]}
+            isCompleted={true}
+            mode="totals"
+          />
+        )}
+
+        {/* 4. Total Recebido via Maquininhas - Real */}
         {transactions.length > 0 && (() => {
           const methodSummary = new Map<string, { total: number; count: number }>();
           transactions.forEach(tx => {
             const method = tx.payment_method?.toLowerCase() || 'outro';
             let label = 'Outro';
-            if (method.includes('débit') || method.includes('debit')) label = 'Débito';
+            if (method.includes('pix')) label = 'Pix';
             else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
-            else if (method.includes('pix')) label = 'Pix';
+            else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
             else if (method.includes('voucher')) label = 'Voucher';
             const entry = methodSummary.get(label) || { total: 0, count: 0 };
             entry.total += tx.gross_amount;
             entry.count += 1;
             methodSummary.set(label, entry);
           });
-          const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
+          const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher', 'Outro'];
+          const sorted = Array.from(methodSummary.entries()).sort((a, b) => fixedOrder.indexOf(a[0]) - fixedOrder.indexOf(b[0]));
+          const iconMap: Record<string, React.ReactNode> = {
+            'Pix': <QrCode className="h-4 w-4 text-primary" />,
+            'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+            'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+            'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+            'Outro': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+          };
+          const totalReal = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
           return (
             <div className="border-b border-border bg-card">
-              <div className="px-6 py-3 flex items-center justify-between gap-4">
-                <div className="flex items-center flex-wrap gap-3">
+              <div className="px-6 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Recebido via Maquininhas - Real</p>
+                <div className="flex flex-wrap gap-3">
                   {sorted.map(([label, { total, count }]) => (
-                    <div key={label} className="flex items-center gap-2 bg-secondary rounded-lg px-4 py-2.5 border border-border">
-                      <span className="text-sm font-medium text-foreground">{label}:</span>
-                      <span className="text-sm font-semibold text-primary font-mono tabular-nums">{formatCurrency(total)}</span>
-                      <span className="text-xs text-muted-foreground">({count}x)</span>
+                    <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                      {iconMap[label]}
+                      <div>
+                        <p className="text-[10px] text-muted-foreground leading-tight">{label} ({count} {count === 1 ? 'op' : 'ops'})</p>
+                        <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
+                      </div>
                     </div>
                   ))}
-                </div>
-                <div className="flex items-center gap-2 bg-accent rounded-lg px-4 py-2.5 border border-border shrink-0">
-                  <span className="text-sm font-medium text-foreground">Total:</span>
-                  <span className="text-sm font-semibold text-foreground font-mono tabular-nums">
-                    {formatCurrency(transactions.reduce((s, tx) => s + tx.gross_amount, 0))}
-                  </span>
-                  <span className="text-xs text-muted-foreground">({transactions.length} operações)</span>
+                  <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                    <Wallet className="h-4 w-4 text-primary" />
+                    <div>
+                      <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral ({transactions.length} ops)</p>
+                      <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalReal)}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           );
         })()}
 
-        {/* Stats */}
+        {/* 5. Contagem de Dinheiro no Fechamento */}
+        {cashSnapshotFechamento && (
+          <div className="border-b border-border bg-card">
+            <div className="px-6 py-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-4 w-4 text-primary" />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
+                </div>
+                <span className="flex items-center gap-1 text-xs text-success">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Salvo
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-4">
+                <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotFechamento.total)}</span>
+                <span className="text-xs text-muted-foreground">
+                  Salvo em {new Date(cashSnapshotFechamento.updated_at).toLocaleString('pt-BR')}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 6. Resumo de Pedidos */}
         <div className="border-b border-border bg-card">
-          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-6 gap-3">
-            <StatCard label="Total Pedidos" value={stats.total} icon={<Store className="h-4 w-4" />} color="text-foreground" />
-            <StatCard label="Conciliados" value={stats.matched} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
-            <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-            <StatCard label="Fora Maquininha" value={stats.external} icon={<DollarSign className="h-4 w-4" />} color="text-muted-foreground" />
-            <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
-            <div className="bg-card rounded-lg p-3 border border-border shadow-card">
-              <p className="section-title mb-1">Progresso</p>
-              <p className="text-2xl font-bold text-foreground font-mono-tabular">{percent}%</p>
-              <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+          <div className="px-6 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <Store className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Comandas Offline</p>
+                  <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.machineTotal}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <CheckCircle2 className="h-4 w-4 text-success" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Conciliadas</p>
+                  <p className="text-sm font-semibold text-success font-mono-tabular">{stats.matched}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <AlertTriangle className="h-4 w-4 text-warning" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Pendentes</p>
+                  <p className="text-sm font-semibold text-warning font-mono-tabular">{stats.pending}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Fora Maquininha</p>
+                  <p className="text-sm font-semibold text-muted-foreground font-mono-tabular">{stats.external}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Tx Maquininha</p>
+                  <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.txTotal}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                <div className="flex-1">
+                  <p className="text-[10px] text-primary font-semibold leading-tight">Progresso</p>
+                  <p className="text-sm font-bold text-primary font-mono-tabular">{percent}%</p>
+                  <div className="mt-1 h-1 bg-border rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Cash Snapshots (read-only) */}
-        {(cashSnapshotAbertura || cashSnapshotFechamento) && (
-          <div className="border-b border-border bg-card">
-            <div className="px-6 py-3 flex flex-wrap gap-4">
-              {cashSnapshotAbertura && (
-                <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2.5 border border-border">
-                  <Banknote className="h-4 w-4 text-success" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground leading-tight">Abertura (Dinheiro)</p>
-                    <p className="text-sm font-semibold text-foreground font-mono tabular-nums">{formatCurrency(cashSnapshotAbertura.total)}</p>
-                  </div>
-                </div>
-              )}
-              {cashSnapshotFechamento && (
-                <div className="flex items-center gap-2 bg-muted rounded-lg px-4 py-2.5 border border-border">
-                  <Banknote className="h-4 w-4 text-primary" />
-                  <div>
-                    <p className="text-[10px] text-muted-foreground leading-tight">Fechamento (Dinheiro)</p>
-                    <p className="text-sm font-semibold text-foreground font-mono tabular-nums">{formatCurrency(cashSnapshotFechamento.total)}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Filters */}
         <div className="border-b border-border bg-card">
