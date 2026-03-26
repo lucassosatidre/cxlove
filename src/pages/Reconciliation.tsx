@@ -957,67 +957,7 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        {/* Import History */}
-        <div className="bg-card rounded-xl shadow-card border border-border mb-4 overflow-hidden">
-          <button
-            className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors"
-            onClick={() => setShowImportHistory(!showImportHistory)}
-          >
-            {showImportHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Histórico de Importações
-            </span>
-            <span className="text-xs text-muted-foreground">({importRecords.length})</span>
-          </button>
-          {showImportHistory && (
-            <div className="border-t border-border px-4 py-3 space-y-2">
-              {importRecords.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nenhuma importação encontrada.</p>
-              ) : (
-                <>
-                  {importRecords.map((imp) => (
-                    <div key={imp.id} className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2">
-                      <Checkbox
-                        checked={selectedImports.has(imp.id)}
-                        onCheckedChange={() => toggleImportSelection(imp.id)}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{imp.file_name}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {imp.total_rows} lidos · {imp.new_rows} novos · {imp.duplicate_rows} duplicados
-                          {' · '}
-                          {new Date(imp.created_at).toLocaleString('pt-BR')}
-                        </p>
-                      </div>
-                      
-                    </div>
-                  ))}
-                  {selectedImports.size > 0 && (
-                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                      <span className="text-xs text-muted-foreground">{selectedImports.size} selecionada(s)</span>
-                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedImports(new Set())}>
-                        Cancelar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="h-7 text-xs"
-                        onClick={handleDeleteSelectedImports}
-                        disabled={deletingImports}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                        {deletingImports ? 'Apagando...' : `Apagar ${selectedImports.size} importação(ões)`}
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* 2. Stats (pedidos) */}
+        {/* Resumo de Pedidos */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
@@ -1060,6 +1000,65 @@ export default function Reconciliation() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Import History */}
+        <div className="bg-card rounded-xl shadow-card border border-border mb-4 overflow-hidden">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors"
+            onClick={() => setShowImportHistory(!showImportHistory)}
+          >
+            {showImportHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Histórico de Importações
+            </span>
+            <span className="text-xs text-muted-foreground">({importRecords.length})</span>
+          </button>
+          {showImportHistory && (
+            <div className="border-t border-border px-4 py-3 space-y-2">
+              {importRecords.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma importação encontrada.</p>
+              ) : (
+                <>
+                  {importRecords.map((imp) => (
+                    <div key={imp.id} className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2">
+                      <Checkbox
+                        checked={selectedImports.has(imp.id)}
+                        onCheckedChange={() => toggleImportSelection(imp.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{imp.file_name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {imp.total_rows} lidos · {imp.new_rows} novos · {imp.duplicate_rows} duplicados
+                          {' · '}
+                          {new Date(imp.created_at).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                  {selectedImports.size > 0 && (
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                      <span className="text-xs text-muted-foreground">{selectedImports.size} selecionada(s)</span>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedImports(new Set())}>
+                        Cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="h-7 text-xs"
+                        onClick={handleDeleteSelectedImports}
+                        disabled={deletingImports}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+                        {deletingImports ? 'Apagando...' : `Apagar ${selectedImports.size} importação(ões)`}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Filters */}
