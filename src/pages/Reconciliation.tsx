@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2, RefreshCw, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -877,7 +877,7 @@ export default function Reconciliation() {
                 const totalGeral = OFFLINE_CATEGORIES.reduce((sum, cat) => sum + (offlineMethodTotals[cat] || 0), 0);
                 return (
                   <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
-                    <CreditCard className="h-4 w-4 text-primary" />
+                    <Wallet className="h-4 w-4 text-primary" />
                     <div>
                       <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
                       <p className="text-sm font-bold text-primary font-mono-tabular">{formatCurrency(totalGeral)}</p>
