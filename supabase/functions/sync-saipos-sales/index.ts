@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
         let dp: string | null = null;
         if (sale.delivery_man?.delivery_man_name) {
           dp = sale.delivery_man.delivery_man_name;
-        } else if (sale.partner_delivery?.partner_order_id) {
+        } else if (sale.delivery?.delivery_by === "PARTNER" || sale.partner_delivery?.partner_order_id) {
           dp = 'Entrega Parceiro';
         }
 
