@@ -576,19 +576,11 @@ export default function SalonReconciliation() {
           </div>
         </div>
 
-        {/* 3. Total Recebido via Maquininhas (Manual) */}
-        {id && (
-          <MachineReadingsSection
-            salonClosingId={id}
-            deliveryPersons={[]}
-            isCompleted={true}
-            mode="totals"
-          />
-        )}
-
-        {/* 4. Total Recebido via Maquininhas - Real */}
-        {transactions.length > 0 && (() => {
+        {/* 3. Total Recebido via Maquininhas */}
+        {(() => {
           const methodSummary = new Map<string, { total: number; count: number }>();
+          const FIXED_LABELS = ['Pix', 'Crédito', 'Débito', 'Voucher'];
+          FIXED_LABELS.forEach(l => methodSummary.set(l, { total: 0, count: 0 }));
           transactions.forEach(tx => {
             const method = tx.payment_method?.toLowerCase() || 'outro';
             let label = 'Outro';
@@ -601,20 +593,20 @@ export default function SalonReconciliation() {
             entry.count += 1;
             methodSummary.set(label, entry);
           });
-          const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher', 'Outro'];
-          const sorted = Array.from(methodSummary.entries()).sort((a, b) => fixedOrder.indexOf(a[0]) - fixedOrder.indexOf(b[0]));
+          const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher'];
+          const sorted = fixedOrder.map(l => [l, methodSummary.get(l) || { total: 0, count: 0 }] as [string, { total: number; count: number }]);
           const iconMap: Record<string, React.ReactNode> = {
             'Pix': <QrCode className="h-4 w-4 text-primary" />,
             'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
             'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
             'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
-            'Outro': <CreditCard className="h-4 w-4 text-muted-foreground" />,
           };
           const totalReal = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
+          const totalOps = transactions.length;
           return (
             <div className="border-b border-border bg-card">
               <div className="px-6 py-3">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Recebido via Maquininhas - Real</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Recebido via Maquininhas</p>
                 <div className="flex flex-wrap gap-3">
                   {sorted.map(([label, { total, count }]) => (
                     <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
@@ -628,7 +620,7 @@ export default function SalonReconciliation() {
                   <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
                     <Wallet className="h-4 w-4 text-primary" />
                     <div>
-                      <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral ({transactions.length} ops)</p>
+                      <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral ({totalOps} ops)</p>
                       <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalReal)}</p>
                     </div>
                   </div>
