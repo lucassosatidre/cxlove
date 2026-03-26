@@ -794,64 +794,7 @@ export default function Reconciliation() {
           </div>
         </header>
 
-        {/* Offline Payment Totals */}
-        <div className="border-b border-border bg-card">
-          <div className="px-6 py-3">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Teórico via Saipos</p>
-            <div className="flex flex-wrap gap-3">
-              {OFFLINE_CATEGORIES.map(cat => {
-                const total = offlineMethodTotals[cat];
-                const iconMap: Record<string, React.ReactNode> = {
-                  'Dinheiro': <Banknote className="h-4 w-4 text-success" />,
-                  '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
-                  'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
-                  'Débito': <CreditCardIcon className="h-4 w-4 text-muted-foreground" />,
-                  'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
-                };
-                return (
-                  <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
-                    {iconMap[cat]}
-                    <div>
-                      <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
-                      <p className="text-sm font-semibold text-foreground font-mono-tabular">{formatCurrency(total)}</p>
-                    </div>
-                  </div>
-                );
-              })}
-              {/* Total Geral card */}
-              {(() => {
-                const totalGeral = OFFLINE_CATEGORIES.reduce((sum, cat) => sum + (offlineMethodTotals[cat] || 0), 0);
-                return (
-                  <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
-                    <CreditCard className="h-4 w-4 text-primary" />
-                    <div>
-                      <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
-                      <p className="text-sm font-bold text-primary font-mono-tabular">{formatCurrency(totalGeral)}</p>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div className="border-b border-border bg-card">
-          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
-            <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
-            <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-            <div className="bg-muted rounded-xl p-3 border border-border">
-              <p className="text-xs text-muted-foreground mb-1">Progresso</p>
-              <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
-              <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Cash Snapshot - Abertura */}
+        {/* 1. Cash Snapshot - Abertura */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
             <div className="flex items-center justify-between">
@@ -894,7 +837,73 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        {/* Cash Snapshot - Fechamento */}
+        {/* 2. Stats (pedidos) */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <StatCard label="Total" value={filtered.length} icon={<Clock className="h-4 w-4" />} color="text-foreground" />
+            <StatCard label="Confirmados" value={confirmed} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
+            <StatCard label="Pendentes" value={pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
+            <div className="bg-muted rounded-xl p-3 border border-border">
+              <p className="text-xs text-muted-foreground mb-1">Progresso</p>
+              <p className="text-2xl font-semibold text-foreground font-mono-tabular">{percent}%</p>
+              <div className="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 3. Total Teórico via Saipos */}
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Teórico via Saipos</p>
+            <div className="flex flex-wrap gap-3">
+              {OFFLINE_CATEGORIES.map(cat => {
+                const total = offlineMethodTotals[cat];
+                const iconMap: Record<string, React.ReactNode> = {
+                  'Dinheiro': <Banknote className="h-4 w-4 text-success" />,
+                  '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
+                  'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+                  'Débito': <CreditCardIcon className="h-4 w-4 text-muted-foreground" />,
+                  'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+                };
+                return (
+                  <div key={cat} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                    {iconMap[cat]}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{cat}</p>
+                      <p className="text-sm font-semibold text-foreground font-mono-tabular">{formatCurrency(total)}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {(() => {
+                const totalGeral = OFFLINE_CATEGORIES.reduce((sum, cat) => sum + (offlineMethodTotals[cat] || 0), 0);
+                return (
+                  <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                    <CreditCard className="h-4 w-4 text-primary" />
+                    <div>
+                      <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
+                      <p className="text-sm font-bold text-primary font-mono-tabular">{formatCurrency(totalGeral)}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* 4. Total Recebido via Maquininhas */}
+        {id && (
+          <MachineReadingsSection
+            dailyClosingId={id}
+            deliveryPersons={deliveryPersons}
+            isCompleted={isCompleted}
+            mode="totals"
+          />
+        )}
+
+        {/* 5. Cash Snapshot - Fechamento */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
             <div className="flex items-center justify-between">
@@ -937,15 +946,13 @@ export default function Reconciliation() {
           </div>
         </div>
 
-
-
-
-        {/* Machine Readings */}
+        {/* 6. Conferência de Maquininhas */}
         {id && (
           <MachineReadingsSection
             dailyClosingId={id}
             deliveryPersons={deliveryPersons}
             isCompleted={isCompleted}
+            mode="conference"
           />
         )}
 
