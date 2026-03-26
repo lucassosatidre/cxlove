@@ -606,45 +606,63 @@ export type Database = {
       }
       salon_orders: {
         Row: {
+          card_number: string | null
           confirmed_at: string | null
           confirmed_by: string | null
+          customers_count: number | null
           discount_amount: number
           id: string
           is_confirmed: boolean
           order_type: string
           payment_method: string
           sale_date: string | null
+          sale_number: string | null
           sale_time: string | null
           salon_closing_id: string | null
           salon_import_id: string
+          service_charge_amount: number | null
+          table_number: string | null
+          ticket_number: string | null
           total_amount: number
         }
         Insert: {
+          card_number?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
+          customers_count?: number | null
           discount_amount?: number
           id?: string
           is_confirmed?: boolean
           order_type: string
           payment_method?: string
           sale_date?: string | null
+          sale_number?: string | null
           sale_time?: string | null
           salon_closing_id?: string | null
           salon_import_id: string
+          service_charge_amount?: number | null
+          table_number?: string | null
+          ticket_number?: string | null
           total_amount?: number
         }
         Update: {
+          card_number?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
+          customers_count?: number | null
           discount_amount?: number
           id?: string
           is_confirmed?: boolean
           order_type?: string
           payment_method?: string
           sale_date?: string | null
+          sale_number?: string | null
           sale_time?: string | null
           salon_closing_id?: string | null
           salon_import_id?: string
+          service_charge_amount?: number | null
+          table_number?: string | null
+          ticket_number?: string | null
           total_amount?: number
         }
         Relationships: [
