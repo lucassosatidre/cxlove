@@ -126,6 +126,30 @@ export default function Reconciliation() {
     }
   }, [id, closingData, user]);
 
+  const toggleConfirmAll = useCallback(async () => {
+    if (!user || isCompleted) return;
+    const allConfirmed = filtered.length > 0 && filtered.every(o => o.is_confirmed);
+    const newVal = !allConfirmed;
+    const ids = filtered.map(o => o.id);
+    
+    setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, is_confirmed: newVal } : o));
+    
+    const { error } = await supabase
+      .from('imported_orders')
+      .update({
+        is_confirmed: newVal,
+        confirmed_at: newVal ? new Date().toISOString() : null,
+        confirmed_by: newVal ? user.id : null,
+      })
+      .in('id', ids);
+    
+    if (error) {
+      toast.error('Erro ao atualizar pedidos.');
+      loadData();
+    } else {
+      toast.success(newVal ? `${ids.length} pedidos confirmados` : `${ids.length} pedidos desconfirmados`);
+    }
+  }, [user, filtered, isCompleted]);
 
   const toggleColumn = (col: keyof typeof visibleColumns) => {
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
