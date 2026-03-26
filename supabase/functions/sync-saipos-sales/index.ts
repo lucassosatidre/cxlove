@@ -231,6 +231,15 @@ Deno.serve(async (req) => {
           } else {
             salesChannel = "Telefone";
           }
+          // Determine delivery person
+          let deliveryPerson: string | null = null;
+          if (sale.delivery_man?.delivery_man_name) {
+            deliveryPerson = sale.delivery_man.delivery_man_name;
+          } else if (sale.partner_delivery?.partner_order_id) {
+            deliveryPerson = 'Entrega Parceiro';
+          } else {
+            deliveryPerson = null;
+          }
 
           return {
             import_id: importRecord.id,
@@ -238,7 +247,7 @@ Deno.serve(async (req) => {
             order_number: String(sale.sale_number),
             payment_method: paymentMethodStr,
             total_amount: sale.total_amount || 0,
-            delivery_person: sale.delivery_man?.delivery_man_name || null,
+            delivery_person: deliveryPerson,
             sale_date: sale.shift_date || closing_date,
             sale_time: saleTime,
             sales_channel: salesChannel,
