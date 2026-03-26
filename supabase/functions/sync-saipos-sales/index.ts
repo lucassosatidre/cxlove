@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const saiposToken = Deno.env.get("SAIPOS_API_TOKEN");
+    console.log("Token length:", saiposToken?.length);
 
     if (!saiposToken) {
       return new Response(
@@ -49,20 +50,22 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Validate caller
+    // Validate caller using getClaims
+    const token = authHeader.replace("Bearer ", "");
     const supabaseUser = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
       global: { headers: { Authorization: authHeader } },
     });
-    const {
-      data: { user },
-      error: userErr,
-    } = await supabaseUser.auth.getUser();
-    if (userErr || !user) {
+    const { data: claimsData, error: claimsErr } = await supabaseUser.auth.getClaims(token);
+    if (claimsErr || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
         status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const userId = claimsData.claims.sub as string;
+
+    // Use service role key for all DB operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
     const { closing_date, daily_closing_id } = await req.json();
     if (!closing_date || !daily_closing_id) {
@@ -75,7 +78,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    // supabaseAdmin already created above with service role key
 
     // Fetch all pages from Saipos
     const allSales: any[] = [];
@@ -125,7 +128,7 @@ Deno.serve(async (req) => {
     if (allSales.length === 0) {
       // Create import record with zero
       await supabaseAdmin.from("imports").insert({
-        user_id: user.id,
+        user_id: userId,
         file_name: `saipos-api-${closing_date}`,
         total_rows: 0,
         new_rows: 0,
@@ -159,7 +162,7 @@ Deno.serve(async (req) => {
     const { data: importRecord, error: importErr } = await supabaseAdmin
       .from("imports")
       .insert({
-        user_id: user.id,
+        user_id: userId,
         file_name: `saipos-api-${closing_date}`,
         total_rows: allSales.length,
         new_rows: newSales.length,
@@ -225,7 +228,7 @@ Deno.serve(async (req) => {
             partner_order_number: partnerSale.cod_sale2 || null,
             is_confirmed: allOnline,
             confirmed_at: allOnline ? new Date().toISOString() : null,
-            confirmed_by: allOnline ? user.id : null,
+            confirmed_by: allOnline ? userId : null,
           };
         });
 
