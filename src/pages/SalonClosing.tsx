@@ -745,7 +745,7 @@ export default function SalonClosing() {
       {/* Resumo de Pedidos */}
       {(() => {
         const countSalao = filtered.filter(o => o.order_type.toLowerCase() === 'salão' || o.order_type.toLowerCase() === 'salao').length;
-        const countRetirada = filtered.filter(o => /^\d+$/.test(o.order_type.trim())).length;
+        const countRetirada = filtered.filter(o => isRetirada(o.order_type)).length;
         const countFicha = filtered.filter(o => o.order_type.toLowerCase() === 'ficha').length;
         return (
           <div className="bg-card rounded-xl shadow-card border border-border p-3 mb-4">
