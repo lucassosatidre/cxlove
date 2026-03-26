@@ -736,7 +736,7 @@ export default function Reconciliation() {
   const allFilteredConfirmed = filtered.length > 0 && filtered.every(o => o.is_confirmed);
   const someFilteredConfirmed = filtered.some(o => o.is_confirmed);
 
-  const toggleConfirmAll = useCallback(async () => {
+  const toggleConfirmAll = async () => {
     if (!user || isCompleted) return;
     const newVal = !allFilteredConfirmed;
     const ids = filtered.map(o => o.id);
@@ -755,7 +755,7 @@ export default function Reconciliation() {
     } else {
       toast.success(newVal ? `${ids.length} pedidos confirmados` : `${ids.length} pedidos desconfirmados`);
     }
-  }, [user, filtered, isCompleted, allFilteredConfirmed]);
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
