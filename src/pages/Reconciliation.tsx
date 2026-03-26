@@ -258,6 +258,17 @@ export default function Reconciliation() {
       }
     }
 
+    // Load last auto-sync timestamp
+    const { data: lastSyncImport } = await supabase
+      .from('imports')
+      .select('created_at')
+      .like('file_name', 'saipos-api-%')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    
+    setLastAutoSync(lastSyncImport?.created_at || null);
+
     setLoading(false);
   };
 
