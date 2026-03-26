@@ -276,9 +276,10 @@ export default function SalonClosing() {
 
   // Build display rows: split rateio into separate lines
   const displayRows = useMemo(() => {
-    const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number }[] = [];
+    const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number; table_number: string | null; card_number: string | null; ticket_number: string | null }[] = [];
     filtered.forEach(order => {
       const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
+      const extra = { table_number: order.table_number, card_number: order.card_number, ticket_number: order.ticket_number };
       if (methods.length > 1) {
         const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
         methods.forEach((method, i) => {
@@ -288,6 +289,7 @@ export default function SalonClosing() {
           rows.push({
             orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
             payment_method: method, amount, isRateio: true, rateioIndex: i, rateioTotal: methods.length,
+            ...extra,
           });
         });
       } else {
@@ -295,6 +297,7 @@ export default function SalonClosing() {
           orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
           payment_method: methods[0] || order.payment_method, amount: order.total_amount,
           isRateio: false, rateioIndex: 0, rateioTotal: 1,
+          ...extra,
         });
       }
     });
