@@ -615,13 +615,17 @@ export function matchSalonTransactionsToOrders(
 
     if (expectedCardLines >= 2) {
       // Multi-card + cash: find N card transactions whose sum < total
-      // Estimate card portion: total * (cardLines / totalMethods)
-      const estimatedCardPortion = Math.round((order.total_amount * expectedCardLines / totalMethods) * 100) / 100;
-      // Also try total + discount card portion
+      // Prefer real breakdown sum, fallback to proportional estimate
+      const realCardPortion = getCardPortionFromPayments(order.id, _payments);
+      const estimatedCardPortion = realCardPortion !== null && realCardPortion > 0
+        ? realCardPortion
+        : Math.round((order.total_amount * expectedCardLines / totalMethods) * 100) / 100;
       const estimatedTargets = [estimatedCardPortion];
       if (order.discount_amount > 0.01) {
-        const totalWithDiscount = order.total_amount + order.discount_amount;
-        estimatedTargets.push(Math.round((totalWithDiscount * expectedCardLines / totalMethods) * 100) / 100);
+        const withDiscount = realCardPortion !== null && realCardPortion > 0
+          ? Math.round((realCardPortion + order.discount_amount) * 100) / 100
+          : Math.round(((order.total_amount + order.discount_amount) * expectedCardLines / totalMethods) * 100) / 100;
+        estimatedTargets.push(withDiscount);
       }
 
       let bestMatch: { txs: TxForMatching[]; diff: number; target: number; sameWaiter: boolean } | null = null;
