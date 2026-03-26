@@ -110,7 +110,7 @@ export default function DeliveryReconciliation() {
     const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
+        .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, sale_date, sales_channel, partner_order_number, is_confirmed')
         .eq('daily_closing_id', id!),
       supabase.from('card_transactions')
         .select('*')
