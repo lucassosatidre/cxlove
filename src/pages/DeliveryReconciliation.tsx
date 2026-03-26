@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
-  Banknote, ShieldCheck, RotateCcw, Rocket
+  Banknote, ShieldCheck, RotateCcw, Rocket, Wifi
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
@@ -26,7 +26,7 @@ import {
 } from '@/lib/delivery-method-utils';
 import { classifyPendingOrder } from '@/lib/delivery-pending-classifier';
 import { useUserRole } from '@/hooks/useUserRole';
-import { formatCurrency } from '@/lib/payment-utils';
+import { formatCurrency, isAllOnline } from '@/lib/payment-utils';
 import {
   exportMatchesXLSX,
   exportPendingXLSX,
@@ -41,6 +41,9 @@ interface Order {
   total_amount: number;
   delivery_person: string | null;
   sale_time: string | null;
+  sale_date: string | null;
+  sales_channel: string | null;
+  partner_order_number: string | null;
   is_confirmed: boolean;
 }
 
@@ -85,6 +88,7 @@ export default function DeliveryReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState('all');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
@@ -106,7 +110,7 @@ export default function DeliveryReconciliation() {
     const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
+        .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, sale_date, sales_channel, partner_order_number, is_confirmed')
         .eq('daily_closing_id', id!),
       supabase.from('card_transactions')
         .select('*')
@@ -290,6 +294,10 @@ export default function DeliveryReconciliation() {
     return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
   }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
 
+  const confirmedCount = useMemo(() => offlineOrders.filter(o => o.is_confirmed).length, [offlineOrders]);
+  const pendingCount = useMemo(() => offlineOrders.length - confirmedCount, [offlineOrders, confirmedCount]);
+  const progressPercent = useMemo(() => offlineOrders.length ? Math.round((confirmedCount / offlineOrders.length) * 100) : 0, [offlineOrders, confirmedCount]);
+
   const deliveryPersons = useMemo(() => {
     const set = new Set<string>();
     offlineOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
@@ -324,13 +332,15 @@ export default function DeliveryReconciliation() {
           if (!methods.includes(filterPaymentMethod)) return false;
         }
       }
+      if (filterStatus === 'confirmed' && !o.is_confirmed) return false;
+      if (filterStatus === 'pending' && o.is_confirmed) return false;
       return true;
     }).sort((a, b) => {
       const aNum = parseInt(a.order_number.replace(/\D/g, ''), 10) || 0;
       const bNum = parseInt(b.order_number.replace(/\D/g, ''), 10) || 0;
       return aNum - bNum;
     });
-  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, matchedOrderIds, breakdowns]);
+  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, filterStatus, matchedOrderIds, breakdowns]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -639,7 +649,7 @@ export default function DeliveryReconciliation() {
     );
   }
 
-  const percent = stats.total > 0 ? Math.round((stats.matched / stats.total) * 100) : 0;
+  
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -771,18 +781,40 @@ export default function DeliveryReconciliation() {
         );
       })()}
 
-      {/* Stats */}
+      {/* Stats - Slim format like Reconciliation */}
       <div className="border-b border-border bg-card">
-        <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <StatCard label="Comandas Offline" value={stats.total} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
-          <StatCard label="Conciliadas" value={stats.matched} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
-          <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-          <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<Truck className="h-4 w-4" />} color="text-foreground" />
-          <div className="bg-card rounded-lg p-3 border border-border shadow-card">
-            <p className="section-title mb-1">Progresso</p>
-            <p className="text-2xl font-bold text-foreground font-mono-tabular">{percent}%</p>
-            <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
+        <div className="px-6 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Total</p>
+                <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.total}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Confirmados</p>
+                <p className="text-sm font-semibold text-success font-mono-tabular">{confirmedCount}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Pendentes</p>
+                <p className="text-sm font-semibold text-warning font-mono-tabular">{pendingCount}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+              <div className="flex-1">
+                <p className="text-[10px] text-primary font-semibold leading-tight">Progresso</p>
+                <p className="text-sm font-bold text-primary font-mono-tabular">{progressPercent}%</p>
+                <div className="mt-1 h-1 bg-border rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${progressPercent}%` }} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -856,12 +888,12 @@ export default function DeliveryReconciliation() {
                       const BILL_DENOMS = [200, 100, 50, 20, 10, 5, 2];
                       const expBills = BILL_DENOMS.reduce((s, d) => s + d * (expectedCash.counts[String(d)] || 0), 0);
                       const opBills = BILL_DENOMS.reduce((s, d) => s + d * ((cashSnapshotDataAbertura.counts[String(d)] as number) || 0), 0);
-                      const match = Math.abs(opBills - expBills) < 0.01;
+                      const matchBills = Math.abs(opBills - expBills) < 0.01;
                       return (
                         <div className="contents font-semibold border-t border-border">
                           <span className="py-1.5 text-foreground">Total</span>
                           <span className="py-1.5 font-mono text-foreground">{formatCurrency(expectedCash.total)}</span>
-                          <span className={`py-1.5 font-mono ${match ? 'text-success' : 'text-warning'}`}>
+                          <span className={`py-1.5 font-mono ${matchBills ? 'text-success' : 'text-warning'}`}>
                             {formatCurrency(cashSnapshotDataAbertura.total)}
                           </span>
                         </div>
@@ -934,221 +966,173 @@ export default function DeliveryReconciliation() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filters - Same layout as Reconciliation */}
       <div className="border-b border-border bg-card">
         <div className="px-6 py-3 flex flex-wrap gap-2">
-          <div className="relative flex-1 min-w-[180px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar comanda..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+          <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Buscar</span>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input placeholder="Buscar pedido..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+            </div>
           </div>
-          <Select value={filterDeliveryPerson} onValueChange={setFilterDeliveryPerson}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos entregadores</SelectItem>
-              {deliveryPersons.map(dp => (
-                <SelectItem key={dp} value={dp}>{dp}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterPaymentMethod} onValueChange={setFilterPaymentMethod}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas formas</SelectItem>
-              {paymentMethodsFilter.map(pm => (
-                <SelectItem key={pm} value={pm}>{pm}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterMatch} onValueChange={setFilterMatch}>
-            <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              <SelectItem value="matched">Conciliadas</SelectItem>
-              <SelectItem value="unmatched">Pendentes</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Formas de Pagamento</span>
+            <Select value={filterPaymentMethod} onValueChange={setFilterPaymentMethod}>
+              <SelectTrigger className="w-[200px] h-9"><SelectValue placeholder="Forma de pagamento" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as formas</SelectItem>
+                {paymentMethodsFilter.map(pm => (
+                  <SelectItem key={pm} value={pm}>{pm}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Motoboy</span>
+            <Select value={filterDeliveryPerson} onValueChange={setFilterDeliveryPerson}>
+              <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os entregadores</SelectItem>
+                {deliveryPersons.map(dp => (
+                  <SelectItem key={dp} value={dp}>{dp}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Status</span>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[140px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os status</SelectItem>
+                <SelectItem value="confirmed">Confirmados</SelectItem>
+                <SelectItem value="pending">Pendentes</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
-      {/* Main content - split view */}
+      {/* Main content - split view with table */}
       <div className="flex-1 overflow-hidden">
         <div className="px-6 py-4 h-full flex gap-4">
-          {/* Left: Orders */}
+          {/* Left: Orders Table */}
           <div className="flex-1 overflow-auto">
-            <h3 className="text-sm font-medium text-muted-foreground mb-2 uppercase tracking-wider">
-              Comandas Offline ({filtered.length})
-            </h3>
-            <div className="space-y-2">
-              {filtered.map(order => {
-                const matchedTxs = matchedOrderIds.get(order.id);
-                const isMatched = !!matchedTxs && matchedTxs.length > 0;
-                const confidence = matchedTxs?.[0]?.match_confidence;
-                const isCombined = matchedTxs && matchedTxs.length > 1;
-                const totalMatchedAmount = matchedTxs?.reduce((s, t) => s + t.gross_amount, 0) || 0;
-                const pendingInfo = pendingMeta.get(order.id);
+            <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider w-12">✓</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pedido</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Pagamento</th>
+                    <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider w-24">Conciliação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(order => {
+                    const matchedTxs = matchedOrderIds.get(order.id);
+                    const isMatched = !!matchedTxs && matchedTxs.length > 0;
+                    const confidence = matchedTxs?.[0]?.match_confidence;
+                    const pendingInfo = pendingMeta.get(order.id);
+                    const cellClass = order.is_confirmed ? 'text-muted-foreground' : 'text-foreground';
 
-                return (
-                  <div
-                    key={order.id}
-                    className={`bg-card rounded-lg border p-3 row-transition ${
-                      isMatched
-                        ? confidence === 'high'
-                          ? 'border-success/50 bg-success/5'
-                          : confidence === 'medium'
-                            ? 'border-primary/50 bg-primary/5'
-                            : 'border-warning/50 bg-warning/5'
-                        : 'border-border hover:border-primary/30'
-                    }`}
-                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-primary'); }}
-                    onDragLeave={(e) => { e.currentTarget.classList.remove('ring-2', 'ring-primary'); }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      e.currentTarget.classList.remove('ring-2', 'ring-primary');
-                      handleDrop(order.id);
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`h-6 w-6 rounded-full flex items-center justify-center ${
-                          isMatched ? 'bg-success text-success-foreground' : 'bg-muted text-muted-foreground'
-                        }`}>
-                          {isMatched ? <CheckCircle2 className="h-3.5 w-3.5" /> : <span className="text-xs font-bold">?</span>}
-                        </div>
-                        <div>
-                          <span className="font-medium text-foreground">#{order.order_number}</span>
-                          <span className="text-xs text-muted-foreground ml-2">{order.delivery_person || '—'}</span>
-                          {order.sale_time && (
-                            <span className="text-xs text-muted-foreground ml-2">
-                              <Clock className="h-3 w-3 inline mr-0.5" />{order.sale_time}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-mono-tabular font-medium text-foreground">
-                          {formatCurrency(getDeliveryDisplayAmount(order, breakdowns))}
-                        </span>
-                        <Badge variant="secondary" className="text-[10px]">
-                          {getDeliveryDisplayMethods(order, breakdowns)}
-                        </Badge>
-                        {!isMatched && pendingInfo && (
-                          <Badge variant="secondary" className={`text-[10px] border ${pendingInfo.tone}`}>
-                            {pendingInfo.label}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
+                    const formatSaleDate = (d: string | null) => {
+                      if (!d) return '—';
+                      const [y, m, day] = d.split('-');
+                      return `${day}/${m}/${y}`;
+                    };
 
-                    {isMatched && matchedTxs && (
-                      <div className="mt-2 pt-2 border-t border-border/50">
-                        {matchedTxs.map((tx, idx) => (
-                          <div key={tx.id} className={`flex items-center justify-between ${idx > 0 ? 'mt-1.5 pt-1.5 border-t border-border/30' : ''}`}>
-                            <div className="flex items-center gap-2 text-xs">
-                              <Link2 className="h-3 w-3 text-success" />
-                              <span className="text-muted-foreground">
-                                {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''}
-                                {(() => {
-                                  const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(tx.machine_serial) : null;
-                                  const orderPerson = order.delivery_person?.trim().toLowerCase();
-                                  const inferredLower = inferredPerson?.trim().toLowerCase();
-                                  const isDivergent = !!(inferredPerson && orderPerson && inferredLower !== orderPerson);
-                                  return inferredPerson ? (
-                                    <>
-                                      <span className={`font-medium ${isDivergent ? 'text-destructive' : 'text-primary'}`}> • {inferredPerson}</span>
-                                      {isDivergent && (
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <AlertTriangle className="h-3 w-3 text-destructive inline ml-1 cursor-help" />
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p className="text-xs">Motoboy divergente: comanda registra <strong>{order.delivery_person}</strong>, mas a máquina é associada a <strong>{inferredPerson}</strong></p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      )}
-                                    </>
-                                  ) : null;
-                                })()}
-                                {' '}— <span className="font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
-                              </span>
-                              {idx === 0 && (() => {
-                                const matchLabel = (() => {
-                                  switch (tx.match_type) {
-                                    case 'manual': return 'Manual';
-                                    case 'combined': return 'Match combinado';
-                                    case 'combined_undeclared': return 'Match combinado não declarado';
-                                    case 'exact_method_divergence': return 'Match exato · método divergente';
-                                    case 'exact_structure_divergence': return 'Match exato · estrutura divergente';
-                                    case 'exact': return 'Match exato';
-                                    case 'approximate': return 'Match aproximado';
-                                    default:
-                                      return confidence === 'high' ? 'Match exato'
-                                        : confidence === 'medium' ? 'Match aproximado'
-                                        : 'Baixa confiança';
-                                  }
-                                })();
-                                const isDivergence = tx.match_type === 'exact_method_divergence' || tx.match_type === 'exact_structure_divergence';
-                                const badgeColor = isDivergence
-                                  ? 'bg-amber-500/10 text-amber-600'
-                                  : tx.match_type === 'combined_undeclared'
-                                    ? 'bg-violet-500/10 text-violet-600'
-                                    : confidence === 'high'
-                                      ? 'bg-success/10 text-success'
-                                      : confidence === 'medium'
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'bg-warning/10 text-warning';
-                                return (
-                                  <Badge variant="secondary" className={`text-[9px] ${badgeColor}`}>
-                                    {matchLabel}
-                                  </Badge>
-                                );
-                              })()}
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
-                              onClick={() => unmatch(tx.id)}
-                            >
-                              <Unlink className="h-3 w-3 mr-1" />
-                              Desvincular
-                            </Button>
+                    return (
+                      <tr
+                        key={order.id}
+                        className={`border-b border-border/50 row-transition ${
+                          order.is_confirmed
+                            ? 'bg-muted/50 opacity-60'
+                            : isMatched
+                              ? confidence === 'high'
+                                ? 'bg-success/5'
+                                : 'bg-primary/5'
+                              : 'hover:bg-primary/5'
+                        }`}
+                        onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-primary'); }}
+                        onDragLeave={(e) => { e.currentTarget.classList.remove('ring-2', 'ring-primary'); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          e.currentTarget.classList.remove('ring-2', 'ring-primary');
+                          handleDrop(order.id);
+                        }}
+                      >
+                        <td className="p-3">
+                          <div className={`h-5 w-5 rounded border-2 flex items-center justify-center row-transition cursor-pointer ${
+                            order.is_confirmed ? 'bg-success border-success' : 'border-border'
+                          }`}>
+                            {order.is_confirmed && <CheckCircle2 className="h-3.5 w-3.5 text-success-foreground" />}
                           </div>
-                        ))}
-                        {isCombined && (
-                          <div className="mt-1 text-[10px] text-muted-foreground">
-                            Soma: <span className="font-mono-tabular font-medium">{formatCurrency(totalMatchedAmount)}</span>
-                            {Math.abs(totalMatchedAmount - order.total_amount) > 0.01 && (
-                              <span className="text-warning ml-1">
-                                Δ {formatCurrency(Math.abs(order.total_amount - totalMatchedAmount))}
+                        </td>
+                        <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
+                          #{order.order_number}
+                        </td>
+                        <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
+                        <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
+                        <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
+                        <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
+                        <td className={`p-3 text-sm ${cellClass}`}>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs">{getDeliveryDisplayMethods(order, breakdowns)}</span>
+                            {isAllOnline(order.payment_method) && (
+                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-primary/10 text-primary">
+                                <Wifi className="h-3 w-3" />
+                                Online
                               </span>
                             )}
                           </div>
-                        )}
-                        {!isCombined && matchedTxs[0].match_type !== 'exact' && matchedTxs[0].gross_amount !== order.total_amount && (
-                          <div className="mt-1 text-warning text-[10px]">
-                            Δ {formatCurrency(Math.abs(order.total_amount - matchedTxs[0].gross_amount))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {!isMatched && pendingInfo && (
-                      <div className="mt-2 pt-2 border-t border-border/50 space-y-1">
-                        {pendingInfo.suggestions.map((suggestion, index) => (
-                          <div key={`${order.id}-suggestion-${index}`} className="text-[11px] text-muted-foreground flex items-start gap-1.5">
-                            <AlertTriangle className="h-3 w-3 mt-0.5 text-warning shrink-0" />
-                            <span>{suggestion}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
+                        </td>
+                        <td className={`p-3 text-right font-mono-tabular text-sm ${cellClass}`}>
+                          {formatCurrency(getDeliveryDisplayAmount(order, breakdowns))}
+                        </td>
+                        <td className={`p-3 text-sm ${cellClass}`}>{order.delivery_person || '—'}</td>
+                        <td className="p-3">
+                          {isMatched ? (
+                            <div className="flex items-center gap-1">
+                              <CheckCircle2 className={`h-4 w-4 ${confidence === 'high' ? 'text-success' : 'text-primary'}`} />
+                              <div className="flex flex-col">
+                                {matchedTxs!.map(tx => (
+                                  <div key={tx.id} className="flex items-center gap-1">
+                                    <span className="text-[10px] text-muted-foreground font-mono-tabular">{formatCurrency(tx.gross_amount)}</span>
+                                    <button
+                                      onClick={() => unmatch(tx.id)}
+                                      className="text-[10px] text-muted-foreground hover:text-destructive"
+                                      title="Desvincular"
+                                    >
+                                      <Unlink className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : pendingInfo ? (
+                            <Badge variant="secondary" className={`text-[9px] border ${pendingInfo.tone}`}>
+                              {pendingInfo.label}
+                            </Badge>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
               {filtered.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground text-sm">
-                  Nenhuma comanda encontrada.
+                <div className="text-center py-12 text-muted-foreground text-sm">
+                  Nenhum pedido encontrado com os filtros aplicados.
                 </div>
               )}
             </div>
@@ -1253,14 +1237,3 @@ export default function DeliveryReconciliation() {
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
-  return (
-    <div className="bg-card rounded-lg p-3 border border-border shadow-card">
-      <div className="flex items-center justify-between mb-1">
-        <p className="section-title">{label}</p>
-        <span className={`${color} opacity-60`}>{icon}</span>
-      </div>
-      <p className={`text-2xl font-bold font-mono-tabular ${color}`}>{value}</p>
-    </div>
-  );
-}
