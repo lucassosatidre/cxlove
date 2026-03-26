@@ -30,6 +30,10 @@ interface SalonOrder {
   sale_date: string | null;
   payment_method: string;
   total_amount: number;
+  table_number: string | null;
+  card_number: string | null;
+  ticket_number: string | null;
+  sale_number: string | null;
 }
 
 interface ClosingData {
