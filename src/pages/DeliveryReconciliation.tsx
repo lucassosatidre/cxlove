@@ -983,7 +983,51 @@ export default function DeliveryReconciliation() {
         );
       })()}
 
-      {/* 5. Resumo de Pedidos */}
+      {/* 5. Contagem de Dinheiro no Fechamento */}
+      {cashSnapshotDataFechamento && (
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-primary" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
+              </div>
+              <span className="flex items-center gap-1 text-xs text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Salvo
+              </span>
+            </div>
+            <div className="mt-2 flex items-center gap-4">
+              <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
+              <span className="text-xs text-muted-foreground">
+                Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
+              </span>
+              <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashDetailsFechamento(!showCashDetailsFechamento)}>
+                {showCashDetailsFechamento ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
+                {showCashDetailsFechamento ? 'Ocultar' : 'Ver detalhes'}
+              </Button>
+            </div>
+            {showCashDetailsFechamento && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.entries(cashSnapshotDataFechamento.counts)
+                  .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
+                  .filter(({ qty }) => qty > 0)
+                  .sort((a, b) => b.denom - a.denom)
+                  .map(({ denom, qty }) => (
+                    <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
+                      <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
+                      <span className="text-muted-foreground">×</span>
+                      <span className="font-semibold text-foreground">{qty}</span>
+                      <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 6. Resumo de Pedidos */}
       <div className="border-b border-border bg-card">
         <div className="px-6 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
@@ -1028,51 +1072,6 @@ export default function DeliveryReconciliation() {
           </div>
         </div>
       </div>
-
-      {/* Cash Snapshot - Fechamento */}
-      {cashSnapshotDataFechamento && (
-        <div className="border-b border-border bg-card">
-          <div className="px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-primary" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
-              </div>
-              <span className="flex items-center gap-1 text-xs text-success">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Salvo
-              </span>
-            </div>
-            <div className="mt-2 flex items-center gap-4">
-              <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
-              <span className="text-xs text-muted-foreground">
-                Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
-              </span>
-              <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashDetailsFechamento(!showCashDetailsFechamento)}>
-                {showCashDetailsFechamento ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
-                {showCashDetailsFechamento ? 'Ocultar' : 'Ver detalhes'}
-              </Button>
-            </div>
-            {showCashDetailsFechamento && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {Object.entries(cashSnapshotDataFechamento.counts)
-                  .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
-                  .filter(({ qty }) => qty > 0)
-                  .sort((a, b) => b.denom - a.denom)
-                  .map(({ denom, qty }) => (
-                    <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
-                      <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
-                      <span className="text-muted-foreground">×</span>
-                      <span className="font-semibold text-foreground">{qty}</span>
-                      <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* Filters */}
       <div className="border-b border-border bg-card">
         <div className="px-6 py-3 flex flex-wrap gap-2">
