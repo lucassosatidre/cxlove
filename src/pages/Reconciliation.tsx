@@ -461,12 +461,8 @@ export default function Reconciliation() {
   const finalize = useCallback(async () => {
     if (!id) return;
 
-    const multiPaymentOrders = orders.filter(o => needsBreakdown(o.payment_method));
-    const invalidOrders = multiPaymentOrders.filter(o => !breakdownValidity[o.id]);
-    if (invalidOrders.length > 0) {
-      toast.error(`${invalidOrders.length} pedido(s) com rateio pendente. Preencha o detalhamento antes de finalizar.`);
-      return;
-    }
+
+
 
     setCompleting(true);
     const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
@@ -578,7 +574,7 @@ export default function Reconciliation() {
       for (const order of orders) {
         if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
         if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
-        if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) errors.push(`Comanda #${order.order_number}: rateio pendente.`);
+        
       }
 
       if (errors.length === 0) {
@@ -607,9 +603,8 @@ export default function Reconciliation() {
       if (!order.delivery_person || order.delivery_person.trim() === '') {
         errors.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
       }
-      if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) {
-        errors.push(`Comanda #${order.order_number}: rateio de pagamento pendente.`);
-      }
+
+
     }
     if (errors.length === 0) {
       finalize();
