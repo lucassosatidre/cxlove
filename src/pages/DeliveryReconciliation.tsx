@@ -1036,7 +1036,8 @@ export default function DeliveryReconciliation() {
           entry.count += 1;
           methodSummary.set(label, entry);
         });
-        const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
+        const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher', 'Outro'];
+        const sorted = Array.from(methodSummary.entries()).sort((a, b) => fixedOrder.indexOf(a[0]) - fixedOrder.indexOf(b[0]));
         const iconMap: Record<string, React.ReactNode> = {
           'Pix': <QrCode className="h-4 w-4 text-primary" />,
           'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
