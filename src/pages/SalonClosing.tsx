@@ -95,6 +95,12 @@ export default function SalonClosing() {
     setMachineReadingsCount((machineData || []).length);
     setImports(importsData || []);
 
+    // Detect last Saipos sync
+    const saiposImport = (importsData || []).find((imp: any) => imp.file_name?.startsWith('saipos-salon-api-'));
+    if (saiposImport) {
+      setLastSync(saiposImport.created_at);
+    }
+
     // Load saved cash snapshots
     if (id) {
       const { data: snapList } = await supabase
