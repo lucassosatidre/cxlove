@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2, RefreshCw, Wallet } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, FileText, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2, RefreshCw, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -957,62 +957,65 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        {/* Import History Toggle */}
-        {importRecords.length > 0 && (
-          <div className="border-b border-border bg-card">
-            <div className="px-6">
-              <button
-                onClick={() => setShowImportHistory(!showImportHistory)}
-                className="w-full py-2 text-xs text-muted-foreground hover:text-foreground row-transition text-left"
-              >
-                {showImportHistory ? '▾' : '▸'} Histórico de importações ({importRecords.length})
-              </button>
-              {showImportHistory && (
-                <div className="pb-3 space-y-1.5">
+        {/* Import History */}
+        <div className="bg-card rounded-xl shadow-card border border-border mb-4 overflow-hidden">
+          <button
+            className="w-full flex items-center gap-2 px-4 py-3 hover:bg-muted/50 transition-colors"
+            onClick={() => setShowImportHistory(!showImportHistory)}
+          >
+            {showImportHistory ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Histórico de Importações
+            </span>
+            <span className="text-xs text-muted-foreground">({importRecords.length})</span>
+          </button>
+          {showImportHistory && (
+            <div className="border-t border-border px-4 py-3 space-y-2">
+              {importRecords.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma importação encontrada.</p>
+              ) : (
+                <>
                   {importRecords.map((imp) => (
-                    <div key={imp.id} className="flex items-center justify-between text-xs bg-muted/50 rounded-lg px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <Checkbox
-                          checked={selectedImports.has(imp.id)}
-                          onCheckedChange={() => toggleImportSelection(imp.id)}
-                          className="h-4 w-4"
-                        />
-                        <FileSpreadsheet className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="text-foreground font-medium">{imp.file_name}</span>
+                    <div key={imp.id} className="flex items-center gap-3 bg-muted/30 rounded-lg px-3 py-2">
+                      <Checkbox
+                        checked={selectedImports.has(imp.id)}
+                        onCheckedChange={() => toggleImportSelection(imp.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{imp.file_name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {imp.total_rows} lidos · {imp.new_rows} novos · {imp.duplicate_rows} duplicados
+                          {' · '}
+                          {new Date(imp.created_at).toLocaleString('pt-BR')}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-3 text-muted-foreground">
-                        <span>{imp.total_rows} lidos</span>
-                        <span className="text-success">{imp.new_rows} novos</span>
-                        <span>{imp.duplicate_rows} duplicados</span>
-                        <span>{new Date(imp.created_at).toLocaleString('pt-BR')}</span>
-                      </div>
+                      
                     </div>
                   ))}
                   {selectedImports.size > 0 && (
-                    <div className="flex items-center gap-3 pt-2">
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+                      <span className="text-xs text-muted-foreground">{selectedImports.size} selecionada(s)</span>
+                      <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedImports(new Set())}>
+                        Cancelar
+                      </Button>
                       <Button
                         size="sm"
                         variant="destructive"
+                        className="h-7 text-xs"
                         onClick={handleDeleteSelectedImports}
                         disabled={deletingImports}
                       >
                         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                         {deletingImports ? 'Apagando...' : `Apagar ${selectedImports.size} importação(ões)`}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setSelectedImports(new Set())}
-                      >
-                        Cancelar
-                      </Button>
                     </div>
                   )}
-                </div>
+                </>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* 2. Stats (pedidos) */}
         <div className="border-b border-border bg-card">
