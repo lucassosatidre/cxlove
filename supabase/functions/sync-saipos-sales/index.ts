@@ -350,21 +350,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Debug sample for frontend
-    const debugSample = allSales.slice(0, 3).map((s: any) => ({
-      sale_number: s.sale_number,
-      delivery_man: s.delivery_man ?? null,
-      partner_sale: s.partner_sale ?? null,
-      partner_delivery: s.partner_delivery ?? null,
-      id_sale_type: s.id_sale_type,
-    }));
-
     return new Response(
       JSON.stringify({
         total: allSales.length,
         new_orders: newSales.length,
         duplicates: duplicateCount,
-        debug_sample: debugSample,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
