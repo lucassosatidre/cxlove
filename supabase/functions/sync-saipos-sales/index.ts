@@ -217,18 +217,20 @@ Deno.serve(async (req) => {
             }
           }
 
-          const partnerSale = sale.partner_sale || {};
+          const partnerSale = sale.partner_sale || null;
 
-          return {
-            import_id: importRecord.id,
-            daily_closing_id,
-            order_number: String(sale.sale_number),
-            payment_method: paymentMethodStr,
-            total_amount: sale.total_amount || 0,
-            delivery_person: sale.delivery_man?.delivery_man_name || null,
-            sale_date: sale.shift_date || closing_date,
-            sale_time: saleTime,
-            sales_channel: partnerSale.desc_store_partner || null,
+          // Determine sales channel based on partner_sale
+          let salesChannel: string | null = null;
+          if (partnerSale && partnerSale.desc_store_partner) {
+            const desc = (partnerSale.desc_store_partner || "").toLowerCase();
+            if (desc.includes("campeche")) {
+              salesChannel = "Brendi";
+            } else {
+              salesChannel = "iFood";
+            }
+          } else {
+            salesChannel = "Telefone";
+          }
             partner_order_number: partnerSale.cod_sale2 || null,
             is_confirmed: allOnline,
             confirmed_at: allOnline ? new Date().toISOString() : null,
