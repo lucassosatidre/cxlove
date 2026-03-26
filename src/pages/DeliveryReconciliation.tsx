@@ -27,6 +27,7 @@ import {
 import { classifyPendingOrder } from '@/lib/delivery-pending-classifier';
 import { useUserRole } from '@/hooks/useUserRole';
 import { formatCurrency } from '@/lib/payment-utils';
+import MachineReadingsSection from '@/components/MachineReadingsSection';
 import {
   exportMatchesXLSX,
   exportPendingXLSX,
