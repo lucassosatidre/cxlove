@@ -59,6 +59,18 @@ interface SalonPaymentForMatching {
   amount: number;
 }
 
+// Helper: sum only card-type breakdowns for a given order
+function getCardPortionFromPayments(
+  orderId: string,
+  payments: SalonPaymentForMatching[]
+): number | null {
+  const orderPayments = payments.filter(p => p.salon_order_id === orderId);
+  if (orderPayments.length === 0) return null;
+  const cardPayments = orderPayments.filter(p => !isExternalMethod(p.payment_method));
+  if (cardPayments.length === 0) return null;
+  return Math.round(cardPayments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+}
+
 interface TxForMatching {
   id: string;
   gross_amount: number;
@@ -143,7 +155,7 @@ function timeGapMinutes(txTime: string, orderTime: string | null): number {
 
 // ─── Target amount helpers ───
 
-function getTargetAmounts(order: SalonOrderForMatching, classification: OrderClassification): number[] {
+function getTargetAmounts(order: SalonOrderForMatching, classification: OrderClassification, payments?: SalonPaymentForMatching[]): number[] {
   const targets: number[] = [];
   const total = order.total_amount;
 
@@ -153,14 +165,24 @@ function getTargetAmounts(order: SalonOrderForMatching, classification: OrderCla
     if (order.discount_amount > 0.01) {
       targets.push(Math.round((total + order.discount_amount) * 100) / 100);
     }
-    // Add estimated card portion: total * (cardLines / totalMethods)
-    const totalMethods = classification.cardMethods.length + classification.externalMethods.length;
-    if (totalMethods > 0 && classification.expectedCardLines < totalMethods) {
-      const cardPortion = Math.round((total * classification.expectedCardLines / totalMethods) * 100) / 100;
-      targets.push(cardPortion);
+
+    // Prefer real breakdown sum when available
+    const realCardPortion = payments ? getCardPortionFromPayments(order.id, payments) : null;
+    if (realCardPortion !== null && realCardPortion > 0) {
+      targets.push(realCardPortion);
       if (order.discount_amount > 0.01) {
-        const totalWithDiscount = total + order.discount_amount;
-        targets.push(Math.round((totalWithDiscount * classification.expectedCardLines / totalMethods) * 100) / 100);
+        targets.push(Math.round((realCardPortion + order.discount_amount) * 100) / 100);
+      }
+    } else {
+      // Fallback: proportional estimate
+      const totalMethods = classification.cardMethods.length + classification.externalMethods.length;
+      if (totalMethods > 0 && classification.expectedCardLines < totalMethods) {
+        const cardPortion = Math.round((total * classification.expectedCardLines / totalMethods) * 100) / 100;
+        targets.push(cardPortion);
+        if (order.discount_amount > 0.01) {
+          const totalWithDiscount = total + order.discount_amount;
+          targets.push(Math.round((totalWithDiscount * classification.expectedCardLines / totalMethods) * 100) / 100);
+        }
       }
     }
   } else {
@@ -221,7 +243,7 @@ export function matchSalonTransactionsToOrders(
 
       // For mixed orders with expected 1 card line, allow partial match
       // For non-mixed, match against target amounts
-      const targets = getTargetAmounts(order, cls);
+      const targets = getTargetAmounts(order, cls, _payments);
       const expectedLines = cls.expectedCardLines;
 
       if (expectedLines === 1 || expectedLines === 0) {
@@ -319,7 +341,7 @@ export function matchSalonTransactionsToOrders(
     if (matchedOrderIds.has(order.id)) continue;
     const cls = classifications.get(order.id)!;
     const expectedLines = cls.expectedCardLines;
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
     if (remainingTxs.length < expectedLines) continue;
@@ -397,7 +419,7 @@ export function matchSalonTransactionsToOrders(
   for (const order of machineOrders) {
     if (matchedOrderIds.has(order.id)) continue;
     const cls = classifications.get(order.id)!;
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
     if (remainingTxs.length < 2) continue;
@@ -478,7 +500,7 @@ export function matchSalonTransactionsToOrders(
     const cls = classifications.get(order.id)!;
     if (cls.expectedCardLines > 1) continue; // groups should have been handled above
 
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     const candidates = transactions
       .filter(tx => !matchedTxIds.has(tx.id))
@@ -518,7 +540,7 @@ export function matchSalonTransactionsToOrders(
     const cls = classifications.get(order.id)!;
     if (cls.expectedCardLines > 1) continue;
 
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     for (const target of targets) {
       const exactRemaining = transactions.filter(tx => {
@@ -552,13 +574,13 @@ export function matchSalonTransactionsToOrders(
       if (matchedOrderIds.has(order.id)) return false;
       const cls = classifications.get(order.id)!;
       if (cls.expectedCardLines > 1) return false;
-      const targets = getTargetAmounts(order, cls);
+      const targets = getTargetAmounts(order, cls, _payments);
       return targets.some(t => Math.abs(tx.gross_amount - t) < 0.01);
     });
 
     if (candidateOrders.length === 1) {
       const order = candidateOrders[0];
-      const targets = getTargetAmounts(order, classifications.get(order.id)!);
+      const targets = getTargetAmounts(order, classifications.get(order.id)!, _payments);
       const isDiscount = !targets.some(t => Math.abs(t - order.total_amount) < 0.01 && Math.abs(tx.gross_amount - t) < 0.01);
 
       results.push({
@@ -580,7 +602,7 @@ export function matchSalonTransactionsToOrders(
   // The card sum will be LESS than total. The remainder is cash/external.
   // ═══════════════════════════════════════════
 
-  const MIXED_TOLERANCE = 0.10; // tolerance for mixed orders with cash
+  const MIXED_TOLERANCE = 1.00; // tolerance for mixed orders with cash (aligned with APPROX_TOLERANCE)
 
   for (const order of machineOrders) {
     if (matchedOrderIds.has(order.id)) continue;
@@ -593,13 +615,17 @@ export function matchSalonTransactionsToOrders(
 
     if (expectedCardLines >= 2) {
       // Multi-card + cash: find N card transactions whose sum < total
-      // Estimate card portion: total * (cardLines / totalMethods)
-      const estimatedCardPortion = Math.round((order.total_amount * expectedCardLines / totalMethods) * 100) / 100;
-      // Also try total + discount card portion
+      // Prefer real breakdown sum, fallback to proportional estimate
+      const realCardPortion = getCardPortionFromPayments(order.id, _payments);
+      const estimatedCardPortion = realCardPortion !== null && realCardPortion > 0
+        ? realCardPortion
+        : Math.round((order.total_amount * expectedCardLines / totalMethods) * 100) / 100;
       const estimatedTargets = [estimatedCardPortion];
       if (order.discount_amount > 0.01) {
-        const totalWithDiscount = order.total_amount + order.discount_amount;
-        estimatedTargets.push(Math.round((totalWithDiscount * expectedCardLines / totalMethods) * 100) / 100);
+        const withDiscount = realCardPortion !== null && realCardPortion > 0
+          ? Math.round((realCardPortion + order.discount_amount) * 100) / 100
+          : Math.round(((order.total_amount + order.discount_amount) * expectedCardLines / totalMethods) * 100) / 100;
+        estimatedTargets.push(withDiscount);
       }
 
       let bestMatch: { txs: TxForMatching[]; diff: number; target: number; sameWaiter: boolean } | null = null;
@@ -692,7 +718,7 @@ export function matchSalonTransactionsToOrders(
       continue;
     }
     const cls = classifications.get(order.id)!;
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
     const remaining = transactions.filter(tx => !matchedTxIds.has(tx.id));
 
     if (cls.isMixed) {
