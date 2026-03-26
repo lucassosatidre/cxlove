@@ -633,6 +633,7 @@ export default function SalonClosing() {
             deliveryPersons={[]}
             isCompleted={isCompleted}
             personLabel="Garçom"
+            onCountChange={setMachineReadingsCount}
           />
         </div>
       )}
