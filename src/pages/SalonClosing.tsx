@@ -682,6 +682,50 @@ export default function SalonClosing() {
         </div>
       )}
 
+      {/* Resumo de Pedidos */}
+      {(() => {
+        const countSalao = filtered.filter(o => o.order_type.toLowerCase() === 'salão' || o.order_type.toLowerCase() === 'salao').length;
+        const countRetirada = filtered.filter(o => isRetirada(o.order_type)).length;
+        const countFicha = filtered.filter(o => o.order_type.toLowerCase() === 'ficha').length;
+        return (
+          <div className="bg-card rounded-xl shadow-card border border-border p-3 mb-4">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 border border-border min-w-[100px]">
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Total Vendas</p>
+                  <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(totalAmount)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 border border-border min-w-[80px]">
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Pedidos</p>
+                  <p className="text-sm font-semibold text-foreground font-mono">{filtered.length}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-warning rounded-lg px-3 py-1.5 border border-warning min-w-[80px]">
+                <div>
+                  <p className="text-[10px] text-foreground leading-tight font-medium">Salão</p>
+                  <p className="text-sm font-semibold text-foreground font-mono">{countSalao}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-foreground rounded-lg px-3 py-1.5 border border-foreground min-w-[80px]">
+                <div>
+                  <p className="text-[10px] text-warning leading-tight font-medium">Retirada</p>
+                  <p className="text-sm font-semibold text-warning font-mono">{countRetirada}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 bg-foreground rounded-lg px-3 py-1.5 border border-foreground min-w-[80px]">
+                <div>
+                  <p className="text-[10px] text-background leading-tight font-medium">Ficha</p>
+                  <p className="text-sm font-semibold text-background font-mono">{countFicha}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Import History */}
       <div className="bg-card rounded-xl shadow-card border border-border mb-4 overflow-hidden">
         <button
@@ -741,50 +785,6 @@ export default function SalonClosing() {
           </div>
         )}
       </div>
-
-      {/* Resumo de Pedidos */}
-      {(() => {
-        const countSalao = filtered.filter(o => o.order_type.toLowerCase() === 'salão' || o.order_type.toLowerCase() === 'salao').length;
-        const countRetirada = filtered.filter(o => isRetirada(o.order_type)).length;
-        const countFicha = filtered.filter(o => o.order_type.toLowerCase() === 'ficha').length;
-        return (
-          <div className="bg-card rounded-xl shadow-card border border-border p-3 mb-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
-            <div className="flex flex-wrap gap-3">
-              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 border border-border min-w-[100px]">
-                <div>
-                  <p className="text-[10px] text-muted-foreground leading-tight">Total Vendas</p>
-                  <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(totalAmount)}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 border border-border min-w-[80px]">
-                <div>
-                  <p className="text-[10px] text-muted-foreground leading-tight">Pedidos</p>
-                  <p className="text-sm font-semibold text-foreground font-mono">{filtered.length}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-warning rounded-lg px-3 py-1.5 border border-warning min-w-[80px]">
-                <div>
-                  <p className="text-[10px] text-foreground leading-tight font-medium">Salão</p>
-                  <p className="text-sm font-semibold text-foreground font-mono">{countSalao}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-foreground rounded-lg px-3 py-1.5 border border-foreground min-w-[80px]">
-                <div>
-                  <p className="text-[10px] text-warning leading-tight font-medium">Retirada</p>
-                  <p className="text-sm font-semibold text-warning font-mono">{countRetirada}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 bg-foreground rounded-lg px-3 py-1.5 border border-foreground min-w-[80px]">
-                <div>
-                  <p className="text-[10px] text-background leading-tight font-medium">Ficha</p>
-                  <p className="text-sm font-semibold text-background font-mono">{countFicha}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-4">
