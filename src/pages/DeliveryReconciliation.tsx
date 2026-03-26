@@ -332,13 +332,15 @@ export default function DeliveryReconciliation() {
           if (!methods.includes(filterPaymentMethod)) return false;
         }
       }
+      if (filterStatus === 'confirmed' && !o.is_confirmed) return false;
+      if (filterStatus === 'pending' && o.is_confirmed) return false;
       return true;
     }).sort((a, b) => {
       const aNum = parseInt(a.order_number.replace(/\D/g, ''), 10) || 0;
       const bNum = parseInt(b.order_number.replace(/\D/g, ''), 10) || 0;
       return aNum - bNum;
     });
-  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, matchedOrderIds, breakdowns]);
+  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, filterStatus, matchedOrderIds, breakdowns]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
