@@ -416,28 +416,12 @@ Deno.serve(async (req) => {
       console.log(`updated_at pass: updated delivery_person for ${deliveryUpdated} orders`);
     }
 
-    const debugDelivery = allSales.slice(0, 5).map((s: any) => ({
-      sale_number: s.sale_number,
-      delivery_man: s.delivery_man || null,
-      delivery: s.delivery || null,
-      partner_delivery: s.partner_delivery || null,
-    }));
-
-    const debugDeliveryUpdated = updatedSales.slice(0, 5).map((s: any) => ({
-      sale_number: s.sale_number,
-      delivery_man: s.delivery_man || null,
-      delivery: s.delivery || null,
-      partner_delivery: s.partner_delivery || null,
-    }));
-
     return new Response(
       JSON.stringify({
         total: allSales.length,
         new_orders: newSales.length,
         duplicates: duplicateCount,
         delivery_updated: deliveryUpdated,
-        debug_delivery: debugDelivery,
-        debug_delivery_updated_at: debugDeliveryUpdated,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

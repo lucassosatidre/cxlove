@@ -125,43 +125,61 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Check existing orders for dedup by sale_number
+    // Check existing orders for dedup - now using saipos_sale_id as primary dedup key
     const { data: existingOrders } = await supabaseAdmin
       .from("salon_orders")
-      .select("id, sale_number, table_number, card_number, ticket_number, customers_count, service_charge_amount")
-      .eq("salon_closing_id", salon_closing_id)
-      .not("sale_number", "is", null);
+      .select("id, sale_number, saipos_sale_id, table_number, card_number, ticket_number, customers_count, service_charge_amount")
+      .eq("salon_closing_id", salon_closing_id);
 
-    const existingMap = new Map<string, any>();
+    // Build dedup maps
+    const existingBySaiposId = new Map<string, any>();
+    const existingBySaleNumber = new Map<string, any>();
     for (const o of (existingOrders || [])) {
-      if (o.sale_number) existingMap.set(String(o.sale_number), o);
+      if (o.saipos_sale_id) existingBySaiposId.set(String(o.saipos_sale_id), o);
+      if (o.sale_number) existingBySaleNumber.set(String(o.sale_number), o);
+    }
+
+    // Find existing order for a sale using the best dedup key
+    function findExisting(sale: any): any | null {
+      // Primary: saipos_sale_id (id_sale from API)
+      if (sale.id_sale) {
+        const found = existingBySaiposId.get(String(sale.id_sale));
+        if (found) return found;
+      }
+      // Fallback: sale_number (works for Retirada)
+      if (sale.sale_number) {
+        const found = existingBySaleNumber.get(String(sale.sale_number));
+        if (found) return found;
+      }
+      return null;
     }
 
     // Backfill null fields on existing orders
     let backfillCount = 0;
     for (const sale of allSales) {
-      const saleNum = String(sale.sale_number);
-      const existing = existingMap.get(saleNum);
+      const existing = findExisting(sale);
       if (!existing) continue;
 
       const updates: Record<string, any> = {};
-      const tableOrder = sale.table_order || null;
       const ticket = sale.ticket || null;
 
-      if (!existing.table_number && tableOrder?.id_store_table) {
-        updates.table_number = String(tableOrder.id_store_table);
+      // Backfill table_number with desc_sale for Salão
+      if (!existing.table_number && sale.id_sale_type === 3 && sale.desc_sale) {
+        updates.table_number = String(sale.desc_sale);
       }
-      if (!existing.card_number && tableOrder?.id_store_order_card) {
-        updates.card_number = String(tableOrder.id_store_order_card);
-      }
-      if (!existing.ticket_number && ticket?.number) {
+      // Backfill ticket_number for Ficha
+      if (!existing.ticket_number && sale.id_sale_type === 4 && ticket?.number) {
         updates.ticket_number = String(ticket.number);
       }
-      if (existing.customers_count === null && tableOrder?.customers_on_table != null) {
-        updates.customers_count = tableOrder.customers_on_table;
+      if (existing.customers_count === null && sale.table_order?.customers_on_table != null) {
+        updates.customers_count = sale.table_order.customers_on_table;
       }
-      if ((existing.service_charge_amount === null || existing.service_charge_amount === 0) && tableOrder?.total_service_charge_amount) {
-        updates.service_charge_amount = tableOrder.total_service_charge_amount;
+      if ((existing.service_charge_amount === null || existing.service_charge_amount === 0) && sale.table_order?.total_service_charge_amount) {
+        updates.service_charge_amount = sale.table_order.total_service_charge_amount;
+      }
+      // Backfill saipos_sale_id if missing
+      if (!existing.saipos_sale_id && sale.id_sale) {
+        updates.saipos_sale_id = String(sale.id_sale);
       }
 
       if (Object.keys(updates).length > 0) {
@@ -170,10 +188,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Filter new sales
-    const newSales = allSales.filter(
-      (s) => !existingMap.has(String(s.sale_number))
-    );
+    // Filter new sales - a sale is new if no existing order matches
+    const newSales = allSales.filter((s) => !findExisting(s));
     const duplicateCount = allSales.length - newSales.length;
 
     // Create import record
@@ -220,8 +236,20 @@ Deno.serve(async (req) => {
             }
           }
 
-          const tableOrder = sale.table_order || null;
           const ticket = sale.ticket || null;
+
+          // table_number mapping:
+          // Salão: desc_sale (e.g. "33.01", "Taila Verruck")
+          // Retirada: sale_number (shown as "Pedido #N")
+          // Ficha: ticket.number (shown as "Ficha N")
+          let tableNumber: string | null = null;
+          if (sale.id_sale_type === 3 && sale.desc_sale) {
+            tableNumber = String(sale.desc_sale);
+          } else if (sale.id_sale_type === 2 && sale.sale_number) {
+            tableNumber = String(sale.sale_number);
+          } else if (sale.id_sale_type === 4 && ticket?.number) {
+            tableNumber = String(ticket.number);
+          }
 
           return {
             salon_import_id: importRecord.id,
@@ -233,12 +261,13 @@ Deno.serve(async (req) => {
             total_amount: sale.total_amount || 0,
             discount_amount: sale.total_discount || 0,
             is_confirmed: false,
-            sale_number: String(sale.sale_number),
-            table_number: (sale.id_sale_type === 3 && tableOrder?.id_store_table) ? String(tableOrder.id_store_table) : null,
-            card_number: (sale.id_sale_type === 3 && tableOrder?.id_store_order_card) ? String(tableOrder.id_store_order_card) : null,
+            sale_number: sale.sale_number ? String(sale.sale_number) : null,
+            saipos_sale_id: sale.id_sale ? String(sale.id_sale) : null,
+            table_number: tableNumber,
+            card_number: null,
             ticket_number: (sale.id_sale_type === 4 && ticket?.number) ? String(ticket.number) : null,
-            customers_count: tableOrder?.customers_on_table ?? null,
-            service_charge_amount: tableOrder?.total_service_charge_amount || 0,
+            customers_count: sale.table_order?.customers_on_table ?? null,
+            service_charge_amount: sale.table_order?.total_service_charge_amount || 0,
           };
         });
 
@@ -263,7 +292,7 @@ Deno.serve(async (req) => {
               .from("salon_orders")
               .select("id")
               .eq("salon_import_id", importRecord.id)
-              .eq("sale_number", batch[j].sale_number)
+              .eq("saipos_sale_id", batch[j].saipos_sale_id || "")
               .maybeSingle();
 
             if (orderData) {
@@ -282,31 +311,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build debug_salon with first 5 of each type
-    const debugSalon: any[] = [];
-    for (const typeId of [3, 2, 4]) {
-      const ofType = allSales.filter((s: any) => s.id_sale_type === typeId).slice(0, 5);
-      for (const s of ofType) {
-        debugSalon.push({
-          id_sale_type: s.id_sale_type,
-          sale_number: s.sale_number,
-          desc_sale: s.desc_sale,
-          total_amount: s.total_amount,
-          table_order: s.table_order || null,
-          ticket: s.ticket || null,
-          created_at: s.created_at,
-          canceled: s.canceled,
-        });
-      }
-    }
-
     return new Response(
       JSON.stringify({
         total: allSales.length,
         new_orders: newSales.length,
         duplicates: duplicateCount,
         backfilled: backfillCount,
-        debug_salon: debugSalon,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

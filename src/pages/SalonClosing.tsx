@@ -827,8 +827,10 @@ export default function SalonClosing() {
                   const getMesaComanda = () => {
                     const ot = row.order_type.toLowerCase();
                     if (ot === 'salão' || ot === 'salao') {
-                      const parts = [row.table_number ? `Mesa ${row.table_number}` : null, row.card_number ? `Cmd ${row.card_number}` : null].filter(Boolean);
-                      return parts.length > 0 ? parts.join(' / ') : '—';
+                      return row.table_number || '—';
+                    }
+                    if (ot === 'retirada') {
+                      return row.table_number ? `Pedido #${row.table_number}` : (row.sale_number ? `Pedido #${row.sale_number}` : '—');
                     }
                     if (ot === 'ficha') return row.ticket_number ? `Ficha ${row.ticket_number}` : '—';
                     return '—';
