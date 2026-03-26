@@ -79,10 +79,6 @@ export default function Reconciliation() {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [allBreakdowns, setAllBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [visibleColumns, setVisibleColumns] = useState({
-    sale_date: false,
-    sale_time: false,
-    sales_channel: false,
-    partner_order_number: false,
   });
 
   // Cash calculator state - Abertura
@@ -1055,37 +1051,6 @@ export default function Reconciliation() {
               </Select>
             </div>
             <div className="relative">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={() => setShowColumnSettings(!showColumnSettings)}
-              >
-                <Settings2 className="h-4 w-4 mr-1" />
-                Colunas
-              </Button>
-              {showColumnSettings && (
-                <div className="absolute right-0 top-10 z-20 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2 min-w-[200px]">
-                  {([
-                    { key: 'sale_date' as const, label: 'Data' },
-                    { key: 'sale_time' as const, label: 'Hora' },
-                    { key: 'sales_channel' as const, label: 'Canal de Venda' },
-                    { key: 'partner_order_number' as const, label: 'Nº Pedido Parceiro' },
-                  ]).map(({ key, label }) => (
-                    <button
-                      key={key}
-                      onClick={() => toggleColumn(key)}
-                      className="flex items-center gap-2 w-full text-left text-sm py-1 px-2 rounded hover:bg-muted/50 transition-colors"
-                    >
-                      {visibleColumns[key]
-                        ? <Eye className="h-4 w-4 text-primary" />
-                        : <EyeOff className="h-4 w-4 text-muted-foreground" />
-                      }
-                      <span className={visibleColumns[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -1099,10 +1064,10 @@ export default function Reconciliation() {
                   <tr className="border-b border-border">
                     <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
                     <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                    {visibleColumns.sale_date && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>}
-                    {visibleColumns.sale_time && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>}
-                    {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
-                    {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>
                     <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
                     <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
@@ -1770,18 +1735,10 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
           #{order.order_number}
         </td>
-        {visibleColumns.sale_date && (
-          <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
-        )}
-        {visibleColumns.sale_time && (
-          <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
-        )}
-        {visibleColumns.sales_channel && (
-          <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
-        )}
-        {visibleColumns.partner_order_number && (
-          <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
-        )}
+        <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
+        <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
+        <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
+        <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         <td className={`p-3 text-sm ${cellClass}`}>
           <div className="flex items-center gap-2 group flex-wrap">
             <Popover open={paymentPopoverOpen} onOpenChange={(open) => {
