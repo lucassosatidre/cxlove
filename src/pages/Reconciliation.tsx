@@ -763,10 +763,17 @@ export default function Reconciliation() {
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
-              <Button variant="outline" size="sm" onClick={handleSyncSaipos} disabled={isCompleted || syncingSaipos}>
-                <RefreshCw className={`h-4 w-4 mr-1 ${syncingSaipos ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">{syncingSaipos ? 'Sincronizando...' : 'Sincronizar via Saipos'}</span>
-              </Button>
+              <div className="flex flex-col items-start">
+                <Button variant="outline" size="sm" onClick={handleSyncSaipos} disabled={isCompleted || syncingSaipos}>
+                  <RefreshCw className={`h-4 w-4 mr-1 ${syncingSaipos ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{syncingSaipos ? 'Sincronizando...' : 'Sincronizar via Saipos'}</span>
+                </Button>
+                {lastAutoSync && (
+                  <span className="text-[11px] text-muted-foreground mt-0.5 ml-1">
+                    Última sincronização: {new Date(lastAutoSync).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
               <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !isAdmin} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>
