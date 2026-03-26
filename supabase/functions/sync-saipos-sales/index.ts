@@ -125,6 +125,10 @@ Deno.serve(async (req) => {
       );
       allSales.push(...filtered);
 
+      if (allSales.length > 0 && offset === 0) {
+        console.log("PRIMEIRO PEDIDO COMPLETO:", JSON.stringify(allSales[0], null, 2));
+      }
+
       if (sales.length < limit) break;
       offset += limit;
     }
