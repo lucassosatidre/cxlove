@@ -29,6 +29,8 @@ interface Props {
   isCompleted: boolean;
   /** Label for the person field: "Entregador" or "Garçom" */
   personLabel?: string;
+  /** Render mode: 'all' (default), 'totals' (only summary), 'conference' (only detail) */
+  mode?: 'all' | 'totals' | 'conference';
 }
 
 const SERIAL_PREFIX = 'S1F2-000';
@@ -58,7 +60,7 @@ function parseRow(r: any): MachineReading {
   };
 }
 
-export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador' }: Props) {
+export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all' }: Props) {
   const { user } = useAuth();
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,206 +195,216 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const blockTotal = (r: MachineReading) => r.debit_amount + r.credit_amount + r.voucher_amount + r.pix_amount;
   const blockOps = (r: MachineReading) => r.debit_count + r.credit_count + r.voucher_count + r.pix_count;
 
+  const showTotals = mode === 'all' || mode === 'totals';
+  const showConference = mode === 'all' || mode === 'conference';
+
   return (
-    <div className="border-b border-border bg-card">
-      <div className="px-6 py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4 text-primary" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Conferência de Maquininhas
-            </span>
-            {readings.length > 0 && (
-              <span className="text-xs text-muted-foreground">({readings.length})</span>
-            )}
-          </div>
-          {!isCompleted && (
-            <div className="flex items-center gap-2">
-              {validationError && (
-                <span className="flex items-center gap-1 text-xs text-destructive">
-                  <AlertCircle className="h-3 w-3" />
-                  {validationError}
-                </span>
-              )}
-              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
-                <Plus className="h-3.5 w-3.5 mr-1" />
-                Adicionar Maquininha
+    <>
+      {/* Totals panel - shown in 'all' or 'totals' mode */}
+      {showTotals && readings.length > 0 && (
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Recebido via Maquininhas</span>
+              <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowByDriver(true)}>
+                <Eye className="h-3 w-3 mr-1" />
+                Ver por {personLabel.toLowerCase()}
               </Button>
             </div>
-          )}
-        </div>
-
-        {readings.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
-        ) : (
-          <div className="space-y-2">
-            {readings.map((r) => {
-              const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
-              const isExpanded = expandedIds.has(r.id) || !isFilled;
-              const toggleExpand = () => {
-                if (!isFilled) return;
-                setExpandedIds(prev => {
-                  const next = new Set(prev);
-                  next.has(r.id) ? next.delete(r.id) : next.add(r.id);
-                  return next;
-                });
-              };
-
-              return (
-                <div key={r.id} className="border border-border rounded-lg bg-muted/30">
-                  {/* Summary row */}
-                  <div
-                    className={`flex items-center gap-2 px-3 py-2 ${isFilled ? 'cursor-pointer hover:bg-muted/50' : ''}`}
-                    onClick={isFilled ? toggleExpand : undefined}
-                  >
-                    {isExpanded
-                      ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    }
-                    <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
-                    <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
-                    <span className="ml-auto text-xs font-bold font-mono text-foreground">
-                      {formatCurrency(blockTotal(r))}
-                      {blockOps(r) > 0 && (
-                        <span className="font-normal text-muted-foreground ml-1">({blockOps(r)} op.)</span>
-                      )}
-                    </span>
-                    {!isCompleted && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-destructive shrink-0"
-                        onClick={(e) => { e.stopPropagation(); removeReading(r.id); }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    )}
+            <div className="flex flex-wrap gap-3">
+              {[
+                { label: '(COBRAR) Pix', value: totals.pix, icon: <span className="text-primary">📱</span> },
+                { label: 'Crédito', value: totals.credit, icon: <span>💳</span> },
+                { label: 'Débito', value: totals.debit, icon: <span>💳</span> },
+                { label: 'Voucher', value: totals.voucher, icon: <span>🎟️</span> },
+              ].map(({ label, value, icon }) => (
+                <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                  <span className="text-base">{icon}</span>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
+                    <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(value)}</p>
                   </div>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                <span className="text-base">💰</span>
+                <div>
+                  <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
+                  <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalGeral)}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-                  {/* Expanded content */}
-                  {isExpanded && (
-                    <div className="px-3 pb-3 space-y-2 border-t border-border">
-                      <div className="flex items-center gap-2 pt-2">
-                        <div className="flex-1 flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
-                          <div className="flex items-center gap-0">
-                            <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
-                              {SERIAL_PREFIX}
-                            </span>
-                            <Input
-                              value={r.machine_serial}
-                              onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
-                              className="h-8 text-xs w-24 rounded-l-none font-mono"
-                              placeholder="000"
-                              disabled={isCompleted}
-                            />
-                          </div>
-                        </div>
-                        <div className="flex-1 flex items-center gap-2">
-                          <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
-                          {deliveryPersons.length > 0 ? (
-                            <Select
-                              value={r.delivery_person}
-                              onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
-                              disabled={isCompleted}
-                            >
-                              <SelectTrigger className="h-8 text-xs flex-1">
-                                <SelectValue placeholder="Selecione..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {deliveryPersons.map(d => (
-                                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <Input
-                              value={r.delivery_person}
-                              onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
-                              className="h-8 text-xs flex-1"
-                              placeholder={`Nome do ${personLabel.toLowerCase()}...`}
-                              disabled={isCompleted}
-                            />
+      {/* Conference detail - shown in 'all' or 'conference' mode */}
+      {showConference && (
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4 text-primary" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Conferência de Maquininhas
+                </span>
+                {readings.length > 0 && (
+                  <span className="text-xs text-muted-foreground">({readings.length})</span>
+                )}
+              </div>
+              {!isCompleted && (
+                <div className="flex items-center gap-2">
+                  {validationError && (
+                    <span className="flex items-center gap-1 text-xs text-destructive">
+                      <AlertCircle className="h-3 w-3" />
+                      {validationError}
+                    </span>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addReading}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Adicionar Maquininha
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {readings.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
+            ) : (
+              <div className="space-y-2">
+                {readings.map((r) => {
+                  const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
+                  const isExpanded = expandedIds.has(r.id) || !isFilled;
+                  const toggleExpand = () => {
+                    if (!isFilled) return;
+                    setExpandedIds(prev => {
+                      const next = new Set(prev);
+                      next.has(r.id) ? next.delete(r.id) : next.add(r.id);
+                      return next;
+                    });
+                  };
+
+                  return (
+                    <div key={r.id} className="border border-border rounded-lg bg-muted/30">
+                      <div
+                        className={`flex items-center gap-2 px-3 py-2 ${isFilled ? 'cursor-pointer hover:bg-muted/50' : ''}`}
+                        onClick={isFilled ? toggleExpand : undefined}
+                      >
+                        {isExpanded
+                          ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        }
+                        <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                        <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
+                        <span className="ml-auto text-xs font-bold font-mono text-foreground">
+                          {formatCurrency(blockTotal(r))}
+                          {blockOps(r) > 0 && (
+                            <span className="font-normal text-muted-foreground ml-1">({blockOps(r)} op.)</span>
                           )}
-                        </div>
+                        </span>
+                        {!isCompleted && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-destructive shrink-0"
+                            onClick={(e) => { e.stopPropagation(); removeReading(r.id); }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
-                        {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
-                          const amountVal = r[amountField];
-                          const countDisabled = isCompleted || amountVal === 0;
-                          const countMissing = amountVal > 0 && r[countField] < 1;
-                          return (
-                            <div key={amountField} className="space-y-1">
-                              <label className="text-[10px] text-muted-foreground">{label}</label>
-                              <div className="flex gap-1">
+
+                      {isExpanded && (
+                        <div className="px-3 pb-3 space-y-2 border-t border-border">
+                          <div className="flex items-center gap-2 pt-2">
+                            <div className="flex-1 flex items-center gap-2">
+                              <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
+                              <div className="flex items-center gap-0">
+                                <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
+                                  {SERIAL_PREFIX}
+                                </span>
                                 <Input
-                                  type="number"
-                                  step="0.01"
-                                  min="0"
-                                  value={amountVal || ''}
-                                  onChange={(e) => updateField(r.id, amountField, parseFloat(e.target.value) || 0)}
-                                  className="h-8 text-xs font-mono flex-1"
-                                  placeholder="0,00"
+                                  value={r.machine_serial}
+                                  onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
+                                  className="h-8 text-xs w-24 rounded-l-none font-mono"
+                                  placeholder="000"
                                   disabled={isCompleted}
-                                />
-                                <Input
-                                  type="number"
-                                  step="1"
-                                  min="0"
-                                  value={r[countField] || ''}
-                                  onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
-                                  className={`h-8 text-xs font-mono w-14 text-center ${countMissing ? 'border-destructive ring-1 ring-destructive' : ''}`}
-                                  placeholder="Qtd"
-                                  disabled={countDisabled}
-                                  title="Qtd operações"
                                 />
                               </div>
                             </div>
-                          );
-                        })}
-                      </div>
+                            <div className="flex-1 flex items-center gap-2">
+                              <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
+                              {deliveryPersons.length > 0 ? (
+                                <Select
+                                  value={r.delivery_person}
+                                  onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
+                                  disabled={isCompleted}
+                                >
+                                  <SelectTrigger className="h-8 text-xs flex-1">
+                                    <SelectValue placeholder="Selecione..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {deliveryPersons.map(d => (
+                                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input
+                                  value={r.delivery_person}
+                                  onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
+                                  className="h-8 text-xs flex-1"
+                                  placeholder={`Nome do ${personLabel.toLowerCase()}...`}
+                                  disabled={isCompleted}
+                                />
+                              )}
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2">
+                            {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
+                              const amountVal = r[amountField];
+                              const countDisabled = isCompleted || amountVal === 0;
+                              const countMissing = amountVal > 0 && r[countField] < 1;
+                              return (
+                                <div key={amountField} className="space-y-1">
+                                  <label className="text-[10px] text-muted-foreground">{label}</label>
+                                  <div className="flex gap-1">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      value={amountVal || ''}
+                                      onChange={(e) => updateField(r.id, amountField, parseFloat(e.target.value) || 0)}
+                                      className="h-8 text-xs font-mono flex-1"
+                                      placeholder="0,00"
+                                      disabled={isCompleted}
+                                    />
+                                    <Input
+                                      type="number"
+                                      step="1"
+                                      min="0"
+                                      value={r[countField] || ''}
+                                      onChange={(e) => updateField(r.id, countField, parseInt(e.target.value) || 0)}
+                                      className={`h-8 text-xs font-mono w-14 text-center ${countMissing ? 'border-destructive ring-1 ring-destructive' : ''}`}
+                                      placeholder="Qtd"
+                                      disabled={countDisabled}
+                                      title="Qtd operações"
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Totals - matching Saipos panel layout */}
-            <div className="border border-border rounded-lg p-3 bg-card">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Total Recebido via Maquininhas</span>
-                <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={() => setShowByDriver(true)}>
-                  <Eye className="h-3 w-3 mr-1" />
-                  Ver por {personLabel.toLowerCase()}
-                </Button>
+                  );
+                })}
               </div>
-              <div className="flex flex-wrap gap-3">
-                {[
-                  { label: '(COBRAR) Pix', value: totals.pix, icon: <span className="text-primary">📱</span> },
-                  { label: 'Crédito', value: totals.credit, icon: <span>💳</span> },
-                  { label: 'Débito', value: totals.debit, icon: <span>💳</span> },
-                  { label: 'Voucher', value: totals.voucher, icon: <span>🎟️</span> },
-                ].map(({ label, value, icon }) => (
-                  <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
-                    <span className="text-base">{icon}</span>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
-                      <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(value)}</p>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
-                  <span className="text-base">💰</span>
-                  <div>
-                    <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
-                    <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalGeral)}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* By Person Dialog */}
       <Dialog open={showByDriver} onOpenChange={setShowByDriver}>
@@ -430,6 +442,6 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
