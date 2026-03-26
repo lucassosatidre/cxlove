@@ -1064,10 +1064,10 @@ export default function Reconciliation() {
                   <tr className="border-b border-border">
                     <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
                     <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
-                    {visibleColumns.sale_date && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>}
-                    {visibleColumns.sale_time && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>}
-                    {visibleColumns.sales_channel && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>}
-                    {visibleColumns.partner_order_number && <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>}
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Canal</th>
+                    <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Nº Parceiro</th>
                     <SortableHeader field="payment_method" label="Pagamento" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
                     <th className="text-right p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Total</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Entregador</th>
