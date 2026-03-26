@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    // supabaseAdmin already created above with service role key
 
     // Fetch all pages from Saipos
     const allSales: any[] = [];
