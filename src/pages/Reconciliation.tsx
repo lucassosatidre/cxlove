@@ -948,16 +948,6 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        {/* 6. Conferência de Maquininhas */}
-        {id && (
-          <MachineReadingsSection
-            dailyClosingId={id}
-            deliveryPersons={deliveryPersons}
-            isCompleted={isCompleted}
-            mode="conference"
-          />
-        )}
-
         {/* Import History Toggle */}
         {importRecords.length > 0 && (
           <div className="border-b border-border bg-card">
