@@ -603,9 +603,8 @@ export default function Reconciliation() {
       if (!order.delivery_person || order.delivery_person.trim() === '') {
         errors.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
       }
-      if (needsBreakdown(order.payment_method) && !breakdownValidity[order.id]) {
-        errors.push(`Comanda #${order.order_number}: rateio de pagamento pendente.`);
-      }
+
+
     }
     if (errors.length === 0) {
       finalize();
