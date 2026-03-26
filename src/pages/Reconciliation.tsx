@@ -1116,7 +1116,16 @@ export default function Reconciliation() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
+                    <th className="w-12 p-3">
+                      <Checkbox
+                        checked={allFilteredConfirmed}
+                        indeterminate={!allFilteredConfirmed && someFilteredConfirmed}
+                        onCheckedChange={() => toggleConfirmAll()}
+                        disabled={isCompleted || filtered.length === 0}
+                        className="h-4 w-4"
+                        title={allFilteredConfirmed ? 'Desconfirmar todos' : 'Confirmar todos'}
+                      />
+                    </th>
                     <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>
