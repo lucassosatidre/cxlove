@@ -990,7 +990,7 @@ export default function Reconciliation() {
                           {new Date(imp.created_at).toLocaleString('pt-BR')}
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-[10px]">{imp.status}</Badge>
+                      
                     </div>
                   ))}
                   {selectedImports.size > 0 && (
