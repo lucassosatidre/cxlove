@@ -588,6 +588,7 @@ export default function Reconciliation() {
     }
 
     const errors: string[] = [];
+    const warnings: string[] = [];
 
     if (!cashSnapshotSavedAbertura) {
       errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
@@ -601,15 +602,20 @@ export default function Reconciliation() {
         errors.push(`Comanda #${order.order_number}: não está confirmada.`);
       }
       if (!order.delivery_person || order.delivery_person.trim() === '') {
-        errors.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
+        warnings.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
       }
-
-
     }
-    if (errors.length === 0) {
+
+    if (errors.length === 0 && warnings.length === 0) {
       finalize();
+    } else if (errors.length === 0 && warnings.length > 0) {
+      // Only warnings (missing delivery person) — allow finalization with confirmation
+      setConferenceErrors(warnings);
+      setConferenceOnlyWarnings(true);
+      setShowConferenceErrors(true);
     } else {
-      setConferenceErrors(errors);
+      setConferenceErrors([...errors, ...warnings]);
+      setConferenceOnlyWarnings(false);
       setShowConferenceErrors(true);
     }
   }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin]);
