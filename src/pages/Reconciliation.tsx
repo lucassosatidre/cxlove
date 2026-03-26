@@ -681,7 +681,7 @@ export default function Reconciliation() {
     const totals: Record<string, number> = {};
     OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
 
-    const confirmedOrders = orders.filter(o => o.is_confirmed);
+    const allOrders = orders;
     const breakdownsByOrder = new Map<string, typeof allBreakdowns>();
     allBreakdowns.forEach(b => {
       if (!breakdownsByOrder.has(b.imported_order_id)) breakdownsByOrder.set(b.imported_order_id, []);
@@ -700,7 +700,7 @@ export default function Reconciliation() {
       return null;
     };
 
-    for (const order of confirmedOrders) {
+    for (const order of allOrders) {
       const breakdowns = breakdownsByOrder.get(order.id);
       if (breakdowns && breakdowns.length > 0) {
         // Use breakdown amounts
