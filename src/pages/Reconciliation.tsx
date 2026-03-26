@@ -1735,18 +1735,10 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>
           #{order.order_number}
         </td>
-        {visibleColumns.sale_date && (
-          <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
-        )}
-        {visibleColumns.sale_time && (
-          <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
-        )}
-        {visibleColumns.sales_channel && (
-          <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
-        )}
-        {visibleColumns.partner_order_number && (
-          <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
-        )}
+        <td className={`p-3 text-sm ${cellClass}`}>{formatSaleDate(order.sale_date)}</td>
+        <td className={`p-3 text-sm ${cellClass}`}>{order.sale_time || '—'}</td>
+        <td className={`p-3 text-sm ${cellClass}`}>{order.sales_channel || '—'}</td>
+        <td className={`p-3 text-sm ${cellClass}`}>{order.partner_order_number || '—'}</td>
         <td className={`p-3 text-sm ${cellClass}`}>
           <div className="flex items-center gap-2 group flex-wrap">
             <Popover open={paymentPopoverOpen} onOpenChange={(open) => {
