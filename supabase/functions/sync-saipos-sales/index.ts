@@ -126,7 +126,16 @@ Deno.serve(async (req) => {
       allSales.push(...filtered);
 
       if (allSales.length > 0 && offset === 0) {
-        console.log("PRIMEIRO PEDIDO COMPLETO:", JSON.stringify(allSales[0], null, 2));
+        console.log("====== DIAGNÓSTICO DELIVERY_MAN ======");
+        const diagSample = allSales.slice(0, 5);
+        diagSample.forEach((s: any, idx: number) => {
+          console.log(`Pedido ${idx + 1} - sale_number: ${s.sale_number}`);
+          console.log(`  delivery_man:`, JSON.stringify(s.delivery_man));
+          console.log(`  delivery:`, JSON.stringify(s.delivery));
+          console.log(`  partner_sale:`, JSON.stringify(s.partner_sale));
+          console.log(`  partner_delivery:`, JSON.stringify(s.partner_delivery));
+        });
+        console.log("====== FIM DIAGNÓSTICO ======");
       }
 
       if (sales.length < limit) break;
