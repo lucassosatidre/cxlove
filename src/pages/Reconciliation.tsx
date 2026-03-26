@@ -102,6 +102,7 @@ export default function Reconciliation() {
   // Save conference state
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
   const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
+  const [conferenceOnlyWarnings, setConferenceOnlyWarnings] = useState(false);
 
   // Saipos sync state
   const [syncingSaipos, setSyncingSaipos] = useState(false);
