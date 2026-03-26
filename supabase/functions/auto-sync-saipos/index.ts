@@ -86,10 +86,9 @@ Deno.serve(async (req) => {
     const results: any[] = [];
 
     for (const closing of closings) {
-      console.log(`[auto-sync] Syncing closing ${closing.id} for ${closing.closing_date}`);
+      console.log(`[auto-sync] Syncing tele closing ${closing.id} for ${closing.closing_date}`);
 
       try {
-        // Call sync-saipos-sales directly via HTTP
         const syncRes = await fetch(
           `${supabaseUrl}/functions/v1/sync-saipos-sales`,
           {
@@ -106,11 +105,80 @@ Deno.serve(async (req) => {
         );
 
         const syncData = await syncRes.json();
-        console.log(`[auto-sync] Result for ${closing.id}:`, JSON.stringify(syncData));
-        results.push({ closing_id: closing.id, date: closing.closing_date, ...syncData });
+        console.log(`[auto-sync] Tele result for ${closing.id}:`, JSON.stringify(syncData));
+        results.push({ type: "tele", closing_id: closing.id, date: closing.closing_date, ...syncData });
       } catch (err) {
-        console.error(`[auto-sync] Error syncing ${closing.id}:`, err.message);
-        results.push({ closing_id: closing.id, error: err.message });
+        console.error(`[auto-sync] Error syncing tele ${closing.id}:`, err.message);
+        results.push({ type: "tele", closing_id: closing.id, error: err.message });
+      }
+    }
+
+    // === SALON SYNC ===
+    let { data: salonClosings, error: salonErr } = await supabase
+      .from("salon_closings")
+      .select("id, closing_date, status")
+      .eq("closing_date", today)
+      .neq("status", "completed");
+
+    if (salonErr) {
+      console.error("[auto-sync] Error fetching salon closings:", salonErr.message);
+    }
+
+    // If no salon closing exists for today, create one
+    if (!salonClosings || salonClosings.length === 0) {
+      console.log("[auto-sync] No salon closing for today, creating one...");
+      const { data: adminRole } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin")
+        .limit(1)
+        .single();
+
+      if (adminRole) {
+        const { data: newSalonClosing, error: createSalonErr } = await supabase
+          .from("salon_closings")
+          .insert({
+            closing_date: today,
+            user_id: adminRole.user_id,
+            status: "pending",
+          })
+          .select("id, closing_date, status")
+          .single();
+
+        if (createSalonErr) {
+          console.error("[auto-sync] Error creating salon closing:", createSalonErr.message);
+        } else {
+          salonClosings = [newSalonClosing];
+        }
+      }
+    }
+
+    if (salonClosings && salonClosings.length > 0) {
+      for (const salonClosing of salonClosings) {
+        console.log(`[auto-sync] Syncing salon closing ${salonClosing.id} for ${salonClosing.closing_date}`);
+        try {
+          const salonSyncRes = await fetch(
+            `${supabaseUrl}/functions/v1/sync-saipos-salon`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${serviceKey}`,
+              },
+              body: JSON.stringify({
+                closing_date: salonClosing.closing_date,
+                salon_closing_id: salonClosing.id,
+              }),
+            }
+          );
+
+          const salonSyncData = await salonSyncRes.json();
+          console.log(`[auto-sync] Salon result for ${salonClosing.id}:`, JSON.stringify(salonSyncData));
+          results.push({ type: "salon", closing_id: salonClosing.id, date: salonClosing.closing_date, ...salonSyncData });
+        } catch (err) {
+          console.error(`[auto-sync] Error syncing salon ${salonClosing.id}:`, err.message);
+          results.push({ type: "salon", closing_id: salonClosing.id, error: err.message });
+        }
       }
     }
 
