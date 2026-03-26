@@ -461,12 +461,8 @@ export default function Reconciliation() {
   const finalize = useCallback(async () => {
     if (!id) return;
 
-    const multiPaymentOrders = orders.filter(o => needsBreakdown(o.payment_method));
-    const invalidOrders = multiPaymentOrders.filter(o => !breakdownValidity[o.id]);
-    if (invalidOrders.length > 0) {
-      toast.error(`${invalidOrders.length} pedido(s) com rateio pendente. Preencha o detalhamento antes de finalizar.`);
-      return;
-    }
+
+
 
     setCompleting(true);
     const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
