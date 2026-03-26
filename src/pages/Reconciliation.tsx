@@ -733,6 +733,30 @@ export default function Reconciliation() {
 
   const isCompleted = closingData?.status === 'completed';
 
+  const allFilteredConfirmed = filtered.length > 0 && filtered.every(o => o.is_confirmed);
+  const someFilteredConfirmed = filtered.some(o => o.is_confirmed);
+
+  const toggleConfirmAll = async () => {
+    if (!user || isCompleted) return;
+    const newVal = !allFilteredConfirmed;
+    const ids = filtered.map(o => o.id);
+    setOrders(prev => prev.map(o => ids.includes(o.id) ? { ...o, is_confirmed: newVal } : o));
+    const { error } = await supabase
+      .from('imported_orders')
+      .update({
+        is_confirmed: newVal,
+        confirmed_at: newVal ? new Date().toISOString() : null,
+        confirmed_by: newVal ? user.id : null,
+      })
+      .in('id', ids);
+    if (error) {
+      toast.error('Erro ao atualizar pedidos.');
+      loadData();
+    } else {
+      toast.success(newVal ? `${ids.length} pedidos confirmados` : `${ids.length} pedidos desconfirmados`);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <div className="ml-56 flex flex-col flex-1">
@@ -1092,7 +1116,15 @@ export default function Reconciliation() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
-                    <SortableHeader field="is_confirmed" label="✓" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} className="w-12" />
+                    <th className="w-12 p-3">
+                      <Checkbox
+                        checked={allFilteredConfirmed ? true : (someFilteredConfirmed ? 'indeterminate' : false)}
+                        onCheckedChange={() => toggleConfirmAll()}
+                        disabled={isCompleted || filtered.length === 0}
+                        className="h-4 w-4"
+                        title={allFilteredConfirmed ? 'Desconfirmar todos' : 'Confirmar todos'}
+                      />
+                    </th>
                     <SortableHeader field="order_number" label="Pedido" currentField={sortField} currentDirection={sortDirection} onSort={toggleSort} />
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Data</th>
                     <th className="text-left p-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Hora</th>
