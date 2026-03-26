@@ -780,63 +780,6 @@ export default function DeliveryReconciliation() {
         </div>
       ) : (
       <>
-      {/* Payment Method Summary */}
-      {transactions.length > 0 && (() => {
-        const methodSummary = new Map<string, { total: number; count: number }>();
-        transactions.forEach(tx => {
-          const method = tx.payment_method?.toLowerCase() || 'outro';
-          let label = 'Outro';
-          if (method.includes('débit') || method.includes('debit')) label = 'Débito';
-          else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
-          else if (method.includes('pix')) label = 'Pix';
-          else if (method.includes('voucher')) label = 'Voucher';
-          const entry = methodSummary.get(label) || { total: 0, count: 0 };
-          entry.total += tx.gross_amount;
-          entry.count += 1;
-          methodSummary.set(label, entry);
-        });
-        const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
-        return (
-          <div className="border-b border-border bg-card">
-            <div className="px-6 py-3 flex items-center justify-between gap-4">
-              <div className="flex items-center flex-wrap gap-3">
-                {sorted.map(([label, { total, count }]) => (
-                  <div key={label} className="flex items-center gap-2 bg-secondary rounded-lg px-4 py-2.5 border border-border">
-                    <span className="text-sm font-medium text-foreground">{label}:</span>
-                    <span className="text-sm font-semibold text-primary font-mono-tabular">{formatCurrency(total)}</span>
-                    <span className="text-xs text-muted-foreground">({count} {count === 1 ? 'operação' : 'operações'})</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center gap-2 bg-accent rounded-lg px-4 py-2.5 border border-border shrink-0">
-                <span className="text-sm font-medium text-foreground">Total:</span>
-                <span className="text-sm font-semibold text-foreground font-mono-tabular">
-                  {formatCurrency(transactions.reduce((s, tx) => s + tx.gross_amount, 0))}
-                </span>
-                <span className="text-xs text-muted-foreground">({transactions.length} operações)</span>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Stats */}
-      <div className="border-b border-border bg-card">
-        <div className="px-6 py-4 grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <StatCard label="Comandas Offline" value={stats.total} icon={<CreditCard className="h-4 w-4" />} color="text-foreground" />
-          <StatCard label="Conciliadas" value={stats.matched} icon={<CheckCircle2 className="h-4 w-4" />} color="text-success" />
-          <StatCard label="Pendentes" value={stats.pending} icon={<AlertTriangle className="h-4 w-4" />} color="text-warning" />
-          <StatCard label="Tx Maquininha" value={stats.txTotal} icon={<Truck className="h-4 w-4" />} color="text-foreground" />
-          <div className="bg-card rounded-lg p-3 border border-border shadow-card">
-            <p className="section-title mb-1">Progresso</p>
-            <p className="text-2xl font-bold text-foreground font-mono-tabular">{percent}%</p>
-            <div className="mt-2 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Cash Snapshot - Abertura (read-only) */}
       {cashSnapshotDataAbertura && (
         <div className="border-b border-border bg-card">
