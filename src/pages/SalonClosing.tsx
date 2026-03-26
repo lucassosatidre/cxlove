@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -48,6 +48,7 @@ export default function SalonClosing() {
   const { isAdmin } = useUserRole();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<SalonOrder[]>([]);
+  const [expandedRateios, setExpandedRateios] = useState<Set<string>>(new Set());
   const [closing, setClosing] = useState<ClosingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -823,45 +824,92 @@ export default function SalonClosing() {
                   </TableCell>
                 </TableRow>
               ) : (
-                displayRows.map((row, idx) => {
-                  const getMesaComanda = () => {
-                    const ot = row.order_type.toLowerCase();
-                    if (ot === 'salão' || ot === 'salao') {
-                      return row.table_number || '—';
+                (() => {
+                  // Group displayRows by orderId
+                  const grouped: { orderId: string; rows: typeof displayRows }[] = [];
+                  displayRows.forEach(row => {
+                    if (row.rateioIndex === 0) {
+                      grouped.push({ orderId: row.orderId, rows: [row] });
+                    } else {
+                      const last = grouped[grouped.length - 1];
+                      if (last) last.rows.push(row);
                     }
-                    if (ot === 'retirada') {
-                      return row.table_number ? `Pedido #${row.table_number}` : '—';
+                  });
+
+                  return grouped.map(group => {
+                    const first = group.rows[0];
+                    const isRateio = first.isRateio;
+                    const isExpanded = expandedRateios.has(group.orderId);
+                    const getMesaComanda = () => {
+                      const ot = first.order_type.toLowerCase();
+                      if (ot === 'salão' || ot === 'salao') return first.table_number || '—';
+                      if (ot === 'retirada') return first.table_number ? `Pedido #${first.table_number}` : '—';
+                      if (ot === 'ficha') return first.ticket_number ? `Ficha ${first.ticket_number}` : '—';
+                      return '—';
+                    };
+
+                    if (!isRateio) {
+                      return (
+                        <TableRow key={group.orderId}>
+                          <TableCell>{getOrderTypeBadge(first.order_type)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{getMesaComanda()}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{first.sale_time || '—'}</TableCell>
+                          <TableCell className="text-xs"><span className="text-foreground">{first.payment_method}</span></TableCell>
+                          <TableCell className="text-right font-medium tabular-nums text-sm">R$ {first.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
+                        </TableRow>
+                      );
                     }
-                    if (ot === 'ficha') return row.ticket_number ? `Ficha ${row.ticket_number}` : '—';
-                    return '—';
-                  };
-                  return (
-                  <TableRow key={`${row.orderId}-${row.rateioIndex}`} className={row.isRateio && row.rateioIndex > 0 ? 'border-t-0' : ''}>
-                    <TableCell>
-                      {row.rateioIndex === 0 ? getOrderTypeBadge(row.order_type) : null}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {row.rateioIndex === 0 ? getMesaComanda() : null}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {row.rateioIndex === 0 ? (row.sale_time || '—') : null}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-foreground">{row.payment_method}</span>
-                        {row.isRateio && (
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-muted-foreground/30">
-                            {row.rateioIndex + 1}/{row.rateioTotal}
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums text-sm">
-                      R$ {row.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </TableCell>
-                  </TableRow>
-                  );
-                })
+
+                    // Rateio: collapsible
+                    const totalAmount = group.rows.reduce((sum, r) => sum + r.amount, 0);
+                    return (
+                      <React.Fragment key={group.orderId}>
+                        <TableRow
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => setExpandedRateios(prev => {
+                            const next = new Set(prev);
+                            next.has(group.orderId) ? next.delete(group.orderId) : next.add(group.orderId);
+                            return next;
+                          })}
+                        >
+                          <TableCell>{getOrderTypeBadge(first.order_type)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{getMesaComanda()}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{first.sale_time || '—'}</TableCell>
+                          <TableCell className="text-xs">
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
+                              <span className="text-foreground">{group.rows.map(r => r.payment_method).join(', ')}</span>
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-muted-foreground/30">
+                                {group.rows.length}x rateio
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums text-sm">
+                            R$ {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </TableCell>
+                        </TableRow>
+                        {isExpanded && group.rows.map((row, i) => (
+                          <TableRow key={`${group.orderId}-${i}`} className="border-t-0 bg-muted/30">
+                            <TableCell />
+                            <TableCell />
+                            <TableCell />
+                            <TableCell className="text-xs">
+                              <div className="flex items-center gap-2 pl-5">
+                                <span className="text-foreground">{row.payment_method}</span>
+                                <Badge variant="outline" className="text-[9px] px-1.5 py-0 text-muted-foreground border-muted-foreground/30">
+                                  {row.rateioIndex + 1}/{row.rateioTotal}
+                                </Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-medium tabular-nums text-sm text-muted-foreground">
+                              R$ {row.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </React.Fragment>
+                    );
+                  });
+                })()
               )}
             </TableBody>
           </Table>
