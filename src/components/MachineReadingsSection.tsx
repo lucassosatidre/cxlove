@@ -29,6 +29,8 @@ interface Props {
   isCompleted: boolean;
   /** Label for the person field: "Entregador" or "Garçom" */
   personLabel?: string;
+  /** Render mode: 'all' (default), 'totals' (only summary), 'conference' (only detail) */
+  mode?: 'all' | 'totals' | 'conference';
 }
 
 const SERIAL_PREFIX = 'S1F2-000';
