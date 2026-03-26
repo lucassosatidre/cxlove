@@ -79,10 +79,6 @@ export default function Reconciliation() {
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [allBreakdowns, setAllBreakdowns] = useState<Array<{ imported_order_id: string; payment_method_name: string; payment_type: string; amount: number }>>([]);
   const [visibleColumns, setVisibleColumns] = useState({
-    sale_date: false,
-    sale_time: false,
-    sales_channel: false,
-    partner_order_number: false,
   });
 
   // Cash calculator state - Abertura
