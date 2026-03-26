@@ -1016,6 +1016,7 @@ export default function Reconciliation() {
                   <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(filtered.reduce((sum, o) => sum + o.total_amount, 0))}</p>
                 </div>
               </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-[10px] text-muted-foreground leading-tight">Total</p>
