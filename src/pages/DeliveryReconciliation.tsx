@@ -1037,26 +1037,34 @@ export default function DeliveryReconciliation() {
           methodSummary.set(label, entry);
         });
         const sorted = Array.from(methodSummary.entries()).sort((a, b) => b[1].total - a[1].total);
+        const iconMap: Record<string, React.ReactNode> = {
+          'Pix': <QrCode className="h-4 w-4 text-primary" />,
+          'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
+          'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+          'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
+          'Outro': <CreditCard className="h-4 w-4 text-muted-foreground" />,
+        };
+        const totalReal = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
         return (
           <div className="border-b border-border bg-card">
             <div className="px-6 py-3">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Recebido via Maquininhas - Real</p>
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center flex-wrap gap-3">
-                  {sorted.map(([label, { total, count }]) => (
-                    <div key={label} className="flex items-center gap-2 bg-secondary rounded-lg px-4 py-2.5 border border-border">
-                      <span className="text-sm font-medium text-foreground">{label}:</span>
-                      <span className="text-sm font-semibold text-primary font-mono-tabular">{formatCurrency(total)}</span>
-                      <span className="text-xs text-muted-foreground">({count} {count === 1 ? 'operação' : 'operações'})</span>
+              <div className="flex flex-wrap gap-3">
+                {sorted.map(([label, { total, count }]) => (
+                  <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                    {iconMap[label]}
+                    <div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">{label} ({count} {count === 1 ? 'op' : 'ops'})</p>
+                      <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
                     </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2 bg-accent rounded-lg px-4 py-2.5 border border-border shrink-0">
-                  <span className="text-sm font-medium text-foreground">Total:</span>
-                  <span className="text-sm font-semibold text-foreground font-mono-tabular">
-                    {formatCurrency(transactions.reduce((s, tx) => s + tx.gross_amount, 0))}
-                  </span>
-                  <span className="text-xs text-muted-foreground">({transactions.length} operações)</span>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+                  <Wallet className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral ({transactions.length} ops)</p>
+                    <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalReal)}</p>
+                  </div>
                 </div>
               </div>
             </div>
