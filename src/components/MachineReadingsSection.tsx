@@ -442,6 +442,6 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
