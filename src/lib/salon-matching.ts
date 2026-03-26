@@ -243,7 +243,7 @@ export function matchSalonTransactionsToOrders(
 
       // For mixed orders with expected 1 card line, allow partial match
       // For non-mixed, match against target amounts
-      const targets = getTargetAmounts(order, cls);
+      const targets = getTargetAmounts(order, cls, _payments);
       const expectedLines = cls.expectedCardLines;
 
       if (expectedLines === 1 || expectedLines === 0) {
@@ -341,7 +341,7 @@ export function matchSalonTransactionsToOrders(
     if (matchedOrderIds.has(order.id)) continue;
     const cls = classifications.get(order.id)!;
     const expectedLines = cls.expectedCardLines;
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
     if (remainingTxs.length < expectedLines) continue;
@@ -419,7 +419,7 @@ export function matchSalonTransactionsToOrders(
   for (const order of machineOrders) {
     if (matchedOrderIds.has(order.id)) continue;
     const cls = classifications.get(order.id)!;
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     const remainingTxs = transactions.filter(tx => !matchedTxIds.has(tx.id));
     if (remainingTxs.length < 2) continue;
@@ -500,7 +500,7 @@ export function matchSalonTransactionsToOrders(
     const cls = classifications.get(order.id)!;
     if (cls.expectedCardLines > 1) continue; // groups should have been handled above
 
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     const candidates = transactions
       .filter(tx => !matchedTxIds.has(tx.id))
@@ -540,7 +540,7 @@ export function matchSalonTransactionsToOrders(
     const cls = classifications.get(order.id)!;
     if (cls.expectedCardLines > 1) continue;
 
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
 
     for (const target of targets) {
       const exactRemaining = transactions.filter(tx => {
@@ -574,13 +574,13 @@ export function matchSalonTransactionsToOrders(
       if (matchedOrderIds.has(order.id)) return false;
       const cls = classifications.get(order.id)!;
       if (cls.expectedCardLines > 1) return false;
-      const targets = getTargetAmounts(order, cls);
+      const targets = getTargetAmounts(order, cls, _payments);
       return targets.some(t => Math.abs(tx.gross_amount - t) < 0.01);
     });
 
     if (candidateOrders.length === 1) {
       const order = candidateOrders[0];
-      const targets = getTargetAmounts(order, classifications.get(order.id)!);
+      const targets = getTargetAmounts(order, classifications.get(order.id)!, _payments);
       const isDiscount = !targets.some(t => Math.abs(t - order.total_amount) < 0.01 && Math.abs(tx.gross_amount - t) < 0.01);
 
       results.push({
@@ -714,7 +714,7 @@ export function matchSalonTransactionsToOrders(
       continue;
     }
     const cls = classifications.get(order.id)!;
-    const targets = getTargetAmounts(order, cls);
+    const targets = getTargetAmounts(order, cls, _payments);
     const remaining = transactions.filter(tx => !matchedTxIds.has(tx.id));
 
     if (cls.isMixed) {
