@@ -429,8 +429,26 @@ export default function SalonClosing() {
     toast.success(`${importIds.length} importação(ões) excluída(s)`);
     loadData();
   };
+  const handleSyncSaipos = async () => {
+    if (!closing || !id) return;
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-saipos-salon', {
+        body: { closing_date: closing.closing_date, salon_closing_id: id },
+      });
+      if (error) throw error;
+      console.log("SALON SYNC RESPONSE:", JSON.stringify(data));
+      toast.success(`Sincronizado: ${data.new_orders} novos, ${data.duplicates} existentes`);
+      setLastSync(new Date().toISOString());
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sincronizar');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
-  return (
+
     <AppLayout
       title={`Salão — ${formatDate(closing.closing_date)}`}
       subtitle={`${orders.length} pedidos`}
