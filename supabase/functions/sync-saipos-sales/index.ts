@@ -230,8 +230,17 @@ Deno.serve(async (req) => {
             }
           } else {
             salesChannel = "Telefone";
-          }
-            partner_order_number: partnerSale.cod_sale2 || null,
+          return {
+            import_id: importRecord.id,
+            daily_closing_id,
+            order_number: String(sale.sale_number),
+            payment_method: paymentMethodStr,
+            total_amount: sale.total_amount || 0,
+            delivery_person: sale.delivery_man?.delivery_man_name || null,
+            sale_date: sale.shift_date || closing_date,
+            sale_time: saleTime,
+            sales_channel: salesChannel,
+            partner_order_number: partnerSale?.cod_sale2 || null,
             is_confirmed: allOnline,
             confirmed_at: allOnline ? new Date().toISOString() : null,
             confirmed_by: allOnline ? userId : null,
