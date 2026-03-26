@@ -117,6 +117,10 @@ export default function Reconciliation() {
       if (error) throw new Error(error.message || 'Erro ao sincronizar');
       if (data?.error) throw new Error(data.error);
       toast.success(`✅ ${data.new_orders} pedidos importados · ⚠️ ${data.duplicates} duplicados ignorados`);
+      if (data.debug_sample) {
+        console.log('DEBUG SAMPLE:', JSON.stringify(data.debug_sample, null, 2));
+        alert('Debug Sample (3 primeiros pedidos):\n\n' + JSON.stringify(data.debug_sample, null, 2));
+      }
       loadData();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao sincronizar com Saipos');
