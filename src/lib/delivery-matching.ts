@@ -455,8 +455,8 @@ export function matchTransactionsToOrders(
   // ═══════════════════════════════════════════════════════════
   // Phase 6: Strict approximate matching
   // ═══════════════════════════════════════════════════════════
-  const APPROX_STRONG = 0.20;
-  const APPROX_MAX = 0.50;
+  const APPROX_STRONG = 0.50;
+  const APPROX_MAX = 1.00;
 
   for (const tx of transactions) {
     if (matchedTxIds.has(tx.id)) continue;
