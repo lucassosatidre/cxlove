@@ -1350,12 +1350,17 @@ export default function Reconciliation() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertCircle className="h-5 w-5" />
-              Pendências na Conferência
+              {conferenceOnlyWarnings ? 'Atenção — Comandas sem entregador' : 'Pendências na Conferência'}
             </DialogTitle>
           </DialogHeader>
+          {conferenceOnlyWarnings && (
+            <p className="text-sm text-muted-foreground">
+              Existem comandas sem entregador identificado. Você pode finalizar mesmo assim ou voltar para corrigir.
+            </p>
+          )}
           <div className="space-y-1 max-h-[50vh] overflow-y-auto">
             {conferenceErrors.map((err, i) => (
-              <div key={i} className="flex items-start gap-2 text-sm bg-destructive/10 text-destructive rounded-md px-3 py-2">
+              <div key={i} className={`flex items-start gap-2 text-sm rounded-md px-3 py-2 ${conferenceOnlyWarnings ? 'bg-warning/10 text-warning' : 'bg-destructive/10 text-destructive'}`}>
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>{err}</span>
               </div>
@@ -1363,9 +1368,14 @@ export default function Reconciliation() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowConferenceErrors(false)}>
-              Entendi
+              {conferenceOnlyWarnings ? 'Voltar e corrigir' : 'Entendi'}
             </Button>
-            {isAdmin && (
+            {conferenceOnlyWarnings && (
+              <Button variant="default" onClick={() => { setShowConferenceErrors(false); finalize(); }}>
+                Finalizar mesmo assim
+              </Button>
+            )}
+            {isAdmin && !conferenceOnlyWarnings && (
               <Button variant="destructive" onClick={() => { setShowConferenceErrors(false); handleAdminForceFinalize(); }}>
                 <ShieldCheck className="h-4 w-4 mr-1" />
                 Forçar Fechamento
