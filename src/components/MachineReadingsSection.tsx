@@ -214,13 +214,13 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
             </div>
             <div className="flex flex-wrap gap-3">
               {[
-                { label: '(COBRAR) Pix', value: totals.pix, icon: <span className="text-primary">📱</span> },
-                { label: 'Crédito', value: totals.credit, icon: <span>💳</span> },
-                { label: 'Débito', value: totals.debit, icon: <span>💳</span> },
-                { label: 'Voucher', value: totals.voucher, icon: <span>🎟️</span> },
+                { label: '(COBRAR) Pix', value: totals.pix, icon: <QrCode className="h-4 w-4 text-primary" /> },
+                { label: 'Crédito', value: totals.credit, icon: <CreditCard className="h-4 w-4 text-accent-foreground" /> },
+                { label: 'Débito', value: totals.debit, icon: <CreditCard className="h-4 w-4 text-muted-foreground" /> },
+                { label: 'Voucher', value: totals.voucher, icon: <CreditCard className="h-4 w-4 text-warning" /> },
               ].map(({ label, value, icon }) => (
                 <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
-                  <span className="text-base">{icon}</span>
+                  {icon}
                   <div>
                     <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
                     <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(value)}</p>
@@ -228,7 +228,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                 </div>
               ))}
               <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
-                <span className="text-base">💰</span>
+                <Wallet className="h-4 w-4 text-primary" />
                 <div>
                   <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral</p>
                   <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalGeral)}</p>
