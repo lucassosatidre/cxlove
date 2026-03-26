@@ -107,6 +107,27 @@ export default function Reconciliation() {
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
   const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
 
+  // Saipos sync state
+  const [syncingSaipos, setSyncingSaipos] = useState(false);
+
+  const handleSyncSaipos = useCallback(async () => {
+    if (!id || !closingData || !user) return;
+    setSyncingSaipos(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-saipos-sales', {
+        body: { closing_date: closingData.closing_date, daily_closing_id: id },
+      });
+      if (error) throw new Error(error.message || 'Erro ao sincronizar');
+      if (data?.error) throw new Error(data.error);
+      toast.success(`✅ ${data.new_orders} pedidos importados · ⚠️ ${data.duplicates} duplicados ignorados`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sincronizar com Saipos');
+    } finally {
+      setSyncingSaipos(false);
+    }
+  }, [id, closingData, user]);
+
 
   const toggleColumn = (col: keyof typeof visibleColumns) => {
     setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
