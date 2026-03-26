@@ -219,7 +219,49 @@ export default function SalonReconciliation() {
     });
   }, [eligibleOrders, search, filterMatch, matchedOrderIds, orderClassifications]);
 
-  const handleImport = useCallback(async (file: File) => {
+  const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
+
+  const offlineMethodTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    OFFLINE_CATEGORIES.forEach(c => totals[c] = 0);
+
+    const matchCategory = (methodName: string): string | null => {
+      const lower = methodName.toLowerCase().trim();
+      if (lower.includes('online') || lower.includes('ifood') || lower.includes('anotaai')) return null;
+      if (lower === 'dinheiro') return null;
+      if (lower.includes('(cobrar) pix') || lower === 'pix') return '(COBRAR) Pix';
+      if (lower.includes('crédit') || lower.includes('crédito') || lower === 'credito') return 'Crédito';
+      if (lower.includes('débit') || lower.includes('débito') || lower === 'debito') return 'Débito';
+      if (lower.includes('voucher') && !lower.includes('voucher parceiro')) return 'Voucher';
+      return null;
+    };
+
+    const paymentsByOrder = new Map<string, SalonPayment[]>();
+    payments.forEach(p => {
+      if (!paymentsByOrder.has(p.salon_order_id)) paymentsByOrder.set(p.salon_order_id, []);
+      paymentsByOrder.get(p.salon_order_id)!.push(p);
+    });
+
+    for (const order of orders) {
+      const orderPayments = paymentsByOrder.get(order.id);
+      if (orderPayments && orderPayments.length > 0) {
+        for (const p of orderPayments) {
+          const cat = matchCategory(p.payment_method);
+          if (cat) totals[cat] += p.amount;
+        }
+      } else {
+        const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+        if (methods.length === 1) {
+          const cat = matchCategory(methods[0]);
+          if (cat) totals[cat] += order.total_amount;
+        }
+      }
+    }
+
+    return totals;
+  }, [orders, payments]);
+
+
     if (!user || !id) return;
     setImporting(true);
     try {
