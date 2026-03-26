@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowLeft, Search, CheckCircle2, Clock, AlertTriangle, PartyPopper, CheckCheck, XCircle, ChevronDown, ChevronRight, ChevronUp, SplitSquareHorizontal, Wifi, CreditCard, ArrowUpDown, Plus, FileSpreadsheet, Eye, EyeOff, Settings2, Truck, Pencil, Banknote, QrCode, CreditCard as CreditCardIcon, Calculator, Save, AlertCircle, X, RotateCcw, ShieldCheck, Trash2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import PaymentBreakdown from '@/components/PaymentBreakdown';
 import AppSidebar from '@/components/AppSidebar';
@@ -106,6 +106,27 @@ export default function Reconciliation() {
   // Save conference state
   const [showConferenceErrors, setShowConferenceErrors] = useState(false);
   const [conferenceErrors, setConferenceErrors] = useState<string[]>([]);
+
+  // Saipos sync state
+  const [syncingSaipos, setSyncingSaipos] = useState(false);
+
+  const handleSyncSaipos = useCallback(async () => {
+    if (!id || !closingData || !user) return;
+    setSyncingSaipos(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-saipos-sales', {
+        body: { closing_date: closingData.closing_date, daily_closing_id: id },
+      });
+      if (error) throw new Error(error.message || 'Erro ao sincronizar');
+      if (data?.error) throw new Error(data.error);
+      toast.success(`✅ ${data.new_orders} pedidos importados · ⚠️ ${data.duplicates} duplicados ignorados`);
+      loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sincronizar com Saipos');
+    } finally {
+      setSyncingSaipos(false);
+    }
+  }, [id, closingData, user]);
 
 
   const toggleColumn = (col: keyof typeof visibleColumns) => {
@@ -729,6 +750,10 @@ export default function Reconciliation() {
               <Button variant="outline" size="sm" onClick={() => navigate(isCaixaTele ? '/tele/import' : '/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleSyncSaipos} disabled={isCompleted || syncingSaipos}>
+                <RefreshCw className={`h-4 w-4 mr-1 ${syncingSaipos ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">{syncingSaipos ? 'Sincronizando...' : 'Sincronizar via Saipos'}</span>
               </Button>
               <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !isAdmin} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
