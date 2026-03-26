@@ -338,17 +338,18 @@ export default function SalonClosing() {
     return { offlineMethodTotals: totals, onlineCategories: onlineSorted };
   }, [displayRows]);
 
+  const isRetirada = (t: string) => /^\d+$/.test(t.trim()) || t.toLowerCase() === 'retirada';
+
   const getOrderTypeBadge = (orderType: string) => {
-    const isNumber = /^\d+$/.test(orderType.trim());
     if (orderType.toLowerCase() === 'ficha') return <Badge className="bg-foreground text-background border-transparent text-xs">Ficha</Badge>;
-    if (isNumber) return <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>;
+    if (isRetirada(orderType)) return <Badge className="bg-foreground text-warning border-transparent text-xs">Retirada</Badge>;
     if (orderType.toLowerCase() === 'salão' || orderType.toLowerCase() === 'salao') return <Badge className="bg-warning text-foreground border-transparent text-xs">Salão</Badge>;
     return <Badge variant="outline" className="text-xs">{orderType}</Badge>;
   };
 
   const getFilterLabel = (t: string) => {
     if (t.toLowerCase() === 'ficha') return 'Ficha';
-    if (/^\d+$/.test(t.trim())) return 'Retirada';
+    if (isRetirada(t)) return 'Retirada';
     if (t.toLowerCase() === 'salão' || t.toLowerCase() === 'salao') return 'Salão';
     return t;
   };
@@ -744,7 +745,7 @@ export default function SalonClosing() {
       {/* Resumo de Pedidos */}
       {(() => {
         const countSalao = filtered.filter(o => o.order_type.toLowerCase() === 'salão' || o.order_type.toLowerCase() === 'salao').length;
-        const countRetirada = filtered.filter(o => /^\d+$/.test(o.order_type.trim())).length;
+        const countRetirada = filtered.filter(o => isRetirada(o.order_type)).length;
         const countFicha = filtered.filter(o => o.order_type.toLowerCase() === 'ficha').length;
         return (
           <div className="bg-card rounded-xl shadow-card border border-border p-3 mb-4">

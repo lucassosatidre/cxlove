@@ -451,9 +451,9 @@ export default function SalonReconciliation() {
   };
 
   const getOrderLabel = (orderType: string) => {
-    const isNumber = /^\d+$/.test(orderType.trim());
+    const isRetirada = /^\d+$/.test(orderType.trim()) || orderType.toLowerCase() === 'retirada';
     if (orderType.toLowerCase() === 'ficha') return { label: 'Ficha', cls: 'bg-foreground text-background' };
-    if (isNumber) return { label: 'Retirada', cls: 'bg-foreground text-warning' };
+    if (isRetirada) return { label: 'Retirada', cls: 'bg-foreground text-warning' };
     if (orderType.toLowerCase() === 'salão' || orderType.toLowerCase() === 'salao') return { label: 'Salão', cls: 'bg-warning text-foreground' };
     return { label: orderType, cls: '' };
   };
