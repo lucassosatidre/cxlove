@@ -150,12 +150,48 @@ Deno.serve(async (req) => {
     // Check existing orders for dedup
     const { data: existingOrders } = await supabaseAdmin
       .from("imported_orders")
-      .select("order_number")
+      .select("id, order_number, delivery_person")
       .eq("daily_closing_id", daily_closing_id);
 
     const existingSet = new Set(
       (existingOrders || []).map((o: any) => String(o.order_number))
     );
+
+    // Build map for resync of delivery_person on existing orders with null
+    const existingNullDelivery = new Map<string, string>();
+    for (const o of (existingOrders || [])) {
+      if (!o.delivery_person) {
+        existingNullDelivery.set(String(o.order_number), o.id);
+      }
+    }
+
+    // Resync delivery_person for existing orders
+    if (existingNullDelivery.size > 0) {
+      let updatedCount = 0;
+      for (const sale of allSales) {
+        const orderNum = String(sale.sale_number);
+        const orderId = existingNullDelivery.get(orderNum);
+        if (!orderId) continue;
+
+        let dp: string | null = null;
+        if (sale.delivery_man?.delivery_man_name) {
+          dp = sale.delivery_man.delivery_man_name;
+        } else if (sale.partner_delivery?.partner_order_id) {
+          dp = 'Entrega Parceiro';
+        }
+
+        if (dp) {
+          await supabaseAdmin
+            .from("imported_orders")
+            .update({ delivery_person: dp })
+            .eq("id", orderId);
+          updatedCount++;
+        }
+      }
+      if (updatedCount > 0) {
+        console.log(`Resync: updated delivery_person for ${updatedCount} existing orders`);
+      }
+    }
 
     // Create import record
     const newSales = allSales.filter(
