@@ -896,13 +896,12 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        {/* 4. Total Recebido via Maquininhas */}
+        {/* 4. Total Recebido via Maquininhas + Conferência */}
         {id && (
           <MachineReadingsSection
             dailyClosingId={id}
             deliveryPersons={deliveryPersons}
             isCompleted={isCompleted}
-            mode="totals"
           />
         )}
 
@@ -948,16 +947,6 @@ export default function Reconciliation() {
             )}
           </div>
         </div>
-
-        {/* 6. Conferência de Maquininhas */}
-        {id && (
-          <MachineReadingsSection
-            dailyClosingId={id}
-            deliveryPersons={deliveryPersons}
-            isCompleted={isCompleted}
-            mode="conference"
-          />
-        )}
 
         {/* Import History Toggle */}
         {importRecords.length > 0 && (
