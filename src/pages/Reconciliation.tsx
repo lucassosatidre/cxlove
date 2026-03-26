@@ -1118,8 +1118,7 @@ export default function Reconciliation() {
                   <tr className="border-b border-border">
                     <th className="w-12 p-3">
                       <Checkbox
-                        checked={allFilteredConfirmed}
-                        indeterminate={!allFilteredConfirmed && someFilteredConfirmed}
+                        checked={allFilteredConfirmed ? true : (someFilteredConfirmed ? 'indeterminate' : false)}
                         onCheckedChange={() => toggleConfirmAll()}
                         disabled={isCompleted || filtered.length === 0}
                         className="h-4 w-4"
