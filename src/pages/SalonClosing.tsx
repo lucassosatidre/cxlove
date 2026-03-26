@@ -830,7 +830,7 @@ export default function SalonClosing() {
                       return row.table_number || '—';
                     }
                     if (ot === 'retirada') {
-                      return row.table_number ? `Pedido #${row.table_number}` : (row.sale_number ? `Pedido #${row.sale_number}` : '—');
+                      return row.table_number ? `Pedido #${row.table_number}` : '—';
                     }
                     if (ot === 'ficha') return row.ticket_number ? `Ficha ${row.ticket_number}` : '—';
                     return '—';
