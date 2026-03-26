@@ -480,25 +480,6 @@ export default function SalonClosing() {
         </div>
       }
     >
-      {/* Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Total Vendas</p>
-          <p className="text-2xl font-bold text-foreground">
-            R$ {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Pedidos</p>
-          <p className="text-2xl font-bold text-foreground">{filtered.length}</p>
-        </div>
-        <div className="bg-card rounded-xl shadow-card p-4 border border-border">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">Status</p>
-          <Badge className={isCompleted ? 'bg-success text-success-foreground' : 'bg-warning/15 text-warning border-warning/30'}>
-            {isCompleted ? 'Concluído' : 'Pendente'}
-          </Badge>
-        </div>
-      </div>
 
       {/* Cash Snapshot - Abertura */}
       <div className="bg-card rounded-xl shadow-card border border-border p-4 mb-4">
