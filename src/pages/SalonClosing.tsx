@@ -504,6 +504,15 @@ export default function SalonClosing() {
               )}
             </div>
           )}
+          <Button variant="outline" onClick={handleSyncSaipos} disabled={syncing || isCompleted}>
+            <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'Sincronizando...' : 'Sincronizar via Saipos'}
+          </Button>
+          {lastSync && (
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              Última sync: {new Date(lastSync).toLocaleString('pt-BR')}
+            </span>
+          )}
           <Button variant="outline" onClick={() => navigate('/salon')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
