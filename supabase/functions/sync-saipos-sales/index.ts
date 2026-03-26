@@ -356,7 +356,74 @@ Deno.serve(async (req) => {
       }
     }
 
+    // === SEGUNDA CHAMADA: updated_at para capturar entregadores atualizados ===
+    const updatedSales: any[] = [];
+    let updOffset = 0;
+
+    while (true) {
+      const updParams = new URLSearchParams({
+        p_date_column_filter: "updated_at",
+        p_filter_date_start: `${closing_date}T00:00:00`,
+        p_filter_date_end: `${closing_date}T23:59:59`,
+        p_limit: String(limit),
+        p_offset: String(updOffset),
+      });
+
+      const updRes = await fetch(
+        `https://data.saipos.io/v1/search_sales?${updParams.toString()}`,
+        { headers: { Authorization: `Bearer ${saiposToken}` } }
+      );
+
+      if (!updRes.ok) {
+        console.error("Saipos updated_at call error:", updRes.status);
+        break;
+      }
+
+      const updData = await updRes.json();
+      const updSalesPage = Array.isArray(updData) ? updData : updData.data || updData.results || [];
+      const updFiltered = updSalesPage.filter(
+        (s: any) => s.id_sale_type === 1 && s.canceled !== "Y"
+      );
+      updatedSales.push(...updFiltered);
+
+      if (updSalesPage.length < limit) break;
+      updOffset += limit;
+    }
+
+    let deliveryUpdated = 0;
+    for (const sale of updatedSales) {
+      const dpName = sale.delivery_man?.delivery_man_name;
+      if (!dpName) continue;
+
+      const orderNum = String(sale.sale_number);
+      const { data: existingOrder } = await supabaseAdmin
+        .from("imported_orders")
+        .select("id, delivery_person")
+        .eq("order_number", orderNum)
+        .eq("daily_closing_id", daily_closing_id)
+        .maybeSingle();
+
+      if (existingOrder && existingOrder.delivery_person === null) {
+        await supabaseAdmin
+          .from("imported_orders")
+          .update({ delivery_person: dpName })
+          .eq("id", existingOrder.id);
+        deliveryUpdated++;
+      }
+    }
+
+    if (deliveryUpdated > 0) {
+      console.log(`updated_at pass: updated delivery_person for ${deliveryUpdated} orders`);
+    }
+
     const debugDelivery = allSales.slice(0, 5).map((s: any) => ({
+      sale_number: s.sale_number,
+      delivery_man: s.delivery_man || null,
+      delivery: s.delivery || null,
+      partner_delivery: s.partner_delivery || null,
+    }));
+
+    const debugDeliveryUpdated = updatedSales.slice(0, 5).map((s: any) => ({
       sale_number: s.sale_number,
       delivery_man: s.delivery_man || null,
       delivery: s.delivery || null,
@@ -368,7 +435,9 @@ Deno.serve(async (req) => {
         total: allSales.length,
         new_orders: newSales.length,
         duplicates: duplicateCount,
+        delivery_updated: deliveryUpdated,
         debug_delivery: debugDelivery,
+        debug_delivery_updated_at: debugDeliveryUpdated,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
