@@ -37,8 +37,12 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const saiposToken = Deno.env.get("SAIPOS_API_TOKEN");
-    console.log("Token length:", saiposToken?.length);
+    let saiposToken = Deno.env.get("SAIPOS_API_TOKEN");
+    // Strip "Bearer " prefix if user accidentally included it
+    if (saiposToken?.startsWith("Bearer ")) {
+      saiposToken = saiposToken.slice(7);
+    }
+    console.log("Saipos token length:", saiposToken?.length, "starts with:", saiposToken?.substring(0, 10));
 
     if (!saiposToken) {
       return new Response(
