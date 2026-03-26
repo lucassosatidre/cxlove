@@ -116,6 +116,7 @@ export default function Reconciliation() {
       });
       if (error) throw new Error(error.message || 'Erro ao sincronizar');
       if (data?.error) throw new Error(data.error);
+      console.log("SYNC RESPONSE:", JSON.stringify(data));
       toast.success(`✅ ${data.new_orders} pedidos importados · ⚠️ ${data.duplicates} duplicados ignorados`);
       loadData();
     } catch (err: any) {

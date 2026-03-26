@@ -356,11 +356,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    const debugDelivery = allSales.slice(0, 5).map((s: any) => ({
+      sale_number: s.sale_number,
+      delivery_man: s.delivery_man || null,
+      delivery: s.delivery || null,
+      partner_delivery: s.partner_delivery || null,
+    }));
+
     return new Response(
       JSON.stringify({
         total: allSales.length,
         new_orders: newSales.length,
         duplicates: duplicateCount,
+        debug_delivery: debugDelivery,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
