@@ -649,7 +649,7 @@ export default function DeliveryReconciliation() {
     );
   }
 
-  const percent = stats.total > 0 ? Math.round((stats.matched / stats.total) * 100) : 0;
+  
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
