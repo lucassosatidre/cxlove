@@ -1383,14 +1383,3 @@ export default function DeliveryReconciliation() {
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
-  return (
-    <div className="bg-card rounded-lg p-3 border border-border shadow-card">
-      <div className="flex items-center justify-between mb-1">
-        <p className="section-title">{label}</p>
-        <span className={`${color} opacity-60`}>{icon}</span>
-      </div>
-      <p className={`text-2xl font-bold font-mono-tabular ${color}`}>{value}</p>
-    </div>
-  );
-}
