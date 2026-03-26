@@ -2,12 +2,19 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useUserRole } from '@/hooks/useUserRole';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import AppLayout from '@/components/AppLayout';
-import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X } from 'lucide-react';
+import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X, DoorOpen, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { cn } from '@/lib/utils';
 
 interface DailyClosing {
   id: string;
@@ -30,6 +37,7 @@ interface ImportRow {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
   const routePrefix = '';
   const reconciliationPrefix = '/reconciliation';
   const [closings, setClosings] = useState<DailyClosing[]>([]);
@@ -38,6 +46,16 @@ export default function Dashboard() {
   const [expandedClosingId, setExpandedClosingId] = useState<string | null>(null);
   const [selectedImports, setSelectedImports] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+
+  // Abrir Caixa state
+  const [abrirCaixaOpen, setAbrirCaixaOpen] = useState(false);
+  const [abrirCaixaDate, setAbrirCaixaDate] = useState<Date | undefined>(new Date());
+  const [abrirCaixaLoading, setAbrirCaixaLoading] = useState(false);
+
+  // Delete closing dialog state
+  const [deleteClosingDialog, setDeleteClosingDialog] = useState<{ id: string; date: string } | null>(null);
+  const [deleteConfirmDate, setDeleteConfirmDate] = useState('');
+  const [deleteClosingLoading, setDeleteClosingLoading] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -78,8 +96,6 @@ export default function Dashboard() {
     setDeleting(true);
     try {
       const importIds = Array.from(selectedImports);
-
-      // Get order IDs for these imports to delete related data first
       const { data: orders } = await supabase
         .from('imported_orders')
         .select('id')
@@ -87,21 +103,14 @@ export default function Dashboard() {
 
       if (orders && orders.length > 0) {
         const orderIds = orders.map(o => o.id);
-        // Clear FK references from card transactions
         await supabase.from('card_transactions')
           .update({ matched_order_id: null, match_type: null, match_confidence: null })
           .in('matched_order_id', orderIds);
-        // Delete payment breakdowns
         await supabase.from('order_payment_breakdowns').delete().in('imported_order_id', orderIds);
-        // Delete orders
         await supabase.from('imported_orders').delete().in('import_id', importIds);
       }
 
-      // Delete imports
       await supabase.from('imports').delete().in('id', importIds);
-
-      // Note: closings are NOT deleted when imports are removed
-      // Cash snapshots and machine readings must be preserved independently
 
       toast.success(`${importIds.length} importação(ões) removida(s) com sucesso.`);
       setSelectedImports(new Set());
@@ -118,9 +127,7 @@ export default function Dashboard() {
     const confirmed = window.confirm('Tem certeza que deseja apagar este fechamento vazio?');
     if (!confirmed) return;
     try {
-      // Delete card transactions linked to this closing (but NEVER cash_snapshots or machine_readings)
       await supabase.from('card_transactions').delete().eq('daily_closing_id', closingId);
-      // Delete the closing itself
       const { error } = await supabase.from('daily_closings').delete().eq('id', closingId);
       if (error) throw error;
       toast.success('Fechamento vazio removido.');
@@ -131,19 +138,139 @@ export default function Dashboard() {
     }
   };
 
+  // Abrir Caixa handler
+  const handleAbrirCaixa = async () => {
+    if (!abrirCaixaDate || !user) return;
+    setAbrirCaixaLoading(true);
+    try {
+      const dateStr = format(abrirCaixaDate, 'yyyy-MM-dd');
+      // Check if closing already exists
+      const { data: existing } = await supabase
+        .from('daily_closings')
+        .select('id')
+        .eq('closing_date', dateStr)
+        .maybeSingle();
+
+      if (existing) {
+        navigate(`${reconciliationPrefix}/${existing.id}`);
+      } else {
+        const { data: newClosing, error } = await supabase
+          .from('daily_closings')
+          .insert({ closing_date: dateStr, user_id: user.id, status: 'pending' })
+          .select('id')
+          .single();
+        if (error) throw error;
+        navigate(`${reconciliationPrefix}/${newClosing.id}`);
+      }
+      setAbrirCaixaOpen(false);
+    } catch (err) {
+      toast.error('Erro ao abrir caixa.');
+      console.error(err);
+    } finally {
+      setAbrirCaixaLoading(false);
+    }
+  };
+
+  // Full cascade delete closing
+  const handleDeleteClosing = async () => {
+    if (!deleteClosingDialog) return;
+    const expectedDate = formatDate(deleteClosingDialog.date);
+    if (deleteConfirmDate !== expectedDate) {
+      toast.error(`Digite a data corretamente: ${expectedDate}`);
+      return;
+    }
+    setDeleteClosingLoading(true);
+    try {
+      const closingId = deleteClosingDialog.id;
+
+      // Get all imports for this closing
+      const { data: closingImports } = await supabase
+        .from('imports')
+        .select('id')
+        .eq('daily_closing_id', closingId);
+      const importIds = closingImports?.map(i => i.id) || [];
+
+      // Get all orders
+      const { data: orders } = await supabase
+        .from('imported_orders')
+        .select('id')
+        .eq('daily_closing_id', closingId);
+      const orderIds = orders?.map(o => o.id) || [];
+
+      // Cascade delete
+      if (orderIds.length > 0) {
+        await supabase.from('order_payment_breakdowns').delete().in('imported_order_id', orderIds);
+        await supabase.from('card_transactions')
+          .update({ matched_order_id: null, match_type: null, match_confidence: null })
+          .in('matched_order_id', orderIds);
+        await supabase.from('imported_orders').delete().eq('daily_closing_id', closingId);
+      }
+
+      if (importIds.length > 0) {
+        await supabase.from('imports').delete().in('id', importIds);
+      }
+
+      await supabase.from('card_transactions').delete().eq('daily_closing_id', closingId);
+      await supabase.from('machine_readings').delete().eq('daily_closing_id', closingId);
+      await supabase.from('cash_snapshots').delete().eq('daily_closing_id', closingId);
+      await supabase.from('daily_closings').delete().eq('id', closingId);
+
+      toast.success(`Fechamento do dia ${expectedDate} excluído com sucesso.`);
+      setDeleteClosingDialog(null);
+      setDeleteConfirmDate('');
+      await loadData();
+    } catch (err) {
+      toast.error('Erro ao excluir fechamento.');
+      console.error(err);
+    } finally {
+      setDeleteClosingLoading(false);
+    }
+  };
+
   const today = new Date();
-  const dateStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+  const todayStr = today.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
   const weekday = today.toLocaleDateString('pt-BR', { weekday: 'long' });
 
   return (
     <AppLayout
       title="Tele"
-      subtitle={`📅 ${dateStr} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
+      subtitle={`📅 ${todayStr} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        <Button onClick={() => navigate('/tele/import')} className="bg-primary hover:bg-primary/90">
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Importação
-        </Button>
+        <div className="flex items-center gap-2">
+          <Popover open={abrirCaixaOpen} onOpenChange={setAbrirCaixaOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline">
+                <DoorOpen className="h-4 w-4 mr-2" />
+                Abrir Caixa
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <div className="p-3 border-b border-border">
+                <p className="text-sm font-medium text-foreground">Selecione a data</p>
+              </div>
+              <Calendar
+                mode="single"
+                selected={abrirCaixaDate}
+                onSelect={setAbrirCaixaDate}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+              <div className="p-3 border-t border-border">
+                <Button
+                  className="w-full"
+                  onClick={handleAbrirCaixa}
+                  disabled={!abrirCaixaDate || abrirCaixaLoading}
+                >
+                  {abrirCaixaLoading ? 'Abrindo...' : 'Confirmar'}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <Button onClick={() => navigate('/tele/import')} className="bg-primary hover:bg-primary/90">
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Importação
+          </Button>
+        </div>
       }
     >
       {/* Stats cards */}
@@ -233,6 +360,20 @@ export default function Dashboard() {
                           }}
                         >
                           <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteClosingDialog({ id: closing.id, date: closing.closing_date });
+                            setDeleteConfirmDate('');
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
                         </Button>
                       )}
                       <Badge
@@ -336,6 +477,44 @@ export default function Dashboard() {
           </Button>
         </div>
       )}
+
+      {/* Delete closing confirmation dialog */}
+      <Dialog open={!!deleteClosingDialog} onOpenChange={(open) => { if (!open) { setDeleteClosingDialog(null); setDeleteConfirmDate(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <ShieldAlert className="h-5 w-5" />
+              Excluir Fechamento
+            </DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o fechamento do dia <strong>{deleteClosingDialog ? formatDate(deleteClosingDialog.date) : ''}</strong>? Todos os pedidos, importações e dados de conciliação deste dia serão removidos permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Para confirmar, digite a data do fechamento: <strong>{deleteClosingDialog ? formatDate(deleteClosingDialog.date) : ''}</strong>
+            </p>
+            <Input
+              placeholder="DD/MM/AAAA"
+              value={deleteConfirmDate}
+              onChange={(e) => setDeleteConfirmDate(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDeleteClosingDialog(null); setDeleteConfirmDate(''); }}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteClosing}
+              disabled={deleteClosingLoading || !deleteConfirmDate}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              {deleteClosingLoading ? 'Excluindo...' : 'Excluir Permanentemente'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
