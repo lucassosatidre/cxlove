@@ -294,6 +294,10 @@ export default function DeliveryReconciliation() {
     return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
   }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
 
+  const confirmedCount = useMemo(() => offlineOrders.filter(o => o.is_confirmed).length, [offlineOrders]);
+  const pendingCount = useMemo(() => offlineOrders.length - confirmedCount, [offlineOrders, confirmedCount]);
+  const progressPercent = useMemo(() => offlineOrders.length ? Math.round((confirmedCount / offlineOrders.length) * 100) : 0, [offlineOrders, confirmedCount]);
+
   const deliveryPersons = useMemo(() => {
     const set = new Set<string>();
     offlineOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
