@@ -416,21 +416,48 @@ export default function SalonClosing() {
     const importIds = Array.from(selectedImports);
     if (importIds.length === 0) return;
 
-    const { data: ordersToDelete } = await supabase
-      .from('salon_orders')
-      .select('id')
-      .in('salon_import_id', importIds);
+    try {
+      // Get all order IDs linked to these imports
+      const { data: ordersToDelete, error: fetchErr } = await supabase
+        .from('salon_orders')
+        .select('id')
+        .in('salon_import_id', importIds);
 
-    if (ordersToDelete?.length) {
-      const orderIds = ordersToDelete.map(o => o.id);
-      await supabase.from('salon_order_payments').delete().in('salon_order_id', orderIds);
-      await supabase.from('salon_orders').delete().in('salon_import_id', importIds);
+      if (fetchErr) {
+        console.error('Error fetching orders to delete:', fetchErr);
+        toast.error('Erro ao buscar pedidos para excluir.');
+        return;
+      }
+
+      if (ordersToDelete?.length) {
+        const orderIds = ordersToDelete.map(o => o.id);
+        // Delete in batches to avoid URI too long errors
+        const batchSize = 100;
+        for (let i = 0; i < orderIds.length; i += batchSize) {
+          const batch = orderIds.slice(i, i + batchSize);
+          await supabase.from('salon_card_transactions').update({ matched_order_id: null }).in('matched_order_id', batch);
+          await supabase.from('salon_order_payments').delete().in('salon_order_id', batch);
+        }
+        // Delete orders in batches too
+        for (let i = 0; i < importIds.length; i++) {
+          const { error: delErr } = await supabase.from('salon_orders').delete().eq('salon_import_id', importIds[i]);
+          if (delErr) console.error('Error deleting orders for import', importIds[i], delErr);
+        }
+      }
+
+      // Delete the imports themselves
+      for (const impId of importIds) {
+        const { error: impDelErr } = await supabase.from('salon_imports').delete().eq('id', impId);
+        if (impDelErr) console.error('Error deleting import', impId, impDelErr);
+      }
+
+      setSelectedImports(new Set());
+      toast.success(`${importIds.length} importação(ões) excluída(s)`);
+      loadData();
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      toast.error('Erro ao excluir importações.');
     }
-    await supabase.from('salon_imports').delete().in('id', importIds);
-
-    setSelectedImports(new Set());
-    toast.success(`${importIds.length} importação(ões) excluída(s)`);
-    loadData();
   };
   const handleSyncSaipos = async () => {
     if (!closing || !id) return;
