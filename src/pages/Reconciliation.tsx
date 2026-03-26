@@ -700,7 +700,7 @@ export default function Reconciliation() {
       return null;
     };
 
-    for (const order of confirmedOrders) {
+    for (const order of allOrders) {
       const breakdowns = breakdownsByOrder.get(order.id);
       if (breakdowns && breakdowns.length > 0) {
         // Use breakdown amounts
