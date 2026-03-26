@@ -1051,37 +1051,6 @@ export default function Reconciliation() {
               </Select>
             </div>
             <div className="relative">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9"
-                onClick={() => setShowColumnSettings(!showColumnSettings)}
-              >
-                <Settings2 className="h-4 w-4 mr-1" />
-                Colunas
-              </Button>
-              {showColumnSettings && (
-                <div className="absolute right-0 top-10 z-20 bg-card border border-border rounded-lg shadow-lg p-3 space-y-2 min-w-[200px]">
-                  {([
-                    { key: 'sale_date' as const, label: 'Data' },
-                    { key: 'sale_time' as const, label: 'Hora' },
-                    { key: 'sales_channel' as const, label: 'Canal de Venda' },
-                    { key: 'partner_order_number' as const, label: 'Nº Pedido Parceiro' },
-                  ]).map(({ key, label }) => (
-                    <button
-                      key={key}
-                      onClick={() => toggleColumn(key)}
-                      className="flex items-center gap-2 w-full text-left text-sm py-1 px-2 rounded hover:bg-muted/50 transition-colors"
-                    >
-                      {visibleColumns[key]
-                        ? <Eye className="h-4 w-4 text-primary" />
-                        : <EyeOff className="h-4 w-4 text-muted-foreground" />
-                      }
-                      <span className={visibleColumns[key] ? 'text-foreground' : 'text-muted-foreground'}>{label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
