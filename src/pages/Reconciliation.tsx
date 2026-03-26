@@ -1038,9 +1038,12 @@ export default function Reconciliation() {
         {/* Filters */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3 flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[180px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+            <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Buscar</span>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Buscar pedido..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9" />
+              </div>
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Formas de Pagamento</span>
