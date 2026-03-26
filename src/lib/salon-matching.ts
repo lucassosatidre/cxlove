@@ -59,6 +59,18 @@ interface SalonPaymentForMatching {
   amount: number;
 }
 
+// Helper: sum only card-type breakdowns for a given order
+function getCardPortionFromPayments(
+  orderId: string,
+  payments: SalonPaymentForMatching[]
+): number | null {
+  const orderPayments = payments.filter(p => p.salon_order_id === orderId);
+  if (orderPayments.length === 0) return null;
+  const cardPayments = orderPayments.filter(p => !isExternalMethod(p.payment_method));
+  if (cardPayments.length === 0) return null;
+  return Math.round(cardPayments.reduce((s, p) => s + p.amount, 0) * 100) / 100;
+}
+
 interface TxForMatching {
   id: string;
   gross_amount: number;
