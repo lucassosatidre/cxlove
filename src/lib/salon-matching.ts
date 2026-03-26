@@ -602,7 +602,7 @@ export function matchSalonTransactionsToOrders(
   // The card sum will be LESS than total. The remainder is cash/external.
   // ═══════════════════════════════════════════
 
-  const MIXED_TOLERANCE = 0.10; // tolerance for mixed orders with cash
+  const MIXED_TOLERANCE = 1.00; // tolerance for mixed orders with cash (aligned with APPROX_TOLERANCE)
 
   for (const order of machineOrders) {
     if (matchedOrderIds.has(order.id)) continue;
