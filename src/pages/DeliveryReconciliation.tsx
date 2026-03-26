@@ -88,6 +88,7 @@ export default function DeliveryReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState('all');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
