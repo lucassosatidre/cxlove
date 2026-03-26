@@ -109,6 +109,7 @@ export default function Reconciliation() {
 
   // Saipos sync state
   const [syncingSaipos, setSyncingSaipos] = useState(false);
+  const [lastAutoSync, setLastAutoSync] = useState<string | null>(null);
 
   const handleSyncSaipos = useCallback(async () => {
     if (!id || !closingData || !user) return;
