@@ -262,6 +262,7 @@ export default function SalonReconciliation() {
   }, [orders, payments]);
 
 
+  const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
     setImporting(true);
     try {
