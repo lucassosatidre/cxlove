@@ -99,8 +99,10 @@ Deno.serve(async (req) => {
         }
       );
 
+      console.log("Saipos API response status:", apiRes.status);
       if (!apiRes.ok) {
         const errText = await apiRes.text();
+        console.error("Saipos API error:", apiRes.status, errText);
         return new Response(
           JSON.stringify({ error: `Erro na API Saipos: ${apiRes.status} - ${errText}` }),
           {
