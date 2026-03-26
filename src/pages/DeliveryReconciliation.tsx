@@ -780,53 +780,7 @@ export default function DeliveryReconciliation() {
         </div>
       ) : (
       <>
-      {/* Resumo de Pedidos */}
-      <div className="border-b border-border bg-card">
-        <div className="px-6 py-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
-          <div className="flex flex-wrap gap-3">
-            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-[10px] text-muted-foreground leading-tight">Comandas Offline</p>
-                <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.total}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <div>
-                <p className="text-[10px] text-muted-foreground leading-tight">Conciliadas</p>
-                <p className="text-sm font-semibold text-success font-mono-tabular">{stats.matched}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
-              <AlertTriangle className="h-4 w-4 text-warning" />
-              <div>
-                <p className="text-[10px] text-muted-foreground leading-tight">Pendentes</p>
-                <p className="text-sm font-semibold text-warning font-mono-tabular">{stats.pending}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
-              <Truck className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-[10px] text-muted-foreground leading-tight">Tx Maquininha</p>
-                <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.txTotal}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
-              <div className="flex-1">
-                <p className="text-[10px] text-primary font-semibold leading-tight">Progresso</p>
-                <p className="text-sm font-bold text-primary font-mono-tabular">{percent}%</p>
-                <div className="mt-1 h-1 bg-border rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Cash Snapshot - Abertura (read-only) */}
+      {/* 1. Cash Snapshot - Abertura */}
       {cashSnapshotDataAbertura && (
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
@@ -928,51 +882,7 @@ export default function DeliveryReconciliation() {
         </div>
       )}
 
-      {/* Cash Snapshot - Fechamento (read-only) */}
-      {cashSnapshotDataFechamento && (
-        <div className="border-b border-border bg-card">
-          <div className="px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Banknote className="h-4 w-4 text-primary" />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
-              </div>
-              <span className="flex items-center gap-1 text-xs text-success">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Salvo
-              </span>
-            </div>
-            <div className="mt-2 flex items-center gap-4">
-              <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
-              <span className="text-xs text-muted-foreground">
-                Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
-              </span>
-              <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashDetailsFechamento(!showCashDetailsFechamento)}>
-                {showCashDetailsFechamento ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
-                {showCashDetailsFechamento ? 'Ocultar' : 'Ver detalhes'}
-              </Button>
-            </div>
-            {showCashDetailsFechamento && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {Object.entries(cashSnapshotDataFechamento.counts)
-                  .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
-                  .filter(({ qty }) => qty > 0)
-                  .sort((a, b) => b.denom - a.denom)
-                  .map(({ denom, qty }) => (
-                    <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
-                      <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
-                      <span className="text-muted-foreground">×</span>
-                      <span className="font-semibold text-foreground">{qty}</span>
-                      <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Total Teórico via Saipos */}
+      {/* 2. Total Teórico via Saipos */}
       <div className="border-b border-border bg-card">
         <div className="px-6 py-3">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Teórico via Saipos</p>
@@ -1011,7 +921,7 @@ export default function DeliveryReconciliation() {
         </div>
       </div>
 
-      {/* Total Recebido via Maquininhas */}
+      {/* 3. Total Recebido via Maquininhas */}
       {id && (
         <MachineReadingsSection
           dailyClosingId={id}
@@ -1021,7 +931,7 @@ export default function DeliveryReconciliation() {
         />
       )}
 
-      {/* Total Recebido via Maquininhas - Real */}
+      {/* 4. Total Recebido via Maquininhas - Real */}
       {transactions.length > 0 && (() => {
         const methodSummary = new Map<string, { total: number; count: number }>();
         transactions.forEach(tx => {
@@ -1072,6 +982,96 @@ export default function DeliveryReconciliation() {
           </div>
         );
       })()}
+
+      {/* 5. Resumo de Pedidos */}
+      <div className="border-b border-border bg-card">
+        <div className="px-6 py-3">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Resumo de Pedidos</p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Comandas Offline</p>
+                <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.total}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Conciliadas</p>
+                <p className="text-sm font-semibold text-success font-mono-tabular">{stats.matched}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <AlertTriangle className="h-4 w-4 text-warning" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Pendentes</p>
+                <p className="text-sm font-semibold text-warning font-mono-tabular">{stats.pending}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+              <Truck className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Tx Maquininha</p>
+                <p className="text-sm font-semibold text-foreground font-mono-tabular">{stats.txTotal}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
+              <div className="flex-1">
+                <p className="text-[10px] text-primary font-semibold leading-tight">Progresso</p>
+                <p className="text-sm font-bold text-primary font-mono-tabular">{percent}%</p>
+                <div className="mt-1 h-1 bg-border rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full row-transition" style={{ width: `${percent}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Cash Snapshot - Fechamento */}
+      {cashSnapshotDataFechamento && (
+        <div className="border-b border-border bg-card">
+          <div className="px-6 py-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Banknote className="h-4 w-4 text-primary" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Contagem de Dinheiro no Fechamento</span>
+              </div>
+              <span className="flex items-center gap-1 text-xs text-success">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Salvo
+              </span>
+            </div>
+            <div className="mt-2 flex items-center gap-4">
+              <span className="text-lg font-bold text-foreground font-mono">{formatCurrency(cashSnapshotDataFechamento.total)}</span>
+              <span className="text-xs text-muted-foreground">
+                Salvo em {new Date(cashSnapshotDataFechamento.updated_at).toLocaleString('pt-BR')}
+              </span>
+              <Button variant="outline" size="sm" className="ml-auto h-7 text-xs" onClick={() => setShowCashDetailsFechamento(!showCashDetailsFechamento)}>
+                {showCashDetailsFechamento ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
+                {showCashDetailsFechamento ? 'Ocultar' : 'Ver detalhes'}
+              </Button>
+            </div>
+            {showCashDetailsFechamento && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.entries(cashSnapshotDataFechamento.counts)
+                  .map(([denom, qty]) => ({ denom: parseFloat(denom), qty: qty as number }))
+                  .filter(({ qty }) => qty > 0)
+                  .sort((a, b) => b.denom - a.denom)
+                  .map(({ denom, qty }) => (
+                    <div key={denom} className="flex items-center gap-1.5 bg-secondary rounded-md px-2.5 py-1 border border-border text-xs">
+                      <span className="font-medium text-foreground font-mono">{formatCurrency(denom)}</span>
+                      <span className="text-muted-foreground">×</span>
+                      <span className="font-semibold text-foreground">{qty}</span>
+                      <span className="text-muted-foreground ml-1">= {formatCurrency(denom * qty)}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="border-b border-border bg-card">
