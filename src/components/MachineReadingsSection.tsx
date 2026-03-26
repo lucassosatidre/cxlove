@@ -31,6 +31,8 @@ interface Props {
   personLabel?: string;
   /** Render mode: 'all' (default), 'totals' (only summary), 'conference' (only detail) */
   mode?: 'all' | 'totals' | 'conference';
+  /** Called when readings count changes */
+  onCountChange?: (count: number) => void;
 }
 
 const SERIAL_PREFIX = 'S1F2-000';
@@ -60,7 +62,7 @@ function parseRow(r: any): MachineReading {
   };
 }
 
-export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all' }: Props) {
+export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all', onCountChange }: Props) {
   const { user } = useAuth();
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,6 +79,10 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     loadReadings();
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
   }, [closingId]);
+
+  useEffect(() => {
+    onCountChange?.(readings.length);
+  }, [readings.length, onCountChange]);
 
   const SELECT_COLS = 'id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount, debit_count, credit_count, voucher_count, pix_count';
 
