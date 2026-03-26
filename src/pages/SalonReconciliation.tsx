@@ -90,6 +90,7 @@ export default function SalonReconciliation() {
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
   const [cashSnapshotFechamento, setCashSnapshotFechamento] = useState<{ total: number; updated_at: string } | null>(null);
+  const [orderClassifications, setOrderClassifications] = useState<Map<string, OrderClassification>>(new Map());
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
 
