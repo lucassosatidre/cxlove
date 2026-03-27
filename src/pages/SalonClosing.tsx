@@ -47,7 +47,7 @@ export default function SalonClosing() {
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
   const navigate = useNavigate();
-  const operatorAssignmentAttempted = useRef(false);
+  
   const [orders, setOrders] = useState<SalonOrder[]>([]);
   const [expandedRateios, setExpandedRateios] = useState<Set<string>>(new Set());
   const [closing, setClosing] = useState<ClosingData | null>(null);
