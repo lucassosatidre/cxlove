@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import AppLayout from '@/components/AppLayout';
-import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X, DoorOpen, ShieldAlert } from 'lucide-react';
+import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, DoorOpen, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
