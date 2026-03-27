@@ -304,7 +304,7 @@ export default function Dashboard() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="font-semibold text-foreground group-hover:text-primary row-transition">
-                  {isToday ? 'Hoje' : formatDate(closing.closing_date)}
+                  {formatDate(closing.closing_date)}
                 </p>
                 {isToday && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Hoje</Badge>}
               </div>
