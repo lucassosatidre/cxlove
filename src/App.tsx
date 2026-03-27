@@ -77,16 +77,16 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<ProtectedRoute><RoleRedirect /></ProtectedRoute>} />
-            <Route path="/tele" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
-            <Route path="/tele/import" element={<ProtectedRoute><TeleImport /></ProtectedRoute>} />
-            <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
-            <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
-            <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
-            <Route path="/salon" element={<ProtectedRoute><SalonDashboard /></ProtectedRoute>} />
-            <Route path="/salon/import" element={<ProtectedRoute><SalonImport /></ProtectedRoute>} />
-            <Route path="/salon/closing/:id" element={<ProtectedRoute><SalonClosing /></ProtectedRoute>} />
-            <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SalonReconciliation /></ProtectedRoute>} />
+            <Route path="/tele" element={<ProtectedRoute><SectorGuard sector="tele"><Dashboard /></SectorGuard></ProtectedRoute>} />
+            <Route path="/import" element={<ProtectedRoute><SectorGuard sector="tele"><Import /></SectorGuard></ProtectedRoute>} />
+            <Route path="/tele/import" element={<ProtectedRoute><SectorGuard sector="tele"><TeleImport /></SectorGuard></ProtectedRoute>} />
+            <Route path="/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="tele"><Reconciliation /></SectorGuard></ProtectedRoute>} />
+            <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><SectorGuard sector="tele"><ReconciliationLegacy /></SectorGuard></ProtectedRoute>} />
+            <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="tele"><DeliveryReconciliation /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon" element={<ProtectedRoute><SectorGuard sector="salon"><SalonDashboard /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon/import" element={<ProtectedRoute><SectorGuard sector="salon"><SalonImport /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon/closing/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonClosing /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonReconciliation /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             {/* Redirect old test routes */}
