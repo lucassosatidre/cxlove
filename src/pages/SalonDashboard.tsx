@@ -297,9 +297,9 @@ export default function SalonDashboard() {
                 )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                {isAdmin && operatorName && (
+                {isAdmin && (
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <User className="h-3 w-3" /> {operatorName}
+                    <User className="h-3 w-3" /> {operatorName || 'aguardando'}
                   </span>
                 )}
                 {isAdmin && (
