@@ -932,48 +932,54 @@ export default function DeliveryReconciliation() {
       )}
 
       {/* 4. Total Recebido via Maquininhas - Real */}
-      {transactions.length > 0 && (() => {
-        const methodSummary = new Map<string, { total: number; count: number }>();
+      {(() => {
+        const methodSummary: Record<string, { total: number; count: number }> = {
+          'Pix': { total: 0, count: 0 },
+          'Crédito': { total: 0, count: 0 },
+          'Débito': { total: 0, count: 0 },
+          'Voucher': { total: 0, count: 0 },
+        };
         transactions.forEach(tx => {
           const method = tx.payment_method?.toLowerCase() || 'outro';
           let label = 'Outro';
-          if (method.includes('débit') || method.includes('debit')) label = 'Débito';
+          if (method.includes('pix')) label = 'Pix';
+          else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
           else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
-          else if (method.includes('pix')) label = 'Pix';
           else if (method.includes('voucher')) label = 'Voucher';
-          const entry = methodSummary.get(label) || { total: 0, count: 0 };
-          entry.total += tx.gross_amount;
-          entry.count += 1;
-          methodSummary.set(label, entry);
+          if (!methodSummary[label]) methodSummary[label] = { total: 0, count: 0 };
+          methodSummary[label].total += tx.gross_amount;
+          methodSummary[label].count += 1;
         });
-        const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher', 'Outro'];
-        const sorted = Array.from(methodSummary.entries()).sort((a, b) => fixedOrder.indexOf(a[0]) - fixedOrder.indexOf(b[0]));
+        const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher'];
         const iconMap: Record<string, React.ReactNode> = {
           'Pix': <QrCode className="h-4 w-4 text-primary" />,
           'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
           'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
           'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
-          'Outro': <CreditCard className="h-4 w-4 text-muted-foreground" />,
         };
-        const totalReal = transactions.reduce((s, tx) => s + tx.gross_amount, 0);
+        const totalReal = Object.values(methodSummary).reduce((s, v) => s + v.total, 0);
+        const totalOps = Object.values(methodSummary).reduce((s, v) => s + v.count, 0);
         return (
           <div className="border-b border-border bg-card">
             <div className="px-6 py-3">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Total Recebido via Maquininhas - Real</p>
               <div className="flex flex-wrap gap-3">
-                {sorted.map(([label, { total, count }]) => (
-                  <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
-                    {iconMap[label]}
-                    <div>
-                      <p className="text-[10px] text-muted-foreground leading-tight">{label} ({count} {count === 1 ? 'op' : 'ops'})</p>
-                      <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
+                {fixedOrder.map(label => {
+                  const { total, count } = methodSummary[label];
+                  return (
+                    <div key={label} className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[150px]">
+                      {iconMap[label]}
+                      <div>
+                        <p className="text-[10px] text-muted-foreground leading-tight">{label} ({count} {count === 1 ? 'op' : 'ops'})</p>
+                        <p className="text-sm font-semibold text-foreground font-mono">{formatCurrency(total)}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
                   <Wallet className="h-4 w-4 text-primary" />
                   <div>
-                    <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral ({transactions.length} ops)</p>
+                    <p className="text-[10px] text-primary font-semibold leading-tight">Total Geral ({totalOps} ops)</p>
                     <p className="text-sm font-bold text-primary font-mono">{formatCurrency(totalReal)}</p>
                   </div>
                 </div>
