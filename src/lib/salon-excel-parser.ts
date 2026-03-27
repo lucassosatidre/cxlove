@@ -103,8 +103,13 @@ export function parseSalonExcelFile(file: File): Promise<SalonParseResult> {
             continue;
           }
 
-          const orderType = String(row[COL_ORDER_TYPE] ?? '').trim();
+          let orderType = String(row[COL_ORDER_TYPE] ?? '').trim();
           if (!orderType) continue;
+
+          // If order_type is purely numeric, it's a Retirada sale_number misplaced as type
+          if (/^\d+$/.test(orderType)) {
+            orderType = 'Retirada';
+          }
 
           const paymentMethod = String(row[COL_PAYMENT] ?? '').trim();
           if (!paymentMethod) continue;
