@@ -35,6 +35,7 @@ Deno.serve(async (req) => {
 
     if (closingsErr) {
       console.error("[auto-sync] Error fetching closings:", closingsErr.message);
+      await logSync(supabase, "error", { error: closingsErr.message }, closingsErr.message);
       return new Response(
         JSON.stringify({ error: closingsErr.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -45,8 +46,6 @@ Deno.serve(async (req) => {
     if (!closings || closings.length === 0) {
       console.log("[auto-sync] No closing for today, creating one...");
 
-      // Use a system-level user_id — we'll use a deterministic UUID for the auto-sync bot
-      // We need a valid user. Let's pick any admin user.
       const { data: adminRole } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -56,6 +55,7 @@ Deno.serve(async (req) => {
 
       if (!adminRole) {
         console.error("[auto-sync] No admin user found to create closing");
+        await logSync(supabase, "error", { error: "No admin user found" }, "No admin user found");
         return new Response(
           JSON.stringify({ error: "No admin user found" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -74,6 +74,7 @@ Deno.serve(async (req) => {
 
       if (createErr) {
         console.error("[auto-sync] Error creating closing:", createErr.message);
+        await logSync(supabase, "error", { error: createErr.message }, createErr.message);
         return new Response(
           JSON.stringify({ error: createErr.message }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -182,15 +183,50 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Log successful execution
+    const hasErrors = results.some(r => r.error);
+    await logSync(
+      supabase,
+      hasErrors ? "partial" : "success",
+      { date: today, results },
+      hasErrors ? results.filter(r => r.error).map(r => r.error).join("; ") : null
+    );
+
     return new Response(
       JSON.stringify({ date: today, results }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[auto-sync] Fatal error:", err.message);
+
+    try {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, serviceKey);
+      await logSync(supabase, "error", { fatal: true }, err.message);
+    } catch (_) { /* ignore logging errors */ }
+
     return new Response(
       JSON.stringify({ error: err.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
+
+async function logSync(
+  supabase: any,
+  status: string,
+  details: Record<string, any>,
+  errorMessage: string | null
+) {
+  try {
+    await supabase.from("sync_logs").insert({
+      sync_type: "auto",
+      status,
+      details,
+      error_message: errorMessage,
+    });
+  } catch (e) {
+    console.error("[auto-sync] Failed to write sync log:", e.message);
+  }
+}
