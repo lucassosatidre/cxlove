@@ -685,6 +685,33 @@ export type Database = {
           },
         ]
       }
+      sync_logs: {
+        Row: {
+          details: Json | null
+          error_message: string | null
+          executed_at: string
+          id: string
+          status: string
+          sync_type: string
+        }
+        Insert: {
+          details?: Json | null
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          status?: string
+          sync_type?: string
+        }
+        Update: {
+          details?: Json | null
+          error_message?: string | null
+          executed_at?: string
+          id?: string
+          status?: string
+          sync_type?: string
+        }
+        Relationships: []
+      }
       user_permissions: {
         Row: {
           id: string
