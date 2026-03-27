@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -47,6 +47,7 @@ export default function SalonClosing() {
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
   const navigate = useNavigate();
+  const operatorAssignmentAttempted = useRef(false);
   const [orders, setOrders] = useState<SalonOrder[]>([]);
   const [expandedRateios, setExpandedRateios] = useState<Set<string>>(new Set());
   const [closing, setClosing] = useState<ClosingData | null>(null);
@@ -84,6 +85,51 @@ export default function SalonClosing() {
     loadData();
   }, [id]);
 
+  useEffect(() => {
+    if (!id || operatorAssignmentAttempted.current) return;
+    operatorAssignmentAttempted.current = true;
+
+    const assignOperator = async () => {
+      const { data: closingData, error: closingError } = await supabase
+        .from('salon_closings')
+        .select('operator_id')
+        .eq('id', id)
+        .single();
+
+      if (closingError) {
+        console.error('[OperatorID] Salon fetch error:', closingError);
+        return;
+      }
+
+      if (closingData?.operator_id) {
+        console.log('OPERATOR ALREADY SET:', closingData.operator_id);
+        return;
+      }
+
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !authData.user) {
+        console.error('[OperatorID] Salon auth error:', authError);
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from('salon_closings')
+        .update({ operator_id: authData.user.id })
+        .eq('id', id)
+        .is('operator_id', null);
+
+      if (updateError) {
+        console.error('[OperatorID] Salon update error:', updateError);
+        return;
+      }
+
+      console.log('OPERATOR ASSIGNED:', authData.user.id);
+    };
+
+    void assignOperator();
+  }, [id]);
+
   const loadData = async () => {
     const [{ data: closingData }, { data: ordersData }, { data: machineData }, { data: importsData }] = await Promise.all([
       supabase.from('salon_closings').select('*').eq('id', id!).single(),
@@ -95,18 +141,6 @@ export default function SalonClosing() {
     setOrders((ordersData as SalonOrder[]) || []);
     setMachineReadingsCount((machineData || []).length);
     setImports(importsData || []);
-
-    // Assign operator_id if null (any user, for testing)
-    if (closingData && !(closingData as any).operator_id && user) {
-      console.log('[OperatorID] Salon - user_id:', user.id, 'operator_id:', (closingData as any).operator_id, 'isAdmin:', isAdmin);
-      const { error: opErr } = await supabase
-        .from('salon_closings')
-        .update({ operator_id: user.id })
-        .eq('id', id!)
-        .is('operator_id', null);
-      if (opErr) console.error('[OperatorID] Failed to set operator_id:', opErr);
-      else console.log('[OperatorID] Salon - operator_id set to', user.id);
-    }
 
     // Detect last Saipos sync
     const saiposImport = (importsData || []).find((imp: any) => imp.file_name?.startsWith('saipos-salon-api-'));
