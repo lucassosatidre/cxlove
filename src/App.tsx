@@ -34,6 +34,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+// Sector guard: restricts caixa_tele to tele routes, caixa_salao to salon routes
+function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children: React.ReactNode }) {
+  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+  // Admin can access everything
+  if (isAdmin) return <>{children}</>;
+  // caixa_tele can only access tele
+  if (isCaixaTele && sector !== 'tele') return <Navigate to="/tele" replace />;
+  // caixa_salao can only access salon
+  if (isCaixaSalao && sector !== 'salon') return <Navigate to="/salon" replace />;
+  return <>{children}</>;
+}
+
 function RoleRedirect() {
   const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
   if (loading) {
@@ -58,16 +77,16 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<ProtectedRoute><RoleRedirect /></ProtectedRoute>} />
-            <Route path="/tele" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
-            <Route path="/tele/import" element={<ProtectedRoute><TeleImport /></ProtectedRoute>} />
-            <Route path="/reconciliation/:id" element={<ProtectedRoute><Reconciliation /></ProtectedRoute>} />
-            <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><ReconciliationLegacy /></ProtectedRoute>} />
-            <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><DeliveryReconciliation /></ProtectedRoute>} />
-            <Route path="/salon" element={<ProtectedRoute><SalonDashboard /></ProtectedRoute>} />
-            <Route path="/salon/import" element={<ProtectedRoute><SalonImport /></ProtectedRoute>} />
-            <Route path="/salon/closing/:id" element={<ProtectedRoute><SalonClosing /></ProtectedRoute>} />
-            <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SalonReconciliation /></ProtectedRoute>} />
+            <Route path="/tele" element={<ProtectedRoute><SectorGuard sector="tele"><Dashboard /></SectorGuard></ProtectedRoute>} />
+            <Route path="/import" element={<ProtectedRoute><SectorGuard sector="tele"><Import /></SectorGuard></ProtectedRoute>} />
+            <Route path="/tele/import" element={<ProtectedRoute><SectorGuard sector="tele"><TeleImport /></SectorGuard></ProtectedRoute>} />
+            <Route path="/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="tele"><Reconciliation /></SectorGuard></ProtectedRoute>} />
+            <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><SectorGuard sector="tele"><ReconciliationLegacy /></SectorGuard></ProtectedRoute>} />
+            <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="tele"><DeliveryReconciliation /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon" element={<ProtectedRoute><SectorGuard sector="salon"><SalonDashboard /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon/import" element={<ProtectedRoute><SectorGuard sector="salon"><SalonImport /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon/closing/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonClosing /></SectorGuard></ProtectedRoute>} />
+            <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonReconciliation /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             {/* Redirect old test routes */}
