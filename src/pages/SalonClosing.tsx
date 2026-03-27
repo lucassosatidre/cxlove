@@ -278,10 +278,19 @@ export default function SalonClosing() {
       setCashSnapshotDataAbertura({ counts: result.countsJson || {}, total: cashTotalAbertura, updated_at: result.updatedAt || new Date().toISOString() });
       toast.success(`Contagem abertura salva: ${formatCurrency(cashTotalAbertura)}`);
       setShowCashCalcAbertura(false);
+
+      // Assign operator_id if not yet set
+      if (id && user) {
+        await supabase
+          .from('salon_closings')
+          .update({ operator_id: user.id })
+          .eq('id', id)
+          .is('operator_id', null);
+      }
     }
 
     setSavingCashAbertura(false);
-  }, [saveCashSnapshot, cashCountsAbertura, cashTotalAbertura]);
+  }, [saveCashSnapshot, cashCountsAbertura, cashTotalAbertura, id, user]);
 
   const handleSaveCashSnapshotFechamento = useCallback(async () => {
     setSavingCashFechamento(true);

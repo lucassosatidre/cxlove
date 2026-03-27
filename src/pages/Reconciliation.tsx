@@ -576,6 +576,13 @@ export default function Reconciliation() {
       setCashSnapshotDataAbertura({ counts: countsJson, total: cashTotalAbertura, updated_at: new Date().toISOString() });
       toast.success(`Contagem abertura salva: ${formatCurrency(cashTotalAbertura)}`);
       setShowCashCalcAbertura(false);
+
+      // Assign operator_id if not yet set
+      await supabase
+        .from('daily_closings')
+        .update({ operator_id: user.id })
+        .eq('id', id)
+        .is('operator_id', null);
     }
     setSavingCashAbertura(false);
   }, [id, user, cashCountsAbertura, cashTotalAbertura]);
