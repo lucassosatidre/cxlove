@@ -344,17 +344,7 @@ export default function SalonDashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {closingImports.length === 0 && closing.status !== 'completed' && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-destructive hover:text-destructive"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteEmptyClosing(closing.id); }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {isAdmin && (
+                      {isAdmin ? (
                         <Button
                           size="icon"
                           variant="ghost"
@@ -364,6 +354,15 @@ export default function SalonDashboard() {
                             setDeleteClosingDialog({ id: closing.id, date: closing.closing_date });
                             setDeleteConfirmDate('');
                           }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : closingImports.length === 0 && closing.status !== 'completed' && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteEmptyClosing(closing.id); }}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

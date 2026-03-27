@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import AppLayout from '@/components/AppLayout';
-import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, X, DoorOpen, ShieldAlert } from 'lucide-react';
+import { Plus, FileSpreadsheet, Clock, CalendarDays, ChevronRight, Trash2, DoorOpen, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -350,20 +350,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {closingImports.length === 0 && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteEmptyClosing(closing.id);
-                          }}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {isAdmin && (
+                      {isAdmin ? (
                         <Button
                           size="sm"
                           variant="ghost"
@@ -372,6 +359,18 @@ export default function Dashboard() {
                             e.stopPropagation();
                             setDeleteClosingDialog({ id: closing.id, date: closing.closing_date });
                             setDeleteConfirmDate('');
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : closingImports.length === 0 && closing.status !== 'completed' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8 p-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteEmptyClosing(closing.id);
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
