@@ -138,50 +138,6 @@ export default function Reconciliation() {
     loadData();
   }, [id]);
 
-  useEffect(() => {
-    if (!id || operatorAssignmentAttempted.current) return;
-    operatorAssignmentAttempted.current = true;
-
-    const assignOperator = async () => {
-      const { data: closingData, error: closingError } = await supabase
-        .from('daily_closings')
-        .select('operator_id')
-        .eq('id', id)
-        .single();
-
-      if (closingError) {
-        console.error('[OperatorID] Tele fetch error:', closingError);
-        return;
-      }
-
-      if (closingData?.operator_id) {
-        console.log('OPERATOR ALREADY SET:', closingData.operator_id);
-        return;
-      }
-
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-
-      if (authError || !authData.user) {
-        console.error('[OperatorID] Tele auth error:', authError);
-        return;
-      }
-
-      const { error: updateError } = await supabase
-        .from('daily_closings')
-        .update({ operator_id: authData.user.id })
-        .eq('id', id)
-        .is('operator_id', null);
-
-      if (updateError) {
-        console.error('[OperatorID] Tele update error:', updateError);
-        return;
-      }
-
-      console.log('OPERATOR ASSIGNED:', authData.user.id);
-    };
-
-    void assignOperator();
-  }, [id]);
 
   const loadData = async () => {
     // Load closing data
