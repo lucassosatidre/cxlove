@@ -136,6 +136,15 @@ export default function SalonDashboard() {
   // Abrir Caixa handler
   const handleAbrirCaixa = async () => {
     if (!abrirCaixaDate || !user) return;
+
+    // Block future dates
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    if (abrirCaixaDate > todayDate) {
+      toast.error('Não é possível abrir caixa para datas futuras.');
+      return;
+    }
+
     setAbrirCaixaLoading(true);
     try {
       const dateStr = format(abrirCaixaDate, 'yyyy-MM-dd');
