@@ -128,16 +128,25 @@ Deno.serve(async (req) => {
     // Check existing orders for dedup - now using saipos_sale_id as primary dedup key
     const { data: existingOrders } = await supabaseAdmin
       .from("salon_orders")
-      .select("id, sale_number, saipos_sale_id, table_number, card_number, ticket_number, customers_count, service_charge_amount")
+      .select("id, sale_number, saipos_sale_id, table_number, card_number, ticket_number, customers_count, service_charge_amount, total_amount, order_type, payment_method")
       .eq("salon_closing_id", salon_closing_id);
 
     // Build dedup maps
     const existingBySaiposId = new Map<string, any>();
     const existingBySaleNumber = new Map<string, any>();
+    // Fallback map: key = "order_type|total_amount|payment_method_sorted"
+    const existingByFingerprint = new Map<string, any[]>();
     for (const o of (existingOrders || [])) {
       if (o.saipos_sale_id) existingBySaiposId.set(String(o.saipos_sale_id), o);
       if (o.sale_number) existingBySaleNumber.set(String(o.sale_number), o);
+      // Build fingerprint for fallback dedup (Excel imports without saipos_sale_id)
+      const fp = `${o.order_type}|${o.total_amount}|${(o.payment_method || '').split(',').map((s: string) => s.trim()).sort().join(',')}`;
+      if (!existingByFingerprint.has(fp)) existingByFingerprint.set(fp, []);
+      existingByFingerprint.get(fp)!.push(o);
     }
+
+    // Track which fingerprint entries have been consumed (to handle multiple orders with same fingerprint)
+    const consumedFingerprints = new Set<string>();
 
     // Find existing order for a sale using the best dedup key
     function findExisting(sale: any): any | null {
@@ -150,6 +159,20 @@ Deno.serve(async (req) => {
       if (sale.sale_number) {
         const found = existingBySaleNumber.get(String(sale.sale_number));
         if (found) return found;
+      }
+      // Fallback: fingerprint match (for Excel-imported orders without saipos_sale_id/sale_number)
+      const saleType = mapSaleType(sale.id_sale_type);
+      const paymentMethods = (sale.payments || []).map((p: any) => p.desc_store_payment_type || "").sort().join(",");
+      const fp = `${saleType}|${sale.total_amount || 0}|${paymentMethods}`;
+      const candidates = existingByFingerprint.get(fp);
+      if (candidates) {
+        for (const c of candidates) {
+          const cKey = `${c.id}`;
+          if (!consumedFingerprints.has(cKey)) {
+            consumedFingerprints.add(cKey);
+            return c;
+          }
+        }
       }
       return null;
     }
