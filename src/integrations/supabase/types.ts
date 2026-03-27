@@ -173,6 +173,7 @@ export type Database = {
           created_at: string
           id: string
           is_test: boolean
+          operator_id: string | null
           reconciliation_status: string
           status: string
           updated_at: string
@@ -183,6 +184,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_test?: boolean
+          operator_id?: string | null
           reconciliation_status?: string
           status?: string
           updated_at?: string
@@ -193,6 +195,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_test?: boolean
+          operator_id?: string | null
           reconciliation_status?: string
           status?: string
           updated_at?: string
@@ -500,6 +503,7 @@ export type Database = {
           closing_date: string
           created_at: string
           id: string
+          operator_id: string | null
           reconciliation_status: string
           status: string
           updated_at: string
@@ -509,6 +513,7 @@ export type Database = {
           closing_date: string
           created_at?: string
           id?: string
+          operator_id?: string | null
           reconciliation_status?: string
           status?: string
           updated_at?: string
@@ -518,6 +523,7 @@ export type Database = {
           closing_date?: string
           created_at?: string
           id?: string
+          operator_id?: string | null
           reconciliation_status?: string
           status?: string
           updated_at?: string
