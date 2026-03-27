@@ -60,6 +60,7 @@ export default function Reconciliation() {
   const { isCaixaTele, isAdmin } = useUserRole();
   
   const navigate = useNavigate();
+  const operatorAssignmentAttempted = useRef(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
   const [importRecords, setImportRecords] = useState<ImportRecord[]>([]);
