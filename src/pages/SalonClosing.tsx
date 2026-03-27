@@ -96,18 +96,6 @@ export default function SalonClosing() {
     setMachineReadingsCount((machineData || []).length);
     setImports(importsData || []);
 
-    // Assign operator_id if null (any user, for testing)
-    if (closingData && !(closingData as any).operator_id && user) {
-      console.log('[OperatorID] Salon - user_id:', user.id, 'operator_id:', (closingData as any).operator_id, 'isAdmin:', isAdmin);
-      const { error: opErr } = await supabase
-        .from('salon_closings')
-        .update({ operator_id: user.id })
-        .eq('id', id!)
-        .is('operator_id', null);
-      if (opErr) console.error('[OperatorID] Failed to set operator_id:', opErr);
-      else console.log('[OperatorID] Salon - operator_id set to', user.id);
-    }
-
     // Detect last Saipos sync
     const saiposImport = (importsData || []).find((imp: any) => imp.file_name?.startsWith('saipos-salon-api-'));
     if (saiposImport) {

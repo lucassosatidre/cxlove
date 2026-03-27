@@ -142,23 +142,11 @@ export default function Reconciliation() {
     // Load closing data
     const { data: closing } = await supabase
       .from('daily_closings')
-      .select('closing_date, status, operator_id')
+      .select('closing_date, status')
       .eq('id', id!)
       .single();
 
     setClosingData(closing ? { closing_date: closing.closing_date, status: closing.status } : null);
-
-    // Assign operator_id if null (any user, for testing)
-    if (closing && !closing.operator_id && user) {
-      console.log('[OperatorID] Tele - user_id:', user.id, 'operator_id:', closing.operator_id, 'isAdmin:', isAdmin);
-      const { error: opErr } = await supabase
-        .from('daily_closings')
-        .update({ operator_id: user.id })
-        .eq('id', id!)
-        .is('operator_id', null);
-      if (opErr) console.error('[OperatorID] Failed to set operator_id:', opErr);
-      else console.log('[OperatorID] Tele - operator_id set to', user.id);
-    }
 
     // Load orders and imports for this closing
     const [{ data: ordData }, { data: impData }] = await Promise.all([
