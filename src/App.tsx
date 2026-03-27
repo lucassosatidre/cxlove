@@ -34,6 +34,25 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return user ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
+// Sector guard: restricts caixa_tele to tele routes, caixa_salao to salon routes
+function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children: React.ReactNode }) {
+  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+  // Admin can access everything
+  if (isAdmin) return <>{children}</>;
+  // caixa_tele can only access tele
+  if (isCaixaTele && sector !== 'tele') return <Navigate to="/tele" replace />;
+  // caixa_salao can only access salon
+  if (isCaixaSalao && sector !== 'salon') return <Navigate to="/salon" replace />;
+  return <>{children}</>;
+}
+
 function RoleRedirect() {
   const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
   if (loading) {
