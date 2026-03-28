@@ -323,6 +323,10 @@ export default function DeliveryReconciliation() {
         }
       } else {
         const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+        // If order has Voucher Parceiro Desconto without breakdowns, skip — we can't know the split
+        const hasVoucherParceiro = methods.some(m => m.toLowerCase().includes('voucher parceiro'));
+        if (hasVoucherParceiro) continue;
+
         const matchingCats = methods
           .map(m => matchCategory(m))
           .filter((c): c is string => c !== null);
