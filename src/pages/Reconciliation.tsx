@@ -717,12 +717,21 @@ export default function Reconciliation() {
           if (cat) totals[cat] += b.amount;
         }
       } else {
-        // Single payment method — use total_amount
+        // No breakdowns — distribute total_amount among matching offline methods
         const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
-        if (methods.length === 1) {
-          const cat = matchCategory(methods[0]);
-          if (cat) totals[cat] += order.total_amount;
+        const matchingCats = methods
+          .map(m => matchCategory(m))
+          .filter((c): c is string => c !== null);
+
+        if (matchingCats.length === 1) {
+          // Single matching offline method — full amount goes there
+          totals[matchingCats[0]] += order.total_amount;
+        } else if (matchingCats.length > 1) {
+          // Multiple offline methods — split equally as estimate
+          const share = order.total_amount / matchingCats.length;
+          matchingCats.forEach(cat => { totals[cat] += share; });
         }
+        // If no matching cats (all online), nothing to add
       }
     }
 
