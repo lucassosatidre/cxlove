@@ -323,9 +323,15 @@ export default function DeliveryReconciliation() {
         }
       } else {
         const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
-        if (methods.length === 1) {
-          const cat = matchCategory(methods[0]);
-          if (cat) totals[cat] += order.total_amount;
+        const matchingCats = methods
+          .map(m => matchCategory(m))
+          .filter((c): c is string => c !== null);
+
+        if (matchingCats.length === 1) {
+          totals[matchingCats[0]] += order.total_amount;
+        } else if (matchingCats.length > 1) {
+          const share = order.total_amount / matchingCats.length;
+          matchingCats.forEach(cat => { totals[cat] += share; });
         }
       }
     }
