@@ -61,13 +61,13 @@ export default function Reconciliation() {
   const { isCaixaTele, isAdmin } = useUserRole();
   
   const navigate = useNavigate();
-  const { confirmedDrivers } = useConfirmedDrivers(closingData?.closing_date || '');
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
   const [importRecords, setImportRecords] = useState<ImportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const { confirmedDrivers } = useConfirmedDrivers(closingData?.closing_date || '');
   const [filterPayment, setFilterPayment] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
