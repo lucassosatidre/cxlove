@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Plus, Search, Pencil, UserCheck, UserX, KeyRound, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
+import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
 
 interface Driver {
   id: string;
