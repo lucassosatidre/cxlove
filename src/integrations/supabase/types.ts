@@ -254,7 +254,7 @@ export type Database = {
       delivery_drivers: {
         Row: {
           auth_user_id: string
-          cpf: string | null
+          cnpj: string | null
           created_at: string
           email: string
           id: string
@@ -268,7 +268,7 @@ export type Database = {
         }
         Insert: {
           auth_user_id: string
-          cpf?: string | null
+          cnpj?: string | null
           created_at?: string
           email: string
           id?: string
@@ -282,7 +282,7 @@ export type Database = {
         }
         Update: {
           auth_user_id?: string
-          cpf?: string | null
+          cnpj?: string | null
           created_at?: string
           email?: string
           id?: string
