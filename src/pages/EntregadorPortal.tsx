@@ -40,9 +40,6 @@ interface AvailableShift {
   _dayLimit?: boolean;
 }
 
-interface ConfirmedShiftExtra extends ConfirmedShift {
-  origin?: string;
-}
 
 interface HistoryItem {
   data: string;
