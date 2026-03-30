@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
   // CREATE DRIVER
   if (action === 'create') {
-    const { nome, telefone, email, cpf, pix, max_periodos_dia, notas, password } = body;
+    const { nome, telefone, email, cnpj, pix, max_periodos_dia, notas, password } = body;
 
     if (!nome || !telefone || !email) {
       return new Response(JSON.stringify({ error: 'Nome, telefone e email são obrigatórios' }), {
