@@ -90,7 +90,7 @@ export default function DriverShifts() {
     if (shiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_checkins')
-        .select('shift_id, status, driver_id, confirmed_at')
+        .select('id, shift_id, status, driver_id, confirmed_at, origin')
         .in('shift_id', shiftIds)
         .eq('status', 'confirmado');
       checkins = data || [];
