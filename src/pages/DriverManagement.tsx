@@ -13,8 +13,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
+import DriverSummaryCards from '@/components/delivery/DriverSummaryCards';
+import DriverTodaySection from '@/components/delivery/DriverTodaySection';
+import DriverHistorySection from '@/components/delivery/DriverHistorySection';
+import DriverRankingSection from '@/components/delivery/DriverRankingSection';
 
 interface Driver {
   id: string;
