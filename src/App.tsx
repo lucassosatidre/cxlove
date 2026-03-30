@@ -21,6 +21,7 @@ import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
 import EntregadorPortal from "./pages/EntregadorPortal";
 import DriverManagement from "./pages/DriverManagement";
+import DriverShifts from "./pages/DriverShifts";
 
 const queryClient = new QueryClient();
 
