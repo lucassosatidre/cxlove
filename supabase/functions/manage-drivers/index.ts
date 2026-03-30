@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
   // CREATE DRIVER
   if (action === 'create') {
-    const { nome, telefone, email, cpf, pix, max_periodos_dia, notas, password } = body;
+    const { nome, telefone, email, cnpj, pix, max_periodos_dia, notas, password } = body;
 
     if (!nome || !telefone || !email) {
       return new Response(JSON.stringify({ error: 'Nome, telefone e email são obrigatórios' }), {
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       nome,
       telefone,
       email,
-      cpf: cpf || null,
+      cnpj: cnpj || null,
       pix: pix || null,
       max_periodos_dia: max_periodos_dia || 1,
       notas: notas || null,
@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
 
   // UPDATE DRIVER
   if (action === 'update') {
-    const { driver_id, nome, telefone, cpf, pix, max_periodos_dia, notas, status } = body;
+    const { driver_id, nome, telefone, cnpj, pix, max_periodos_dia, notas, status } = body;
 
     if (!driver_id) {
       return new Response(JSON.stringify({ error: 'driver_id é obrigatório' }), {
@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (nome !== undefined) updateData.nome = nome;
     if (telefone !== undefined) updateData.telefone = telefone;
-    if (cpf !== undefined) updateData.cpf = cpf || null;
+    if (cnpj !== undefined) updateData.cnpj = cnpj || null;
     if (pix !== undefined) updateData.pix = pix || null;
     if (max_periodos_dia !== undefined) updateData.max_periodos_dia = max_periodos_dia;
     if (notas !== undefined) updateData.notas = notas || null;

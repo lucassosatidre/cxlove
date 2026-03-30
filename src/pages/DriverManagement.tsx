@@ -22,7 +22,7 @@ interface Driver {
   nome: string;
   telefone: string;
   email: string;
-  cpf: string | null;
+  cnpj: string | null;
   pix: string | null;
   status: string;
   max_periodos_dia: number;
@@ -38,12 +38,13 @@ function maskPhone(v: string) {
   return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
 }
 
-function maskCPF(v: string) {
-  const d = v.replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+function maskCNPJ(v: string) {
+  const d = v.replace(/\D/g, '').slice(0, 14);
+  if (d.length <= 2) return d;
+  if (d.length <= 5) return `${d.slice(0, 2)}.${d.slice(2)}`;
+  if (d.length <= 8) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5)}`;
+  if (d.length <= 12) return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8)}`;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' }> = {
@@ -65,7 +66,7 @@ export default function DriverManagement() {
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
-    nome: '', telefone: '', email: '', cpf: '', pix: '', max_periodos_dia: 1, notas: '',
+    nome: '', telefone: '', email: '', cnpj: '', password: '', max_periodos_dia: 1, notas: '',
   });
   const [creating, setCreating] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
@@ -73,7 +74,7 @@ export default function DriverManagement() {
   // Edit modal
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
   const [editForm, setEditForm] = useState({
-    nome: '', telefone: '', cpf: '', pix: '', max_periodos_dia: 1, notas: '', status: 'ativo',
+    nome: '', telefone: '', cnpj: '', max_periodos_dia: 1, notas: '', status: 'ativo',
   });
   const [saving, setSaving] = useState(false);
 
@@ -118,7 +119,7 @@ export default function DriverManagement() {
   };
 
   const resetCreateForm = () => {
-    setCreateForm({ nome: '', telefone: '', email: '', cpf: '', pix: '', max_periodos_dia: 1, notas: '' });
+    setCreateForm({ nome: '', telefone: '', email: '', cnpj: '', password: '', max_periodos_dia: 1, notas: '' });
     setCreatedPassword(null);
   };
 
@@ -151,23 +152,32 @@ export default function DriverManagement() {
   };
 
   // RESET PASSWORD
+  const [editPassword, setEditPassword] = useState('');
   const handleResetPassword = async (driverId: string) => {
+    if (!editPassword) { toast.error('Digite a nova senha'); return; }
     try {
-      const result = await invokeFunction({ action: 'reset_password', driver_id: driverId });
+      const result = await invokeFunction({ action: 'reset_password', driver_id: driverId, new_password: editPassword });
       setResetPasswordResult(result.password);
-      toast.success('Senha resetada!');
+      toast.success('Senha atualizada!');
     } catch (err: any) {
       toast.error(err.message);
     }
+  };
+  const generatePassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let pwd = '';
+    for (let i = 0; i < 8; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
+    return pwd;
   };
 
   const openEdit = (d: Driver) => {
     setEditDriver(d);
     setEditForm({
-      nome: d.nome, telefone: d.telefone, cpf: d.cpf || '', pix: d.pix || '',
+      nome: d.nome, telefone: d.telefone, cnpj: d.cnpj || '',
       max_periodos_dia: d.max_periodos_dia, notas: d.notas || '', status: d.status,
     });
     setResetPasswordResult(null);
+    setEditPassword('');
   };
 
   // Filters
@@ -244,8 +254,7 @@ export default function DriverManagement() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Telefone</TableHead>
                 <TableHead className="hidden md:table-cell">Email</TableHead>
-                <TableHead className="hidden lg:table-cell">CPF</TableHead>
-                <TableHead className="hidden lg:table-cell">PIX</TableHead>
+                <TableHead className="hidden lg:table-cell">CNPJ</TableHead>
                 <TableHead className="hidden md:table-cell">Per./dia</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
@@ -253,14 +262,13 @@ export default function DriverManagement() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum entregador encontrado</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum entregador encontrado</TableCell></TableRow>
               ) : filtered.map(d => (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.nome}</TableCell>
                   <TableCell>{d.telefone}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{d.email}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs">{d.cpf || '—'}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs">{d.pix || '—'}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-xs">{d.cnpj || '—'}</TableCell>
                   <TableCell className="hidden md:table-cell">{d.max_periodos_dia}</TableCell>
                   <TableCell>
                     <Badge variant={statusConfig[d.status]?.variant || 'secondary'}>
@@ -309,8 +317,14 @@ export default function DriverManagement() {
               <div><Label>Nome completo *</Label><Input value={createForm.nome} onChange={e => setCreateForm(f => ({ ...f, nome: e.target.value }))} /></div>
               <div><Label>Telefone *</Label><Input value={createForm.telefone} onChange={e => setCreateForm(f => ({ ...f, telefone: maskPhone(e.target.value) }))} placeholder="(XX) XXXXX-XXXX" /></div>
               <div><Label>Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} /></div>
-              <div><Label>CPF</Label><Input value={createForm.cpf} onChange={e => setCreateForm(f => ({ ...f, cpf: maskCPF(e.target.value) }))} placeholder="000.000.000-00" /></div>
-              <div><Label>Chave PIX</Label><Input value={createForm.pix} onChange={e => setCreateForm(f => ({ ...f, pix: e.target.value }))} /></div>
+              <div><Label>CNPJ (MEI)</Label><Input value={createForm.cnpj} onChange={e => setCreateForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
+              <div>
+                <Label>Senha *</Label>
+                <div className="flex gap-2">
+                  <Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Senha do entregador" className="flex-1" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCreateForm(f => ({ ...f, password: generatePassword() }))}>Gerar</Button>
+                </div>
+              </div>
               <div><Label>Máx períodos/dia</Label>
                 <Select value={String(createForm.max_periodos_dia)} onValueChange={v => setCreateForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -336,8 +350,7 @@ export default function DriverManagement() {
               <div><Label>Email (login)</Label><Input value={editDriver.email} disabled className="bg-muted" /></div>
               <div><Label>Nome completo</Label><Input value={editForm.nome} onChange={e => setEditForm(f => ({ ...f, nome: e.target.value }))} /></div>
               <div><Label>Telefone</Label><Input value={editForm.telefone} onChange={e => setEditForm(f => ({ ...f, telefone: maskPhone(e.target.value) }))} /></div>
-              <div><Label>CPF</Label><Input value={editForm.cpf} onChange={e => setEditForm(f => ({ ...f, cpf: maskCPF(e.target.value) }))} /></div>
-              <div><Label>Chave PIX</Label><Input value={editForm.pix} onChange={e => setEditForm(f => ({ ...f, pix: e.target.value }))} /></div>
+              <div><Label>CNPJ (MEI)</Label><Input value={editForm.cnpj} onChange={e => setEditForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
               <div><Label>Máx períodos/dia</Label>
                 <Select value={String(editForm.max_periodos_dia)} onValueChange={v => setEditForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -358,15 +371,17 @@ export default function DriverManagement() {
 
               {/* Reset password */}
               <div className="border-t pt-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">Resetar senha</p>
-                  <Button variant="outline" size="sm" onClick={() => handleResetPassword(editDriver.id)}>
-                    <KeyRound className="h-3 w-3 mr-1" /> Gerar nova senha
+                <Label>Nova senha</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Digite a nova senha" className="flex-1" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => setEditPassword(generatePassword())}>Gerar</Button>
+                  <Button size="sm" onClick={() => handleResetPassword(editDriver.id)} disabled={!editPassword}>
+                    <KeyRound className="h-3 w-3 mr-1" /> Salvar
                   </Button>
                 </div>
                 {resetPasswordResult && (
                   <div className="mt-2 bg-muted p-3 rounded-lg flex items-center gap-2">
-                    <p className="text-sm"><strong>Nova senha:</strong> {resetPasswordResult}</p>
+                    <p className="text-sm"><strong>Senha atualizada:</strong> {resetPasswordResult}</p>
                     <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(resetPasswordResult); toast.success('Copiada!'); }}>
                       <Copy className="h-3 w-3" />
                     </Button>
