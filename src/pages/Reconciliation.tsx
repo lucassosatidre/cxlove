@@ -826,10 +826,17 @@ export default function Reconciliation() {
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => navigate('/tele/import')} disabled={isCompleted}>
-                <Plus className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Importar mais</span>
-              </Button>
+              <div className="flex flex-col items-start">
+                <Button variant="outline" size="sm" onClick={() => navigate('/tele/import')} disabled={isCompleted}>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  <span className="hidden sm:inline">Sincronizar via Excel</span>
+                </Button>
+                {importRecords.length > 0 && (
+                  <span className="text-[11px] text-muted-foreground mt-0.5 ml-1">
+                    Última sincronização: {new Date(importRecords[0].created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+              </div>
               <div className="flex flex-col items-start">
                 <Button variant="outline" size="sm" onClick={handleSyncSaipos} disabled={isCompleted || syncingSaipos}>
                   <RefreshCw className={`h-4 w-4 mr-1 ${syncingSaipos ? 'animate-spin' : ''}`} />
