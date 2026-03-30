@@ -19,6 +19,7 @@ import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnl
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
+import DriverAttendanceSection, { useDriverAttendance } from '@/components/delivery/DriverAttendanceSection';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
