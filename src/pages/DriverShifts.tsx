@@ -447,13 +447,73 @@ export default function DriverShifts() {
                         </div>
                       </div>
 
-                      {/* Driver names */}
+                      {/* Driver names with remove buttons */}
                       {shift.confirmedDrivers.length > 0 ? (
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          {shift.confirmedDrivers.map(d => d.nome).join(', ')}
-                        </p>
+                        <div className="space-y-0.5">
+                          {shift.confirmedDrivers.map(d => (
+                            <div key={d.checkinId} className="flex items-center justify-between group">
+                              <span className="text-[10px] text-muted-foreground leading-tight">
+                                {d.nome}
+                                {d.origin === 'admin' && <span className="text-[8px] text-primary ml-0.5">(admin)</span>}
+                              </span>
+                              {!past && (
+                                <button
+                                  onClick={() => setRemoveConfirm({ checkinId: d.checkinId, driverName: d.nome, horario: `${shift.horario_inicio} — ${shift.horario_fim}` })}
+                                  className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive/80 p-0.5 transition-opacity"
+                                  title="Remover"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <p className="text-[10px] text-muted-foreground italic">sem confirmações</p>
+                      )}
+
+                      {/* Admin add driver button */}
+                      {!past && shift.id && (
+                        <Popover
+                          open={addDriverPopover?.shiftId === shift.id}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setAddDriverPopover({ shiftId: shift.id!, dayIdx, shiftIdx });
+                              setSelectedDriverToAdd('');
+                            } else {
+                              setAddDriverPopover(null);
+                            }
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <button className="flex items-center gap-0.5 text-[9px] text-primary hover:text-primary/80 transition-colors">
+                              <UserPlus className="h-2.5 w-2.5" /> Motoboy
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-52 p-3 space-y-2" align="start">
+                            <p className="text-xs font-medium">Adicionar motoboy</p>
+                            <select
+                              className="w-full h-7 text-xs border rounded px-1.5 bg-background"
+                              value={selectedDriverToAdd}
+                              onChange={e => setSelectedDriverToAdd(e.target.value)}
+                            >
+                              <option value="">Selecione...</option>
+                              {allActiveDrivers
+                                .filter(d => !shift.confirmedDrivers.some(cd => cd.driverId === d.id))
+                                .map(d => (
+                                  <option key={d.id} value={d.id}>{d.nome}</option>
+                                ))}
+                            </select>
+                            <Button
+                              size="sm"
+                              className="w-full h-7 text-xs"
+                              disabled={!selectedDriverToAdd || addingDriver}
+                              onClick={handleAdminAddDriver}
+                            >
+                              {addingDriver ? 'Adicionando...' : 'Adicionar'}
+                            </Button>
+                          </PopoverContent>
+                        </Popover>
                       )}
                     </div>
                   );
