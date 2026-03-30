@@ -1110,14 +1110,6 @@ export default function Reconciliation() {
           )}
         </div>
 
-        {/* Driver Attendance Section */}
-        {closingData && (
-          <DriverAttendanceSection
-            closingDate={closingData.closing_date}
-            isCompleted={isCompleted}
-            isAdmin={isAdmin}
-          />
-        )}
 
         {/* Filters */}
         <div className="border-b border-border bg-card">
