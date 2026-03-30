@@ -96,6 +96,7 @@ const App = () => (
             <Route path="/entregador" element={<ProtectedRoute><SectorGuard sector="entregador"><EntregadorPortal /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
             <Route path="/admin/entregadores" element={<ProtectedRoute><DriverManagement /></ProtectedRoute>} />
+            <Route path="/admin/escalas-entregadores" element={<ProtectedRoute><DriverShifts /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
