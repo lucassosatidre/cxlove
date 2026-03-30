@@ -57,7 +57,7 @@ function SectorGuard({ sector, children }: { sector: 'tele' | 'salon' | 'entrega
 }
 
 function RoleRedirect() {
-  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+  const { isAdmin, isCaixaTele, isCaixaSalao, isEntregador, loading } = useUserRole();
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -65,6 +65,7 @@ function RoleRedirect() {
       </div>
     );
   }
+  if (isEntregador) return <Navigate to="/entregador" replace />;
   if (isCaixaTele) return <Navigate to="/tele" replace />;
   if (isCaixaSalao) return <Navigate to="/salon" replace />;
   return <Overview />;
