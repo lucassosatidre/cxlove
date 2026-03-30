@@ -207,81 +207,93 @@ export default function DriverManagement() {
           </Button>
         </div>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card><CardContent className="pt-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center"><Users className="h-5 w-5 text-primary" /></div>
-            <div><p className="text-xs text-muted-foreground">Total</p><p className="text-xl font-bold">{drivers.length}</p></div>
-          </CardContent></Card>
-          <Card><CardContent className="pt-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center"><UserPlus className="h-5 w-5 text-green-600" /></div>
-            <div><p className="text-xs text-muted-foreground">Ativos</p><p className="text-xl font-bold text-green-600">{totalAtivos}</p></div>
-          </CardContent></Card>
-          <Card><CardContent className="pt-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center"><UserMinus className="h-5 w-5 text-muted-foreground" /></div>
-            <div><p className="text-xs text-muted-foreground">Inativos/Suspensos</p><p className="text-xl font-bold text-muted-foreground">{totalInativos}</p></div>
-          </CardContent></Card>
-        </div>
+        <Tabs defaultValue="dashboard" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="cadastro">Cadastro</TabsTrigger>
+          </TabsList>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar por nome ou telefone…" value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-          </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="ativo">Ativos</SelectItem>
-              <SelectItem value="inativo">Inativos</SelectItem>
-              <SelectItem value="suspenso">Suspensos</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+          <TabsContent value="dashboard" className="space-y-6">
+            <DriverSummaryCards />
 
-        {/* Table */}
-        <div className="border rounded-lg overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Telefone</TableHead>
-                <TableHead className="hidden md:table-cell">Email</TableHead>
-                <TableHead className="hidden lg:table-cell">CNPJ</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum entregador encontrado</TableCell></TableRow>
-              ) : filtered.map(d => (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">{d.nome}</TableCell>
-                  <TableCell>{d.telefone}</TableCell>
-                  <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{d.email}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs">{d.cnpj || '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusConfig[d.status]?.variant || 'secondary'}>
-                      {statusConfig[d.status]?.label || d.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(d)} title="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(d)} title={d.status === 'ativo' ? 'Inativar' : 'Reativar'}>
-                        {d.status === 'ativo' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-3">Hoje</h2>
+              <DriverTodaySection />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-3">Histórico de Presenças</h2>
+              <DriverHistorySection />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-3">Ranking de Entregadores</h2>
+              <DriverRankingSection />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="cadastro" className="space-y-4">
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input placeholder="Buscar por nome ou telefone…" value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="ativo">Ativos</SelectItem>
+                  <SelectItem value="inativo">Inativos</SelectItem>
+                  <SelectItem value="suspenso">Suspensos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Table */}
+            <div className="border rounded-lg overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Telefone</TableHead>
+                    <TableHead className="hidden md:table-cell">Email</TableHead>
+                    <TableHead className="hidden lg:table-cell">CNPJ</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Nenhum entregador encontrado</TableCell></TableRow>
+                  ) : filtered.map(d => (
+                    <TableRow key={d.id}>
+                      <TableCell className="font-medium">{d.nome}</TableCell>
+                      <TableCell>{d.telefone}</TableCell>
+                      <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{d.email}</TableCell>
+                      <TableCell className="hidden lg:table-cell text-xs">{d.cnpj || '—'}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusConfig[d.status]?.variant || 'secondary'}>
+                          {statusConfig[d.status]?.label || d.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(d)} title="Editar">
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleToggleStatus(d)} title={d.status === 'ativo' ? 'Inativar' : 'Reativar'}>
+                            {d.status === 'ativo' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* CREATE DIALOG */}
