@@ -20,6 +20,7 @@ import SalonClosing from "./pages/SalonClosing";
 import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
 import EntregadorPortal from "./pages/EntregadorPortal";
+import DriverManagement from "./pages/DriverManagement";
 
 const queryClient = new QueryClient();
 
@@ -93,6 +94,7 @@ const App = () => (
             <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonReconciliation /></SectorGuard></ProtectedRoute>} />
             <Route path="/entregador" element={<ProtectedRoute><SectorGuard sector="entregador"><EntregadorPortal /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
+            <Route path="/admin/entregadores" element={<ProtectedRoute><DriverManagement /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
