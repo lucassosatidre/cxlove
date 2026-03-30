@@ -963,6 +963,15 @@ export default function Reconciliation() {
           />
         )}
 
+        {/* 4b. Driver Attendance */}
+        {closingData && (
+          <DriverAttendanceSection
+            closingDate={closingData.closing_date}
+            isCompleted={isCompleted}
+            isAdmin={isAdmin}
+          />
+        )}
+
         {/* 5. Cash Snapshot - Fechamento */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
