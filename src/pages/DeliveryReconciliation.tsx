@@ -351,11 +351,16 @@ export default function DeliveryReconciliation() {
     return Array.from(set).sort();
   }, [orders]);
 
+  const confirmedDriverNames = useMemo(() => confirmedDrivers.map(d => d.nome), [confirmedDrivers]);
+
   const deliveryPersons = useMemo(() => {
     const set = new Set<string>();
     offlineOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
-    return Array.from(set).sort();
-  }, [offlineOrders]);
+    const all = Array.from(set);
+    const confirmed = all.filter(d => confirmedDriverNames.includes(d));
+    const others = all.filter(d => !confirmedDriverNames.includes(d));
+    return [...confirmed.sort(), ...others.sort()];
+  }, [offlineOrders, confirmedDriverNames]);
 
   const paymentMethodsFilter = useMemo(() => {
     const set = new Set<string>();
