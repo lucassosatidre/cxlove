@@ -91,6 +91,7 @@ const App = () => (
             <Route path="/salon/import" element={<ProtectedRoute><SectorGuard sector="salon"><SalonImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/salon/closing/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonClosing /></SectorGuard></ProtectedRoute>} />
             <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonReconciliation /></SectorGuard></ProtectedRoute>} />
+            <Route path="/entregador" element={<ProtectedRoute><SectorGuard sector="entregador"><EntregadorPortal /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             {/* Redirect old test routes */}
