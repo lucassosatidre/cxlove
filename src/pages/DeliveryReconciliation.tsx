@@ -82,6 +82,7 @@ export default function DeliveryReconciliation() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [closingDate, setClosingDate] = useState('');
+  const { confirmedDrivers } = useConfirmedDrivers(closingDate);
   const [reconciliationStatus, setReconciliationStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const [filterMatch, setFilterMatch] = useState('all');
