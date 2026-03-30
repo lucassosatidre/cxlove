@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
       nome,
       telefone,
       email,
-      cpf: cpf || null,
+      cnpj: cnpj || null,
       pix: pix || null,
       max_periodos_dia: max_periodos_dia || 1,
       notas: notas || null,
