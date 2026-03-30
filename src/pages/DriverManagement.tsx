@@ -262,7 +262,7 @@ export default function DriverManagement() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Nenhum entregador encontrado</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum entregador encontrado</TableCell></TableRow>
               ) : filtered.map(d => (
                 <TableRow key={d.id}>
                   <TableCell className="font-medium">{d.nome}</TableCell>
