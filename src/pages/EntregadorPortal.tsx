@@ -228,18 +228,6 @@ export default function EntregadorPortal() {
         return;
       }
 
-      const { count: dayCount } = await supabase
-        .from('delivery_checkins')
-        .select('*, delivery_shifts!inner(data)', { count: 'exact', head: true })
-        .eq('driver_id', driver.id)
-        .eq('status', 'confirmado')
-        .eq('delivery_shifts.data', shift.data);
-
-      if ((dayCount || 0) >= driver.max_periodos_dia) {
-        toast({ title: 'Limite de turnos por dia atingido', variant: 'destructive' });
-        return;
-      }
-
       const { error } = await supabase.from('delivery_checkins').insert({
         shift_id: shift.shiftId,
         driver_id: driver.id,
