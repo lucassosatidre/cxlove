@@ -203,6 +203,135 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_checkins: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          confirmed_at: string | null
+          created_at: string
+          driver_id: string
+          id: string
+          shift_id: string
+          status: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          driver_id: string
+          id?: string
+          shift_id: string
+          status?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          confirmed_at?: string | null
+          created_at?: string
+          driver_id?: string
+          id?: string
+          shift_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_checkins_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_drivers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_checkins_shift_id_fkey"
+            columns: ["shift_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_shifts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_drivers: {
+        Row: {
+          auth_user_id: string
+          cpf: string | null
+          created_at: string
+          email: string
+          id: string
+          max_periodos_dia: number
+          nome: string
+          notas: string | null
+          pix: string | null
+          status: string
+          telefone: string
+          updated_at: string
+        }
+        Insert: {
+          auth_user_id: string
+          cpf?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          max_periodos_dia?: number
+          nome: string
+          notas?: string | null
+          pix?: string | null
+          status?: string
+          telefone: string
+          updated_at?: string
+        }
+        Update: {
+          auth_user_id?: string
+          cpf?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          max_periodos_dia?: number
+          nome?: string
+          notas?: string | null
+          pix?: string | null
+          status?: string
+          telefone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      delivery_shifts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: string
+          horario_fim: string | null
+          horario_inicio: string | null
+          id: string
+          notas: string | null
+          periodo: string
+          vagas: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data: string
+          horario_fim?: string | null
+          horario_inicio?: string | null
+          id?: string
+          notas?: string | null
+          periodo: string
+          vagas?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: string
+          horario_fim?: string | null
+          horario_inicio?: string | null
+          id?: string
+          notas?: string | null
+          periodo?: string
+          vagas?: number
+        }
+        Relationships: []
+      }
       imported_orders: {
         Row: {
           confirmed_at: string | null
@@ -849,7 +978,12 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "operador" | "caixa_tele" | "caixa_salao"
+      app_role:
+        | "admin"
+        | "operador"
+        | "caixa_tele"
+        | "caixa_salao"
+        | "entregador"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -977,7 +1111,13 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "operador", "caixa_tele", "caixa_salao"],
+      app_role: [
+        "admin",
+        "operador",
+        "caixa_tele",
+        "caixa_salao",
+        "entregador",
+      ],
     },
   },
 } as const

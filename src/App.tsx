@@ -19,6 +19,7 @@ import SalonImport from "./pages/SalonImport";
 import SalonClosing from "./pages/SalonClosing";
 import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
+import EntregadorPortal from "./pages/EntregadorPortal";
 
 const queryClient = new QueryClient();
 
@@ -35,8 +36,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Sector guard: restricts caixa_tele to tele routes, caixa_salao to salon routes
-function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children: React.ReactNode }) {
-  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+function SectorGuard({ sector, children }: { sector: 'tele' | 'salon' | 'entregador'; children: React.ReactNode }) {
+  const { isAdmin, isCaixaTele, isCaixaSalao, isEntregador, loading } = useUserRole();
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -46,6 +47,8 @@ function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children:
   }
   // Admin can access everything
   if (isAdmin) return <>{children}</>;
+  // Entregador can only access entregador portal
+  if (isEntregador && sector !== 'entregador') return <Navigate to="/entregador" replace />;
   // caixa_tele can only access tele
   if (isCaixaTele && sector !== 'tele') return <Navigate to="/tele" replace />;
   // caixa_salao can only access salon
@@ -54,7 +57,7 @@ function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children:
 }
 
 function RoleRedirect() {
-  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+  const { isAdmin, isCaixaTele, isCaixaSalao, isEntregador, loading } = useUserRole();
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -62,6 +65,7 @@ function RoleRedirect() {
       </div>
     );
   }
+  if (isEntregador) return <Navigate to="/entregador" replace />;
   if (isCaixaTele) return <Navigate to="/tele" replace />;
   if (isCaixaSalao) return <Navigate to="/salon" replace />;
   return <Overview />;
@@ -87,6 +91,7 @@ const App = () => (
             <Route path="/salon/import" element={<ProtectedRoute><SectorGuard sector="salon"><SalonImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/salon/closing/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonClosing /></SectorGuard></ProtectedRoute>} />
             <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonReconciliation /></SectorGuard></ProtectedRoute>} />
+            <Route path="/entregador" element={<ProtectedRoute><SectorGuard sector="entregador"><EntregadorPortal /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             {/* Redirect old test routes */}
