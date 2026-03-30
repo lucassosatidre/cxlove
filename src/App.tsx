@@ -36,8 +36,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Sector guard: restricts caixa_tele to tele routes, caixa_salao to salon routes
-function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children: React.ReactNode }) {
-  const { isAdmin, isCaixaTele, isCaixaSalao, loading } = useUserRole();
+function SectorGuard({ sector, children }: { sector: 'tele' | 'salon' | 'entregador'; children: React.ReactNode }) {
+  const { isAdmin, isCaixaTele, isCaixaSalao, isEntregador, loading } = useUserRole();
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -47,6 +47,8 @@ function SectorGuard({ sector, children }: { sector: 'tele' | 'salon'; children:
   }
   // Admin can access everything
   if (isAdmin) return <>{children}</>;
+  // Entregador can only access entregador portal
+  if (isEntregador && sector !== 'entregador') return <Navigate to="/entregador" replace />;
   // caixa_tele can only access tele
   if (isCaixaTele && sector !== 'tele') return <Navigate to="/tele" replace />;
   // caixa_salao can only access salon
