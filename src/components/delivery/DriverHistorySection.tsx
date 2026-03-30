@@ -33,7 +33,7 @@ interface DriverOption {
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
   confirmado: { label: 'Confirmado', variant: 'default' },
   cancelado: { label: 'Cancelado', variant: 'secondary' },
-  no_show: { label: 'No-show', variant: 'destructive' },
+  no_show: { label: 'Faltou', variant: 'destructive' },
   concluido: { label: 'Concluído', variant: 'outline' },
 };
 
