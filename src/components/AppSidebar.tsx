@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
-import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck } from 'lucide-react';
+import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, CalendarDays } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import propositoLogo from '@/assets/proposito-logo.png';
 import estrelaLogo from '@/assets/estrela-logo.png';
@@ -39,6 +39,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     navItems = allNavItems.filter(item => hasPermission(item.permission));
     if (isAdmin) {
       navItems.push({ icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' });
+      navItems.push({ icon: CalendarDays, label: 'Escalas Entregadores', path: '/admin/escalas-entregadores', permission: 'dashboard' });
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }
   }
