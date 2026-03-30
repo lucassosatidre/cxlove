@@ -173,10 +173,11 @@ export default function DriverManagement() {
   const openEdit = (d: Driver) => {
     setEditDriver(d);
     setEditForm({
-      nome: d.nome, telefone: d.telefone, cpf: d.cpf || '', pix: d.pix || '',
+      nome: d.nome, telefone: d.telefone, cnpj: d.cnpj || '',
       max_periodos_dia: d.max_periodos_dia, notas: d.notas || '', status: d.status,
     });
     setResetPasswordResult(null);
+    setEditPassword('');
   };
 
   // Filters
