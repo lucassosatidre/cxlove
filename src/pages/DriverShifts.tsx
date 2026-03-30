@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { format, startOfWeek, addDays, isBefore, isToday, addWeeks, subWeeks, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Save, Settings2, CalendarDays, Plus, Trash2, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, Settings2, CalendarDays, Plus, Trash2, Clock, UserPlus, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Progress } from '@/components/ui/progress';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 
@@ -24,7 +23,7 @@ interface ShiftSlot {
   horario_fim: string;
   vagas: number;
   checkins: number;
-  confirmedDrivers: { nome: string; confirmedAt: string }[];
+  confirmedDrivers: { checkinId: string; driverId: string; nome: string; confirmedAt: string; origin: string }[];
 }
 
 interface DayData {
@@ -58,7 +57,12 @@ export default function DriverShifts() {
     days: [true, true, true, true, true, true, true],
   });
   const [confirmDelete, setConfirmDelete] = useState<{ dayIdx: number; shiftIdx: number; checkins: number } | null>(null);
-  const [editPopover, setEditPopover] = useState<{ dayIdx: number; shiftIdx: number } | null>(null);
+  const [allActiveDrivers, setAllActiveDrivers] = useState<{ id: string; nome: string }[]>([]);
+  const [addDriverPopover, setAddDriverPopover] = useState<{ shiftId: string; dayIdx: number; shiftIdx: number } | null>(null);
+  const [selectedDriverToAdd, setSelectedDriverToAdd] = useState('');
+  const [addingDriver, setAddingDriver] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState<{ checkinId: string; driverName: string; horario: string } | null>(null);
+  const [removingDriver, setRemovingDriver] = useState(false);
 
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
@@ -89,7 +93,7 @@ export default function DriverShifts() {
     if (shiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_checkins')
-        .select('shift_id, status, driver_id, confirmed_at')
+        .select('id, shift_id, status, driver_id, confirmed_at, origin')
         .in('shift_id', shiftIds)
         .eq('status', 'confirmado');
       checkins = data || [];
@@ -107,7 +111,7 @@ export default function DriverShifts() {
     }
 
     // Group checkins by shift
-    const checkinsByShift: Record<string, { count: number; drivers: { nome: string; confirmedAt: string }[] }> = {};
+    const checkinsByShift: Record<string, { count: number; drivers: { checkinId: string; driverId: string; nome: string; confirmedAt: string; origin: string }[] }> = {};
     checkins.forEach(c => {
       if (!checkinsByShift[c.shift_id]) {
         checkinsByShift[c.shift_id] = { count: 0, drivers: [] };
@@ -115,8 +119,11 @@ export default function DriverShifts() {
       checkinsByShift[c.shift_id].count++;
       const firstName = (driverMap[c.driver_id] || 'Desconhecido').split(' ')[0];
       checkinsByShift[c.shift_id].drivers.push({
+        checkinId: c.id,
+        driverId: c.driver_id,
         nome: firstName,
         confirmedAt: c.confirmed_at ? format(new Date(c.confirmed_at), 'HH:mm') : '-',
+        origin: (c as any).origin || 'entregador',
       });
     });
 
@@ -136,6 +143,57 @@ export default function DriverShifts() {
     });
     setWeekData(updated);
     setLoading(false);
+
+    // Fetch all active drivers for admin add
+    const { data: activeDrivers } = await supabase
+      .from('delivery_drivers')
+      .select('id, nome')
+      .eq('status', 'ativo')
+      .order('nome');
+    setAllActiveDrivers(activeDrivers || []);
+  };
+
+  const handleAdminAddDriver = async () => {
+    if (!addDriverPopover || !selectedDriverToAdd || !user) return;
+    setAddingDriver(true);
+    const { error } = await supabase.from('delivery_checkins').insert({
+      shift_id: addDriverPopover.shiftId,
+      driver_id: selectedDriverToAdd,
+      status: 'confirmado',
+      origin: 'admin',
+      admin_inserted_by: user.id,
+    } as any);
+    if (error) {
+      toast({ title: error.code === '23505' ? 'Entregador já confirmado neste turno' : 'Erro ao adicionar', variant: 'destructive' });
+    } else {
+      toast({ title: 'Entregador adicionado ao turno' });
+      fetchWeekData();
+    }
+    setAddingDriver(false);
+    setAddDriverPopover(null);
+    setSelectedDriverToAdd('');
+  };
+
+  const handleAdminRemoveDriver = async () => {
+    if (!removeConfirm || !user) return;
+    setRemovingDriver(true);
+    const { error } = await supabase
+      .from('delivery_checkins')
+      .update({
+        status: 'cancelado',
+        admin_removed_at: new Date().toISOString(),
+        admin_removed_by: user.id,
+        cancel_reason: 'Removido pelo admin',
+      } as any)
+      .eq('id', removeConfirm.checkinId);
+    if (error) {
+      toast({ title: 'Erro ao remover', variant: 'destructive' });
+    } else {
+      toast({ title: 'Entregador removido do turno' });
+      fetchWeekData();
+    }
+    setRemovingDriver(false);
+    setRemoveConfirm(null);
   };
 
   const addShift = (dayIdx: number) => {
@@ -387,13 +445,73 @@ export default function DriverShifts() {
                         </div>
                       </div>
 
-                      {/* Driver names */}
+                      {/* Driver names with remove buttons */}
                       {shift.confirmedDrivers.length > 0 ? (
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          {shift.confirmedDrivers.map(d => d.nome).join(', ')}
-                        </p>
+                        <div className="space-y-0.5">
+                          {shift.confirmedDrivers.map(d => (
+                            <div key={d.checkinId} className="flex items-center justify-between group">
+                              <span className="text-[10px] text-muted-foreground leading-tight">
+                                {d.nome}
+                                {d.origin === 'admin' && <span className="text-[8px] text-primary ml-0.5">(admin)</span>}
+                              </span>
+                              {!past && (
+                                <button
+                                  onClick={() => setRemoveConfirm({ checkinId: d.checkinId, driverName: d.nome, horario: `${shift.horario_inicio} — ${shift.horario_fim}` })}
+                                  className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive/80 p-0.5 transition-opacity"
+                                  title="Remover"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       ) : (
                         <p className="text-[10px] text-muted-foreground italic">sem confirmações</p>
+                      )}
+
+                      {/* Admin add driver button */}
+                      {!past && shift.id && (
+                        <Popover
+                          open={addDriverPopover?.shiftId === shift.id}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setAddDriverPopover({ shiftId: shift.id!, dayIdx, shiftIdx });
+                              setSelectedDriverToAdd('');
+                            } else {
+                              setAddDriverPopover(null);
+                            }
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <button className="flex items-center gap-0.5 text-[9px] text-primary hover:text-primary/80 transition-colors">
+                              <UserPlus className="h-2.5 w-2.5" /> Motoboy
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-52 p-3 space-y-2" align="start">
+                            <p className="text-xs font-medium">Adicionar motoboy</p>
+                            <select
+                              className="w-full h-7 text-xs border rounded px-1.5 bg-background"
+                              value={selectedDriverToAdd}
+                              onChange={e => setSelectedDriverToAdd(e.target.value)}
+                            >
+                              <option value="">Selecione...</option>
+                              {allActiveDrivers
+                                .filter(d => !shift.confirmedDrivers.some(cd => cd.driverId === d.id))
+                                .map(d => (
+                                  <option key={d.id} value={d.id}>{d.nome}</option>
+                                ))}
+                            </select>
+                            <Button
+                              size="sm"
+                              className="w-full h-7 text-xs"
+                              disabled={!selectedDriverToAdd || addingDriver}
+                              onClick={handleAdminAddDriver}
+                            >
+                              {addingDriver ? 'Adicionando...' : 'Adicionar'}
+                            </Button>
+                          </PopoverContent>
+                        </Popover>
                       )}
                     </div>
                   );
@@ -554,6 +672,24 @@ export default function DriverShifts() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={handleForceDeleteAndSave}>Remover mesmo assim</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm remove driver */}
+      <AlertDialog open={!!removeConfirm} onOpenChange={() => setRemoveConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover entregador</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remover {removeConfirm?.driverName} do turno de {removeConfirm?.horario}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAdminRemoveDriver} disabled={removingDriver}>
+              {removingDriver ? 'Removendo...' : 'Remover'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

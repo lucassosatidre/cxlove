@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format, addDays, isBefore, isToday, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LogOut, RefreshCw, ChevronDown, AlertTriangle, Clock, Check } from 'lucide-react';
+import { LogOut, RefreshCw, ChevronDown, AlertTriangle, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -26,6 +24,7 @@ interface ConfirmedShift {
   data: string;
   horario_inicio: string;
   horario_fim: string;
+  origin: string;
 }
 
 interface AvailableShift {
@@ -38,6 +37,7 @@ interface AvailableShift {
   alreadyConfirmed: boolean;
   _dayLimit?: boolean;
 }
+
 
 interface HistoryItem {
   data: string;
@@ -99,7 +99,7 @@ export default function EntregadorPortal() {
     if (shiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_checkins')
-        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason')
+        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason, origin')
         .in('shift_id', shiftIds);
       allCheckins = data || [];
     }
@@ -132,6 +132,7 @@ export default function EntregadorPortal() {
           data: shift.data,
           horario_inicio: shift.horario_inicio?.slice(0, 5) || '',
           horario_fim: shift.horario_fim?.slice(0, 5) || '',
+          origin: (c as any).origin || 'entregador',
         };
       })
       .filter(Boolean) as ConfirmedShift[];
@@ -212,6 +213,18 @@ export default function EntregadorPortal() {
 
   const canCancel = (data: string, horarioInicio: string | null): boolean => !isShiftPast(data, horarioInicio);
 
+  const getDeviceInfo = async () => {
+    let deviceIp = 'indisponível';
+    try {
+      const res = await fetch('https://api.ipify.org?format=json');
+      const data = await res.json();
+      deviceIp = data.ip || 'indisponível';
+    } catch { /* ignore */ }
+    const deviceUserAgent = navigator.userAgent;
+    const deviceInfo = `${screen.width}x${screen.height}`;
+    return { deviceIp, deviceUserAgent, deviceInfo };
+  };
+
   const handleConfirm = async (shift: AvailableShift) => {
     if (!driver || !user) return;
     setActionLoading(shift.shiftId);
@@ -228,11 +241,17 @@ export default function EntregadorPortal() {
         return;
       }
 
+      const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+
       const { error } = await supabase.from('delivery_checkins').insert({
         shift_id: shift.shiftId,
         driver_id: driver.id,
         status: 'confirmado',
-      });
+        device_ip: deviceIp,
+        device_user_agent: deviceUserAgent,
+        device_info: deviceInfo,
+        origin: 'entregador',
+      } as any);
 
       if (error) {
         if (error.code === '23505') {
@@ -359,6 +378,9 @@ export default function EntregadorPortal() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[#1A1A1A] leading-snug">{formatDateFull(cs.data)}</p>
                         <p className="text-[13px] text-[#6B7280] mt-0.5">{cs.horario_inicio} — {cs.horario_fim}</p>
+                        {cs.origin === 'admin' && (
+                          <p className="text-[11px] text-[#9CA3AF] mt-0.5 italic">adicionado pela gestão</p>
+                        )}
                       </div>
                       {canCancel(cs.data, cs.horario_inicio) && (
                         <button

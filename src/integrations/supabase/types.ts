@@ -205,32 +205,53 @@ export type Database = {
       }
       delivery_checkins: {
         Row: {
+          admin_inserted_by: string | null
+          admin_removed_at: string | null
+          admin_removed_by: string | null
           cancel_reason: string | null
           cancelled_at: string | null
           confirmed_at: string | null
           created_at: string
+          device_info: string | null
+          device_ip: string | null
+          device_user_agent: string | null
           driver_id: string
           id: string
+          origin: string
           shift_id: string
           status: string
         }
         Insert: {
+          admin_inserted_by?: string | null
+          admin_removed_at?: string | null
+          admin_removed_by?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           confirmed_at?: string | null
           created_at?: string
+          device_info?: string | null
+          device_ip?: string | null
+          device_user_agent?: string | null
           driver_id: string
           id?: string
+          origin?: string
           shift_id: string
           status?: string
         }
         Update: {
+          admin_inserted_by?: string | null
+          admin_removed_at?: string | null
+          admin_removed_by?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
           confirmed_at?: string | null
           created_at?: string
+          device_info?: string | null
+          device_ip?: string | null
+          device_user_agent?: string | null
           driver_id?: string
           id?: string
+          origin?: string
           shift_id?: string
           status?: string
         }
