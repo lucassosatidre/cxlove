@@ -118,13 +118,14 @@ export default function DriverAttendanceSection({ closingDate, isCompleted, isAd
     })));
     setUpdating(checkinId);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('delivery_checkins')
       .update({ status: newStatus })
-      .eq('id', checkinId);
+      .eq('id', checkinId)
+      .select();
 
-    if (error) {
-      toast.error('Erro ao atualizar presença');
+    if (error || !data || data.length === 0) {
+      toast.error(error ? 'Erro ao atualizar presença' : 'Sem permissão para atualizar presença. Contate o administrador.');
       // Revert optimistic update
       setShifts(prev => prev.map(s => ({
         ...s,
@@ -136,7 +137,6 @@ export default function DriverAttendanceSection({ closingDate, isCompleted, isAd
       } else {
         toast.success(`${driverName} marcado como falta`);
       }
-      console.log(`[Attendance] ${driverName} marked as ${newStatus}, checkinId=${checkinId}`);
     }
     setUpdating(null);
   };
