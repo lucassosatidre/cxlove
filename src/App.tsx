@@ -19,6 +19,7 @@ import SalonImport from "./pages/SalonImport";
 import SalonClosing from "./pages/SalonClosing";
 import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
+import EntregadorPortal from "./pages/EntregadorPortal";
 
 const queryClient = new QueryClient();
 
