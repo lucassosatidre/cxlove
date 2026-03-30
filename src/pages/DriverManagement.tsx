@@ -163,7 +163,7 @@ export default function DriverManagement() {
     setEditDriver(d);
     setEditForm({
       nome: d.nome, telefone: d.telefone, cnpj: d.cnpj || '',
-      max_periodos_dia: d.max_periodos_dia, notas: d.notas || '', status: d.status,
+      notas: d.notas || '', status: d.status,
     });
     setResetPasswordResult(null);
     setEditPassword('');
