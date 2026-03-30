@@ -318,13 +318,7 @@ export default function DriverManagement() {
               <div><Label>Telefone *</Label><Input value={createForm.telefone} onChange={e => setCreateForm(f => ({ ...f, telefone: maskPhone(e.target.value) }))} placeholder="(XX) XXXXX-XXXX" /></div>
               <div><Label>Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><Label>CNPJ (MEI)</Label><Input value={createForm.cnpj} onChange={e => setCreateForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
-              <div>
-                <Label>Senha *</Label>
-                <div className="flex gap-2">
-                  <Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Senha do entregador" className="flex-1" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCreateForm(f => ({ ...f, password: generatePassword() }))}>Gerar</Button>
-                </div>
-              </div>
+              <div><Label>Senha *</Label><Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Digite a senha do entregador" /></div>
               <div><Label>Máx períodos/dia</Label>
                 <Select value={String(createForm.max_periodos_dia)} onValueChange={v => setCreateForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
