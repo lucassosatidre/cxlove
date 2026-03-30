@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
 
   // UPDATE DRIVER
   if (action === 'update') {
-    const { driver_id, nome, telefone, cpf, pix, max_periodos_dia, notas, status } = body;
+    const { driver_id, nome, telefone, cnpj, pix, max_periodos_dia, notas, status } = body;
 
     if (!driver_id) {
       return new Response(JSON.stringify({ error: 'driver_id é obrigatório' }), {
