@@ -108,7 +108,7 @@ export default function DriverShifts() {
     }
 
     // Group checkins by shift
-    const checkinsByShift: Record<string, { count: number; drivers: { nome: string; confirmedAt: string }[] }> = {};
+    const checkinsByShift: Record<string, { count: number; drivers: { checkinId: string; driverId: string; nome: string; confirmedAt: string; origin: string }[] }> = {};
     checkins.forEach(c => {
       if (!checkinsByShift[c.shift_id]) {
         checkinsByShift[c.shift_id] = { count: 0, drivers: [] };
@@ -116,8 +116,11 @@ export default function DriverShifts() {
       checkinsByShift[c.shift_id].count++;
       const firstName = (driverMap[c.driver_id] || 'Desconhecido').split(' ')[0];
       checkinsByShift[c.shift_id].drivers.push({
+        checkinId: c.id,
+        driverId: c.driver_id,
         nome: firstName,
         confirmedAt: c.confirmed_at ? format(new Date(c.confirmed_at), 'HH:mm') : '-',
+        origin: (c as any).origin || 'entregador',
       });
     });
 
