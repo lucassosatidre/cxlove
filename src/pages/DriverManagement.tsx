@@ -306,12 +306,6 @@ export default function DriverManagement() {
               <div><Label>Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><Label>CNPJ (MEI)</Label><Input value={createForm.cnpj} onChange={e => setCreateForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
               <div><Label>Senha *</Label><Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Digite a senha do entregador" /></div>
-              <div><Label>Máx períodos/dia</Label>
-                <Select value={String(createForm.max_periodos_dia)} onValueChange={v => setCreateForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem></SelectContent>
-                </Select>
-              </div>
               <div><Label>Observações</Label><Textarea value={createForm.notas} onChange={e => setCreateForm(f => ({ ...f, notas: e.target.value }))} rows={2} /></div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setShowCreate(false); resetCreateForm(); }}>Cancelar</Button>
