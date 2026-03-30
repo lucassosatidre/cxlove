@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Plus, Search, Pencil, UserCheck, UserX, KeyRound, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
+import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
 
 interface Driver {
   id: string;
@@ -78,8 +78,7 @@ export default function DriverManagement() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Reset password result
-  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null);
+  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null); // kept for openEdit reset
 
   const fetchDrivers = useCallback(async () => {
     const { data, error } = await supabase.from('delivery_drivers').select('*').order('nome');
@@ -129,8 +128,15 @@ export default function DriverManagement() {
     setSaving(true);
     try {
       await invokeFunction({ action: 'update', driver_id: editDriver.id, ...editForm });
-      toast.success('Entregador atualizado!');
+      // If password field has a value, also reset password
+      if (editPassword.trim()) {
+        await invokeFunction({ action: 'reset_password', driver_id: editDriver.id, new_password: editPassword.trim() });
+        toast.success('Entregador e senha atualizados!');
+      } else {
+        toast.success('Entregador atualizado!');
+      }
       setEditDriver(null);
+      setEditPassword('');
       fetchDrivers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao atualizar');
@@ -151,24 +157,7 @@ export default function DriverManagement() {
     }
   };
 
-  // RESET PASSWORD
   const [editPassword, setEditPassword] = useState('');
-  const handleResetPassword = async (driverId: string) => {
-    if (!editPassword) { toast.error('Digite a nova senha'); return; }
-    try {
-      const result = await invokeFunction({ action: 'reset_password', driver_id: driverId, new_password: editPassword });
-      setResetPasswordResult(result.password);
-      toast.success('Senha atualizada!');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let pwd = '';
-    for (let i = 0; i < 8; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
-    return pwd;
-  };
 
   const openEdit = (d: Driver) => {
     setEditDriver(d);
@@ -318,13 +307,7 @@ export default function DriverManagement() {
               <div><Label>Telefone *</Label><Input value={createForm.telefone} onChange={e => setCreateForm(f => ({ ...f, telefone: maskPhone(e.target.value) }))} placeholder="(XX) XXXXX-XXXX" /></div>
               <div><Label>Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><Label>CNPJ (MEI)</Label><Input value={createForm.cnpj} onChange={e => setCreateForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
-              <div>
-                <Label>Senha *</Label>
-                <div className="flex gap-2">
-                  <Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Senha do entregador" className="flex-1" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => setCreateForm(f => ({ ...f, password: generatePassword() }))}>Gerar</Button>
-                </div>
-              </div>
+              <div><Label>Senha *</Label><Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Digite a senha do entregador" /></div>
               <div><Label>Máx períodos/dia</Label>
                 <Select value={String(createForm.max_periodos_dia)} onValueChange={v => setCreateForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -369,24 +352,9 @@ export default function DriverManagement() {
               </div>
               <div><Label>Observações</Label><Textarea value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} rows={2} /></div>
 
-              {/* Reset password */}
               <div className="border-t pt-3">
-                <Label>Nova senha</Label>
-                <div className="flex gap-2 mt-1">
-                  <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Digite a nova senha" className="flex-1" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEditPassword(generatePassword())}>Gerar</Button>
-                  <Button size="sm" onClick={() => handleResetPassword(editDriver.id)} disabled={!editPassword}>
-                    <KeyRound className="h-3 w-3 mr-1" /> Salvar
-                  </Button>
-                </div>
-                {resetPasswordResult && (
-                  <div className="mt-2 bg-muted p-3 rounded-lg flex items-center gap-2">
-                    <p className="text-sm"><strong>Senha atualizada:</strong> {resetPasswordResult}</p>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(resetPasswordResult); toast.success('Copiada!'); }}>
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
+                <Label>Nova senha (deixe vazio para manter a atual)</Label>
+                <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Deixe vazio para manter a senha atual" className="mt-1" />
               </div>
 
               <DialogFooter>
