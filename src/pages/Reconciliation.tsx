@@ -18,6 +18,7 @@ import AppSidebar from '@/components/AppSidebar';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
+import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
