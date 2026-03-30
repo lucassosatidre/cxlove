@@ -25,7 +25,7 @@ interface ShiftSlot {
   horario_fim: string;
   vagas: number;
   checkins: number;
-  confirmedDrivers: { nome: string; confirmedAt: string }[];
+  confirmedDrivers: { checkinId: string; driverId: string; nome: string; confirmedAt: string; origin: string }[];
 }
 
 interface DayData {
