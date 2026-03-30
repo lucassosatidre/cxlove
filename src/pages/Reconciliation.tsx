@@ -18,6 +18,7 @@ import AppSidebar from '@/components/AppSidebar';
 import { needsBreakdown, formatCurrency, getPaymentBadgeType, isAllOnline, isOnlinePayment, type PaymentBadgeType } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
+import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
 
 type SortField = 'order_number' | 'payment_method' | 'is_confirmed';
 type SortDirection = 'asc' | 'desc';
@@ -66,6 +67,7 @@ export default function Reconciliation() {
   const [importRecords, setImportRecords] = useState<ImportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const { confirmedDrivers } = useConfirmedDrivers(closingData?.closing_date || '');
   const [filterPayment, setFilterPayment] = useState('all');
   const [filterDelivery, setFilterDelivery] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -634,7 +636,14 @@ export default function Reconciliation() {
   const offlinePaymentMethods = useMemo(() => [
     'Crédito', 'Débito', '(COBRAR) Pix', 'Dinheiro', 'Voucher', '(PAGO) Pix Banco do Brasil', 'Sob Demanda Ifood', 'Pagamento não cadastrado'
   ], []);
-  const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
+  const confirmedDriverNames = useMemo(() => confirmedDrivers.map(d => d.nome), [confirmedDrivers]);
+  const deliveryPersons = useMemo(() => {
+    const fromOrders = [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])];
+    // Prioritize confirmed drivers first
+    const confirmed = fromOrders.filter(d => confirmedDriverNames.includes(d));
+    const others = fromOrders.filter(d => !confirmedDriverNames.includes(d));
+    return [...confirmed.sort(), ...others.sort()];
+  }, [orders, confirmedDriverNames]);
 
   const filtered = useMemo(() => {
     const result = orders.filter(o => {
@@ -1083,6 +1092,16 @@ export default function Reconciliation() {
           )}
         </div>
 
+        {/* Confirmed drivers info */}
+        {confirmedDrivers.length > 0 && (
+          <div className="border-b border-border bg-primary/5 px-6 py-2.5 flex items-center gap-2 text-sm">
+            <Truck className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-muted-foreground">Entregadores confirmados hoje:</span>
+            <span className="font-medium text-foreground">{confirmedDrivers.map(d => d.nome).join(', ')}</span>
+            <span className="text-xs text-muted-foreground">({confirmedDrivers.length})</span>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3 flex flex-wrap gap-2">
@@ -1112,7 +1131,11 @@ export default function Reconciliation() {
                 <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os entregadores</SelectItem>
-                  {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  {deliveryPersons.map(d => (
+                    <SelectItem key={d} value={d}>
+                      {d}{confirmedDriverNames.includes(d) ? ' ✓' : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

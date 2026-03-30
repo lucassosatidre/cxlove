@@ -34,6 +34,7 @@ import {
   exportDriverSummaryXLSX,
 } from '@/lib/delivery-export';
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
+import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
 
 interface Order {
   id: string;
@@ -81,6 +82,7 @@ export default function DeliveryReconciliation() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [closingDate, setClosingDate] = useState('');
+  const { confirmedDrivers } = useConfirmedDrivers(closingDate);
   const [reconciliationStatus, setReconciliationStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const [filterMatch, setFilterMatch] = useState('all');
@@ -349,11 +351,16 @@ export default function DeliveryReconciliation() {
     return Array.from(set).sort();
   }, [orders]);
 
+  const confirmedDriverNames = useMemo(() => confirmedDrivers.map(d => d.nome), [confirmedDrivers]);
+
   const deliveryPersons = useMemo(() => {
     const set = new Set<string>();
     offlineOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
-    return Array.from(set).sort();
-  }, [offlineOrders]);
+    const all = Array.from(set);
+    const confirmed = all.filter(d => confirmedDriverNames.includes(d));
+    const others = all.filter(d => !confirmedDriverNames.includes(d));
+    return [...confirmed.sort(), ...others.sort()];
+  }, [offlineOrders, confirmedDriverNames]);
 
   const paymentMethodsFilter = useMemo(() => {
     const set = new Set<string>();
@@ -1088,6 +1095,15 @@ export default function DeliveryReconciliation() {
           </div>
         </div>
       </div>
+      {/* Confirmed drivers info */}
+      {confirmedDrivers.length > 0 && (
+        <div className="border-b border-border bg-primary/5 px-6 py-2.5 flex items-center gap-2 text-sm">
+          <Truck className="h-4 w-4 text-primary shrink-0" />
+          <span className="text-muted-foreground">Entregadores confirmados hoje:</span>
+          <span className="font-medium text-foreground">{confirmedDrivers.map(d => d.nome).join(', ')}</span>
+          <span className="text-xs text-muted-foreground">({confirmedDrivers.length})</span>
+        </div>
+      )}
       {/* Filters */}
       <div className="border-b border-border bg-card">
         <div className="px-6 py-3 flex flex-wrap gap-2">
@@ -1100,7 +1116,9 @@ export default function DeliveryReconciliation() {
             <SelectContent>
               <SelectItem value="all">Todos entregadores</SelectItem>
               {deliveryPersons.map(dp => (
-                <SelectItem key={dp} value={dp}>{dp}</SelectItem>
+                <SelectItem key={dp} value={dp}>
+                  {dp}{confirmedDriverNames.includes(dp) ? ' ✓' : ''}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
