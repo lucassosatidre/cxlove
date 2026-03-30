@@ -635,7 +635,14 @@ export default function Reconciliation() {
   const offlinePaymentMethods = useMemo(() => [
     'Crédito', 'Débito', '(COBRAR) Pix', 'Dinheiro', 'Voucher', '(PAGO) Pix Banco do Brasil', 'Sob Demanda Ifood', 'Pagamento não cadastrado'
   ], []);
-  const deliveryPersons = useMemo(() => [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])].sort(), [orders]);
+  const confirmedDriverNames = useMemo(() => confirmedDrivers.map(d => d.nome), [confirmedDrivers]);
+  const deliveryPersons = useMemo(() => {
+    const fromOrders = [...new Set(orders.map(o => o.delivery_person).filter(Boolean) as string[])];
+    // Prioritize confirmed drivers first
+    const confirmed = fromOrders.filter(d => confirmedDriverNames.includes(d));
+    const others = fromOrders.filter(d => !confirmedDriverNames.includes(d));
+    return [...confirmed.sort(), ...others.sort()];
+  }, [orders, confirmedDriverNames]);
 
   const filtered = useMemo(() => {
     const result = orders.filter(o => {
