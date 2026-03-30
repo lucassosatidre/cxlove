@@ -107,7 +107,7 @@ export default function DriverManagement() {
     }
     setCreating(true);
     try {
-      const result = const result = await invokeFunction({ action: 'create', ...createForm, cpf: undefined });
+      const result = await invokeFunction({ action: 'create', ...createForm });
       setCreatedPassword(result.password);
       toast.success('Entregador criado com sucesso!');
       fetchDrivers();
