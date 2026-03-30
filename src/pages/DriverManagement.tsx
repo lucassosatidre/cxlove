@@ -244,7 +244,6 @@ export default function DriverManagement() {
                 <TableHead>Telefone</TableHead>
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead className="hidden lg:table-cell">CNPJ</TableHead>
-                <TableHead className="hidden md:table-cell">Per./dia</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
