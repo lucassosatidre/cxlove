@@ -61,6 +61,7 @@ export default function Reconciliation() {
   const { isCaixaTele, isAdmin } = useUserRole();
   
   const navigate = useNavigate();
+  const { confirmedDrivers } = useConfirmedDrivers(closingData?.closing_date || '');
   
   const [orders, setOrders] = useState<Order[]>([]);
   const [closingData, setClosingData] = useState<ClosingData | null>(null);
