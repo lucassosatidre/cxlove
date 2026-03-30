@@ -78,8 +78,7 @@ export default function DriverManagement() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Reset password result
-  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null);
+  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null); // kept for openEdit reset
 
   const fetchDrivers = useCallback(async () => {
     const { data, error } = await supabase.from('delivery_drivers').select('*').order('nome');
