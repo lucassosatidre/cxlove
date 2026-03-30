@@ -104,7 +104,7 @@ export default function DriverRankingSection() {
           ))}
         </TableBody>
       </Table>
-      <p className="text-xs text-muted-foreground px-4 py-2">Últimos 30 dias. Taxa = confirmados / total de registros.</p>
+      <p className="text-xs text-muted-foreground px-4 py-2">Últimos 30 dias. Taxa = presentes / (presentes + faltas). Cancelamentos não afetam a taxa.</p>
     </div>
   );
 }

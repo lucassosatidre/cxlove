@@ -219,7 +219,7 @@ export default function DriverTodaySection() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {c.status === 'concluido' && <Badge variant="secondary" className="bg-blue-100 text-blue-700">Concluído</Badge>}
-                          {c.status === 'no_show' && <Badge variant="destructive">No-show</Badge>}
+                          {c.status === 'no_show' && <Badge variant="destructive">Faltou</Badge>}
                           {c.status === 'confirmado' && (
                             <>
                               <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Confirmado</Badge>
