@@ -59,7 +59,12 @@ export default function DriverShifts() {
     days: [true, true, true, true, true, true, true],
   });
   const [confirmDelete, setConfirmDelete] = useState<{ dayIdx: number; shiftIdx: number; checkins: number } | null>(null);
-  const [editPopover, setEditPopover] = useState<{ dayIdx: number; shiftIdx: number } | null>(null);
+  const [allActiveDrivers, setAllActiveDrivers] = useState<{ id: string; nome: string }[]>([]);
+  const [addDriverPopover, setAddDriverPopover] = useState<{ shiftId: string; dayIdx: number; shiftIdx: number } | null>(null);
+  const [selectedDriverToAdd, setSelectedDriverToAdd] = useState('');
+  const [addingDriver, setAddingDriver] = useState(false);
+  const [removeConfirm, setRemoveConfirm] = useState<{ checkinId: string; driverName: string; horario: string } | null>(null);
+  const [removingDriver, setRemovingDriver] = useState(false);
 
   const weekEnd = useMemo(() => addDays(weekStart, 6), [weekStart]);
 
