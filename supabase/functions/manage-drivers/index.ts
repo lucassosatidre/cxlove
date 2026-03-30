@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
     const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (nome !== undefined) updateData.nome = nome;
     if (telefone !== undefined) updateData.telefone = telefone;
-    if (cpf !== undefined) updateData.cpf = cpf || null;
+    if (cnpj !== undefined) updateData.cnpj = cnpj || null;
     if (pix !== undefined) updateData.pix = pix || null;
     if (max_periodos_dia !== undefined) updateData.max_periodos_dia = max_periodos_dia;
     if (notas !== undefined) updateData.notas = notas || null;
