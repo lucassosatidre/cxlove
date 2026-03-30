@@ -74,7 +74,7 @@ export default function DriverManagement() {
   // Edit modal
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
   const [editForm, setEditForm] = useState({
-    nome: '', telefone: '', cnpj: '', max_periodos_dia: 1, notas: '', status: 'ativo',
+    nome: '', telefone: '', cnpj: '', notas: '', status: 'ativo',
   });
   const [saving, setSaving] = useState(false);
 
