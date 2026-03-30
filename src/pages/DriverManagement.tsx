@@ -353,24 +353,9 @@ export default function DriverManagement() {
               </div>
               <div><Label>Observações</Label><Textarea value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} rows={2} /></div>
 
-              {/* Reset password */}
               <div className="border-t pt-3">
-                <Label>Nova senha</Label>
-                <div className="flex gap-2 mt-1">
-                  <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Digite a nova senha" className="flex-1" />
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEditPassword(generatePassword())}>Gerar</Button>
-                  <Button size="sm" onClick={() => handleResetPassword(editDriver.id)} disabled={!editPassword}>
-                    <KeyRound className="h-3 w-3 mr-1" /> Salvar
-                  </Button>
-                </div>
-                {resetPasswordResult && (
-                  <div className="mt-2 bg-muted p-3 rounded-lg flex items-center gap-2">
-                    <p className="text-sm"><strong>Senha atualizada:</strong> {resetPasswordResult}</p>
-                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => { navigator.clipboard.writeText(resetPasswordResult); toast.success('Copiada!'); }}>
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
+                <Label>Nova senha (deixe vazio para manter a atual)</Label>
+                <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Deixe vazio para manter a senha atual" className="mt-1" />
               </div>
 
               <DialogFooter>
