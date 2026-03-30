@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format, addDays, isBefore, isToday, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LogOut, RefreshCw, ChevronDown, AlertTriangle, Clock } from 'lucide-react';
+import { LogOut, RefreshCw, ChevronDown, AlertTriangle, Clock, Check } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -11,7 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import propositoLogo from '@/assets/proposito-logo.png';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface DriverProfile {
   id: string;
@@ -45,7 +45,6 @@ interface HistoryItem {
   horario_fim: string;
   status: string;
   confirmed_at: string | null;
-  cancelled_at: string | null;
   cancel_reason: string | null;
 }
 
@@ -186,7 +185,6 @@ export default function EntregadorPortal() {
           horario_fim: s.horario_fim?.slice(0, 5) || '',
           status: c.status,
           confirmed_at: c.confirmed_at,
-          cancelled_at: c.cancelled_at,
           cancel_reason: c.cancel_reason,
         };
       })
@@ -212,14 +210,11 @@ export default function EntregadorPortal() {
     return false;
   };
 
-  const canCancel = (data: string, horarioInicio: string | null): boolean => {
-    return !isShiftPast(data, horarioInicio);
-  };
+  const canCancel = (data: string, horarioInicio: string | null): boolean => !isShiftPast(data, horarioInicio);
 
   const handleConfirm = async (shift: AvailableShift) => {
     if (!driver || !user) return;
     setActionLoading(shift.shiftId);
-
     try {
       const { count } = await supabase
         .from('delivery_checkins')
@@ -259,7 +254,7 @@ export default function EntregadorPortal() {
         }
       } else {
         const dateFormatted = format(parseISO(shift.data), "dd/MM (EEEE)", { locale: ptBR });
-        toast({ title: `Presença confirmada para ${dateFormatted} — ${shift.horario_inicio}` });
+        toast({ title: `Presença confirmada para ${dateFormatted}` });
         fetchAll();
       }
     } catch {
@@ -271,14 +266,9 @@ export default function EntregadorPortal() {
   const handleCancel = async () => {
     if (!cancelDialog) return;
     setActionLoading(cancelDialog.checkinId);
-
     const { error } = await supabase
       .from('delivery_checkins')
-      .update({
-        status: 'cancelado',
-        cancelled_at: new Date().toISOString(),
-        cancel_reason: cancelReason || null,
-      })
+      .update({ status: 'cancelado', cancelled_at: new Date().toISOString(), cancel_reason: cancelReason || null })
       .eq('id', cancelDialog.checkinId);
 
     if (error) {
@@ -292,228 +282,201 @@ export default function EntregadorPortal() {
     setActionLoading(null);
   };
 
-  const formatDateExtended = (dateStr: string) => {
+  const formatDateFull = (dateStr: string) => {
     const d = parseISO(dateStr);
-    return format(d, "EEEE, dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase());
+    return format(d, "EEEE, dd 'de' MMMM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase());
   };
 
   const statusBadge = (status: string) => {
-    switch (status) {
-      case 'confirmado': return <Badge className="bg-green-600 text-white text-[10px]">Confirmado</Badge>;
-      case 'cancelado': return <Badge variant="destructive" className="text-[10px]">Cancelado</Badge>;
-      case 'no_show': return <Badge className="bg-amber-500 text-white text-[10px]">Não compareceu</Badge>;
-      case 'concluido': return <Badge className="bg-blue-600 text-white text-[10px]">Concluído</Badge>;
-      default: return <Badge variant="secondary" className="text-[10px]">{status}</Badge>;
-    }
+    const map: Record<string, { label: string; cls: string }> = {
+      confirmado: { label: 'Confirmado', cls: 'bg-[#DCFCE7] text-[#166534]' },
+      cancelado: { label: 'Cancelado', cls: 'bg-muted text-muted-foreground' },
+      no_show: { label: 'No-show', cls: 'bg-destructive/10 text-destructive' },
+      concluido: { label: 'Concluído', cls: 'bg-blue-100 text-blue-700' },
+    };
+    const s = map[status] || { label: status, cls: 'bg-muted text-muted-foreground' };
+    return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${s.cls}`}>{s.label}</span>;
   };
 
+  // Blocked states
   if (!loading && driver && (driver.status === 'inativo' || driver.status === 'suspenso')) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-[480px]">
-          <CardContent className="pt-6 text-center space-y-4">
-            <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
-            <h2 className="text-lg font-bold text-foreground">Conta {driver.status === 'inativo' ? 'inativa' : 'suspensa'}</h2>
-            <p className="text-muted-foreground text-sm">
-              Sua conta está {driver.status}. Entre em contato com a administração.
-            </p>
-            <Button variant="outline" onClick={signOut} className="min-h-[48px] w-full">
-              <LogOut className="h-4 w-4 mr-2" /> Sair
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4">
+        <div className="w-full max-w-[480px] bg-white rounded-xl border border-[#E5E7EB] p-6 text-center space-y-4">
+          <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
+          <h2 className="text-lg font-semibold text-[#1A1A1A]">Conta {driver.status === 'inativo' ? 'inativa' : 'suspensa'}</h2>
+          <p className="text-[#6B7280] text-sm">Entre em contato com a administração.</p>
+          <button onClick={signOut} className="w-full h-12 rounded-lg border border-[#E5E7EB] text-[#6B7280] font-medium text-sm hover:bg-[#F3F4F6] transition-colors flex items-center justify-center gap-2">
+            <LogOut className="h-4 w-4" /> Sair
+          </button>
+        </div>
       </div>
     );
   }
 
   if (!loading && !driver) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-[480px]">
-          <CardContent className="pt-6 text-center space-y-4">
-            <p className="text-muted-foreground">Perfil de entregador não encontrado. Contacte a administração.</p>
-            <Button variant="outline" onClick={signOut} className="min-h-[48px] w-full">
-              <LogOut className="h-4 w-4 mr-2" /> Sair
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4">
+        <div className="w-full max-w-[480px] bg-white rounded-xl border border-[#E5E7EB] p-6 text-center space-y-4">
+          <p className="text-[#6B7280] text-sm">Perfil de entregador não encontrado. Contacte a administração.</p>
+          <button onClick={signOut} className="w-full h-12 rounded-lg border border-[#E5E7EB] text-[#6B7280] font-medium text-sm hover:bg-[#F3F4F6] transition-colors flex items-center justify-center gap-2">
+            <LogOut className="h-4 w-4" /> Sair
+          </button>
+        </div>
       </div>
     );
   }
 
+  // Group available by day
   const availableByDay: Record<string, AvailableShift[]> = {};
   availableShifts.forEach(s => {
     if (!availableByDay[s.data]) availableByDay[s.data] = [];
     availableByDay[s.data].push(s);
   });
-  const sortedAvailableDays = Object.keys(availableByDay).sort();
+  const sortedDays = Object.keys(availableByDay).sort();
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-20 bg-sidebar border-b border-sidebar-border px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 rounded-lg bg-sidebar-accent border border-sidebar-border flex items-center justify-center p-1 shrink-0">
-            <img src={propositoLogo} alt="CX Love" className="h-full w-full object-contain" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight">CX Love</p>
-            {driver && <p className="text-[11px] text-sidebar-foreground/70">{driver.nome}</p>}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => fetchAll()} disabled={refreshing} className="text-sidebar-foreground hover:text-sidebar-accent-foreground">
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={signOut} className="text-sidebar-foreground hover:text-sidebar-accent-foreground">
-            <LogOut className="h-4 w-4" />
-          </Button>
+    <div className="min-h-screen bg-[#FAFAFA]">
+      {/* Header — 56px, black */}
+      <header className="sticky top-0 z-20 h-14 bg-[#1A1A1A] flex items-center justify-between px-4">
+        <span className="text-white font-bold text-base tracking-tight">CX Love</span>
+        <div className="flex items-center gap-3">
+          {driver && <span className="text-white/70 text-sm hidden sm:block">{driver.nome}</span>}
+          <button onClick={() => fetchAll()} disabled={refreshing} className="text-white/70 hover:text-white transition-colors">
+            <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={signOut} className="text-white/70 hover:text-white transition-colors">
+            <LogOut className="h-[18px] w-[18px]" />
+          </button>
         </div>
       </header>
 
       <main className="max-w-[480px] mx-auto px-4 py-5 space-y-6">
         {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-          </div>
+          <LoadingSkeleton />
         ) : (
           <>
-            {/* Confirmed shifts */}
+            {/* Próximos Turnos */}
             <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Meus Turnos Confirmados
-              </h2>
+              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-3">Próximos Turnos</h2>
               {confirmedShifts.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-6 text-center">
-                    <p className="text-sm text-muted-foreground">Você não tem turnos confirmados.</p>
-                    <p className="text-sm text-muted-foreground">Confira as vagas disponíveis abaixo!</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-2">
-                  {confirmedShifts.map(cs => {
-                    const canCancelThis = canCancel(cs.data, cs.horario_inicio);
-                    return (
-                      <Card key={cs.checkinId} className="border-primary/30 bg-primary/5">
-                        <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
-                          <div className="space-y-0.5 min-w-0">
-                            <p className="text-sm font-semibold text-foreground">{formatDateExtended(cs.data)}</p>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">
-                                {cs.horario_inicio} — {cs.horario_fim}
-                              </span>
-                            </div>
-                          </div>
-                          {canCancelThis && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="shrink-0 min-h-[40px] text-xs"
-                              disabled={actionLoading === cs.checkinId}
-                              onClick={() => setCancelDialog({ checkinId: cs.checkinId, data: cs.data, horario: `${cs.horario_inicio} — ${cs.horario_fim}` })}
-                            >
-                              Cancelar
-                            </Button>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
+                <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 text-center">
+                  <p className="text-sm text-[#6B7280]">Nenhum turno confirmado</p>
+                  <p className="text-sm text-[#9CA3AF] mt-0.5">Confira as vagas abaixo</p>
                 </div>
-              )}
-            </section>
-
-            {/* Available shifts */}
-            <section>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Vagas Disponíveis
-              </h2>
-              {sortedAvailableDays.length === 0 ? (
-                <Card className="border-dashed">
-                  <CardContent className="py-6 text-center">
-                    <p className="text-sm text-muted-foreground">Nenhum turno com vagas nos próximos dias.</p>
-                  </CardContent>
-                </Card>
               ) : (
                 <div className="space-y-3">
-                  {sortedAvailableDays.map(dateStr => {
+                  {confirmedShifts.map(cs => (
+                    <div key={cs.checkinId} className="bg-white rounded-xl border border-[#E5E7EB] border-l-4 border-l-[#F97316] p-4 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-[#1A1A1A] leading-snug">{formatDateFull(cs.data)}</p>
+                        <p className="text-[13px] text-[#6B7280] mt-0.5">{cs.horario_inicio} — {cs.horario_fim}</p>
+                      </div>
+                      {canCancel(cs.data, cs.horario_inicio) && (
+                        <button
+                          className="shrink-0 h-8 px-3 rounded-md border border-destructive text-destructive text-xs font-semibold uppercase tracking-wide hover:bg-destructive/5 transition-colors disabled:opacity-50"
+                          disabled={actionLoading === cs.checkinId}
+                          onClick={() => setCancelDialog({ checkinId: cs.checkinId, data: cs.data, horario: `${cs.horario_inicio} — ${cs.horario_fim}` })}
+                        >
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {/* Vagas Disponíveis */}
+            <section>
+              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-3">Vagas Disponíveis</h2>
+              {sortedDays.length === 0 ? (
+                <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 text-center">
+                  <p className="text-sm text-[#6B7280]">Nenhum turno com vagas nos próximos dias.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {sortedDays.map(dateStr => {
                     const dayShifts = availableByDay[dateStr];
                     return (
-                      <Card key={dateStr}>
-                        <CardContent className="py-3 px-4 space-y-2">
-                          <p className="text-sm font-semibold text-foreground">{formatDateExtended(dateStr)}</p>
+                      <div key={dateStr}>
+                        <p className="text-sm font-semibold text-[#1A1A1A] mb-2">{formatDateFull(dateStr)}</p>
+                        <div className="space-y-2">
                           {dayShifts.map(s => (
-                            <div key={s.shiftId} className="flex items-center justify-between gap-2 py-1.5 border-t border-border first:border-0">
-                              <div className="space-y-0.5 min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-3 w-3 text-muted-foreground" />
-                                  <span className="text-xs font-medium text-foreground">
-                                    {s.horario_inicio} — {s.horario_fim}
+                            <div key={s.shiftId} className="bg-white rounded-xl border border-[#E5E7EB] p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold text-[#1A1A1A]">{s.horario_inicio} — {s.horario_fim}</span>
+                                {s.alreadyConfirmed && (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] text-[#166534] text-xs font-medium px-2.5 py-0.5">
+                                    <Check className="h-3 w-3" /> Confirmado
                                   </span>
-                                </div>
-                                <p className={`text-xs ${s.vagasRestantes > 0 ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
-                                  {s.vagasRestantes > 0 ? `${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''} restante${s.vagasRestantes > 1 ? 's' : ''}` : 'Esgotado'}
-                                </p>
-                              </div>
-                              <div className="shrink-0">
-                                {s.alreadyConfirmed ? (
-                                  <Badge className="bg-green-600 text-white text-xs px-3 py-1">Confirmado</Badge>
-                                ) : s.vagasRestantes <= 0 ? (
-                                  <Badge variant="destructive" className="text-xs px-3 py-1">Esgotado</Badge>
-                                ) : s._dayLimit ? (
-                                  <Button size="sm" disabled className="min-h-[48px] text-xs opacity-50">
-                                    Limite atingido
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    className="min-h-[48px] bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4"
-                                    disabled={actionLoading === s.shiftId}
-                                    onClick={() => handleConfirm(s)}
-                                  >
-                                    {actionLoading === s.shiftId ? 'Confirmando...' : 'CONFIRMAR'}
-                                  </Button>
                                 )}
                               </div>
+
+                              {!s.alreadyConfirmed && (
+                                <>
+                                  <p className={`text-[13px] ${s.vagasRestantes > 0 && s.vagasRestantes < 3 ? 'text-destructive font-medium' : s.vagasRestantes <= 0 ? 'text-destructive font-medium' : 'text-[#6B7280]'}`}>
+                                    {s.vagasRestantes <= 0
+                                      ? 'Esgotado'
+                                      : s.vagasRestantes < 3
+                                        ? `Últimas ${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''}!`
+                                        : `${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''} restante${s.vagasRestantes > 1 ? 's' : ''}`}
+                                  </p>
+
+                                  {s.vagasRestantes > 0 && (
+                                    s._dayLimit ? (
+                                      <button disabled className="w-full h-12 rounded-lg bg-[#E5E7EB] text-[#9CA3AF] font-semibold text-sm uppercase tracking-wide cursor-not-allowed">
+                                        Limite diário atingido
+                                      </button>
+                                    ) : (
+                                      <button
+                                        className="w-full h-12 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white font-bold text-sm uppercase tracking-wide transition-colors disabled:opacity-60"
+                                        disabled={actionLoading === s.shiftId}
+                                        onClick={() => handleConfirm(s)}
+                                      >
+                                        {actionLoading === s.shiftId ? 'Confirmando...' : 'Confirmar'}
+                                      </button>
+                                    )
+                                  )}
+                                </>
+                              )}
                             </div>
                           ))}
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     );
                   })}
                 </div>
               )}
             </section>
 
-            {/* History */}
+            {/* Histórico */}
             <section>
               <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
                 <CollapsibleTrigger asChild>
-                  <Button variant="ghost" className="w-full justify-between text-sm text-muted-foreground">
-                    Ver histórico
+                  <button className="w-full flex items-center justify-between py-2.5 text-sm text-[#6B7280] hover:text-[#1A1A1A] transition-colors">
+                    <span>Ver histórico</span>
                     <ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
-                  </Button>
+                  </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   {history.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">Nenhum registro encontrado.</p>
+                    <p className="text-sm text-[#9CA3AF] text-center py-4">Nenhum registro.</p>
                   ) : (
-                    <div className="space-y-1 mt-2">
+                    <div className="space-y-1.5 mt-1">
                       {history.map((h, i) => (
-                        <div key={i} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/30 text-sm">
-                          <div className="space-y-0.5">
-                            <p className="font-medium text-foreground text-xs">
+                        <div key={i} className="bg-white rounded-lg border border-[#E5E7EB] px-3 py-2.5 flex items-center justify-between">
+                          <div>
+                            <p className="text-[13px] font-medium text-[#1A1A1A]">
                               {format(parseISO(h.data), 'dd/MM/yyyy')} — {h.horario_inicio} — {h.horario_fim}
                             </p>
                             {h.confirmed_at && (
-                              <p className="text-[10px] text-muted-foreground">
+                              <p className="text-[11px] text-[#9CA3AF]">
                                 Confirmado às {format(new Date(h.confirmed_at), 'HH:mm')}
                               </p>
                             )}
                             {h.cancel_reason && (
-                              <p className="text-[10px] text-muted-foreground italic">Motivo: {h.cancel_reason}</p>
+                              <p className="text-[11px] text-[#9CA3AF] italic">Motivo: {h.cancel_reason}</p>
                             )}
                           </div>
                           {statusBadge(h.status)}
@@ -530,29 +493,57 @@ export default function EntregadorPortal() {
 
       {/* Cancel dialog */}
       <Dialog open={!!cancelDialog} onOpenChange={() => { setCancelDialog(null); setCancelReason(''); }}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent className="sm:max-w-[400px] rounded-xl">
           <DialogHeader>
-            <DialogTitle>Cancelar presença</DialogTitle>
+            <DialogTitle className="text-base">Cancelar presença?</DialogTitle>
           </DialogHeader>
           {cancelDialog && (
-            <p className="text-sm text-muted-foreground">
-              Deseja cancelar sua presença em {formatDateExtended(cancelDialog.data)} — {cancelDialog.horario}?
+            <p className="text-sm text-[#6B7280]">
+              Turno: {formatDateFull(cancelDialog.data)} — {cancelDialog.horario}
             </p>
           )}
           <Textarea
-            placeholder="Motivo do cancelamento (opcional)"
+            placeholder="Motivo (opcional)"
             value={cancelReason}
             onChange={e => setCancelReason(e.target.value)}
-            className="min-h-[80px]"
+            className="min-h-[80px] text-sm"
           />
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setCancelDialog(null); setCancelReason(''); }}>Voltar</Button>
-            <Button variant="destructive" onClick={handleCancel} disabled={actionLoading === cancelDialog?.checkinId} className="min-h-[44px]">
+            <Button variant="outline" onClick={() => { setCancelDialog(null); setCancelReason(''); }} className="h-11">
+              Voltar
+            </Button>
+            <Button variant="destructive" onClick={handleCancel} disabled={actionLoading === cancelDialog?.checkinId} className="h-11">
               Confirmar cancelamento
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <Skeleton className="h-5 w-40 mb-3" />
+        <Skeleton className="h-20 w-full rounded-xl" />
+      </div>
+      <div>
+        <Skeleton className="h-5 w-40 mb-3" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="h-28 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-xl" />
+        </div>
+      </div>
+      <div>
+        <Skeleton className="h-5 w-48 mb-3" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="h-28 w-full rounded-xl" />
+        </div>
+      </div>
     </div>
   );
 }
