@@ -20,6 +20,7 @@ import SalonClosing from "./pages/SalonClosing";
 import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
 import EntregadorPortal from "./pages/EntregadorPortal";
+import DriverManagement from "./pages/DriverManagement";
 
 const queryClient = new QueryClient();
 

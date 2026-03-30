@@ -38,6 +38,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     ];
     navItems = allNavItems.filter(item => hasPermission(item.permission));
     if (isAdmin) {
+      navItems.push({ icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' });
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }
   }
