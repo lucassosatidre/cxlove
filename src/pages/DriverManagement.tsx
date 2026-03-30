@@ -66,7 +66,7 @@ export default function DriverManagement() {
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
-    nome: '', telefone: '', email: '', cpf: '', pix: '', max_periodos_dia: 1, notas: '',
+    nome: '', telefone: '', email: '', cnpj: '', password: '', max_periodos_dia: 1, notas: '',
   });
   const [creating, setCreating] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
