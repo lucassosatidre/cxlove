@@ -47,8 +47,8 @@ export default function DriverRankingSection() {
 
       const ranking: RankingRow[] = drivers.map(d => {
         const s = stats[d.id] || { confirmados: 0, cancelamentos: 0, noShows: 0 };
-        const total = s.confirmados + s.cancelamentos + s.noShows;
-        const taxa = total > 0 ? ((s.confirmados) / total) * 100 : 0;
+        const presencaTotal = s.confirmados + s.noShows;
+        const taxa = presencaTotal > 0 ? (s.confirmados / presencaTotal) * 100 : 0;
         return {
           nome: d.nome,
           status: d.status,
