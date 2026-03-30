@@ -1093,14 +1093,13 @@ export default function Reconciliation() {
           )}
         </div>
 
-        {/* Confirmed drivers info */}
-        {confirmedDrivers.length > 0 && (
-          <div className="border-b border-border bg-primary/5 px-6 py-2.5 flex items-center gap-2 text-sm">
-            <Truck className="h-4 w-4 text-primary shrink-0" />
-            <span className="text-muted-foreground">Entregadores confirmados hoje:</span>
-            <span className="font-medium text-foreground">{confirmedDrivers.map(d => d.nome).join(', ')}</span>
-            <span className="text-xs text-muted-foreground">({confirmedDrivers.length})</span>
-          </div>
+        {/* Driver Attendance Section */}
+        {closingData && (
+          <DriverAttendanceSection
+            closingDate={closingData.closing_date}
+            isCompleted={isCompleted}
+            isAdmin={isAdmin}
+          />
         )}
 
         {/* Filters */}
