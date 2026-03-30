@@ -26,6 +26,7 @@ interface ConfirmedShift {
   data: string;
   horario_inicio: string;
   horario_fim: string;
+  origin: string;
 }
 
 interface AvailableShift {
