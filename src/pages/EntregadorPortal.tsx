@@ -132,6 +132,7 @@ export default function EntregadorPortal() {
           data: shift.data,
           horario_inicio: shift.horario_inicio?.slice(0, 5) || '',
           horario_fim: shift.horario_fim?.slice(0, 5) || '',
+          origin: (c as any).origin || 'entregador',
         };
       })
       .filter(Boolean) as ConfirmedShift[];
