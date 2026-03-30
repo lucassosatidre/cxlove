@@ -158,24 +158,7 @@ export default function DriverManagement() {
     }
   };
 
-  // RESET PASSWORD
   const [editPassword, setEditPassword] = useState('');
-  const handleResetPassword = async (driverId: string) => {
-    if (!editPassword) { toast.error('Digite a nova senha'); return; }
-    try {
-      const result = await invokeFunction({ action: 'reset_password', driver_id: driverId, new_password: editPassword });
-      setResetPasswordResult(result.password);
-      toast.success('Senha atualizada!');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-  const generatePassword = () => {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-    let pwd = '';
-    for (let i = 0; i < 8; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
-    return pwd;
-  };
 
   const openEdit = (d: Driver) => {
     setEditDriver(d);
