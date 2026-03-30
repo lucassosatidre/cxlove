@@ -148,7 +148,7 @@ export default function EntregadorPortal() {
         horario_inicio: s.horario_inicio?.slice(0, 5) || '',
         horario_fim: s.horario_fim?.slice(0, 5) || '',
         alreadyConfirmed: myConfirmedShiftIds.has(s.id),
-        _dayLimit: (myConfirmedPerDay[s.data] || 0) >= driverData.max_periodos_dia && !myConfirmedShiftIds.has(s.id),
+        _dayLimit: false,
       }))
       .filter(s => !isShiftPast(s.data, s.horario_inicio));
     setAvailableShifts(available);
