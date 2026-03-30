@@ -22,7 +22,7 @@ interface Driver {
   nome: string;
   telefone: string;
   email: string;
-  cpf: string | null;
+  cnpj: string | null;
   pix: string | null;
   status: string;
   max_periodos_dia: number;
