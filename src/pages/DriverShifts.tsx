@@ -677,6 +677,24 @@ export default function DriverShifts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Confirm remove driver */}
+      <AlertDialog open={!!removeConfirm} onOpenChange={() => setRemoveConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover entregador</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remover {removeConfirm?.driverName} do turno de {removeConfirm?.horario}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAdminRemoveDriver} disabled={removingDriver}>
+              {removingDriver ? 'Removendo...' : 'Remover'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
