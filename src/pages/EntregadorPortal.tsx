@@ -99,7 +99,7 @@ export default function EntregadorPortal() {
     if (shiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_checkins')
-        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason')
+        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason, origin')
         .in('shift_id', shiftIds);
       allCheckins = data || [];
     }
