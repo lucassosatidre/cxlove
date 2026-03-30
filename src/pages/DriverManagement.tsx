@@ -129,8 +129,15 @@ export default function DriverManagement() {
     setSaving(true);
     try {
       await invokeFunction({ action: 'update', driver_id: editDriver.id, ...editForm });
-      toast.success('Entregador atualizado!');
+      // If password field has a value, also reset password
+      if (editPassword.trim()) {
+        await invokeFunction({ action: 'reset_password', driver_id: editDriver.id, new_password: editPassword.trim() });
+        toast.success('Entregador e senha atualizados!');
+      } else {
+        toast.success('Entregador atualizado!');
+      }
       setEditDriver(null);
+      setEditPassword('');
       fetchDrivers();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao atualizar');
