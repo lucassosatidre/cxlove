@@ -806,7 +806,7 @@ export default function Reconciliation() {
                 <span className="hidden sm:inline">Conciliação Delivery</span>
               </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => <Button variant="outline" size="sm" onClick={() => navigate('/tele/import')} disabled={isCompleted}>} disabled={isCompleted}>
+              <Button variant="outline" size="sm" onClick={() => navigate('/tele/import')} disabled={isCompleted}>
                 <Plus className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar mais</span>
               </Button>
