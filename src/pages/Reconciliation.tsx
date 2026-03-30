@@ -576,6 +576,8 @@ export default function Reconciliation() {
     setSavingCashFechamento(false);
   }, [id, user, cashCountsFechamento, cashTotalFechamento]);
 
+  const { unmarkedCount: attendanceUnmarked } = useDriverAttendance(closingData?.closing_date || '');
+
   const handleSaveConference = useCallback(() => {
     // Admin can force-finalize even with errors
     if (isAdmin) {
@@ -588,6 +590,10 @@ export default function Reconciliation() {
         if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
         if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
         
+      }
+
+      if (attendanceUnmarked > 0) {
+        errors.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
       }
 
       if (errors.length === 0) {
@@ -619,10 +625,14 @@ export default function Reconciliation() {
       }
     }
 
+    if (attendanceUnmarked > 0) {
+      warnings.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
+    }
+
     if (errors.length === 0 && warnings.length === 0) {
       finalize();
     } else if (errors.length === 0 && warnings.length > 0) {
-      // Only warnings (missing delivery person) — allow finalization with confirmation
+      // Only warnings — allow finalization with confirmation
       setConferenceErrors(warnings);
       setConferenceOnlyWarnings(true);
       setShowConferenceErrors(true);
@@ -631,7 +641,7 @@ export default function Reconciliation() {
       setConferenceOnlyWarnings(false);
       setShowConferenceErrors(true);
     }
-  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin]);
+  }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin, attendanceUnmarked]);
 
   const paymentMethods = useMemo(() => [...new Set(orders.map(o => o.payment_method).filter(Boolean))].sort(), [orders]);
   const offlinePaymentMethods = useMemo(() => [
