@@ -148,7 +148,7 @@ export default function EntregadorPortal() {
         horario_inicio: s.horario_inicio?.slice(0, 5) || '',
         horario_fim: s.horario_fim?.slice(0, 5) || '',
         alreadyConfirmed: myConfirmedShiftIds.has(s.id),
-        _dayLimit: (myConfirmedPerDay[s.data] || 0) >= driverData.max_periodos_dia && !myConfirmedShiftIds.has(s.id),
+        _dayLimit: false,
       }))
       .filter(s => !isShiftPast(s.data, s.horario_inicio));
     setAvailableShifts(available);
@@ -225,18 +225,6 @@ export default function EntregadorPortal() {
       if ((count || 0) >= shift.vagas) {
         toast({ title: 'Vagas esgotadas, tente outro turno', variant: 'destructive' });
         fetchAll();
-        return;
-      }
-
-      const { count: dayCount } = await supabase
-        .from('delivery_checkins')
-        .select('*, delivery_shifts!inner(data)', { count: 'exact', head: true })
-        .eq('driver_id', driver.id)
-        .eq('status', 'confirmado')
-        .eq('delivery_shifts.data', shift.data);
-
-      if ((dayCount || 0) >= driver.max_periodos_dia) {
-        toast({ title: 'Limite de turnos por dia atingido', variant: 'destructive' });
         return;
       }
 

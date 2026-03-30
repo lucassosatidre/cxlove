@@ -66,7 +66,7 @@ export default function DriverManagement() {
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
-    nome: '', telefone: '', email: '', cnpj: '', password: '', max_periodos_dia: 1, notas: '',
+    nome: '', telefone: '', email: '', cnpj: '', password: '', notas: '',
   });
   const [creating, setCreating] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
@@ -74,7 +74,7 @@ export default function DriverManagement() {
   // Edit modal
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
   const [editForm, setEditForm] = useState({
-    nome: '', telefone: '', cnpj: '', max_periodos_dia: 1, notas: '', status: 'ativo',
+    nome: '', telefone: '', cnpj: '', notas: '', status: 'ativo',
   });
   const [saving, setSaving] = useState(false);
 
@@ -118,7 +118,7 @@ export default function DriverManagement() {
   };
 
   const resetCreateForm = () => {
-    setCreateForm({ nome: '', telefone: '', email: '', cnpj: '', password: '', max_periodos_dia: 1, notas: '' });
+    setCreateForm({ nome: '', telefone: '', email: '', cnpj: '', password: '', notas: '' });
     setCreatedPassword(null);
   };
 
@@ -163,7 +163,7 @@ export default function DriverManagement() {
     setEditDriver(d);
     setEditForm({
       nome: d.nome, telefone: d.telefone, cnpj: d.cnpj || '',
-      max_periodos_dia: d.max_periodos_dia, notas: d.notas || '', status: d.status,
+      notas: d.notas || '', status: d.status,
     });
     setResetPasswordResult(null);
     setEditPassword('');
@@ -244,7 +244,6 @@ export default function DriverManagement() {
                 <TableHead>Telefone</TableHead>
                 <TableHead className="hidden md:table-cell">Email</TableHead>
                 <TableHead className="hidden lg:table-cell">CNPJ</TableHead>
-                <TableHead className="hidden md:table-cell">Per./dia</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -258,7 +257,6 @@ export default function DriverManagement() {
                   <TableCell>{d.telefone}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{d.email}</TableCell>
                   <TableCell className="hidden lg:table-cell text-xs">{d.cnpj || '—'}</TableCell>
-                  <TableCell className="hidden md:table-cell">{d.max_periodos_dia}</TableCell>
                   <TableCell>
                     <Badge variant={statusConfig[d.status]?.variant || 'secondary'}>
                       {statusConfig[d.status]?.label || d.status}
@@ -308,12 +306,6 @@ export default function DriverManagement() {
               <div><Label>Email *</Label><Input type="email" value={createForm.email} onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))} /></div>
               <div><Label>CNPJ (MEI)</Label><Input value={createForm.cnpj} onChange={e => setCreateForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
               <div><Label>Senha *</Label><Input type="text" value={createForm.password} onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))} placeholder="Digite a senha do entregador" /></div>
-              <div><Label>Máx períodos/dia</Label>
-                <Select value={String(createForm.max_periodos_dia)} onValueChange={v => setCreateForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem></SelectContent>
-                </Select>
-              </div>
               <div><Label>Observações</Label><Textarea value={createForm.notas} onChange={e => setCreateForm(f => ({ ...f, notas: e.target.value }))} rows={2} /></div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setShowCreate(false); resetCreateForm(); }}>Cancelar</Button>
@@ -334,12 +326,6 @@ export default function DriverManagement() {
               <div><Label>Nome completo</Label><Input value={editForm.nome} onChange={e => setEditForm(f => ({ ...f, nome: e.target.value }))} /></div>
               <div><Label>Telefone</Label><Input value={editForm.telefone} onChange={e => setEditForm(f => ({ ...f, telefone: maskPhone(e.target.value) }))} /></div>
               <div><Label>CNPJ (MEI)</Label><Input value={editForm.cnpj} onChange={e => setEditForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
-              <div><Label>Máx períodos/dia</Label>
-                <Select value={String(editForm.max_periodos_dia)} onValueChange={v => setEditForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="1">1</SelectItem><SelectItem value="2">2</SelectItem></SelectContent>
-                </Select>
-              </div>
               <div><Label>Status</Label>
                 <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
