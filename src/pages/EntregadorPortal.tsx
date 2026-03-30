@@ -212,6 +212,18 @@ export default function EntregadorPortal() {
 
   const canCancel = (data: string, horarioInicio: string | null): boolean => !isShiftPast(data, horarioInicio);
 
+  const getDeviceInfo = async () => {
+    let deviceIp = 'indisponível';
+    try {
+      const res = await fetch('https://api.ipify.org?format=json');
+      const data = await res.json();
+      deviceIp = data.ip || 'indisponível';
+    } catch { /* ignore */ }
+    const deviceUserAgent = navigator.userAgent;
+    const deviceInfo = `${screen.width}x${screen.height}`;
+    return { deviceIp, deviceUserAgent, deviceInfo };
+  };
+
   const handleConfirm = async (shift: AvailableShift) => {
     if (!driver || !user) return;
     setActionLoading(shift.shiftId);
@@ -228,11 +240,17 @@ export default function EntregadorPortal() {
         return;
       }
 
+      const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+
       const { error } = await supabase.from('delivery_checkins').insert({
         shift_id: shift.shiftId,
         driver_id: driver.id,
         status: 'confirmado',
-      });
+        device_ip: deviceIp,
+        device_user_agent: deviceUserAgent,
+        device_info: deviceInfo,
+        origin: 'entregador',
+      } as any);
 
       if (error) {
         if (error.code === '23505') {
