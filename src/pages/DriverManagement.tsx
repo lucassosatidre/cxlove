@@ -350,8 +350,7 @@ export default function DriverManagement() {
               <div><Label>Email (login)</Label><Input value={editDriver.email} disabled className="bg-muted" /></div>
               <div><Label>Nome completo</Label><Input value={editForm.nome} onChange={e => setEditForm(f => ({ ...f, nome: e.target.value }))} /></div>
               <div><Label>Telefone</Label><Input value={editForm.telefone} onChange={e => setEditForm(f => ({ ...f, telefone: maskPhone(e.target.value) }))} /></div>
-              <div><Label>CPF</Label><Input value={editForm.cpf} onChange={e => setEditForm(f => ({ ...f, cpf: maskCPF(e.target.value) }))} /></div>
-              <div><Label>Chave PIX</Label><Input value={editForm.pix} onChange={e => setEditForm(f => ({ ...f, pix: e.target.value }))} /></div>
+              <div><Label>CNPJ (MEI)</Label><Input value={editForm.cnpj} onChange={e => setEditForm(f => ({ ...f, cnpj: maskCNPJ(e.target.value) }))} placeholder="XX.XXX.XXX/XXXX-XX" /></div>
               <div><Label>Máx períodos/dia</Label>
                 <Select value={String(editForm.max_periodos_dia)} onValueChange={v => setEditForm(f => ({ ...f, max_periodos_dia: Number(v) }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
