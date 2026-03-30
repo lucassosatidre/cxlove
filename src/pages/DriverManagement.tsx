@@ -268,8 +268,7 @@ export default function DriverManagement() {
                   <TableCell className="font-medium">{d.nome}</TableCell>
                   <TableCell>{d.telefone}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{d.email}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs">{d.cpf || '—'}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-xs">{d.pix || '—'}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-xs">{d.cnpj || '—'}</TableCell>
                   <TableCell className="hidden md:table-cell">{d.max_periodos_dia}</TableCell>
                   <TableCell>
                     <Badge variant={statusConfig[d.status]?.variant || 'secondary'}>
