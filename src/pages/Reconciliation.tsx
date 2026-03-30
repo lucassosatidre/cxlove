@@ -1092,6 +1092,16 @@ export default function Reconciliation() {
           )}
         </div>
 
+        {/* Confirmed drivers info */}
+        {confirmedDrivers.length > 0 && (
+          <div className="border-b border-border bg-primary/5 px-6 py-2.5 flex items-center gap-2 text-sm">
+            <Truck className="h-4 w-4 text-primary shrink-0" />
+            <span className="text-muted-foreground">Entregadores confirmados hoje:</span>
+            <span className="font-medium text-foreground">{confirmedDrivers.map(d => d.nome).join(', ')}</span>
+            <span className="text-xs text-muted-foreground">({confirmedDrivers.length})</span>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3 flex flex-wrap gap-2">
@@ -1121,7 +1131,11 @@ export default function Reconciliation() {
                 <SelectTrigger className="w-[160px] h-9"><SelectValue placeholder="Entregador" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos os entregadores</SelectItem>
-                  {deliveryPersons.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                  {deliveryPersons.map(d => (
+                    <SelectItem key={d} value={d}>
+                      {d}{confirmedDriverNames.includes(d) ? ' ✓' : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
