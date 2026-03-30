@@ -301,33 +301,30 @@ export type Database = {
           created_at: string
           created_by: string | null
           data: string
-          horario_fim: string | null
-          horario_inicio: string | null
+          horario_fim: string
+          horario_inicio: string
           id: string
           notas: string | null
-          periodo: string
           vagas: number
         }
         Insert: {
           created_at?: string
           created_by?: string | null
           data: string
-          horario_fim?: string | null
-          horario_inicio?: string | null
+          horario_fim: string
+          horario_inicio: string
           id?: string
           notas?: string | null
-          periodo: string
           vagas?: number
         }
         Update: {
           created_at?: string
           created_by?: string | null
           data?: string
-          horario_fim?: string | null
-          horario_inicio?: string | null
+          horario_fim?: string
+          horario_inicio?: string
           id?: string
           notas?: string | null
-          periodo?: string
           vagas?: number
         }
         Relationships: []
