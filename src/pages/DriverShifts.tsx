@@ -145,6 +145,57 @@ export default function DriverShifts() {
     });
     setWeekData(updated);
     setLoading(false);
+
+    // Fetch all active drivers for admin add
+    const { data: activeDrivers } = await supabase
+      .from('delivery_drivers')
+      .select('id, nome')
+      .eq('status', 'ativo')
+      .order('nome');
+    setAllActiveDrivers(activeDrivers || []);
+  };
+
+  const handleAdminAddDriver = async () => {
+    if (!addDriverPopover || !selectedDriverToAdd || !user) return;
+    setAddingDriver(true);
+    const { error } = await supabase.from('delivery_checkins').insert({
+      shift_id: addDriverPopover.shiftId,
+      driver_id: selectedDriverToAdd,
+      status: 'confirmado',
+      origin: 'admin',
+      admin_inserted_by: user.id,
+    } as any);
+    if (error) {
+      toast({ title: error.code === '23505' ? 'Entregador já confirmado neste turno' : 'Erro ao adicionar', variant: 'destructive' });
+    } else {
+      toast({ title: 'Entregador adicionado ao turno' });
+      fetchWeekData();
+    }
+    setAddingDriver(false);
+    setAddDriverPopover(null);
+    setSelectedDriverToAdd('');
+  };
+
+  const handleAdminRemoveDriver = async () => {
+    if (!removeConfirm || !user) return;
+    setRemovingDriver(true);
+    const { error } = await supabase
+      .from('delivery_checkins')
+      .update({
+        status: 'cancelado',
+        admin_removed_at: new Date().toISOString(),
+        admin_removed_by: user.id,
+        cancel_reason: 'Removido pelo admin',
+      } as any)
+      .eq('id', removeConfirm.checkinId);
+    if (error) {
+      toast({ title: 'Erro ao remover', variant: 'destructive' });
+    } else {
+      toast({ title: 'Entregador removido do turno' });
+      fetchWeekData();
+    }
+    setRemovingDriver(false);
+    setRemoveConfirm(null);
   };
 
   const addShift = (dayIdx: number) => {
