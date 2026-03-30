@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format, addDays, isBefore, isToday, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LogOut, Sun, Moon, RefreshCw, ChevronDown, AlertTriangle } from 'lucide-react';
+import { LogOut, RefreshCw, ChevronDown, AlertTriangle, Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -24,25 +24,25 @@ interface ConfirmedShift {
   checkinId: string;
   shiftId: string;
   data: string;
-  periodo: string;
-  horario_inicio: string | null;
-  horario_fim: string | null;
+  horario_inicio: string;
+  horario_fim: string;
 }
 
 interface AvailableShift {
   shiftId: string;
   data: string;
-  periodo: string;
   vagas: number;
   vagasRestantes: number;
-  horario_inicio: string | null;
-  horario_fim: string | null;
+  horario_inicio: string;
+  horario_fim: string;
   alreadyConfirmed: boolean;
+  _dayLimit?: boolean;
 }
 
 interface HistoryItem {
   data: string;
-  periodo: string;
+  horario_inicio: string;
+  horario_fim: string;
   status: string;
   confirmed_at: string | null;
   cancelled_at: string | null;
@@ -59,7 +59,7 @@ export default function EntregadorPortal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [cancelDialog, setCancelDialog] = useState<{ checkinId: string; data: string; periodo: string } | null>(null);
+  const [cancelDialog, setCancelDialog] = useState<{ checkinId: string; data: string; horario: string } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -69,7 +69,6 @@ export default function EntregadorPortal() {
     if (!user) return;
     setRefreshing(true);
 
-    // 1. Fetch driver profile
     const { data: driverData } = await supabase
       .from('delivery_drivers')
       .select('id, nome, status, max_periodos_dia')
@@ -86,18 +85,17 @@ export default function EntregadorPortal() {
 
     const futureEnd = format(addDays(new Date(), 14), 'yyyy-MM-dd');
 
-    // 2. Fetch shifts for next 14 days
     const { data: shifts } = await supabase
       .from('delivery_shifts')
       .select('*')
       .gte('data', todayStr)
       .lte('data', futureEnd)
-      .order('data', { ascending: true });
+      .order('data', { ascending: true })
+      .order('horario_inicio', { ascending: true });
 
     const allShifts = shifts || [];
     const shiftIds = allShifts.map(s => s.id);
 
-    // 3. Fetch all checkins for these shifts (to count)
     let allCheckins: any[] = [];
     if (shiftIds.length > 0) {
       const { data } = await supabase
@@ -107,7 +105,6 @@ export default function EntregadorPortal() {
       allCheckins = data || [];
     }
 
-    // Count confirmed per shift
     const confirmedCountByShift: Record<string, number> = {};
     allCheckins.forEach(c => {
       if (c.status === 'confirmado') {
@@ -115,11 +112,9 @@ export default function EntregadorPortal() {
       }
     });
 
-    // My confirmed checkins
     const myCheckins = allCheckins.filter(c => c.driver_id === driverData.id && c.status === 'confirmado');
     const myConfirmedShiftIds = new Set(myCheckins.map(c => c.shift_id));
 
-    // Count my confirmed per day (for max_periodos_dia check)
     const myConfirmedPerDay: Record<string, number> = {};
     myCheckins.forEach(c => {
       const shift = allShifts.find(s => s.id === c.shift_id);
@@ -128,7 +123,6 @@ export default function EntregadorPortal() {
       }
     });
 
-    // Build confirmed shifts list
     const confirmed: ConfirmedShift[] = myCheckins
       .map(c => {
         const shift = allShifts.find(s => s.id === c.shift_id);
@@ -137,33 +131,30 @@ export default function EntregadorPortal() {
           checkinId: c.id,
           shiftId: shift.id,
           data: shift.data,
-          periodo: shift.periodo,
-          horario_inicio: shift.horario_inicio,
-          horario_fim: shift.horario_fim,
+          horario_inicio: shift.horario_inicio?.slice(0, 5) || '',
+          horario_fim: shift.horario_fim?.slice(0, 5) || '',
         };
       })
       .filter(Boolean) as ConfirmedShift[];
-    confirmed.sort((a, b) => a.data.localeCompare(b.data));
+    confirmed.sort((a, b) => a.data.localeCompare(b.data) || a.horario_inicio.localeCompare(b.horario_inicio));
     setConfirmedShifts(confirmed);
 
-    // Build available shifts list
     const available: AvailableShift[] = allShifts
       .filter(s => s.vagas > 0)
       .map(s => ({
         shiftId: s.id,
         data: s.data,
-        periodo: s.periodo,
         vagas: s.vagas,
         vagasRestantes: s.vagas - (confirmedCountByShift[s.id] || 0),
-        horario_inicio: s.horario_inicio,
-        horario_fim: s.horario_fim,
+        horario_inicio: s.horario_inicio?.slice(0, 5) || '',
+        horario_fim: s.horario_fim?.slice(0, 5) || '',
         alreadyConfirmed: myConfirmedShiftIds.has(s.id),
         _dayLimit: (myConfirmedPerDay[s.data] || 0) >= driverData.max_periodos_dia && !myConfirmedShiftIds.has(s.id),
       }))
       .filter(s => !isShiftPast(s.data, s.horario_inicio));
-    setAvailableShifts(available as any);
+    setAvailableShifts(available);
 
-    // 4. Fetch history (last 30 days)
+    // History
     const thirtyDaysAgo = format(addDays(new Date(), -30), 'yyyy-MM-dd');
     const { data: histCheckins } = await supabase
       .from('delivery_checkins')
@@ -171,13 +162,12 @@ export default function EntregadorPortal() {
       .eq('driver_id', driverData.id)
       .order('created_at', { ascending: false });
 
-    // Need to fetch shift info for history
     const histShiftIds = [...new Set((histCheckins || []).map(c => c.shift_id))];
     let histShifts: any[] = [];
     if (histShiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_shifts')
-        .select('id, data, periodo')
+        .select('id, data, horario_inicio, horario_fim')
         .in('id', histShiftIds)
         .gte('data', thirtyDaysAgo)
         .order('data', { ascending: false });
@@ -192,7 +182,8 @@ export default function EntregadorPortal() {
         if (!s) return null;
         return {
           data: s.data,
-          periodo: s.periodo,
+          horario_inicio: s.horario_inicio?.slice(0, 5) || '',
+          horario_fim: s.horario_fim?.slice(0, 5) || '',
           status: c.status,
           confirmed_at: c.confirmed_at,
           cancelled_at: c.cancelled_at,
@@ -230,7 +221,6 @@ export default function EntregadorPortal() {
     setActionLoading(shift.shiftId);
 
     try {
-      // Revalidate vacancies
       const { count } = await supabase
         .from('delivery_checkins')
         .select('*', { count: 'exact', head: true })
@@ -243,14 +233,12 @@ export default function EntregadorPortal() {
         return;
       }
 
-      // Check day limit
-      const shiftDate = shift.data;
       const { count: dayCount } = await supabase
         .from('delivery_checkins')
         .select('*, delivery_shifts!inner(data)', { count: 'exact', head: true })
         .eq('driver_id', driver.id)
         .eq('status', 'confirmado')
-        .eq('delivery_shifts.data', shiftDate);
+        .eq('delivery_shifts.data', shift.data);
 
       if ((dayCount || 0) >= driver.max_periodos_dia) {
         toast({ title: 'Limite de turnos por dia atingido', variant: 'destructive' });
@@ -271,7 +259,7 @@ export default function EntregadorPortal() {
         }
       } else {
         const dateFormatted = format(parseISO(shift.data), "dd/MM (EEEE)", { locale: ptBR });
-        toast({ title: `Presença confirmada para ${dateFormatted} — ${shift.periodo === 'dia' ? 'Dia' : 'Noite'}!` });
+        toast({ title: `Presença confirmada para ${dateFormatted} — ${shift.horario_inicio}` });
         fetchAll();
       }
     } catch {
@@ -309,8 +297,6 @@ export default function EntregadorPortal() {
     return format(d, "EEEE, dd/MM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase());
   };
 
-  const formatTime = (t: string | null) => t ? t.slice(0, 5) : null;
-
   const statusBadge = (status: string) => {
     switch (status) {
       case 'confirmado': return <Badge className="bg-green-600 text-white text-[10px]">Confirmado</Badge>;
@@ -321,7 +307,6 @@ export default function EntregadorPortal() {
     }
   };
 
-  // Inactive/suspended driver
   if (!loading && driver && (driver.status === 'inativo' || driver.status === 'suspenso')) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -330,7 +315,7 @@ export default function EntregadorPortal() {
             <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto" />
             <h2 className="text-lg font-bold text-foreground">Conta {driver.status === 'inativo' ? 'inativa' : 'suspensa'}</h2>
             <p className="text-muted-foreground text-sm">
-              Sua conta está {driver.status}. Entre em contato com a administração para mais informações.
+              Sua conta está {driver.status}. Entre em contato com a administração.
             </p>
             <Button variant="outline" onClick={signOut} className="min-h-[48px] w-full">
               <LogOut className="h-4 w-4 mr-2" /> Sair
@@ -341,7 +326,6 @@ export default function EntregadorPortal() {
     );
   }
 
-  // No driver profile found
   if (!loading && !driver) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -357,7 +341,6 @@ export default function EntregadorPortal() {
     );
   }
 
-  // Group available shifts by day
   const availableByDay: Record<string, AvailableShift[]> = {};
   availableShifts.forEach(s => {
     if (!availableByDay[s.data]) availableByDay[s.data] = [];
@@ -379,27 +362,15 @@ export default function EntregadorPortal() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => fetchAll()}
-            disabled={refreshing}
-            className="text-sidebar-foreground hover:text-sidebar-accent-foreground"
-          >
+          <Button variant="ghost" size="icon" onClick={() => fetchAll()} disabled={refreshing} className="text-sidebar-foreground hover:text-sidebar-accent-foreground">
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={signOut}
-            className="text-sidebar-foreground hover:text-sidebar-accent-foreground"
-          >
+          <Button variant="ghost" size="icon" onClick={signOut} className="text-sidebar-foreground hover:text-sidebar-accent-foreground">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
       </header>
 
-      {/* Content */}
       <main className="max-w-[480px] mx-auto px-4 py-5 space-y-6">
         {loading ? (
           <div className="flex justify-center py-20">
@@ -415,9 +386,7 @@ export default function EntregadorPortal() {
               {confirmedShifts.length === 0 ? (
                 <Card className="border-dashed">
                   <CardContent className="py-6 text-center">
-                    <p className="text-sm text-muted-foreground">
-                      Você não tem turnos confirmados.
-                    </p>
+                    <p className="text-sm text-muted-foreground">Você não tem turnos confirmados.</p>
                     <p className="text-sm text-muted-foreground">Confira as vagas disponíveis abaixo!</p>
                   </CardContent>
                 </Card>
@@ -431,18 +400,10 @@ export default function EntregadorPortal() {
                           <div className="space-y-0.5 min-w-0">
                             <p className="text-sm font-semibold text-foreground">{formatDateExtended(cs.data)}</p>
                             <div className="flex items-center gap-2">
-                              <Badge className={cs.periodo === 'dia'
-                                ? 'bg-amber-100 text-amber-800 text-[10px]'
-                                : 'bg-indigo-100 text-indigo-800 text-[10px]'
-                              }>
-                                {cs.periodo === 'dia' ? <Sun className="h-3 w-3 mr-0.5" /> : <Moon className="h-3 w-3 mr-0.5" />}
-                                {cs.periodo === 'dia' ? 'Dia' : 'Noite'}
-                              </Badge>
-                              {(cs.horario_inicio || cs.horario_fim) && (
-                                <span className="text-xs text-muted-foreground">
-                                  {formatTime(cs.horario_inicio)} — {formatTime(cs.horario_fim)}
-                                </span>
-                              )}
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                {cs.horario_inicio} — {cs.horario_fim}
+                              </span>
                             </div>
                           </div>
                           {canCancelThis && (
@@ -451,7 +412,7 @@ export default function EntregadorPortal() {
                               size="sm"
                               className="shrink-0 min-h-[40px] text-xs"
                               disabled={actionLoading === cs.checkinId}
-                              onClick={() => setCancelDialog({ checkinId: cs.checkinId, data: cs.data, periodo: cs.periodo })}
+                              onClick={() => setCancelDialog({ checkinId: cs.checkinId, data: cs.data, horario: `${cs.horario_inicio} — ${cs.horario_fim}` })}
                             >
                               Cancelar
                             </Button>
@@ -483,51 +444,41 @@ export default function EntregadorPortal() {
                       <Card key={dateStr}>
                         <CardContent className="py-3 px-4 space-y-2">
                           <p className="text-sm font-semibold text-foreground">{formatDateExtended(dateStr)}</p>
-                          {dayShifts.map(s => {
-                            const isDayLimit = (s as any)._dayLimit;
-                            return (
-                              <div key={s.shiftId} className="flex items-center justify-between gap-2 py-1.5 border-t border-border first:border-0">
-                                <div className="space-y-0.5 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <Badge className={s.periodo === 'dia'
-                                      ? 'bg-amber-100 text-amber-800 text-[10px]'
-                                      : 'bg-indigo-100 text-indigo-800 text-[10px]'
-                                    }>
-                                      {s.periodo === 'dia' ? '☀️ Dia' : '🌙 Noite'}
-                                    </Badge>
-                                    {(s.horario_inicio || s.horario_fim) && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {formatTime(s.horario_inicio)} — {formatTime(s.horario_fim)}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <p className={`text-xs ${s.vagasRestantes > 0 ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
-                                    {s.vagasRestantes > 0 ? `${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''} restante${s.vagasRestantes > 1 ? 's' : ''}` : 'Esgotado'}
-                                  </p>
+                          {dayShifts.map(s => (
+                            <div key={s.shiftId} className="flex items-center justify-between gap-2 py-1.5 border-t border-border first:border-0">
+                              <div className="space-y-0.5 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-3 w-3 text-muted-foreground" />
+                                  <span className="text-xs font-medium text-foreground">
+                                    {s.horario_inicio} — {s.horario_fim}
+                                  </span>
                                 </div>
-                                <div className="shrink-0">
-                                  {s.alreadyConfirmed ? (
-                                    <Badge className="bg-green-600 text-white text-xs px-3 py-1">✅ Confirmado</Badge>
-                                  ) : s.vagasRestantes <= 0 ? (
-                                    <Badge variant="destructive" className="text-xs px-3 py-1">Esgotado</Badge>
-                                  ) : isDayLimit ? (
-                                    <Button size="sm" disabled className="min-h-[48px] text-xs opacity-50">
-                                      Limite atingido
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      className="min-h-[48px] bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4"
-                                      disabled={actionLoading === s.shiftId}
-                                      onClick={() => handleConfirm(s)}
-                                    >
-                                      {actionLoading === s.shiftId ? 'Confirmando...' : 'CONFIRMAR'}
-                                    </Button>
-                                  )}
-                                </div>
+                                <p className={`text-xs ${s.vagasRestantes > 0 ? 'text-muted-foreground' : 'text-destructive font-medium'}`}>
+                                  {s.vagasRestantes > 0 ? `${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''} restante${s.vagasRestantes > 1 ? 's' : ''}` : 'Esgotado'}
+                                </p>
                               </div>
-                            );
-                          })}
+                              <div className="shrink-0">
+                                {s.alreadyConfirmed ? (
+                                  <Badge className="bg-green-600 text-white text-xs px-3 py-1">Confirmado</Badge>
+                                ) : s.vagasRestantes <= 0 ? (
+                                  <Badge variant="destructive" className="text-xs px-3 py-1">Esgotado</Badge>
+                                ) : s._dayLimit ? (
+                                  <Button size="sm" disabled className="min-h-[48px] text-xs opacity-50">
+                                    Limite atingido
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    className="min-h-[48px] bg-green-600 hover:bg-green-700 text-white font-semibold text-xs px-4"
+                                    disabled={actionLoading === s.shiftId}
+                                    onClick={() => handleConfirm(s)}
+                                  >
+                                    {actionLoading === s.shiftId ? 'Confirmando...' : 'CONFIRMAR'}
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </CardContent>
                       </Card>
                     );
@@ -554,7 +505,7 @@ export default function EntregadorPortal() {
                         <div key={i} className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/30 text-sm">
                           <div className="space-y-0.5">
                             <p className="font-medium text-foreground text-xs">
-                              {format(parseISO(h.data), 'dd/MM/yyyy')} — {h.periodo === 'dia' ? 'Dia' : 'Noite'}
+                              {format(parseISO(h.data), 'dd/MM/yyyy')} — {h.horario_inicio} — {h.horario_fim}
                             </p>
                             {h.confirmed_at && (
                               <p className="text-[10px] text-muted-foreground">
@@ -585,7 +536,7 @@ export default function EntregadorPortal() {
           </DialogHeader>
           {cancelDialog && (
             <p className="text-sm text-muted-foreground">
-              Deseja cancelar sua presença em {formatDateExtended(cancelDialog.data)} — {cancelDialog.periodo === 'dia' ? 'Dia' : 'Noite'}?
+              Deseja cancelar sua presença em {formatDateExtended(cancelDialog.data)} — {cancelDialog.horario}?
             </p>
           )}
           <Textarea
