@@ -118,7 +118,7 @@ export default function DriverManagement() {
   };
 
   const resetCreateForm = () => {
-    setCreateForm({ nome: '', telefone: '', email: '', cnpj: '', password: '', max_periodos_dia: 1, notas: '' });
+    setCreateForm({ nome: '', telefone: '', email: '', cnpj: '', password: '', notas: '' });
     setCreatedPassword(null);
   };
 
