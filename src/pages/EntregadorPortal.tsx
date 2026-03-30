@@ -378,6 +378,9 @@ export default function EntregadorPortal() {
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[#1A1A1A] leading-snug">{formatDateFull(cs.data)}</p>
                         <p className="text-[13px] text-[#6B7280] mt-0.5">{cs.horario_inicio} — {cs.horario_fim}</p>
+                        {cs.origin === 'admin' && (
+                          <p className="text-[11px] text-[#9CA3AF] mt-0.5 italic">adicionado pela gestão</p>
+                        )}
                       </div>
                       {canCancel(cs.data, cs.horario_inicio) && (
                         <button
