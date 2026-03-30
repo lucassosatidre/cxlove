@@ -170,9 +170,6 @@ export default function DriverTodaySection() {
   // Compact today summary
   const todayData = weekData.find(d => isToday(d.date));
   const todayShifts = todayData?.shifts || [];
-  const todayTotal = todayShifts.reduce((acc, s) => acc + s.confirmados.filter(c => c.status === 'confirmado' || c.status === 'concluido').length, 0);
-  const todayVagas = todayShifts.reduce((acc, s) => acc + s.vagas, 0);
-  const todayFaltas = todayShifts.reduce((acc, s) => acc + s.confirmados.filter(c => c.status === 'no_show').length, 0);
 
   if (loading) {
     return <Card><CardContent className="py-6 text-center text-muted-foreground text-sm">Carregando...</CardContent></Card>;
