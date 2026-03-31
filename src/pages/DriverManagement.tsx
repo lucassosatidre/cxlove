@@ -172,22 +172,22 @@ export default function DriverManagement() {
 
   const handleBatchImport = async () => {
     const entregadores = [
-      { nome: "Dejean", telefone: "(51) 8489-1856", email: "dejean@entregador.cx", password: "1856" },
-      { nome: "Elisson", telefone: "(48) 8839-7415", email: "elisson@entregador.cx", password: "7415" },
-      { nome: "Erick", telefone: "(51) 8188-0376", email: "erick@entregador.cx", password: "0376" },
-      { nome: "Gabriel", telefone: "(48) 8840-9318", email: "gabriel.moto@entregador.cx", password: "9318" },
-      { nome: "Jhonatan", telefone: "(48) 8403-3209", email: "jhonatan@entregador.cx", password: "3209" },
-      { nome: "Junior", telefone: "(48) 9129-6925", email: "junior@entregador.cx", password: "6925" },
-      { nome: "Luis", telefone: "(48) 9217-1187", email: "luis@entregador.cx", password: "1187" },
-      { nome: "Mauricio", telefone: "(48) 9148-0117", email: "mauricio@entregador.cx", password: "0117" },
-      { nome: "Maicon", telefone: "(48) 8449-0604", email: "maicon@entregador.cx", password: "0604" },
-      { nome: "Marcos", telefone: "(51) 9560-9655", email: "marcos@entregador.cx", password: "9655" },
-      { nome: "Maylon", telefone: "(48) 9903-1736", email: "maylon@entregador.cx", password: "1736" },
-      { nome: "Moises", telefone: "(48) 9133-1806", email: "moises@entregador.cx", password: "1806" },
-      { nome: "Robson", telefone: "(48) 9623-2896", email: "robson@entregador.cx", password: "2896" },
-      { nome: "Rodrigo", telefone: "(48) 9689-4740", email: "rodrigo@entregador.cx", password: "4740" },
-      { nome: "Rosalino", telefone: "(48) 8866-3011", email: "rosalino@entregador.cx", password: "3011" },
-      { nome: "Vinicius", telefone: "(48) 9167-6039", email: "vinicius@entregador.cx", password: "6039" },
+      { nome: "Dejean", telefone: "(51) 98489-1856", email: "dejean@entregador.cx", password: "1856" },
+      { nome: "Elisson", telefone: "(48) 98839-7415", email: "elisson@entregador.cx", password: "7415" },
+      { nome: "Erick", telefone: "(51) 98188-0376", email: "erick@entregador.cx", password: "0376" },
+      { nome: "Gabriel", telefone: "(48) 98840-9318", email: "gabriel.moto@entregador.cx", password: "9318" },
+      { nome: "Jhonatan", telefone: "(48) 98403-3209", email: "jhonatan@entregador.cx", password: "3209" },
+      { nome: "Junior", telefone: "(48) 99129-6925", email: "junior@entregador.cx", password: "6925" },
+      { nome: "Luis", telefone: "(48) 99217-1187", email: "luis@entregador.cx", password: "1187" },
+      { nome: "Mauricio", telefone: "(48) 99148-0117", email: "mauricio@entregador.cx", password: "0117" },
+      { nome: "Maicon", telefone: "(48) 98449-0604", email: "maicon@entregador.cx", password: "0604" },
+      { nome: "Marcos", telefone: "(51) 99560-9655", email: "marcos@entregador.cx", password: "9655" },
+      { nome: "Maylon", telefone: "(48) 99903-1736", email: "maylon@entregador.cx", password: "1736" },
+      { nome: "Moises", telefone: "(48) 99133-1806", email: "moises@entregador.cx", password: "1806" },
+      { nome: "Robson", telefone: "(48) 99623-2896", email: "robson@entregador.cx", password: "2896" },
+      { nome: "Rodrigo", telefone: "(48) 99689-4740", email: "rodrigo@entregador.cx", password: "4740" },
+      { nome: "Rosalino", telefone: "(48) 98866-3011", email: "rosalino@entregador.cx", password: "3011" },
+      { nome: "Vinicius", telefone: "(48) 99167-6039", email: "vinicius@entregador.cx", password: "6039" },
     ];
 
     setBatchImporting(true);
@@ -214,55 +214,8 @@ export default function DriverManagement() {
     fetchDrivers();
   };
 
-  // Phone fix state
-  const [fixingPhones, setFixingPhones] = useState(false);
-  const [fixPhoneProgress, setFixPhoneProgress] = useState(0);
-  const [fixPhoneResults, setFixPhoneResults] = useState<{ email: string; ok: boolean; error?: string }[]>([]);
 
-  const handleFixPhones = async () => {
-    const correcoes = [
-      { email: "dejean@entregador.cx", telefone_correto: "(51) 98489-1856" },
-      { email: "elisson@entregador.cx", telefone_correto: "(48) 98839-7415" },
-      { email: "erick@entregador.cx", telefone_correto: "(51) 98188-0376" },
-      { email: "gabriel.moto@entregador.cx", telefone_correto: "(48) 98840-9318" },
-      { email: "jhonatan@entregador.cx", telefone_correto: "(48) 98403-3209" },
-      { email: "junior@entregador.cx", telefone_correto: "(48) 99129-6925" },
-      { email: "luis@entregador.cx", telefone_correto: "(48) 99217-1187" },
-      { email: "mauricio@entregador.cx", telefone_correto: "(48) 99148-0117" },
-      { email: "maicon@entregador.cx", telefone_correto: "(48) 98449-0604" },
-      { email: "marcos@entregador.cx", telefone_correto: "(51) 99560-9655" },
-      { email: "maylon@entregador.cx", telefone_correto: "(48) 99903-1736" },
-      { email: "moises@entregador.cx", telefone_correto: "(48) 99133-1806" },
-      { email: "robson@entregador.cx", telefone_correto: "(48) 99623-2896" },
-      { email: "rodrigo@entregador.cx", telefone_correto: "(48) 99689-4740" },
-      { email: "rosalino@entregador.cx", telefone_correto: "(48) 98866-3011" },
-      { email: "vinicius@entregador.cx", telefone_correto: "(48) 99167-6039" },
-    ];
 
-    setFixingPhones(true);
-    setFixPhoneProgress(0);
-    setFixPhoneResults([]);
-    const results: { email: string; ok: boolean; error?: string }[] = [];
-
-    for (let i = 0; i < correcoes.length; i++) {
-      const c = correcoes[i];
-      setFixPhoneProgress(i + 1);
-      try {
-        const { error } = await supabase.from('delivery_drivers').update({ telefone: c.telefone_correto }).eq('email', c.email);
-        if (error) throw error;
-        results.push({ email: c.email, ok: true });
-      } catch (err: any) {
-        results.push({ email: c.email, ok: false, error: err.message });
-      }
-      setFixPhoneResults([...results]);
-    }
-
-    const successCount = results.filter(r => r.ok).length;
-    const errorCount = results.filter(r => !r.ok).length;
-    toast.success(`${successCount} telefones corrigidos, ${errorCount} erros`);
-    setFixingPhones(false);
-    fetchDrivers();
-  };
 
   const openEdit = (d: Driver) => {
     setEditDriver(d);
@@ -359,32 +312,8 @@ export default function DriverManagement() {
                 </CardContent>
               </Card>
             )}
-            {/* TEMPORARY: Fix phones button */}
-            {true && (
-              <Card className="border-dashed border-2 border-blue-300 bg-blue-50/50">
-                <CardContent className="py-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-sm">Corrigir telefones (adicionar 9 após DDD)</p>
-                      <p className="text-xs text-muted-foreground">Botão temporário — corrigir todos os 16 telefones</p>
-                    </div>
-                    <Button onClick={handleFixPhones} disabled={fixingPhones} variant="outline" size="sm">
-                      {fixingPhones ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Corrigindo {fixPhoneProgress}/16...</> : 'Corrigir telefones'}
-                    </Button>
-                  </div>
-                  {fixingPhones && <Progress value={(fixPhoneProgress / 16) * 100} className="h-2" />}
-                  {fixPhoneResults.length > 0 && (
-                    <div className="max-h-40 overflow-auto text-xs space-y-0.5">
-                      {fixPhoneResults.map((r, i) => (
-                        <div key={i} className={r.ok ? 'text-green-700' : 'text-red-600'}>
-                          {r.ok ? '✓' : '✗'} {r.email} {r.error ? `— ${r.error}` : ''}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+
+
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
