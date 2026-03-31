@@ -166,6 +166,24 @@ export default function DriverShifts() {
     if (error) {
       toast({ title: error.code === '23505' ? 'Entregador já confirmado neste turno' : 'Erro ao adicionar', variant: 'destructive' });
     } else {
+      // Auto-increase vagas if confirmados exceed current capacity
+      const { count } = await supabase
+        .from('delivery_checkins')
+        .select('id', { count: 'exact', head: true })
+        .eq('shift_id', addDriverPopover.shiftId)
+        .in('status', ['confirmado', 'concluido']);
+      // Find the shift's current vagas from DB
+      const { data: shiftRow } = await supabase
+        .from('delivery_shifts')
+        .select('vagas')
+        .eq('id', addDriverPopover.shiftId)
+        .single();
+      if (shiftRow && count && count > shiftRow.vagas) {
+        await supabase
+          .from('delivery_shifts')
+          .update({ vagas: count })
+          .eq('id', addDriverPopover.shiftId);
+      }
       toast({ title: 'Entregador adicionado ao turno' });
       fetchWeekData();
     }
