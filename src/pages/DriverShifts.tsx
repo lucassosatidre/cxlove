@@ -172,10 +172,6 @@ export default function DriverShifts() {
         .select('id', { count: 'exact', head: true })
         .eq('shift_id', addDriverPopover.shiftId)
         .in('status', ['confirmado', 'concluido']);
-      const currentShift = weekData.flatMap(d => d.shifts).find((_, idx) => {
-        const dayIdx = weekData.findIndex(d => d.shifts.some(s => s.id === addDriverPopover.shiftId));
-        return dayIdx >= 0 && weekData[dayIdx].shifts.find(s => s.id === addDriverPopover.shiftId);
-      });
       // Find the shift's current vagas from DB
       const { data: shiftRow } = await supabase
         .from('delivery_shifts')
