@@ -359,6 +359,32 @@ export default function DriverManagement() {
                 </CardContent>
               </Card>
             )}
+            {/* TEMPORARY: Fix phones button */}
+            {true && (
+              <Card className="border-dashed border-2 border-blue-300 bg-blue-50/50">
+                <CardContent className="py-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">Corrigir telefones (adicionar 9 após DDD)</p>
+                      <p className="text-xs text-muted-foreground">Botão temporário — corrigir todos os 16 telefones</p>
+                    </div>
+                    <Button onClick={handleFixPhones} disabled={fixingPhones} variant="outline" size="sm">
+                      {fixingPhones ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Corrigindo {fixPhoneProgress}/16...</> : 'Corrigir telefones'}
+                    </Button>
+                  </div>
+                  {fixingPhones && <Progress value={(fixPhoneProgress / 16) * 100} className="h-2" />}
+                  {fixPhoneResults.length > 0 && (
+                    <div className="max-h-40 overflow-auto text-xs space-y-0.5">
+                      {fixPhoneResults.map((r, i) => (
+                        <div key={i} className={r.ok ? 'text-green-700' : 'text-red-600'}>
+                          {r.ok ? '✓' : '✗'} {r.email} {r.error ? `— ${r.error}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
