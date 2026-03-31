@@ -4,12 +4,13 @@ import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { supabase } from '@/integrations/supabase/client';
 import propositoLogo from '@/assets/proposito-logo.png';
 import estrelaLogo from '@/assets/estrela-logo.png';
 
 export default function Login() {
   const { user, loading, signIn } = useAuth();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -24,12 +25,41 @@ export default function Login() {
 
   if (user) return <Navigate to="/" replace />;
 
+  const isEmail = (value: string) => value.includes('@');
+
+  const cleanPhone = (value: string) => value.replace(/\D/g, '');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSubmitting(true);
+
     try {
-      await signIn(email, password);
+      const trimmed = identifier.trim();
+
+      if (isEmail(trimmed)) {
+        await signIn(trimmed, password);
+      } else {
+        // Phone login — lookup email via edge function
+        const phone = cleanPhone(trimmed);
+        if (phone.length < 10) {
+          setError('Telefone inválido. Digite com DDD.');
+          setSubmitting(false);
+          return;
+        }
+
+        const { data, error: fnError } = await supabase.functions.invoke('lookup-driver-email', {
+          body: { telefone: phone },
+        });
+
+        if (fnError || !data?.email) {
+          setError(data?.error || 'Telefone não cadastrado. Verifique com a administração.');
+          setSubmitting(false);
+          return;
+        }
+
+        await signIn(data.email, password);
+      }
     } catch (err: any) {
       setError(err.message || 'Usuário ou senha inválidos.');
     } finally {
@@ -69,13 +99,13 @@ export default function Login() {
         <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-foreground text-sm">Email</Label>
+              <Label htmlFor="identifier" className="text-foreground text-sm">Email ou Telefone</Label>
               <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
+                id="identifier"
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
+                placeholder="seu@email.com ou (XX) XXXXX-XXXX"
                 required
                 className="bg-background"
               />
@@ -89,7 +119,6 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
-                minLength={6}
                 className="bg-background"
               />
             </div>

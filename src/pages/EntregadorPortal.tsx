@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { format, addDays, isBefore, isToday, startOfDay, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { LogOut, RefreshCw, ChevronDown, AlertTriangle, Check } from 'lucide-react';
+import { LogOut, RefreshCw, Check, AlertTriangle, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 
 interface DriverProfile {
@@ -38,29 +38,21 @@ interface AvailableShift {
   _dayLimit?: boolean;
 }
 
-
-interface HistoryItem {
-  data: string;
-  horario_inicio: string;
-  horario_fim: string;
-  status: string;
-  confirmed_at: string | null;
-  cancel_reason: string | null;
-}
-
 export default function EntregadorPortal() {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const [driver, setDriver] = useState<DriverProfile | null>(null);
   const [confirmedShifts, setConfirmedShifts] = useState<ConfirmedShift[]>([]);
   const [availableShifts, setAvailableShifts] = useState<AvailableShift[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [cancelDialog, setCancelDialog] = useState<{ checkinId: string; data: string; horario: string } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [passwordDialog, setPasswordDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
 
@@ -114,14 +106,6 @@ export default function EntregadorPortal() {
     const myCheckins = allCheckins.filter(c => c.driver_id === driverData.id && c.status === 'confirmado');
     const myConfirmedShiftIds = new Set(myCheckins.map(c => c.shift_id));
 
-    const myConfirmedPerDay: Record<string, number> = {};
-    myCheckins.forEach(c => {
-      const shift = allShifts.find(s => s.id === c.shift_id);
-      if (shift) {
-        myConfirmedPerDay[shift.data] = (myConfirmedPerDay[shift.data] || 0) + 1;
-      }
-    });
-
     const confirmed: ConfirmedShift[] = myCheckins
       .map(c => {
         const shift = allShifts.find(s => s.id === c.shift_id);
@@ -153,44 +137,6 @@ export default function EntregadorPortal() {
       }))
       .filter(s => !isShiftPast(s.data, s.horario_inicio));
     setAvailableShifts(available);
-
-    // History
-    const thirtyDaysAgo = format(addDays(new Date(), -30), 'yyyy-MM-dd');
-    const { data: histCheckins } = await supabase
-      .from('delivery_checkins')
-      .select('shift_id, status, confirmed_at, cancelled_at, cancel_reason')
-      .eq('driver_id', driverData.id)
-      .order('created_at', { ascending: false });
-
-    const histShiftIds = [...new Set((histCheckins || []).map(c => c.shift_id))];
-    let histShifts: any[] = [];
-    if (histShiftIds.length > 0) {
-      const { data } = await supabase
-        .from('delivery_shifts')
-        .select('id, data, horario_inicio, horario_fim')
-        .in('id', histShiftIds)
-        .gte('data', thirtyDaysAgo)
-        .order('data', { ascending: false });
-      histShifts = data || [];
-    }
-    const histShiftMap: Record<string, any> = {};
-    histShifts.forEach(s => { histShiftMap[s.id] = s; });
-
-    const histItems: HistoryItem[] = (histCheckins || [])
-      .map(c => {
-        const s = histShiftMap[c.shift_id];
-        if (!s) return null;
-        return {
-          data: s.data,
-          horario_inicio: s.horario_inicio?.slice(0, 5) || '',
-          horario_fim: s.horario_fim?.slice(0, 5) || '',
-          status: c.status,
-          confirmed_at: c.confirmed_at,
-          cancel_reason: c.cancel_reason,
-        };
-      })
-      .filter(Boolean) as HistoryItem[];
-    setHistory(histItems);
 
     setLoading(false);
     setRefreshing(false);
@@ -289,20 +235,27 @@ export default function EntregadorPortal() {
     setActionLoading(null);
   };
 
+  const handleChangePassword = async () => {
+    if (!/^\d{4}$/.test(newPassword)) {
+      setPasswordError('A senha deve ter exatamente 4 dígitos numéricos');
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordError('');
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setPasswordError(error.message);
+    } else {
+      toast({ title: 'Senha alterada com sucesso!' });
+      setPasswordDialog(false);
+      setNewPassword('');
+    }
+    setPasswordSaving(false);
+  };
+
   const formatDateFull = (dateStr: string) => {
     const d = parseISO(dateStr);
     return format(d, "EEEE, dd 'de' MMMM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase());
-  };
-
-  const statusBadge = (status: string) => {
-    const map: Record<string, { label: string; cls: string }> = {
-      confirmado: { label: 'Confirmado', cls: 'bg-[#DCFCE7] text-[#166534]' },
-      cancelado: { label: 'Cancelado', cls: 'bg-muted text-muted-foreground' },
-      no_show: { label: 'No-show', cls: 'bg-destructive/10 text-destructive' },
-      concluido: { label: 'Concluído', cls: 'bg-blue-100 text-blue-700' },
-    };
-    const s = map[status] || { label: status, cls: 'bg-muted text-muted-foreground' };
-    return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${s.cls}`}>{s.label}</span>;
   };
 
   // Blocked states
@@ -351,6 +304,9 @@ export default function EntregadorPortal() {
           {driver && <span className="text-white/70 text-sm hidden sm:block">{driver.nome}</span>}
           <button onClick={() => fetchAll()} disabled={refreshing} className="text-white/70 hover:text-white transition-colors">
             <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={() => setPasswordDialog(true)} className="text-white/70 hover:text-white transition-colors">
+            <Settings className="h-[18px] w-[18px]" />
           </button>
           <button onClick={signOut} className="text-white/70 hover:text-white transition-colors">
             <LogOut className="h-[18px] w-[18px]" />
@@ -459,44 +415,6 @@ export default function EntregadorPortal() {
                 </div>
               )}
             </section>
-
-            {/* Histórico */}
-            <section>
-              <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-                <CollapsibleTrigger asChild>
-                  <button className="w-full flex items-center justify-between py-2.5 text-sm text-[#6B7280] hover:text-[#1A1A1A] transition-colors">
-                    <span>Ver histórico</span>
-                    <ChevronDown className={`h-4 w-4 transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  {history.length === 0 ? (
-                    <p className="text-sm text-[#9CA3AF] text-center py-4">Nenhum registro.</p>
-                  ) : (
-                    <div className="space-y-1.5 mt-1">
-                      {history.map((h, i) => (
-                        <div key={i} className="bg-white rounded-lg border border-[#E5E7EB] px-3 py-2.5 flex items-center justify-between">
-                          <div>
-                            <p className="text-[13px] font-medium text-[#1A1A1A]">
-                              {format(parseISO(h.data), 'dd/MM/yyyy')} — {h.horario_inicio} — {h.horario_fim}
-                            </p>
-                            {h.confirmed_at && (
-                              <p className="text-[11px] text-[#9CA3AF]">
-                                Confirmado às {format(new Date(h.confirmed_at), 'HH:mm')}
-                              </p>
-                            )}
-                            {h.cancel_reason && (
-                              <p className="text-[11px] text-[#9CA3AF] italic">Motivo: {h.cancel_reason}</p>
-                            )}
-                          </div>
-                          {statusBadge(h.status)}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CollapsibleContent>
-              </Collapsible>
-            </section>
           </>
         )}
       </main>
@@ -528,6 +446,44 @@ export default function EntregadorPortal() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Password change dialog */}
+      <Dialog open={passwordDialog} onOpenChange={(open) => { setPasswordDialog(open); if (!open) { setNewPassword(''); setPasswordError(''); } }}>
+        <DialogContent className="sm:max-w-[360px] rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base">Alterar senha</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                pattern="[0-9]*"
+                placeholder="Digite 4 dígitos"
+                value={newPassword}
+                onChange={e => {
+                  const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                  setNewPassword(v);
+                  setPasswordError('');
+                }}
+                className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-background"
+              />
+              <p className="text-xs text-[#9CA3AF] mt-1.5 text-center">Use 4 dígitos numéricos</p>
+            </div>
+            {passwordError && <p className="text-sm text-destructive text-center">{passwordError}</p>}
+          </div>
+          <DialogFooter>
+            <button
+              className="w-full h-12 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white font-bold text-sm uppercase tracking-wide transition-colors disabled:opacity-60"
+              disabled={passwordSaving}
+              onClick={handleChangePassword}
+            >
+              {passwordSaving ? 'Salvando...' : 'Salvar nova senha'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -544,13 +500,6 @@ function LoadingSkeleton() {
         <div className="space-y-2">
           <Skeleton className="h-4 w-48" />
           <Skeleton className="h-28 w-full rounded-xl" />
-          <Skeleton className="h-28 w-full rounded-xl" />
-        </div>
-      </div>
-      <div>
-        <Skeleton className="h-5 w-48 mb-3" />
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-48" />
           <Skeleton className="h-28 w-full rounded-xl" />
         </div>
       </div>
