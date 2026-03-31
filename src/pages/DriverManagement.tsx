@@ -15,7 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
+import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy, Upload, Loader2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import DriverSummaryCards from '@/components/delivery/DriverSummaryCards';
 import DriverTodaySection from '@/components/delivery/DriverTodaySection';
 import DriverHistorySection from '@/components/delivery/DriverHistorySection';
@@ -164,6 +165,55 @@ export default function DriverManagement() {
 
   const [editPassword, setEditPassword] = useState('');
 
+  // Batch import state
+  const [batchImporting, setBatchImporting] = useState(false);
+  const [batchProgress, setBatchProgress] = useState(0);
+  const [batchResults, setBatchResults] = useState<{ nome: string; ok: boolean; error?: string }[]>([]);
+
+  const handleBatchImport = async () => {
+    const entregadores = [
+      { nome: "Dejean", telefone: "(51) 8489-1856", email: "dejean@entregador.cx", password: "1856" },
+      { nome: "Elisson", telefone: "(48) 8839-7415", email: "elisson@entregador.cx", password: "7415" },
+      { nome: "Erick", telefone: "(51) 8188-0376", email: "erick@entregador.cx", password: "0376" },
+      { nome: "Gabriel", telefone: "(48) 8840-9318", email: "gabriel.moto@entregador.cx", password: "9318" },
+      { nome: "Jhonatan", telefone: "(48) 8403-3209", email: "jhonatan@entregador.cx", password: "3209" },
+      { nome: "Junior", telefone: "(48) 9129-6925", email: "junior@entregador.cx", password: "6925" },
+      { nome: "Luis", telefone: "(48) 9217-1187", email: "luis@entregador.cx", password: "1187" },
+      { nome: "Mauricio", telefone: "(48) 9148-0117", email: "mauricio@entregador.cx", password: "0117" },
+      { nome: "Maicon", telefone: "(48) 8449-0604", email: "maicon@entregador.cx", password: "0604" },
+      { nome: "Marcos", telefone: "(51) 9560-9655", email: "marcos@entregador.cx", password: "9655" },
+      { nome: "Maylon", telefone: "(48) 9903-1736", email: "maylon@entregador.cx", password: "1736" },
+      { nome: "Moises", telefone: "(48) 9133-1806", email: "moises@entregador.cx", password: "1806" },
+      { nome: "Robson", telefone: "(48) 9623-2896", email: "robson@entregador.cx", password: "2896" },
+      { nome: "Rodrigo", telefone: "(48) 9689-4740", email: "rodrigo@entregador.cx", password: "4740" },
+      { nome: "Rosalino", telefone: "(48) 8866-3011", email: "rosalino@entregador.cx", password: "3011" },
+      { nome: "Vinicius", telefone: "(48) 9167-6039", email: "vinicius@entregador.cx", password: "6039" },
+    ];
+
+    setBatchImporting(true);
+    setBatchProgress(0);
+    setBatchResults([]);
+    const results: { nome: string; ok: boolean; error?: string }[] = [];
+
+    for (let i = 0; i < entregadores.length; i++) {
+      const e = entregadores[i];
+      setBatchProgress(i + 1);
+      try {
+        await invokeFunction({ action: 'create', nome: e.nome, telefone: e.telefone, email: e.email, password: e.password });
+        results.push({ nome: e.nome, ok: true });
+      } catch (err: any) {
+        results.push({ nome: e.nome, ok: false, error: err.message });
+      }
+      setBatchResults([...results]);
+    }
+
+    const successCount = results.filter(r => r.ok).length;
+    const errorCount = results.filter(r => !r.ok).length;
+    toast.success(`${successCount} entregadores criados, ${errorCount} erros`);
+    setBatchImporting(false);
+    fetchDrivers();
+  };
+
   const openEdit = (d: Driver) => {
     setEditDriver(d);
     setEditForm({
@@ -233,7 +283,32 @@ export default function DriverManagement() {
           </TabsContent>
 
           <TabsContent value="cadastro" className="space-y-4">
-            {/* Filters */}
+            {/* TEMPORARY: Batch import button — set to false after use */}
+            {true && (
+              <Card className="border-dashed border-2 border-orange-300 bg-orange-50/50">
+                <CardContent className="py-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-semibold text-sm">Importar entregadores iniciais (16)</p>
+                      <p className="text-xs text-muted-foreground">Botão temporário — criar todos os entregadores de uma vez</p>
+                    </div>
+                    <Button onClick={handleBatchImport} disabled={batchImporting} variant="outline" size="sm">
+                      {batchImporting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Criando {batchProgress}/16...</> : <><Upload className="h-4 w-4 mr-1" /> Importar em lote</>}
+                    </Button>
+                  </div>
+                  {batchImporting && <Progress value={(batchProgress / 16) * 100} className="h-2" />}
+                  {batchResults.length > 0 && (
+                    <div className="max-h-40 overflow-auto text-xs space-y-0.5">
+                      {batchResults.map((r, i) => (
+                        <div key={i} className={r.ok ? 'text-green-700' : 'text-red-600'}>
+                          {r.ok ? '✓' : '✗'} {r.nome} {r.error ? `— ${r.error}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
