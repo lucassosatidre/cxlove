@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye } from 'lucide-react';
+import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye, ArrowUpNarrowWide, ArrowDownNarrowWide } from 'lucide-react';
 
 import AppSidebar from '@/components/AppSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
