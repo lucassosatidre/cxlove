@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ driver: driverData, password: finalPassword }), {
+    return new Response(JSON.stringify({ driver: driverData, password: rawPassword }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
