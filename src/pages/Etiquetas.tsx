@@ -345,16 +345,17 @@ export default function Etiquetas() {
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
           {selectedLabels.map(({ order, index, total }) => {
-            const lineCount = 1 + order.items.length;
             const header = formatHeaderLine(order, index, total);
+            const totalItems = getTotalItemCount(order);
             return (
               <div key={`${order.id}-${index}`} className="etiqueta">
-                <div className={cn("label-items", getLabelPrintClass(lineCount))}>
+                <div className={cn("label-items", getLabelPrintClass(order, index, total))}>
                   <div className="label-header">{header}</div>
                   {order.items.map((item, i) => (
                     <div key={i} className="label-item">{formatItemDisplay(item)}</div>
                   ))}
                   {order.items.length === 0 && <div className="label-item">-</div>}
+                  <div className="label-item">Total de itens: {totalItems}</div>
                 </div>
               </div>
             );
