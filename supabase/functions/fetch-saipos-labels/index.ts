@@ -6,6 +6,30 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const PIZZA_KEYWORDS = ["broto", "brotinho", "média", "media", "grande", "gigante", "família", "familia", "especial"];
+
+function isPizza(descItem: string): boolean {
+  const lower = (descItem || "").toLowerCase();
+  return PIZZA_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function buildItemLabel(rawItem: any): { name: string; type: "pizza" | "other"; quantity: number; price: number } {
+  const desc = rawItem.desc_sale_item || rawItem.name || rawItem.product_name || "Item";
+  const quantity = rawItem.quantity || rawItem.qt_quantity || 1;
+  const price = rawItem.total_price || rawItem.vl_total || rawItem.price || 0;
+  const choices: any[] = rawItem.choices || [];
+
+  if (isPizza(desc)) {
+    const flavors = choices
+      .map((c: any) => c.desc_sale_item_choice || c.name || "")
+      .filter(Boolean);
+    const flavorStr = flavors.length > 0 ? ` - ${flavors.join(" / ")}` : "";
+    return { name: `${desc}${flavorStr}`, type: "pizza", quantity, price };
+  }
+
+  return { name: desc, type: "other", quantity, price };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -83,7 +107,6 @@ Deno.serve(async (req) => {
       const sales = Array.isArray(data) ? data : data.data || data.results || [];
       if (sales.length === 0) break;
 
-      // Only delivery sales (id_sale_type = 1) that are not canceled
       const filtered = sales.filter((s: any) => s.id_sale_type === 1 && s.id_status !== 3);
       allSales.push(...filtered);
 
@@ -123,16 +146,13 @@ Deno.serve(async (req) => {
       itemOffset += limit;
     }
 
-    // 3) Build items map by id_sale
+    // 3) Build items map by id_sale using new pizza/other logic
     const itemsBySale = new Map<number, any[]>();
-    for (const item of allItems) {
-      const saleId = item.id_sale;
+    for (const rawItem of allItems) {
+      const saleId = rawItem.id_sale;
       if (!itemsBySale.has(saleId)) itemsBySale.set(saleId, []);
-      itemsBySale.get(saleId)!.push({
-        name: item.name || item.product_name || item.ds_product || "Item",
-        quantity: item.quantity || item.qt_quantity || 1,
-        price: item.total_price || item.vl_total || item.price || 0,
-      });
+      const parsed = buildItemLabel(rawItem);
+      itemsBySale.get(saleId)!.push(parsed);
     }
 
     // 4) Build response
@@ -154,7 +174,6 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Sort by sale_number
     orders.sort((a, b) => {
       const numA = parseInt(a.sale_number, 10);
       const numB = parseInt(b.sale_number, 10);
@@ -163,7 +182,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ orders, total_sales: orders.length, total_items: allItems.length, debug_raw_items: allItems.slice(0, 20) }),
+      JSON.stringify({ orders, total_sales: orders.length, total_items: allItems.length }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

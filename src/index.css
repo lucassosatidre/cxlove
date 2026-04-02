@@ -92,11 +92,11 @@
   }
 }
 
-/* Print styles for etiquetas 10x15cm */
+/* Print styles for etiquetas 5x3cm */
 @media print {
   @page {
-    size: 100mm 150mm;
-    margin: 5mm;
+    size: 50mm 30mm;
+    margin: 2mm;
   }
 
   body {
@@ -114,64 +114,46 @@
 
   .etiqueta {
     page-break-after: always;
-    width: 90mm;
-    height: 140mm;
+    width: 46mm;
+    height: 26mm;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     font-family: 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 7px;
+    line-height: 1.3;
     color: #000;
-    padding: 4mm 2mm;
+    overflow: hidden;
   }
 
   .etiqueta:last-child {
     page-break-after: avoid;
   }
 
-  .label-header {
-    text-align: center;
-    font-size: 16px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    border-bottom: 1px dashed #000;
-    padding-bottom: 4mm;
-    margin-bottom: 4mm;
-  }
-
   .label-order {
-    text-align: center;
-    font-size: 22px;
+    font-size: 10px;
     font-weight: bold;
-    margin-bottom: 4mm;
+    margin-bottom: 1mm;
   }
 
-  .label-section {
+  .label-items {
     flex: 1;
-    margin-bottom: 4mm;
-  }
-
-  .label-title {
-    font-weight: bold;
-    font-size: 13px;
-    margin-bottom: 2mm;
-    text-decoration: underline;
+    overflow: hidden;
   }
 
   .label-item {
-    font-size: 14px;
-    margin-left: 2mm;
+    font-size: 7px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .label-footer {
-    border-top: 1px dashed #000;
-    padding-top: 4mm;
-    font-size: 14px;
+    font-size: 7px;
     font-weight: bold;
-  }
-
-  .label-footer div {
-    margin-bottom: 1mm;
+    border-top: 0.5px dashed #000;
+    padding-top: 0.5mm;
+    margin-top: 0.5mm;
+    white-space: nowrap;
   }
 }
