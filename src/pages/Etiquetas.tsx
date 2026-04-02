@@ -377,6 +377,15 @@ export default function Etiquetas() {
                     ))}
                   </div>
 
+                  <button
+                    title={sortAsc ? 'Ordenar decrescente' : 'Ordenar crescente'}
+                    onClick={() => setSortAsc(prev => !prev)}
+                    className="flex items-center gap-1 px-2 py-1.5 border border-border rounded-md text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    {sortAsc ? <ArrowUpNarrowWide className="h-4 w-4" /> : <ArrowDownNarrowWide className="h-4 w-4" />}
+                    {sortAsc ? '1→9' : '9→1'}
+                  </button>
+
                   <Button variant="outline" onClick={selectAll} className="gap-2">
                     {filteredOrders.every(o => selected.has(o.id)) && filteredOrders.length > 0 ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                     {filteredOrders.every(o => selected.has(o.id)) && filteredOrders.length > 0 ? 'Desmarcar todos' : 'Selecionar todos'}
