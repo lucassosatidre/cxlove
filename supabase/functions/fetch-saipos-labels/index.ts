@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
         p_offset: String(itemOffset),
       });
 
-      const res = await fetch(
+      const res = await fetchWithRetry(
         `https://data.saipos.io/v1/sales_items?${params.toString()}`,
         { headers: { Authorization: `Bearer ${saiposToken}` } }
       );
