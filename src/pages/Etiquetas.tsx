@@ -297,13 +297,16 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedOrders.map(order => {
+          {selectedLabels.map(({ order, index, total }, li) => {
             const [firstItem, ...restItems] = order.items;
+            const numberStr = total > 1
+              ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
+              : formatOrderNumber(order.sale_number);
             return (
-              <div key={order.id} className="etiqueta">
+              <div key={`${order.id}-${index}`} className="etiqueta">
                 <div className={cn("label-items", getItemsFontClass(order.items.length))}>
                   <div className="label-item">
-                    <span className="label-order">{formatOrderNumber(order.sale_number)}</span>
+                    <span className="label-order">{numberStr}</span>
                     {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
                   </div>
                   {restItems.map((item, i) => (
