@@ -16,18 +16,15 @@ import { cn } from '@/lib/utils';
 
 interface OrderItem {
   name: string;
-  type: 'pizza' | 'other';
+  type: 'pizza' | 'drink';
   quantity: number;
-  price: number;
 }
 
 interface Order {
   id: number;
   sale_number: string;
-  payment_method: string;
   total: number;
   items: OrderItem[];
-  delivery_person: string | null;
   sale_time: string | null;
 }
 
