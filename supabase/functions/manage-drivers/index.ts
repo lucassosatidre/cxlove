@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ password: finalPassword }), {
+    return new Response(JSON.stringify({ password: rawPassword }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
