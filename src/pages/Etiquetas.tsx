@@ -299,7 +299,12 @@ export default function Etiquetas() {
     return true;
   });
 
+  // For printing: use printOrderIds if set (single order print), otherwise use selected
+  const printOrders = printOrderIds
+    ? orders.filter(o => printOrderIds.includes(o.id))
+    : orders.filter(o => selected.has(o.id));
   const selectedOrders = orders.filter(o => selected.has(o.id));
+  const printLabels = expandLabels(printOrders);
   const selectedLabels = expandLabels(selectedOrders);
   const totalLabelCount = selectedLabels.length;
 
