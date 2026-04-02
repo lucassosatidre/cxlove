@@ -49,21 +49,20 @@ const getItemsFontClass = (itemCount: number) => {
 function LabelPreview({ order }: { order: Order }) {
   const itemCount = order.items.length;
   const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
+  const [firstItem, ...restItems] = order.items;
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
          style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '2px' }}>
-        {formatOrderNumber(order.sale_number)}
+      <div style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{formatOrderNumber(order.sale_number)}</span>
+        {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
       </div>
-      <div>
-        {order.items.length > 0
-          ? order.items.map((item, i) => (
-              <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-                {formatItemDisplay(item)}
-              </div>
-            ))
-          : <div style={{ fontSize: '10px' }}>-</div>}
-      </div>
+      {restItems.map((item, i) => (
+        <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+          {formatItemDisplay(item)}
+        </div>
+      ))}
+      {order.items.length === 0 && <div style={{ fontSize: '10px' }}>-</div>}
     </div>
   );
 }
@@ -260,15 +259,20 @@ export default function Etiquetas() {
                   className="mt-1"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-foreground">
-                    {formatOrderNumber(order.sale_number)}
-                  </div>
-                  <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
-                    {order.items.length > 0
-                      ? order.items.map((item, i) => (
+                  <div className="text-sm text-muted-foreground space-y-0.5">
+                    {order.items.length > 0 ? (
+                      <>
+                        <div>
+                          <span className="font-semibold text-foreground">{formatOrderNumber(order.sale_number)}</span>
+                          {' '}{formatItemDisplay(order.items[0])}
+                        </div>
+                        {order.items.slice(1).map((item, i) => (
                           <div key={i}>{formatItemDisplay(item)}</div>
-                        ))
-                      : <div>Sem itens</div>}
+                        ))}
+                      </>
+                    ) : (
+                      <div><span className="font-semibold text-foreground">{formatOrderNumber(order.sale_number)}</span> Sem itens</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -278,19 +282,23 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedOrders.map(order => (
-            <div key={order.id} className="etiqueta">
-              <div className="label-order">{formatOrderNumber(order.sale_number)}</div>
-              <div className={cn("label-items", getItemsFontClass(order.items.length))}>
-                {order.items.length > 0
-                  ? order.items.map((item, i) => (
-                      <div key={i} className="label-item">{formatItemDisplay(item)}</div>
-                    ))
-                  : <div className="label-item">-</div>
-                }
+          {selectedOrders.map(order => {
+            const [firstItem, ...restItems] = order.items;
+            return (
+              <div key={order.id} className="etiqueta">
+                <div className={cn("label-items", getItemsFontClass(order.items.length))}>
+                  <div className="label-item">
+                    <span className="label-order">{formatOrderNumber(order.sale_number)}</span>
+                    {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
+                  </div>
+                  {restItems.map((item, i) => (
+                    <div key={i} className="label-item">{formatItemDisplay(item)}</div>
+                  ))}
+                  {order.items.length === 0 && <div className="label-item">-</div>}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Preview modal */}
