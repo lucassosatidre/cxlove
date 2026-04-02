@@ -52,8 +52,7 @@ function decomposeItems(rawItem: any): LabelItem[] {
       } else if (isPizzaName(partName)) {
         results.push({ name: partName, type: "pizza", quantity: partQty * quantity });
       } else if (partName.toLowerCase().includes("refrigerante")) {
-        // Generic "Refrigerante" — look in choices for the actual drink
-        // Will be resolved below from choices
+        // Generic "Refrigerante" — skip, will try to find real drink name in choices
       } else {
         // Unknown combo part — show as pizza by default
         results.push({ name: partName, type: "pizza", quantity: partQty * quantity });
