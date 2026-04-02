@@ -273,6 +273,18 @@ export default function Etiquetas() {
     document.title = originalTitle;
   };
 
+  const handlePrintSingle = async (orderId: number) => {
+    setPrintOrderIds([orderId]);
+    await markAsPrinted([orderId]);
+    // Wait for React to render the print area with the single order
+    await new Promise(r => setTimeout(r, 100));
+    const originalTitle = document.title;
+    document.title = ' ';
+    window.print();
+    document.title = originalTitle;
+    setPrintOrderIds(null);
+  };
+
   const handlePreview = () => {
     if (selected.size === 0) {
       toast({ title: 'Selecione ao menos um pedido', variant: 'destructive' });
