@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { padPin } from '@/lib/pin-utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
