@@ -42,15 +42,32 @@ const getItemsFontClass = (itemCount: number) => {
   return '';
 };
 
-function LabelPreview({ order }: { order: Order }) {
+const getPizzaCount = (order: Order) =>
+  order.items.filter(i => i.type === 'pizza').reduce((sum, i) => sum + i.quantity, 0);
+
+const expandLabels = (orders: Order[]) => {
+  const labels: { order: Order; index: number; total: number }[] = [];
+  for (const order of orders) {
+    const count = Math.max(1, getPizzaCount(order));
+    for (let i = 0; i < count; i++) {
+      labels.push({ order, index: i + 1, total: count });
+    }
+  }
+  return labels;
+};
+
+function LabelPreview({ order, index, total }: { order: Order; index: number; total: number }) {
   const itemCount = order.items.length;
   const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
   const [firstItem, ...restItems] = order.items;
+  const numberStr = total > 1
+    ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
+    : formatOrderNumber(order.sale_number);
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
          style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
       <div style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{formatOrderNumber(order.sale_number)}</span>
+        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{numberStr}</span>
         {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
       </div>
       {restItems.map((item, i) => (
@@ -141,6 +158,8 @@ export default function Etiquetas() {
   };
 
   const selectedOrders = orders.filter(o => selected.has(o.id));
+  const selectedLabels = expandLabels(selectedOrders);
+  const totalLabelCount = selectedLabels.length;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -215,7 +234,7 @@ export default function Etiquetas() {
                   </Button>
                   <Button onClick={handlePrint} disabled={selected.size === 0} className="gap-2">
                     <Printer className="h-4 w-4" />
-                    Imprimir ({selected.size})
+                    Imprimir ({totalLabelCount})
                   </Button>
                 </>
               )}
@@ -278,13 +297,16 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedOrders.map(order => {
+          {selectedLabels.map(({ order, index, total }, li) => {
             const [firstItem, ...restItems] = order.items;
+            const numberStr = total > 1
+              ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
+              : formatOrderNumber(order.sale_number);
             return (
-              <div key={order.id} className="etiqueta">
+              <div key={`${order.id}-${index}`} className="etiqueta">
                 <div className={cn("label-items", getItemsFontClass(order.items.length))}>
                   <div className="label-item">
-                    <span className="label-order">{formatOrderNumber(order.sale_number)}</span>
+                    <span className="label-order">{numberStr}</span>
                     {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
                   </div>
                   {restItems.map((item, i) => (
@@ -301,12 +323,12 @@ export default function Etiquetas() {
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Prévia das Etiquetas ({selectedOrders.length}) — {printMode === 'grid' ? 'Múltiplas por página' : '1 por página'}</DialogTitle>
+              <DialogTitle>Prévia das Etiquetas ({totalLabelCount}) — {printMode === 'grid' ? 'Múltiplas por página' : '1 por página'}</DialogTitle>
             </DialogHeader>
             <div className={cn("py-2", printMode === 'grid' ? 'flex flex-wrap gap-1 justify-center' : 'space-y-4')}>
-              {selectedOrders.map(order => (
-                <div key={order.id} className={cn(printMode === 'grid' ? '' : 'flex justify-center')}>
-                  <LabelPreview order={order} />
+              {selectedLabels.map(({ order, index, total }) => (
+                <div key={`${order.id}-${index}`} className={cn(printMode === 'grid' ? '' : 'flex justify-center')}>
+                  <LabelPreview order={order} index={index} total={total} />
                 </div>
               ))}
             </div>
