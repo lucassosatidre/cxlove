@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+
 import AppSidebar from '@/components/AppSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
