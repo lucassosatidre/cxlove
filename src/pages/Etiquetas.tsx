@@ -29,8 +29,7 @@ interface Order {
 }
 
 const formatItemDisplay = (item: OrderItem) => {
-  const icon = item.type === 'pizza' ? '🍕' : '🥤';
-  return `${icon} ${item.quantity}x ${item.name}`;
+  return `▸ ${item.quantity}x ${item.name}`;
 };
 
 const formatOrderNumber = (saleNumber: string) => {
