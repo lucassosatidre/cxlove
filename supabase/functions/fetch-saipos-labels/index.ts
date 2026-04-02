@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ orders, total_sales: orders.length, total_items: allItems.length }),
+      JSON.stringify({ orders, total_sales: orders.length, total_items: allItems.length, debug_raw_items: allItems.slice(0, 20) }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

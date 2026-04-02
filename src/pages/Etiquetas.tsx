@@ -36,6 +36,8 @@ export default function Etiquetas() {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [debugRawItems, setDebugRawItems] = useState<any[] | null>(null);
+  const [debugOpen, setDebugOpen] = useState(false);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
@@ -59,6 +61,7 @@ export default function Etiquetas() {
 
       if (error) throw error;
       setOrders(data.orders || []);
+      setDebugRawItems(data.debug_raw_items || null);
       setFetched(true);
       toast({ title: `${data.total_sales} pedidos encontrados` });
     } catch (err: any) {
@@ -211,6 +214,23 @@ export default function Etiquetas() {
                 </div>
               </div>
             ))}
+
+            {debugRawItems && debugRawItems.length > 0 && (
+              <div className="mt-6 border border-border rounded-lg bg-card">
+                <button
+                  onClick={() => setDebugOpen(!debugOpen)}
+                  className="w-full flex items-center justify-between p-4 text-left font-semibold text-foreground"
+                >
+                  Debug — Dados brutos da API Saipos ({debugRawItems.length} itens)
+                  <span className={cn('transition-transform', debugOpen && 'rotate-180')}>▼</span>
+                </button>
+                {debugOpen && (
+                  <pre className="p-4 pt-0 text-xs text-muted-foreground overflow-auto max-h-[500px] whitespace-pre-wrap break-all">
+                    {JSON.stringify(debugRawItems, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
