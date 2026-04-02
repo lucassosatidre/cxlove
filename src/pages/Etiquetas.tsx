@@ -33,32 +33,62 @@ const formatItemDisplay = (item: OrderItem) => {
 };
 
 const formatOrderNumber = (saleNumber: string) => {
-  return `#${parseInt(saleNumber, 10) || saleNumber}`;
+  return `${parseInt(saleNumber, 10) || saleNumber}`;
 };
 
 const getTotalItemCount = (order: Order) =>
   order.items.reduce((sum, i) => sum + i.quantity, 0);
 
-const getLabelFontSizes = (lineCount: number) => {
-  // lineCount = 1 (header) + number of items
-  if (lineCount <= 2) return { header: '16px', item: '14px' };
-  if (lineCount <= 3) return { header: '14px', item: '12px' };
-  if (lineCount <= 4) return { header: '13px', item: '11px' };
-  return { header: '11px', item: '9px' };
+const getLabelFontSizes = (order: Order, index: number, total: number) => {
+  const headerLine = formatHeaderLine(order, index, total);
+  const itemLines = order.items.map(i => formatItemDisplay(i));
+  const totalLine = `Total de itens: ${getTotalItemCount(order)}`;
+  const allLines = [headerLine, ...itemLines, totalLine];
+  const lineCount = allLines.length;
+  const maxChars = Math.max(...allLines.map(l => l.length));
+
+  // Width constraint: 60mm ≈ 227px, estimate ~7px per char at 12px font
+  // Height constraint: 30mm ≈ 113px, with line-height 1.3
+  let fontSize = 16;
+  if (lineCount >= 5) fontSize = 9;
+  else if (lineCount >= 4) fontSize = 11;
+  else if (lineCount >= 3) fontSize = 12;
+  else fontSize = 14;
+
+  // Reduce if longest line is too wide (approx 0.6 * fontSize per char)
+  const maxWidth = 212; // 227px - 15px padding
+  const charWidth = fontSize * 0.6;
+  if (maxChars * charWidth > maxWidth) {
+    fontSize = Math.floor(maxWidth / (maxChars * 0.6));
+  }
+
+  // Ensure fits height (113px - 15px padding = 98px usable)
+  const maxHeight = 98;
+  let lineHeight = 1.3;
+  if (lineCount * fontSize * lineHeight > maxHeight) {
+    fontSize = Math.floor(maxHeight / (lineCount * lineHeight));
+  }
+  if (fontSize < 8) {
+    fontSize = 8;
+    lineHeight = 1.1;
+  }
+
+  const headerSize = Math.min(fontSize + 2, 16);
+  return { header: `${headerSize}px`, item: `${fontSize}px`, lineHeight: `${lineHeight}` };
 };
 
-const getLabelPrintClass = (lineCount: number) => {
-  if (lineCount <= 2) return 'font-xl';
-  if (lineCount <= 3) return 'font-lg';
-  if (lineCount <= 4) return 'font-md';
+const getLabelPrintClass = (order: Order, index: number, total: number) => {
+  const sizes = getLabelFontSizes(order, index, total);
+  const fs = parseInt(sizes.item);
+  if (fs >= 14) return 'font-xl';
+  if (fs >= 12) return 'font-lg';
+  if (fs >= 11) return 'font-md';
   return 'font-sm';
 };
 
 const formatHeaderLine = (order: Order, index: number, total: number) => {
   const num = formatOrderNumber(order.sale_number);
-  const itemCount = getTotalItemCount(order);
-  const numeration = total > 1 ? `  ${index}/${total}` : '';
-  return `Pedido: ${num}  Itens: ${itemCount}${numeration}`;
+  return `Nº ${num}  -  Pizza: ${index}/${total}`;
 };
 
 const getPizzaCount = (order: Order) =>
