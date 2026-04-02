@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 const ALL_PERMISSIONS = ['dashboard', 'import', 'reconciliation', 'delivery_reconciliation'];
@@ -13,7 +13,9 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization');
+  console.log('[create-user] authHeader present:', !!authHeader);
   if (!authHeader) {
+    console.error('[create-user] FAIL: missing Authorization header');
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -30,8 +32,10 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } }
   );
-  const { data: { user: caller } } = await supabaseUser.auth.getUser();
+  const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser();
+  console.log('[create-user] caller:', caller?.id, 'error:', callerError?.message);
   if (!caller) {
+    console.error('[create-user] FAIL: getUser returned null, error:', callerError?.message);
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
