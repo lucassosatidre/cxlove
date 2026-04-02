@@ -299,7 +299,7 @@ export default function DriverTodaySection() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">
                         {c.driverName}
-                        {c.origin === 'admin' && <span className="text-[10px] text-primary ml-1">(admin)</span>}
+                        
                       </p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         {c.driverPhone && (

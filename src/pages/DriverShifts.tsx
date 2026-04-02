@@ -492,7 +492,7 @@ export default function DriverShifts() {
                             <div key={d.checkinId} className="flex items-center justify-between group">
                               <span className="text-[10px] text-muted-foreground leading-tight">
                                 {d.nome}
-                                {d.origin === 'admin' && <span className="text-[8px] text-primary ml-0.5">(admin)</span>}
+                                
                               </span>
                               {!past && (
                                 <button
