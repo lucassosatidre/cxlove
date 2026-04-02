@@ -325,7 +325,7 @@ export default function Etiquetas() {
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-muted-foreground space-y-0.5">
                     <div className="font-semibold text-foreground">
-                      Pedido: {formatOrderNumber(order.sale_number)}  Itens: {getTotalItemCount(order)}
+                      Nº {formatOrderNumber(order.sale_number)}  -  Pizza: {Math.max(1, getPizzaCount(order))}/{Math.max(1, getPizzaCount(order))}  |  Total de itens: {getTotalItemCount(order)}
                       {getPizzaCount(order) > 1 && <span className="ml-2 text-xs font-normal text-muted-foreground">({getPizzaCount(order)} etiquetas)</span>}
                     </div>
                     {order.items.length > 0 ? (
