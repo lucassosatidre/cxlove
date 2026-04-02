@@ -36,10 +36,29 @@ const formatOrderNumber = (saleNumber: string) => {
   return `#${parseInt(saleNumber, 10) || saleNumber}`;
 };
 
-const getItemsFontClass = (itemCount: number) => {
-  if (itemCount >= 6) return 'font-xs';
-  if (itemCount >= 4) return 'font-sm';
-  return '';
+const getTotalItemCount = (order: Order) =>
+  order.items.reduce((sum, i) => sum + i.quantity, 0);
+
+const getLabelFontSizes = (lineCount: number) => {
+  // lineCount = 1 (header) + number of items
+  if (lineCount <= 2) return { header: '16px', item: '14px' };
+  if (lineCount <= 3) return { header: '14px', item: '12px' };
+  if (lineCount <= 4) return { header: '13px', item: '11px' };
+  return { header: '11px', item: '9px' };
+};
+
+const getLabelPrintClass = (lineCount: number) => {
+  if (lineCount <= 2) return 'font-xl';
+  if (lineCount <= 3) return 'font-lg';
+  if (lineCount <= 4) return 'font-md';
+  return 'font-sm';
+};
+
+const formatHeaderLine = (order: Order, index: number, total: number) => {
+  const num = formatOrderNumber(order.sale_number);
+  const itemCount = getTotalItemCount(order);
+  const numeration = total > 1 ? `  ${index}/${total}` : '';
+  return `Pedido: ${num}  Itens: ${itemCount}${numeration}`;
 };
 
 const getPizzaCount = (order: Order) =>
