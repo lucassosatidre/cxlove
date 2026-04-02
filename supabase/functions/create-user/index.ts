@@ -32,10 +32,27 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } }
   );
-  const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser();
-  console.log('[create-user] caller:', caller?.id, 'error:', callerError?.message);
-  if (!caller) {
-    console.error('[create-user] FAIL: getUser returned null, error:', callerError?.message);
+
+  // Try getClaims first (faster, no network call), fallback to getUser
+  const token = authHeader.replace('Bearer ', '');
+  let callerId: string | null = null;
+
+  const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+  if (claimsData?.claims?.sub) {
+    callerId = claimsData.claims.sub;
+    console.log('[create-user] caller from getClaims:', callerId);
+  } else {
+    console.log('[create-user] getClaims failed:', claimsError?.message, '- trying getUser');
+    const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser();
+    if (caller) {
+      callerId = caller.id;
+      console.log('[create-user] caller from getUser:', callerId);
+    } else {
+      console.error('[create-user] getUser also failed:', callerError?.message);
+    }
+  }
+
+  if (!callerId) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
