@@ -62,9 +62,10 @@ Deno.serve(async (req) => {
   const { data: roleData } = await supabaseAdmin
     .from('user_roles')
     .select('role')
-    .eq('user_id', caller.id)
+    .eq('user_id', callerId)
     .eq('role', 'admin')
     .maybeSingle();
+  console.log('[create-user] role check for', callerId, ':', JSON.stringify(roleData));
 
   if (!roleData) {
     return new Response(JSON.stringify({ error: 'Apenas administradores podem gerenciar usuários' }), {
