@@ -38,17 +38,19 @@ const formatItemDisplay = (item: OrderItem) => {
 
 function LabelPreview({ order }: { order: Order }) {
   return (
-    <div className="border border-border rounded bg-white text-black p-3 font-mono"
-         style={{ width: '227px', height: '113px', fontSize: '9px', lineHeight: '1.3', overflow: 'hidden' }}>
-      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '2px' }}>
+    <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center overflow-hidden"
+         style={{ width: '227px', height: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
+      <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '2px' }}>
         #{order.sale_number.padStart(4, '0')}
       </div>
       <div>
         {order.items.length > 0
           ? order.items.map((item, i) => (
-              <div key={i} className="truncate">{formatItemDisplay(item)}</div>
+              <div key={i} style={{ fontSize: '10px', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {formatItemDisplay(item)}
+              </div>
             ))
-          : <div>-</div>}
+          : <div style={{ fontSize: '10px' }}>-</div>}
       </div>
     </div>
   );
