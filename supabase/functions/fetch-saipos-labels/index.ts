@@ -47,12 +47,12 @@ function decomposeItems(rawItem: any): LabelItem[] {
       const partQty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
       const partName = qtyMatch ? qtyMatch[2].trim() : part.trim();
 
-      if (isDrinkName(partName)) {
+      if (partName.toLowerCase().replace(/\s/g, "") === "refrigerante") {
+        // Generic "Refrigerante" — skip, real drink name comes from choices
+      } else if (isDrinkName(partName)) {
         results.push({ name: partName, type: "drink", quantity: partQty * quantity });
       } else if (isPizzaName(partName)) {
         results.push({ name: partName, type: "pizza", quantity: partQty * quantity });
-      } else if (partName.toLowerCase().includes("refrigerante")) {
-        // Generic "Refrigerante" — skip, will try to find real drink name in choices
       } else {
         // Unknown combo part — show as pizza by default
         results.push({ name: partName, type: "pizza", quantity: partQty * quantity });
