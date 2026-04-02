@@ -36,10 +36,29 @@ const formatOrderNumber = (saleNumber: string) => {
   return `#${parseInt(saleNumber, 10) || saleNumber}`;
 };
 
-const getItemsFontClass = (itemCount: number) => {
-  if (itemCount >= 6) return 'font-xs';
-  if (itemCount >= 4) return 'font-sm';
-  return '';
+const getTotalItemCount = (order: Order) =>
+  order.items.reduce((sum, i) => sum + i.quantity, 0);
+
+const getLabelFontSizes = (lineCount: number) => {
+  // lineCount = 1 (header) + number of items
+  if (lineCount <= 2) return { header: '16px', item: '14px' };
+  if (lineCount <= 3) return { header: '14px', item: '12px' };
+  if (lineCount <= 4) return { header: '13px', item: '11px' };
+  return { header: '11px', item: '9px' };
+};
+
+const getLabelPrintClass = (lineCount: number) => {
+  if (lineCount <= 2) return 'font-xl';
+  if (lineCount <= 3) return 'font-lg';
+  if (lineCount <= 4) return 'font-md';
+  return 'font-sm';
+};
+
+const formatHeaderLine = (order: Order, index: number, total: number) => {
+  const num = formatOrderNumber(order.sale_number);
+  const itemCount = getTotalItemCount(order);
+  const numeration = total > 1 ? `  ${index}/${total}` : '';
+  return `Pedido: ${num}  Itens: ${itemCount}${numeration}`;
 };
 
 const getPizzaCount = (order: Order) =>
@@ -57,25 +76,21 @@ const expandLabels = (orders: Order[]) => {
 };
 
 function LabelPreview({ order, index, total }: { order: Order; index: number; total: number }) {
-  const itemCount = order.items.length;
-  const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
-  const [firstItem, ...restItems] = order.items;
-  const numberStr = total > 1
-    ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
-    : formatOrderNumber(order.sale_number);
+  const lineCount = 1 + order.items.length; // header + items
+  const fonts = getLabelFontSizes(lineCount);
+  const header = formatHeaderLine(order, index, total);
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
          style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{numberStr}</span>
-        {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
+      <div style={{ fontSize: fonts.header, fontWeight: 'bold', lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+        {header}
       </div>
-      {restItems.map((item, i) => (
-        <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+      {order.items.map((item, i) => (
+        <div key={i} style={{ fontSize: fonts.item, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
           {formatItemDisplay(item)}
         </div>
       ))}
-      {order.items.length === 0 && <div style={{ fontSize: '10px' }}>-</div>}
+      {order.items.length === 0 && <div style={{ fontSize: fonts.item }}>-</div>}
     </div>
   );
 }
@@ -275,18 +290,16 @@ export default function Etiquetas() {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-muted-foreground space-y-0.5">
+                    <div className="font-semibold text-foreground">
+                      Pedido: {formatOrderNumber(order.sale_number)}  Itens: {getTotalItemCount(order)}
+                      {getPizzaCount(order) > 1 && <span className="ml-2 text-xs font-normal text-muted-foreground">({getPizzaCount(order)} etiquetas)</span>}
+                    </div>
                     {order.items.length > 0 ? (
-                      <>
-                        <div>
-                          <span className="font-semibold text-foreground">{formatOrderNumber(order.sale_number)}</span>
-                          {' '}{formatItemDisplay(order.items[0])}
-                        </div>
-                        {order.items.slice(1).map((item, i) => (
-                          <div key={i}>{formatItemDisplay(item)}</div>
-                        ))}
-                      </>
+                      order.items.map((item, i) => (
+                        <div key={i}>{formatItemDisplay(item)}</div>
+                      ))
                     ) : (
-                      <div><span className="font-semibold text-foreground">{formatOrderNumber(order.sale_number)}</span> Sem itens</div>
+                      <div>Sem itens</div>
                     )}
                   </div>
                 </div>
@@ -297,19 +310,14 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedLabels.map(({ order, index, total }, li) => {
-            const [firstItem, ...restItems] = order.items;
-            const numberStr = total > 1
-              ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
-              : formatOrderNumber(order.sale_number);
+          {selectedLabels.map(({ order, index, total }) => {
+            const lineCount = 1 + order.items.length;
+            const header = formatHeaderLine(order, index, total);
             return (
               <div key={`${order.id}-${index}`} className="etiqueta">
-                <div className={cn("label-items", getItemsFontClass(order.items.length))}>
-                  <div className="label-item">
-                    <span className="label-order">{numberStr}</span>
-                    {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
-                  </div>
-                  {restItems.map((item, i) => (
+                <div className={cn("label-items", getLabelPrintClass(lineCount))}>
+                  <div className="label-header">{header}</div>
+                  {order.items.map((item, i) => (
                     <div key={i} className="label-item">{formatItemDisplay(item)}</div>
                   ))}
                   {order.items.length === 0 && <div className="label-item">-</div>}
