@@ -170,7 +170,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const finalPassword = new_password || driver.telefone.replace(/\D/g, '').slice(0, 4) + '2026';
+    const rawPassword = new_password || driver.telefone.replace(/\D/g, '').slice(-4);
+    const finalPassword = padPin(rawPassword);
 
     const { error } = await supabaseAdmin.auth.admin.updateUserById(driver.auth_user_id, {
       password: finalPassword,
