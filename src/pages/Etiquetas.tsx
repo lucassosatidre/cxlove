@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye } from 'lucide-react';
+import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye, ArrowUpNarrowWide, ArrowDownNarrowWide } from 'lucide-react';
 
 import AppSidebar from '@/components/AppSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -145,6 +145,7 @@ export default function Etiquetas() {
   const [printMode, setPrintMode] = useState<'single' | 'grid'>('single');
   const [filter, setFilter] = useState<FilterMode>('all');
   const [printOrderIds, setPrintOrderIds] = useState<number[] | null>(null);
+  const [sortAsc, setSortAsc] = useState(false);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
@@ -293,11 +294,17 @@ export default function Etiquetas() {
     setPreviewOpen(true);
   };
 
-  const filteredOrders = orders.filter(o => {
-    if (filter === 'printed') return o.printed;
-    if (filter === 'not_printed') return !o.printed;
-    return true;
-  });
+  const filteredOrders = orders
+    .filter(o => {
+      if (filter === 'printed') return o.printed;
+      if (filter === 'not_printed') return !o.printed;
+      return true;
+    })
+    .sort((a, b) => {
+      const numA = parseInt(a.sale_number, 10) || 0;
+      const numB = parseInt(b.sale_number, 10) || 0;
+      return sortAsc ? numA - numB : numB - numA;
+    });
 
   // For printing: use printOrderIds if set (single order print), otherwise use selected
   const printOrders = printOrderIds
@@ -369,6 +376,15 @@ export default function Etiquetas() {
                       </button>
                     ))}
                   </div>
+
+                  <button
+                    title={sortAsc ? 'Ordenar decrescente' : 'Ordenar crescente'}
+                    onClick={() => setSortAsc(prev => !prev)}
+                    className="flex items-center gap-1 px-2 py-1.5 border border-border rounded-md text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    {sortAsc ? <ArrowUpNarrowWide className="h-4 w-4" /> : <ArrowDownNarrowWide className="h-4 w-4" />}
+                    {sortAsc ? '1→9' : '9→1'}
+                  </button>
 
                   <Button variant="outline" onClick={selectAll} className="gap-2">
                     {filteredOrders.every(o => selected.has(o.id)) && filteredOrders.length > 0 ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
