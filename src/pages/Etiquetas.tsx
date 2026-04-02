@@ -158,6 +158,8 @@ export default function Etiquetas() {
   };
 
   const selectedOrders = orders.filter(o => selected.has(o.id));
+  const selectedLabels = expandLabels(selectedOrders);
+  const totalLabelCount = selectedLabels.length;
 
   return (
     <div className="flex min-h-screen bg-background">
