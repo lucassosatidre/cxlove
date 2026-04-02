@@ -463,6 +463,45 @@ export type Database = {
           },
         ]
       }
+      label_orders: {
+        Row: {
+          created_at: string
+          id: string
+          items: Json
+          pizza_count: number
+          printed: boolean
+          printed_at: string | null
+          saipos_sale_id: number
+          sale_number: string
+          shift_date: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          items?: Json
+          pizza_count?: number
+          printed?: boolean
+          printed_at?: string | null
+          saipos_sale_id: number
+          sale_number: string
+          shift_date: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          items?: Json
+          pizza_count?: number
+          printed?: boolean
+          printed_at?: string | null
+          saipos_sale_id?: number
+          sale_number?: string
+          shift_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       machine_readings: {
         Row: {
           created_at: string
