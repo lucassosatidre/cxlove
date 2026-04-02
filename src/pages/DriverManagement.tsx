@@ -15,8 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy, Upload, Loader2 } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
+import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
 import DriverSummaryCards from '@/components/delivery/DriverSummaryCards';
 import DriverTodaySection from '@/components/delivery/DriverTodaySection';
 import DriverHistorySection from '@/components/delivery/DriverHistorySection';
