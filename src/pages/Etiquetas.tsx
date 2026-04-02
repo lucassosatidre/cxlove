@@ -36,17 +36,29 @@ const formatItemDisplay = (item: OrderItem) => {
   return `${icon} ${item.quantity}x ${item.name}`;
 };
 
+const formatOrderNumber = (saleNumber: string) => {
+  return `#${parseInt(saleNumber, 10) || saleNumber}`;
+};
+
+const getItemsFontClass = (itemCount: number) => {
+  if (itemCount >= 6) return 'font-xs';
+  if (itemCount >= 4) return 'font-sm';
+  return '';
+};
+
 function LabelPreview({ order }: { order: Order }) {
+  const itemCount = order.items.length;
+  const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
   return (
-    <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center overflow-hidden"
-         style={{ width: '227px', height: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
+    <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
+         style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
       <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '2px' }}>
-        #{order.sale_number.padStart(4, '0')}
+        {formatOrderNumber(order.sale_number)}
       </div>
       <div>
         {order.items.length > 0
           ? order.items.map((item, i) => (
-              <div key={i} style={{ fontSize: '10px', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
                 {formatItemDisplay(item)}
               </div>
             ))
@@ -249,7 +261,7 @@ export default function Etiquetas() {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-foreground">
-                    #{order.sale_number.padStart(4, '0')}
+                    {formatOrderNumber(order.sale_number)}
                   </div>
                   <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
                     {order.items.length > 0
@@ -268,8 +280,8 @@ export default function Etiquetas() {
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
           {selectedOrders.map(order => (
             <div key={order.id} className="etiqueta">
-              <div className="label-order">#{order.sale_number.padStart(4, '0')}</div>
-              <div className="label-items">
+              <div className="label-order">{formatOrderNumber(order.sale_number)}</div>
+              <div className={cn("label-items", getItemsFontClass(order.items.length))}>
                 {order.items.length > 0
                   ? order.items.map((item, i) => (
                       <div key={i} className="label-item">{formatItemDisplay(item)}</div>
