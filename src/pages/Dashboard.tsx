@@ -16,6 +16,7 @@ import { FileSpreadsheet, CalendarDays, ChevronRight, Trash2, DoorOpen, ShieldAl
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { getOperationalDate } from '@/lib/operational-date';
 
 interface DailyClosing {
   id: string;
@@ -103,10 +104,7 @@ export default function Dashboard() {
       });
   }, [isAdmin, closings]);
 
-  const getTodayStr = () => {
-    const now = new Date();
-    return format(now, 'yyyy-MM-dd');
-  };
+  const getTodayStr = () => getOperationalDate();
 
   const loadData = async () => {
     const [{ data: closingsData }, { data: importsData }] = await Promise.all([
