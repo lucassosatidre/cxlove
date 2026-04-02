@@ -13,7 +13,9 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization');
+  console.log('[create-user] authHeader present:', !!authHeader);
   if (!authHeader) {
+    console.error('[create-user] FAIL: missing Authorization header');
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -30,8 +32,10 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_ANON_KEY")!,
     { global: { headers: { Authorization: authHeader } } }
   );
-  const { data: { user: caller } } = await supabaseUser.auth.getUser();
+  const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser();
+  console.log('[create-user] caller:', caller?.id, 'error:', callerError?.message);
   if (!caller) {
+    console.error('[create-user] FAIL: getUser returned null, error:', callerError?.message);
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
