@@ -266,7 +266,7 @@ export default function DriverTodaySection() {
                               <p className="font-medium">{c.driverName}</p>
                               <p className="text-muted-foreground">
                                 {c.status === 'confirmado' ? 'Confirmado' : c.status === 'concluido' ? 'Concluído' : c.status === 'no_show' ? 'Faltou' : c.status}
-                                {c.origin === 'admin' && ' (admin)'}
+                                
                               </p>
                             </TooltipContent>
                           </Tooltip>
