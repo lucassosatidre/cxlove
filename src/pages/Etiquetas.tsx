@@ -261,7 +261,7 @@ export default function Etiquetas() {
                 />
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-foreground">
-                    #{order.sale_number.padStart(4, '0')}
+                    {formatOrderNumber(order.sale_number)}
                   </div>
                   <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
                     {order.items.length > 0
