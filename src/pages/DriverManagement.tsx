@@ -353,7 +353,11 @@ export default function DriverManagement() {
                       <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{d.email}</TableCell>
                       <TableCell className="hidden lg:table-cell text-xs">{d.cnpj || '—'}</TableCell>
                       <TableCell>
-                        <Badge variant={statusConfig[d.status]?.variant || 'secondary'}>
+                        <Badge
+                          variant={statusConfig[d.status]?.variant || 'secondary'}
+                          className="cursor-pointer hover:opacity-70 transition-opacity"
+                          onClick={() => handleToggleStatus(d)}
+                        >
                           {statusConfig[d.status]?.label || d.status}
                         </Badge>
                       </TableCell>
