@@ -30,6 +30,18 @@ export default function Login() {
 
   const cleanPhone = (value: string) => value.replace(/\D/g, '');
 
+  // Try padded PIN first, fallback to raw password, then migrate
+  const signInDriver = async (email: string, rawPassword: string) => {
+    try {
+      await signIn(email, padPin(rawPassword));
+    } catch {
+      // Padded failed — try raw (old format)
+      await signIn(email, rawPassword);
+      // Old format worked — migrate to new format silently
+      supabase.auth.updateUser({ password: padPin(rawPassword) }).catch(() => {});
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -39,9 +51,11 @@ export default function Login() {
       const trimmed = identifier.trim();
 
       if (isEmail(trimmed)) {
-        // For driver emails (@entregador.cx), pad the PIN
-        const finalPassword = trimmed.endsWith('@entregador.cx') ? padPin(password) : password;
-        await signIn(trimmed, finalPassword);
+        if (trimmed.endsWith('@entregador.cx')) {
+          await signInDriver(trimmed, password);
+        } else {
+          await signIn(trimmed, password);
+        }
       } else {
         // Phone login — lookup email via edge function
         const phone = cleanPhone(trimmed);
@@ -61,8 +75,7 @@ export default function Login() {
           return;
         }
 
-        // Driver phone login — always pad PIN
-        await signIn(data.email, padPin(password));
+        await signInDriver(data.email, password);
       }
     } catch (err: any) {
       setError(err.message || 'Usuário ou senha inválidos.');
