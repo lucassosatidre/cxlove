@@ -64,6 +64,7 @@ export default function Etiquetas() {
   const [fetched, setFetched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [printMode, setPrintMode] = useState<'single' | 'grid'>('single');
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
