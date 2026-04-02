@@ -165,29 +165,36 @@
     box-sizing: border-box;
   }
 
-  .label-order {
-    font-size: 14px;
-    font-weight: bold;
-  }
-
   .label-items {
     flex: 1;
     overflow: hidden;
   }
 
-  .label-item {
-    font-size: 10px;
+  .label-header {
+    font-weight: bold;
     line-height: 1.3;
     word-wrap: break-word;
     overflow-wrap: break-word;
     white-space: normal;
   }
 
-  .label-items.font-sm .label-item {
-    font-size: 9px;
+  .label-item {
+    line-height: 1.3;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
   }
 
-  .label-items.font-xs .label-item {
-    font-size: 8px;
-  }
+  /* Dynamic font sizing based on line count */
+  .label-items.font-xl .label-header { font-size: 16px; }
+  .label-items.font-xl .label-item { font-size: 14px; }
+
+  .label-items.font-lg .label-header { font-size: 14px; }
+  .label-items.font-lg .label-item { font-size: 12px; }
+
+  .label-items.font-md .label-header { font-size: 13px; }
+  .label-items.font-md .label-item { font-size: 11px; }
+
+  .label-items.font-sm .label-header { font-size: 11px; }
+  .label-items.font-sm .label-item { font-size: 9px; }
 }
