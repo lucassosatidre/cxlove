@@ -323,12 +323,12 @@ export default function Etiquetas() {
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Prévia das Etiquetas ({selectedOrders.length}) — {printMode === 'grid' ? 'Múltiplas por página' : '1 por página'}</DialogTitle>
+              <DialogTitle>Prévia das Etiquetas ({totalLabelCount}) — {printMode === 'grid' ? 'Múltiplas por página' : '1 por página'}</DialogTitle>
             </DialogHeader>
             <div className={cn("py-2", printMode === 'grid' ? 'flex flex-wrap gap-1 justify-center' : 'space-y-4')}>
-              {selectedOrders.map(order => (
-                <div key={order.id} className={cn(printMode === 'grid' ? '' : 'flex justify-center')}>
-                  <LabelPreview order={order} />
+              {selectedLabels.map(({ order, index, total }) => (
+                <div key={`${order.id}-${index}`} className={cn(printMode === 'grid' ? '' : 'flex justify-center')}>
+                  <LabelPreview order={order} index={index} total={total} />
                 </div>
               ))}
             </div>
