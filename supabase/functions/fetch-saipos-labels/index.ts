@@ -75,10 +75,7 @@ function decomposeItems(rawItem: any): LabelItem[] {
       // Ignore flavors, borders, etc.
     }
 
-    // If combo had "Refrigerante" but no drink found in choices, add generic
-    if (results.every(r => r.type !== "drink") && cleaned.toLowerCase().includes("refrigerante")) {
-      results.push({ name: "Refrigerante", type: "drink", quantity: 1 });
-    }
+    // If combo had "Refrigerante" but no real drink found in choices, don't add generic
 
     return results.length > 0 ? results : [{ name: desc, type: "pizza", quantity }];
   }
