@@ -242,7 +242,8 @@ export default function EntregadorPortal() {
     }
     setPasswordSaving(true);
     setPasswordError('');
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    const { padPin } = await import('@/lib/pin-utils');
+    const { error } = await supabase.auth.updateUser({ password: padPin(newPassword) });
     if (error) {
       setPasswordError(error.message);
     } else {

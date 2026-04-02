@@ -1,5 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const PIN_SUFFIX = '@@';
+function padPin(pin: string): string { return pin + PIN_SUFFIX; }
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -62,7 +65,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const finalPassword = password || telefone.replace(/\D/g, '').slice(0, 4) + '2026';
+    const rawPassword = password || telefone.replace(/\D/g, '').slice(-4);
+    const finalPassword = padPin(rawPassword);
 
     // Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -101,7 +105,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ driver: driverData, password: finalPassword }), {
+    return new Response(JSON.stringify({ driver: driverData, password: rawPassword }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
@@ -166,7 +170,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const finalPassword = new_password || driver.telefone.replace(/\D/g, '').slice(0, 4) + '2026';
+    const rawPassword = new_password || driver.telefone.replace(/\D/g, '').slice(-4);
+    const finalPassword = padPin(rawPassword);
 
     const { error } = await supabaseAdmin.auth.admin.updateUserById(driver.auth_user_id, {
       password: finalPassword,
@@ -178,7 +183,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    return new Response(JSON.stringify({ password: finalPassword }), {
+    return new Response(JSON.stringify({ password: rawPassword }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

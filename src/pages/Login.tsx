@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { padPin } from '@/lib/pin-utils';
 import { useAuth } from '@/hooks/useAuth';
 import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,9 @@ export default function Login() {
       const trimmed = identifier.trim();
 
       if (isEmail(trimmed)) {
-        await signIn(trimmed, password);
+        // For driver emails (@entregador.cx), pad the PIN
+        const finalPassword = trimmed.endsWith('@entregador.cx') ? padPin(password) : password;
+        await signIn(trimmed, finalPassword);
       } else {
         // Phone login — lookup email via edge function
         const phone = cleanPhone(trimmed);
@@ -58,7 +61,8 @@ export default function Login() {
           return;
         }
 
-        await signIn(data.email, password);
+        // Driver phone login — always pad PIN
+        await signIn(data.email, padPin(password));
       }
     } catch (err: any) {
       setError(err.message || 'Usuário ou senha inválidos.');
