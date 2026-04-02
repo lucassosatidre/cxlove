@@ -36,6 +36,8 @@ export default function Etiquetas() {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [debugRawItems, setDebugRawItems] = useState<any[] | null>(null);
+  const [debugOpen, setDebugOpen] = useState(false);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
