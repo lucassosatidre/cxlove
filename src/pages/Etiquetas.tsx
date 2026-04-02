@@ -76,25 +76,21 @@ const expandLabels = (orders: Order[]) => {
 };
 
 function LabelPreview({ order, index, total }: { order: Order; index: number; total: number }) {
-  const itemCount = order.items.length;
-  const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
-  const [firstItem, ...restItems] = order.items;
-  const numberStr = total > 1
-    ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
-    : formatOrderNumber(order.sale_number);
+  const lineCount = 1 + order.items.length; // header + items
+  const fonts = getLabelFontSizes(lineCount);
+  const header = formatHeaderLine(order, index, total);
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
          style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{numberStr}</span>
-        {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
+      <div style={{ fontSize: fonts.header, fontWeight: 'bold', lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+        {header}
       </div>
-      {restItems.map((item, i) => (
-        <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+      {order.items.map((item, i) => (
+        <div key={i} style={{ fontSize: fonts.item, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
           {formatItemDisplay(item)}
         </div>
       ))}
-      {order.items.length === 0 && <div style={{ fontSize: '10px' }}>-</div>}
+      {order.items.length === 0 && <div style={{ fontSize: fonts.item }}>-</div>}
     </div>
   );
 }
