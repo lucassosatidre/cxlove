@@ -294,11 +294,17 @@ export default function Etiquetas() {
     setPreviewOpen(true);
   };
 
-  const filteredOrders = orders.filter(o => {
-    if (filter === 'printed') return o.printed;
-    if (filter === 'not_printed') return !o.printed;
-    return true;
-  });
+  const filteredOrders = orders
+    .filter(o => {
+      if (filter === 'printed') return o.printed;
+      if (filter === 'not_printed') return !o.printed;
+      return true;
+    })
+    .sort((a, b) => {
+      const numA = parseInt(a.sale_number, 10) || 0;
+      const numB = parseInt(b.sale_number, 10) || 0;
+      return sortAsc ? numA - numB : numB - numA;
+    });
 
   // For printing: use printOrderIds if set (single order print), otherwise use selected
   const printOrders = printOrderIds
