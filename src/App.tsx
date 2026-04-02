@@ -22,6 +22,7 @@ import NotFound from "./pages/NotFound";
 import EntregadorPortal from "./pages/EntregadorPortal";
 import DriverManagement from "./pages/DriverManagement";
 import DriverShifts from "./pages/DriverShifts";
+import Etiquetas from "./pages/Etiquetas";
 
 const queryClient = new QueryClient();
 
