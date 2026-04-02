@@ -156,6 +156,28 @@ export default function DriverShifts() {
   const handleAdminAddDriver = async () => {
     if (!addDriverPopover || !selectedDriverToAdd || !user) return;
     setAddingDriver(true);
+
+    // Check for existing cancelled/old checkin and delete it first
+    const { data: existing } = await supabase
+      .from('delivery_checkins')
+      .select('id, status')
+      .eq('shift_id', addDriverPopover.shiftId)
+      .eq('driver_id', selectedDriverToAdd);
+
+    if (existing && existing.length > 0) {
+      const activeCheckin = existing.find(c => c.status === 'confirmado' || c.status === 'concluido');
+      if (activeCheckin) {
+        toast({ title: 'Entregador já confirmado neste turno', variant: 'destructive' });
+        setAddingDriver(false);
+        setAddDriverPopover(null);
+        setSelectedDriverToAdd('');
+        return;
+      }
+      // Delete old cancelled/no_show records to allow re-insertion
+      const oldIds = existing.map(c => c.id);
+      await supabase.from('delivery_checkins').delete().in('id', oldIds);
+    }
+
     const { error } = await supabase.from('delivery_checkins').insert({
       shift_id: addDriverPopover.shiftId,
       driver_id: selectedDriverToAdd,
@@ -164,7 +186,7 @@ export default function DriverShifts() {
       admin_inserted_by: user.id,
     } as any);
     if (error) {
-      toast({ title: error.code === '23505' ? 'Entregador já confirmado neste turno' : 'Erro ao adicionar', variant: 'destructive' });
+      toast({ title: 'Erro ao adicionar', description: error.message, variant: 'destructive' });
     } else {
       // Auto-increase vagas if confirmados exceed current capacity
       const { count } = await supabase

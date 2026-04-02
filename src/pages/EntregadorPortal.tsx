@@ -189,6 +189,24 @@ export default function EntregadorPortal() {
 
       const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
 
+      // Delete old cancelled/no_show records to allow re-confirmation
+      const { data: existingCheckins } = await supabase
+        .from('delivery_checkins')
+        .select('id, status')
+        .eq('shift_id', shift.shiftId)
+        .eq('driver_id', driver.id);
+
+      if (existingCheckins && existingCheckins.length > 0) {
+        const activeCheckin = existingCheckins.find(c => c.status === 'confirmado' || c.status === 'concluido');
+        if (activeCheckin) {
+          toast({ title: 'Você já confirmou este turno', variant: 'destructive' });
+          setActionLoading(null);
+          return;
+        }
+        const oldIds = existingCheckins.map(c => c.id);
+        await supabase.from('delivery_checkins').delete().in('id', oldIds);
+      }
+
       const { error } = await supabase.from('delivery_checkins').insert({
         shift_id: shift.shiftId,
         driver_id: driver.id,
@@ -200,11 +218,7 @@ export default function EntregadorPortal() {
       } as any);
 
       if (error) {
-        if (error.code === '23505') {
-          toast({ title: 'Você já confirmou este turno', variant: 'destructive' });
-        } else {
-          toast({ title: 'Erro ao confirmar', description: error.message, variant: 'destructive' });
-        }
+        toast({ title: 'Erro ao confirmar', description: error.message, variant: 'destructive' });
       } else {
         const dateFormatted = format(parseISO(shift.data), "dd/MM (EEEE)", { locale: ptBR });
         toast({ title: `Presença confirmada para ${dateFormatted}` });
