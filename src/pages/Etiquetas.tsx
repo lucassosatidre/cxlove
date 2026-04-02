@@ -49,21 +49,20 @@ const getItemsFontClass = (itemCount: number) => {
 function LabelPreview({ order }: { order: Order }) {
   const itemCount = order.items.length;
   const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
+  const [firstItem, ...restItems] = order.items;
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
          style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '2px' }}>
-        {formatOrderNumber(order.sale_number)}
+      <div style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{formatOrderNumber(order.sale_number)}</span>
+        {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
       </div>
-      <div>
-        {order.items.length > 0
-          ? order.items.map((item, i) => (
-              <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-                {formatItemDisplay(item)}
-              </div>
-            ))
-          : <div style={{ fontSize: '10px' }}>-</div>}
-      </div>
+      {restItems.map((item, i) => (
+        <div key={i} style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+          {formatItemDisplay(item)}
+        </div>
+      ))}
+      {order.items.length === 0 && <div style={{ fontSize: '10px' }}>-</div>}
     </div>
   );
 }
