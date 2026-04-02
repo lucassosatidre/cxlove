@@ -146,6 +146,16 @@ Deno.serve(async (req) => {
       itemOffset += limit;
     }
 
+    // DEBUG: log first sale and first item to see actual field names
+    if (allSales.length > 0) {
+      console.log("FIRST SALE KEYS:", Object.keys(allSales[0]));
+      console.log("FIRST SALE:", JSON.stringify(allSales[0]).substring(0, 2000));
+    }
+    if (allItems.length > 0) {
+      console.log("FIRST ITEM KEYS:", Object.keys(allItems[0]));
+      console.log("FIRST ITEM:", JSON.stringify(allItems[0]).substring(0, 2000));
+    }
+
     // 3) Build items map by id_sale using new pizza/other logic
     const itemsBySale = new Map<number, any[]>();
     for (const rawItem of allItems) {
