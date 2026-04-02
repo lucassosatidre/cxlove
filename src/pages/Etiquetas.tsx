@@ -214,6 +214,23 @@ export default function Etiquetas() {
                 </div>
               </div>
             ))}
+
+            {debugRawItems && debugRawItems.length > 0 && (
+              <div className="mt-6 border border-border rounded-lg bg-card">
+                <button
+                  onClick={() => setDebugOpen(!debugOpen)}
+                  className="w-full flex items-center justify-between p-4 text-left font-semibold text-foreground"
+                >
+                  Debug — Dados brutos da API Saipos ({debugRawItems.length} itens)
+                  <span className={cn('transition-transform', debugOpen && 'rotate-180')}>▼</span>
+                </button>
+                {debugOpen && (
+                  <pre className="p-4 pt-0 text-xs text-muted-foreground overflow-auto max-h-[500px] whitespace-pre-wrap break-all">
+                    {JSON.stringify(debugRawItems, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
