@@ -16,6 +16,7 @@ import { FileSpreadsheet, CalendarDays, ChevronRight, Trash2, DoorOpen, ShieldAl
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { getOperationalDate } from '@/lib/operational-date';
 
 interface SalonClosing {
   id: string;
