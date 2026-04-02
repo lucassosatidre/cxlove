@@ -6,6 +6,26 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+/**
+ * Get the operational date in Brasília timezone.
+ * The business day starts at 03:00 BRT.
+ * Before 03:00, the operational date is still yesterday.
+ */
+function getOperationalDate(): string {
+  const now = new Date();
+  const brasiliaOffset = -3 * 60;
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const brasiliaMs = utcMs + brasiliaOffset * 60000;
+  const brasilia = new Date(brasiliaMs);
+
+  // If before 03:00 BRT, operational date = yesterday
+  if (brasilia.getHours() < 3) {
+    brasilia.setDate(brasilia.getDate() - 1);
+  }
+
+  return brasilia.toISOString().split("T")[0];
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -16,15 +36,10 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // Get today's date in Brasília timezone (UTC-3)
-    const now = new Date();
-    const brasiliaOffset = -3 * 60;
-    const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-    const brasiliaMs = utcMs + brasiliaOffset * 60000;
-    const brasilia = new Date(brasiliaMs);
-    const today = brasilia.toISOString().split("T")[0];
+    // Use operational date (accounts for 03:00 BRT boundary)
+    const today = getOperationalDate();
 
-    console.log(`[auto-open] Running for date: ${today}`);
+    console.log(`[auto-open] Running for operational date: ${today}`);
 
     // Get an admin user_id
     const { data: adminRole } = await supabase
