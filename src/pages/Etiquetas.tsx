@@ -145,6 +145,7 @@ export default function Etiquetas() {
   const [printMode, setPrintMode] = useState<'single' | 'grid'>('single');
   const [filter, setFilter] = useState<FilterMode>('all');
   const [printOrderIds, setPrintOrderIds] = useState<number[] | null>(null);
+  const [sortAsc, setSortAsc] = useState(false);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
