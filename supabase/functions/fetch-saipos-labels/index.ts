@@ -30,6 +30,21 @@ function buildItemLabel(rawItem: any): { name: string; type: "pizza" | "other"; 
   return { name: desc, type: "other", quantity, price };
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3, delay = 2000): Promise<Response> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok || attempt === retries) return res;
+    if (res.status >= 500) {
+      console.log(`[RETRY] Attempt ${attempt}/${retries} failed with ${res.status}, retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 1.5;
+    } else {
+      return res;
+    }
+  }
+  return fetch(url, options); // fallback
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
