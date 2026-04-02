@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,7 @@ import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye } fr
 import AppSidebar from '@/components/AppSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
+import { getOperationalDate } from '@/lib/operational-date';
 
 interface OrderItem {
   name: string;
@@ -26,7 +27,12 @@ interface Order {
   total: number;
   items: OrderItem[];
   sale_time: string | null;
+  printed: boolean;
+  printed_at: string | null;
+  db_id?: string;
 }
+
+type FilterMode = 'all' | 'not_printed' | 'printed';
 
 const formatItemDisplay = (item: OrderItem) => {
   return `▸ ${item.quantity}x ${item.name}`;
@@ -47,22 +53,18 @@ const getLabelFontSizes = (order: Order, index: number, total: number) => {
   const lineCount = allLines.length;
   const maxChars = Math.max(...allLines.map(l => l.length));
 
-  // Width constraint: 60mm ≈ 227px, estimate ~7px per char at 12px font
-  // Height constraint: 30mm ≈ 113px, with line-height 1.3
   let fontSize = 16;
   if (lineCount >= 5) fontSize = 9;
   else if (lineCount >= 4) fontSize = 11;
   else if (lineCount >= 3) fontSize = 12;
   else fontSize = 14;
 
-  // Reduce if longest line is too wide (approx 0.6 * fontSize per char)
-  const maxWidth = 212; // 227px - 15px padding
+  const maxWidth = 212;
   const charWidth = fontSize * 0.6;
   if (maxChars * charWidth > maxWidth) {
     fontSize = Math.floor(maxWidth / (maxChars * 0.6));
   }
 
-  // Ensure fits height (113px - 15px padding = 98px usable)
   const maxHeight = 98;
   let lineHeight = 1.3;
   if (lineCount * fontSize * lineHeight > maxHeight) {
@@ -129,23 +131,61 @@ function LabelPreview({ order, index, total }: { order: Order; index: number; to
 }
 
 export default function Etiquetas() {
-  const [date, setDate] = useState<Date>(new Date());
+  const [date, setDate] = useState<Date>(() => {
+    const opDate = getOperationalDate();
+    return new Date(opDate + 'T12:00:00');
+  });
   const [orders, setOrders] = useState<Order[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
+  const [loadingDb, setLoadingDb] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'single' | 'grid'>('single');
+  const [filter, setFilter] = useState<FilterMode>('all');
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
 
   const closingDate = format(date, 'yyyy-MM-dd');
 
+  // Load from DB on mount and date change
+  useEffect(() => {
+    loadFromDb();
+  }, [closingDate]);
+
+  const loadFromDb = async () => {
+    setLoadingDb(true);
+    try {
+      const { data, error } = await supabase
+        .from('label_orders')
+        .select('*')
+        .eq('shift_date', closingDate)
+        .order('sale_number', { ascending: true });
+
+      if (error) throw error;
+
+      const dbOrders: Order[] = (data || []).map((row: any) => ({
+        id: row.saipos_sale_id,
+        sale_number: row.sale_number,
+        total: 0,
+        items: row.items as OrderItem[],
+        sale_time: null,
+        printed: row.printed,
+        printed_at: row.printed_at,
+        db_id: row.id,
+      }));
+      setOrders(dbOrders);
+      setSelected(new Set());
+    } catch (err: any) {
+      console.error('Error loading label orders:', err);
+    } finally {
+      setLoadingDb(false);
+    }
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
-    setFetched(false);
     setSelected(new Set());
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -159,9 +199,27 @@ export default function Etiquetas() {
       });
 
       if (error) throw error;
-      setOrders(data.orders || []);
-      setFetched(true);
-      toast({ title: `${data.total_sales} pedidos encontrados` });
+      const apiOrders: Array<{ id: number; sale_number: string; total: number; items: OrderItem[]; sale_time: string | null }> = data.orders || [];
+
+      // Upsert into DB
+      const userId = session.user.id;
+      for (const order of apiOrders) {
+        const pizzaCount = order.items.filter(i => i.type === 'pizza').reduce((s, i) => s + i.quantity, 0);
+        await supabase
+          .from('label_orders')
+          .upsert({
+            saipos_sale_id: order.id,
+            sale_number: order.sale_number,
+            items: order.items as any,
+            pizza_count: pizzaCount,
+            shift_date: closingDate,
+            user_id: userId,
+          }, { onConflict: 'saipos_sale_id,shift_date' });
+      }
+
+      // Reload from DB to get canonical state
+      await loadFromDb();
+      toast({ title: `${apiOrders.length} pedidos sincronizados` });
     } catch (err: any) {
       toast({ title: 'Erro ao buscar pedidos', description: err.message, variant: 'destructive' });
     } finally {
@@ -179,18 +237,34 @@ export default function Etiquetas() {
   };
 
   const selectAll = () => {
-    if (selected.size === orders.length) {
+    const visible = filteredOrders.map(o => o.id);
+    if (visible.every(id => selected.has(id))) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(orders.map(o => o.id)));
+      setSelected(new Set(visible));
     }
   };
 
-  const handlePrint = () => {
+  const markAsPrinted = async (orderIds: number[]) => {
+    const now = new Date().toISOString();
+    const dbIds = orders.filter(o => orderIds.includes(o.id) && o.db_id).map(o => o.db_id!);
+    if (dbIds.length > 0) {
+      await supabase
+        .from('label_orders')
+        .update({ printed: true, printed_at: now })
+        .in('id', dbIds);
+    }
+    setOrders(prev => prev.map(o =>
+      orderIds.includes(o.id) ? { ...o, printed: true, printed_at: now } : o
+    ));
+  };
+
+  const handlePrint = async () => {
     if (selected.size === 0) {
       toast({ title: 'Selecione ao menos um pedido', variant: 'destructive' });
       return;
     }
+    await markAsPrinted(Array.from(selected));
     const originalTitle = document.title;
     document.title = ' ';
     window.print();
@@ -205,9 +279,17 @@ export default function Etiquetas() {
     setPreviewOpen(true);
   };
 
+  const filteredOrders = orders.filter(o => {
+    if (filter === 'printed') return o.printed;
+    if (filter === 'not_printed') return !o.printed;
+    return true;
+  });
+
   const selectedOrders = orders.filter(o => selected.has(o.id));
   const selectedLabels = expandLabels(selectedOrders);
   const totalLabelCount = selectedLabels.length;
+
+  const isLoading = loading || loadingDb;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -256,9 +338,22 @@ export default function Etiquetas() {
 
               {orders.length > 0 && (
                 <>
+                  {/* Filter buttons */}
+                  <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden">
+                    {([['all', 'Todos'], ['not_printed', 'Não impressos'], ['printed', 'Impressos']] as [FilterMode, string][]).map(([key, label]) => (
+                      <button
+                        key={key}
+                        onClick={() => setFilter(key)}
+                        className={cn('px-3 py-1.5 text-xs font-medium transition-colors', filter === key ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted')}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
                   <Button variant="outline" onClick={selectAll} className="gap-2">
-                    {selected.size === orders.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                    {selected.size === orders.length ? 'Desmarcar todos' : 'Selecionar todos'}
+                    {filteredOrders.every(o => selected.has(o.id)) && filteredOrders.length > 0 ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                    {filteredOrders.every(o => selected.has(o.id)) && filteredOrders.length > 0 ? 'Desmarcar todos' : 'Selecionar todos'}
                   </Button>
 
                   <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden">
@@ -291,7 +386,7 @@ export default function Etiquetas() {
 
           {/* Orders list */}
           <div className="p-4 sm:p-6 space-y-2">
-            {loading && (
+            {isLoading && (
               <div className="space-y-3">
                 {[...Array(5)].map((_, i) => (
                   <Skeleton key={i} className="h-20 w-full rounded-lg" />
@@ -299,13 +394,19 @@ export default function Etiquetas() {
               </div>
             )}
 
-            {!loading && fetched && orders.length === 0 && (
+            {!isLoading && orders.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
-                Nenhum pedido encontrado para {format(date, "dd/MM/yyyy")}
+                Nenhum pedido encontrado para {format(date, "dd/MM/yyyy")}. Clique em "Buscar pedidos" para importar da API.
               </div>
             )}
 
-            {!loading && orders.map(order => (
+            {!isLoading && filteredOrders.length === 0 && orders.length > 0 && (
+              <div className="text-center py-12 text-muted-foreground">
+                Nenhum pedido {filter === 'printed' ? 'impresso' : 'não impresso'} encontrado.
+              </div>
+            )}
+
+            {!isLoading && filteredOrders.map(order => (
               <div
                 key={order.id}
                 onClick={() => toggleSelect(order.id)}
@@ -313,6 +414,8 @@ export default function Etiquetas() {
                   'flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors',
                   selected.has(order.id)
                     ? 'border-primary bg-primary/5'
+                    : order.printed
+                    ? 'border-border bg-muted/30 hover:bg-muted/50'
                     : 'border-border bg-card hover:bg-muted/50'
                 )}
               >
@@ -322,10 +425,15 @@ export default function Etiquetas() {
                   className="mt-1"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-muted-foreground space-y-0.5">
-                    <div className="font-semibold text-foreground">
+                  <div className={cn('text-sm space-y-0.5', order.printed ? 'text-muted-foreground' : 'text-muted-foreground')}>
+                    <div className={cn('font-semibold', order.printed ? 'text-muted-foreground' : 'text-foreground')}>
                       Nº {formatOrderNumber(order.sale_number)}  -  Pizza: {Math.max(1, getPizzaCount(order))}/{Math.max(1, getPizzaCount(order))}  |  Total de itens: {getTotalItemCount(order)}
                       {getPizzaCount(order) > 1 && <span className="ml-2 text-xs font-normal text-muted-foreground">({getPizzaCount(order)} etiquetas)</span>}
+                      {order.printed && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1.5 py-0.5 rounded">
+                          ✓ Impresso
+                        </span>
+                      )}
                     </div>
                     {order.items.length > 0 ? (
                       order.items.map((item, i) => (
