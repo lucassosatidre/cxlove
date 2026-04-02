@@ -943,7 +943,7 @@ export default function SalonClosing() {
               </p>
             )}
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             <div className={`grid ${expectedCash ? 'grid-cols-[1fr_80px_1fr_1fr]' : 'grid-cols-[1fr_80px_1fr]'} gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1`}>
               <span>Cédula/Moeda</span><span className="text-center">Qtd</span><span className="text-right">Subtotal</span>
               {expectedCash && <span className="text-right text-warning">Esperado</span>}
@@ -1003,7 +1003,7 @@ export default function SalonClosing() {
               Calculadora de Dinheiro — Fechamento (Salão)
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
               <span>Cédula/Moeda</span><span className="text-center">Qtd</span><span className="text-right">Subtotal</span>
             </div>
