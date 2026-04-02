@@ -146,16 +146,6 @@ Deno.serve(async (req) => {
       itemOffset += limit;
     }
 
-    // DEBUG: log first sale and first item to see actual field names
-    if (allSales.length > 0) {
-      console.log("FIRST SALE KEYS:", Object.keys(allSales[0]));
-      console.log("FIRST SALE:", JSON.stringify(allSales[0]).substring(0, 2000));
-    }
-    if (allItems.length > 0) {
-      console.log("FIRST ITEM KEYS:", Object.keys(allItems[0]));
-      console.log("FIRST ITEM:", JSON.stringify(allItems[0]).substring(0, 2000));
-    }
-
     // 3) Build items map by id_sale using new pizza/other logic
     const itemsBySale = new Map<number, any[]>();
     for (const rawItem of allItems) {
@@ -165,13 +155,36 @@ Deno.serve(async (req) => {
       itemsBySale.get(saleId)!.push(parsed);
     }
 
-    // 4) Build response
+    // 4) Build response using correct Saipos field names
     const orders = allSales.map((sale: any) => {
-      const saleId = sale.id_sale || sale.id;
-      const saleNumber = String(sale.sale_number || sale.order_number || sale.nu_sale || saleId);
-      const paymentMethod = sale.payment_method_name || sale.ds_payment_method || sale.payment_method || "N/A";
-      const total = sale.total_value || sale.vl_total || sale.total || 0;
+      const saleId = sale.id_sale;
+      const saleNumber = String(sale.sale_number || saleId);
+
+      // Payment method from payments array
+      const payments = sale.payments || [];
+      const paymentMethod = payments.length > 0
+        ? payments.map((p: any) => p.desc_store_payment_type || "").filter(Boolean).join(", ") || "N/A"
+        : "N/A";
+
+      const total = sale.total_amount || 0;
       const items = itemsBySale.get(saleId) || [];
+
+      // Delivery person
+      let deliveryPerson: string | null = null;
+      if (sale.delivery_man?.delivery_man_name) {
+        deliveryPerson = sale.delivery_man.delivery_man_name;
+      } else if (sale.delivery?.delivery_by === "PARTNER" || sale.partner_delivery?.partner_order_id) {
+        deliveryPerson = "Entrega Parceiro";
+      }
+
+      // Time from created_at
+      let saleTime: string | null = null;
+      if (sale.created_at) {
+        try {
+          const dt = new Date(sale.created_at);
+          saleTime = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+        } catch { saleTime = null; }
+      }
 
       return {
         id: saleId,
@@ -179,8 +192,8 @@ Deno.serve(async (req) => {
         payment_method: paymentMethod,
         total,
         items,
-        delivery_person: sale.delivery_person_name || sale.ds_delivery_person || null,
-        sale_time: sale.sale_time || sale.dt_sale || null,
+        delivery_person: deliveryPerson,
+        sale_time: saleTime,
       };
     });
 
