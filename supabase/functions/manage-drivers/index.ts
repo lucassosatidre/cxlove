@@ -65,7 +65,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const finalPassword = password || telefone.replace(/\D/g, '').slice(0, 4) + '2026';
+    const rawPassword = password || telefone.replace(/\D/g, '').slice(-4);
+    const finalPassword = padPin(rawPassword);
 
     // Create auth user
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
