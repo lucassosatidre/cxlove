@@ -6,28 +6,91 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const PIZZA_KEYWORDS = ["broto", "brotinho", "média", "media", "grande", "gigante", "família", "familia", "especial"];
+const DRINK_KEYWORDS = ["coca", "pureza", "guaraná", "guarana", "vinho", "cerveja", "água", "agua", "fanta", "sprite", "pepsi", "suco", "refrigerante"];
+const PIZZA_KEYWORDS = ["pizza", "gigante", "grande", "broto", "brotinho", "média", "media", "família", "familia", "temx"];
 
-function isPizza(descItem: string): boolean {
-  const lower = (descItem || "").toLowerCase();
+function isDrinkName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return DRINK_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+function isPizzaName(name: string): boolean {
+  const lower = name.toLowerCase();
   return PIZZA_KEYWORDS.some(kw => lower.includes(kw));
 }
 
-function buildItemLabel(rawItem: any): { name: string; type: "pizza" | "other"; quantity: number; price: number } {
+function isCombo(desc: string): boolean {
+  return desc.includes("+");
+}
+
+interface LabelItem {
+  name: string;
+  type: "pizza" | "drink";
+  quantity: number;
+}
+
+function decomposeItems(rawItem: any): LabelItem[] {
   const desc = rawItem.desc_sale_item || rawItem.name || rawItem.product_name || "Item";
   const quantity = rawItem.quantity || rawItem.qt_quantity || 1;
-  const price = rawItem.total_price || rawItem.vl_total || rawItem.price || 0;
   const choices: any[] = rawItem.choices || [];
+  const results: LabelItem[] = [];
 
-  if (isPizza(desc)) {
-    const flavors = choices
-      .map((c: any) => c.desc_sale_item_choice || c.name || "")
-      .filter(Boolean);
-    const flavorStr = flavors.length > 0 ? ` - ${flavors.join(" / ")}` : "";
-    return { name: `${desc}${flavorStr}`, type: "pizza", quantity, price };
+  if (isCombo(desc)) {
+    // Parse combo: split by "+" and analyze each part
+    // Clean up patterns like "## 2 x Pizza Grande TEMX ##"
+    const cleaned = desc.replace(/^#+\s*/, "").replace(/\s*#+$/, "").trim();
+    const parts = cleaned.split("+").map((p: string) => p.trim()).filter(Boolean);
+
+    for (const part of parts) {
+      // Extract quantity prefix like "2x", "2 x", "2 X"
+      const qtyMatch = part.match(/^(\d+)\s*[xX]\s*(.+)$/);
+      const partQty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1;
+      const partName = qtyMatch ? qtyMatch[2].trim() : part.trim();
+
+      if (isDrinkName(partName)) {
+        results.push({ name: partName, type: "drink", quantity: partQty * quantity });
+      } else if (isPizzaName(partName)) {
+        results.push({ name: partName, type: "pizza", quantity: partQty * quantity });
+      } else if (partName.toLowerCase().includes("refrigerante")) {
+        // Generic "Refrigerante" — look in choices for the actual drink
+        // Will be resolved below from choices
+      } else {
+        // Unknown combo part — show as pizza by default
+        results.push({ name: partName, type: "pizza", quantity: partQty * quantity });
+      }
+    }
+
+    // Process choices for drinks and broto doce
+    for (const choice of choices) {
+      const choiceName = choice.desc_sale_item_choice || choice.name || "";
+      if (!choiceName) continue;
+      const lower = choiceName.toLowerCase();
+
+      if (lower.includes("pizza broto de") || lower.includes("broto de")) {
+        // Broto doce from combo
+        results.push({ name: "Pizza Broto", type: "pizza", quantity: 1 });
+      } else if (isDrinkName(choiceName)) {
+        // Drink from combo choices (e.g., "Coca Cola Zero 1,5l")
+        results.push({ name: choiceName, type: "drink", quantity: 1 });
+      }
+      // Ignore flavors, borders, etc.
+    }
+
+    // If combo had "Refrigerante" but no drink found in choices, add generic
+    if (results.every(r => r.type !== "drink") && cleaned.toLowerCase().includes("refrigerante")) {
+      results.push({ name: "Refrigerante", type: "drink", quantity: 1 });
+    }
+
+    return results.length > 0 ? results : [{ name: desc, type: "pizza", quantity }];
   }
 
-  return { name: desc, type: "other", quantity, price };
+  // Non-combo: pizza or drink
+  if (isPizzaName(desc)) {
+    return [{ name: desc, type: "pizza", quantity }];
+  }
+
+  // Default: treat as drink/other
+  return [{ name: desc, type: "drink", quantity }];
 }
 
 async function fetchWithRetry(url: string, options: RequestInit, retries = 3, delay = 2000): Promise<Response> {
@@ -35,14 +98,13 @@ async function fetchWithRetry(url: string, options: RequestInit, retries = 3, de
     const res = await fetch(url, options);
     if (res.ok || attempt === retries) return res;
     if (res.status >= 500) {
-      console.log(`[RETRY] Attempt ${attempt}/${retries} failed with ${res.status}, retrying in ${delay}ms...`);
       await new Promise(r => setTimeout(r, delay));
       delay *= 1.5;
     } else {
       return res;
     }
   }
-  return fetch(url, options); // fallback
+  return fetch(url, options);
 }
 
 Deno.serve(async (req) => {
@@ -147,85 +209,43 @@ Deno.serve(async (req) => {
         { headers: { Authorization: `Bearer ${saiposToken}` } }
       );
 
-      if (!res.ok) {
-        console.error("Error fetching items:", res.status, await res.text());
-        break;
-      }
+      if (!res.ok) break;
 
       const data = await res.json();
       const items = Array.isArray(data) ? data : data.data || data.results || [];
       if (items.length === 0) break;
-
-      // Debug: log first 3 items structure
-      if (itemOffset === 0) {
-        console.log(`[DEBUG] sales_items total batch: ${items.length}`);
-        console.log(`[DEBUG] First 3 items keys:`, items.slice(0, 3).map((i: any) => Object.keys(i)));
-        console.log(`[DEBUG] First 3 items:`, JSON.stringify(items.slice(0, 3)));
-      }
 
       allItems.push(...items);
       if (items.length < limit) break;
       itemOffset += limit;
     }
 
-    console.log(`[DEBUG] Total sales: ${allSales.length}, Total items: ${allItems.length}`);
-    // Debug: check id_sale presence in items
-    if (allItems.length > 0) {
-      const sampleItem = allItems[0];
-      console.log(`[DEBUG] Sample item fields: ${Object.keys(sampleItem).join(', ')}`);
-      console.log(`[DEBUG] Sample item id_sale: ${sampleItem.id_sale}, sale_number: ${sampleItem.sale_number}`);
-    }
-
-    // 3) Build items map by id_sale — handle both flat and nested structures
-    const itemsBySale = new Map<number, any[]>();
+    // 3) Build decomposed items map by id_sale
+    const itemsBySale = new Map<number, LabelItem[]>();
     for (const rawRecord of allItems) {
       const saleId = rawRecord.id_sale;
       if (!saleId) continue;
       if (!itemsBySale.has(saleId)) itemsBySale.set(saleId, []);
 
-      // Check if record has nested items array (structure: { id_sale, items: [...] })
       const nestedItems = rawRecord.items;
       if (Array.isArray(nestedItems) && nestedItems.length > 0) {
         for (const subItem of nestedItems) {
-          const parsed = buildItemLabel(subItem);
-          itemsBySale.get(saleId)!.push(parsed);
+          const decomposed = decomposeItems(subItem);
+          itemsBySale.get(saleId)!.push(...decomposed);
         }
       } else {
-        // Flat structure: each record IS an item
-        const parsed = buildItemLabel(rawRecord);
-        itemsBySale.get(saleId)!.push(parsed);
+        const decomposed = decomposeItems(rawRecord);
+        itemsBySale.get(saleId)!.push(...decomposed);
       }
     }
 
-    // Debug: log first 3 sales item mapping
-    const saleIds = Array.from(itemsBySale.keys()).slice(0, 3);
-    for (const sid of saleIds) {
-      console.log(`[DEBUG] Sale ${sid} items:`, JSON.stringify(itemsBySale.get(sid)));
-    }
-
-    // 4) Build response using correct Saipos field names
+    // 4) Build response
     const orders = allSales.map((sale: any) => {
       const saleId = sale.id_sale;
       const saleNumber = String(sale.sale_number || saleId);
-
-      // Payment method from payments array
-      const payments = sale.payments || [];
-      const paymentMethod = payments.length > 0
-        ? payments.map((p: any) => p.desc_store_payment_type || "").filter(Boolean).join(", ") || "N/A"
-        : "N/A";
-
       const total = sale.total_amount || 0;
       const items = itemsBySale.get(saleId) || [];
 
-      // Delivery person
-      let deliveryPerson: string | null = null;
-      if (sale.delivery_man?.delivery_man_name) {
-        deliveryPerson = sale.delivery_man.delivery_man_name;
-      } else if (sale.delivery?.delivery_by === "PARTNER" || sale.partner_delivery?.partner_order_id) {
-        deliveryPerson = "Entrega Parceiro";
-      }
-
-      // Time from created_at
       let saleTime: string | null = null;
       if (sale.created_at) {
         try {
@@ -237,10 +257,8 @@ Deno.serve(async (req) => {
       return {
         id: saleId,
         sale_number: saleNumber,
-        payment_method: paymentMethod,
         total,
         items,
-        delivery_person: deliveryPerson,
         sale_time: saleTime,
       };
     });
@@ -257,7 +275,6 @@ Deno.serve(async (req) => {
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("Error:", err);
     return new Response(
       JSON.stringify({ error: err.message || "Erro interno" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
