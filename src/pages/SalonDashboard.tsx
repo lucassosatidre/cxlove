@@ -102,7 +102,7 @@ export default function SalonDashboard() {
       });
   }, [isAdmin, closings]);
 
-  const getTodayStr = () => format(new Date(), 'yyyy-MM-dd');
+  const getTodayStr = () => getOperationalDate();
 
   const loadData = async () => {
     const [{ data: closingsData }, { data: importsData }] = await Promise.all([

@@ -104,10 +104,7 @@ export default function Dashboard() {
       });
   }, [isAdmin, closings]);
 
-  const getTodayStr = () => {
-    const now = new Date();
-    return format(now, 'yyyy-MM-dd');
-  };
+  const getTodayStr = () => getOperationalDate();
 
   const loadData = async () => {
     const [{ data: closingsData }, { data: importsData }] = await Promise.all([
