@@ -262,7 +262,7 @@ export default function Etiquetas() {
         </div>
 
         {/* Print-only labels */}
-        <div id="print-labels" ref={printRef} className="hidden print:block">
+        <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
           {selectedOrders.map(order => (
             <div key={order.id} className="etiqueta">
               <div className="label-order">#{order.sale_number.padStart(4, '0')}</div>
