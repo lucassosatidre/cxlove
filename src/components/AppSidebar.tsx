@@ -40,6 +40,7 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
     if (isAdmin) {
       navItems.push({ icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' });
       navItems.push({ icon: CalendarDays, label: 'Escalas Entregadores', path: '/admin/escalas-entregadores', permission: 'dashboard' });
+      navItems.push({ icon: Tag, label: 'Etiquetas', path: '/etiquetas', permission: 'dashboard' });
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }
   }
