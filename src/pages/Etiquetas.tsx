@@ -126,7 +126,6 @@ function LabelPreview({ order, index, total }: { order: Order; index: number; to
       </div>
     </div>
   );
-  );
 }
 
 export default function Etiquetas() {
