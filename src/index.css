@@ -92,19 +92,13 @@
   }
 }
 
-/* Print styles for etiquetas 60x30mm */
+/* Print styles for etiquetas */
 @media print {
-  @page {
-    size: 60mm 30mm;
-    margin: 2mm;
-  }
-
   /* Hide everything */
   body * {
     visibility: hidden !important;
   }
 
-  /* Show only print area */
   #print-labels,
   #print-labels * {
     visibility: visible !important;
@@ -115,37 +109,60 @@
     left: 0;
     top: 0;
     width: 100%;
+    margin: 0;
+    padding: 0;
   }
 
   body {
-    margin: 0;
-    padding: 0;
+    margin: 0 !important;
+    padding: 0 !important;
     background: #fff !important;
   }
 
-  .etiqueta {
-    visibility: visible !important;
+  /* Single mode */
+  #print-labels.print-single .etiqueta {
     page-break-after: always;
-    width: 56mm;
-    height: 26mm;
+    width: 60mm;
+    height: 30mm;
+    padding: 2mm;
+    margin: 0;
     display: flex;
     flex-direction: column;
-    font-family: 'Courier New', monospace;
-    font-size: 9px;
-    line-height: 1.3;
-    color: #000 !important;
-    background: #fff !important;
+    justify-content: center;
     overflow: hidden;
-    padding: 0;
-    margin: 0;
+    font-family: Arial, sans-serif;
+    color: #000;
+    background: #fff;
   }
-
-  .etiqueta:last-child {
+  #print-labels.print-single .etiqueta:last-child {
     page-break-after: avoid;
   }
 
+  /* Grid mode — 3 cols on A4 */
+  #print-labels.print-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    padding: 2mm;
+  }
+  #print-labels.print-grid .etiqueta {
+    width: 60mm;
+    height: 30mm;
+    padding: 2mm;
+    margin: 0;
+    border: 1px dashed #ccc;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    color: #000;
+    background: #fff;
+    box-sizing: border-box;
+  }
+
   .label-order {
-    font-size: 12px;
+    font-size: 14px;
     font-weight: bold;
     margin-bottom: 1mm;
   }
@@ -156,7 +173,8 @@
   }
 
   .label-item {
-    font-size: 9px;
+    font-size: 10px;
+    line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

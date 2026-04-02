@@ -38,17 +38,19 @@ const formatItemDisplay = (item: OrderItem) => {
 
 function LabelPreview({ order }: { order: Order }) {
   return (
-    <div className="border border-border rounded bg-white text-black p-3 font-mono"
-         style={{ width: '227px', height: '113px', fontSize: '9px', lineHeight: '1.3', overflow: 'hidden' }}>
-      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '2px' }}>
+    <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center overflow-hidden"
+         style={{ width: '227px', height: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
+      <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '2px' }}>
         #{order.sale_number.padStart(4, '0')}
       </div>
       <div>
         {order.items.length > 0
           ? order.items.map((item, i) => (
-              <div key={i} className="truncate">{formatItemDisplay(item)}</div>
+              <div key={i} style={{ fontSize: '10px', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {formatItemDisplay(item)}
+              </div>
             ))
-          : <div>-</div>}
+          : <div style={{ fontSize: '10px' }}>-</div>}
       </div>
     </div>
   );
@@ -62,6 +64,7 @@ export default function Etiquetas() {
   const [fetched, setFetched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [printMode, setPrintMode] = useState<'single' | 'grid'>('single');
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
@@ -180,6 +183,22 @@ export default function Etiquetas() {
                     {selected.size === orders.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                     {selected.size === orders.length ? 'Desmarcar todos' : 'Selecionar todos'}
                   </Button>
+
+                  <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden">
+                    <button
+                      onClick={() => setPrintMode('single')}
+                      className={cn('px-3 py-1.5 text-xs font-medium transition-colors', printMode === 'single' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted')}
+                    >
+                      1 por página
+                    </button>
+                    <button
+                      onClick={() => setPrintMode('grid')}
+                      className={cn('px-3 py-1.5 text-xs font-medium transition-colors', printMode === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted')}
+                    >
+                      Múltiplas
+                    </button>
+                  </div>
+
                   <Button variant="outline" onClick={handlePreview} disabled={selected.size === 0} className="gap-2">
                     <Eye className="h-4 w-4" />
                     Prévia
@@ -243,7 +262,7 @@ export default function Etiquetas() {
         </div>
 
         {/* Print-only labels */}
-        <div id="print-labels" ref={printRef} className="hidden print:block">
+        <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
           {selectedOrders.map(order => (
             <div key={order.id} className="etiqueta">
               <div className="label-order">#{order.sale_number.padStart(4, '0')}</div>
@@ -261,13 +280,13 @@ export default function Etiquetas() {
 
         {/* Preview modal */}
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Prévia das Etiquetas ({selectedOrders.length})</DialogTitle>
+              <DialogTitle>Prévia das Etiquetas ({selectedOrders.length}) — {printMode === 'grid' ? 'Múltiplas por página' : '1 por página'}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-2">
+            <div className={cn("py-2", printMode === 'grid' ? 'flex flex-wrap gap-1 justify-center' : 'space-y-4')}>
               {selectedOrders.map(order => (
-                <div key={order.id} className="flex justify-center">
+                <div key={order.id} className={cn(printMode === 'grid' ? '' : 'flex justify-center')}>
                   <LabelPreview order={order} />
                 </div>
               ))}
