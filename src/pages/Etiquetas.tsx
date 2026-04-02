@@ -226,9 +226,6 @@ export default function Etiquetas() {
                   : <div className="label-item">-</div>
                 }
               </div>
-              <div className="label-footer">
-                {formatCurrency(order.total)} · {order.payment_method}
-              </div>
             </div>
           ))}
         </div>

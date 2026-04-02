@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
       );
 
       if (!res.ok) {
-        console.error("Error fetching items:", res.status);
+        console.error("Error fetching items:", res.status, await res.text());
         break;
       }
 
@@ -141,9 +141,24 @@ Deno.serve(async (req) => {
       const items = Array.isArray(data) ? data : data.data || data.results || [];
       if (items.length === 0) break;
 
+      // Debug: log first 3 items structure
+      if (itemOffset === 0) {
+        console.log(`[DEBUG] sales_items total batch: ${items.length}`);
+        console.log(`[DEBUG] First 3 items keys:`, items.slice(0, 3).map((i: any) => Object.keys(i)));
+        console.log(`[DEBUG] First 3 items:`, JSON.stringify(items.slice(0, 3)));
+      }
+
       allItems.push(...items);
       if (items.length < limit) break;
       itemOffset += limit;
+    }
+
+    console.log(`[DEBUG] Total sales: ${allSales.length}, Total items: ${allItems.length}`);
+    // Debug: check id_sale presence in items
+    if (allItems.length > 0) {
+      const sampleItem = allItems[0];
+      console.log(`[DEBUG] Sample item fields: ${Object.keys(sampleItem).join(', ')}`);
+      console.log(`[DEBUG] Sample item id_sale: ${sampleItem.id_sale}, sale_number: ${sampleItem.sale_number}`);
     }
 
     // 3) Build items map by id_sale using new pizza/other logic
