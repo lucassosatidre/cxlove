@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 
 interface OrderItem {
   name: string;
+  type: 'pizza' | 'other';
   quantity: number;
   price: number;
 }
@@ -29,6 +30,11 @@ interface Order {
   sale_time: string | null;
 }
 
+const formatItemDisplay = (item: OrderItem) => {
+  const icon = item.type === 'pizza' ? '🍕' : '🥤';
+  return `${icon} ${item.quantity}x ${item.name}`;
+};
+
 export default function Etiquetas() {
   const [date, setDate] = useState<Date>(new Date());
   const [orders, setOrders] = useState<Order[]>([]);
@@ -36,8 +42,6 @@ export default function Etiquetas() {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [debugRawItems, setDebugRawItems] = useState<any[] | null>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
@@ -61,7 +65,6 @@ export default function Etiquetas() {
 
       if (error) throw error;
       setOrders(data.orders || []);
-      setDebugRawItems(data.debug_raw_items || null);
       setFetched(true);
       toast({ title: `${data.total_sales} pedidos encontrados` });
     } catch (err: any) {
@@ -204,7 +207,7 @@ export default function Etiquetas() {
                   </div>
                   <div className="text-sm text-muted-foreground mt-1">
                     {order.items.length > 0
-                      ? order.items.map(i => `${i.quantity}x ${i.name}`).join(', ')
+                      ? order.items.map(i => formatItemDisplay(i)).join(', ')
                       : 'Sem itens'}
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
@@ -214,44 +217,24 @@ export default function Etiquetas() {
                 </div>
               </div>
             ))}
-
-            {debugRawItems && debugRawItems.length > 0 && (
-              <div className="mt-6 border border-border rounded-lg bg-card">
-                <button
-                  onClick={() => setDebugOpen(!debugOpen)}
-                  className="w-full flex items-center justify-between p-4 text-left font-semibold text-foreground"
-                >
-                  Debug — Dados brutos da API Saipos ({debugRawItems.length} itens)
-                  <span className={cn('transition-transform', debugOpen && 'rotate-180')}>▼</span>
-                </button>
-                {debugOpen && (
-                  <pre className="p-4 pt-0 text-xs text-muted-foreground overflow-auto max-h-[500px] whitespace-pre-wrap break-all">
-                    {JSON.stringify(debugRawItems, null, 2)}
-                  </pre>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Print-only labels */}
+        {/* Print-only labels — 5x3cm compact */}
         <div ref={printRef} className="hidden print:block">
           {selectedOrders.map(order => (
             <div key={order.id} className="etiqueta">
-              <div className="label-header">PIZZARIA ESTRELA DA ILHA</div>
-              <div className="label-order">PEDIDO #{order.sale_number.padStart(4, '0')}</div>
-              <div className="label-section">
-                <div className="label-title">ITENS:</div>
+              <div className="label-order">#{order.sale_number.padStart(4, '0')}</div>
+              <div className="label-items">
                 {order.items.length > 0
                   ? order.items.map((item, i) => (
-                      <div key={i} className="label-item">{item.quantity}x {item.name}</div>
+                      <div key={i} className="label-item">{formatItemDisplay(item)}</div>
                     ))
                   : <div className="label-item">-</div>
                 }
               </div>
               <div className="label-footer">
-                <div>PAGAMENTO: {order.payment_method}</div>
-                <div>TOTAL: {formatCurrency(order.total)}</div>
+                {formatCurrency(order.total)} · {order.payment_method}
               </div>
             </div>
           ))}
