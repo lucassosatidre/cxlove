@@ -99,8 +99,6 @@ export default function Etiquetas() {
     window.print();
   };
 
-  const formatCurrency = (v: number) =>
-    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const selectedOrders = orders.filter(o => selected.has(o.id));
 
@@ -197,22 +195,15 @@ export default function Etiquetas() {
                   className="mt-1"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-foreground">
-                      #{order.sale_number.padStart(4, '0')}
-                    </span>
-                    <span className="font-semibold text-foreground">
-                      {formatCurrency(order.total)}
-                    </span>
+                  <div className="font-semibold text-foreground">
+                    #{order.sale_number.padStart(4, '0')}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-1">
+                  <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
                     {order.items.length > 0
-                      ? order.items.map(i => formatItemDisplay(i)).join(', ')
-                      : 'Sem itens'}
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    <span>{order.payment_method}</span>
-                    {order.delivery_person && <span>• {order.delivery_person}</span>}
+                      ? order.items.map((item, i) => (
+                          <div key={i}>{formatItemDisplay(item)}</div>
+                        ))
+                      : <div>Sem itens</div>}
                   </div>
                 </div>
               </div>
@@ -232,9 +223,6 @@ export default function Etiquetas() {
                     ))
                   : <div className="label-item">-</div>
                 }
-              </div>
-              <div className="label-footer">
-                {formatCurrency(order.total)} · {order.payment_method}
               </div>
             </div>
           ))}
