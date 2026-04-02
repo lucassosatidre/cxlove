@@ -235,32 +235,8 @@ export default function DriverManagement() {
           </TabsContent>
 
           <TabsContent value="cadastro" className="space-y-4">
-            {/* TEMPORARY: Batch import button — set to false after use */}
-            {true && (
-              <Card className="border-dashed border-2 border-orange-300 bg-orange-50/50">
-                <CardContent className="py-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-sm">Importar entregadores iniciais (16)</p>
-                      <p className="text-xs text-muted-foreground">Botão temporário — criar todos os entregadores de uma vez</p>
-                    </div>
-                    <Button onClick={handleBatchImport} disabled={batchImporting} variant="outline" size="sm">
-                      {batchImporting ? <><Loader2 className="h-4 w-4 mr-1 animate-spin" /> Criando {batchProgress}/16...</> : <><Upload className="h-4 w-4 mr-1" /> Importar em lote</>}
-                    </Button>
-                  </div>
-                  {batchImporting && <Progress value={(batchProgress / 16) * 100} className="h-2" />}
-                  {batchResults.length > 0 && (
-                    <div className="max-h-40 overflow-auto text-xs space-y-0.5">
-                      {batchResults.map((r, i) => (
-                        <div key={i} className={r.ok ? 'text-green-700' : 'text-red-600'}>
-                          {r.ok ? '✓' : '✗'} {r.nome} {r.error ? `— ${r.error}` : ''}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+
+
 
 
             <div className="flex flex-col sm:flex-row gap-3">
