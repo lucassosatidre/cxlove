@@ -5,7 +5,7 @@ function padPin(pin: string): string { return pin + PIN_SUFFIX; }
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
 Deno.serve(async (req) => {
@@ -31,8 +31,26 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } }
   );
 
-  const { data: { user: caller } } = await supabaseUser.auth.getUser();
-  if (!caller) {
+  // Try getClaims first (faster), fallback to getUser
+  const token = authHeader.replace('Bearer ', '');
+  let callerId: string | null = null;
+
+  const { data: claimsData, error: claimsError } = await supabaseUser.auth.getClaims(token);
+  if (claimsData?.claims?.sub) {
+    callerId = claimsData.claims.sub;
+    console.log('[manage-drivers] caller from getClaims:', callerId);
+  } else {
+    console.log('[manage-drivers] getClaims failed:', claimsError?.message, '- trying getUser');
+    const { data: { user: caller }, error: callerError } = await supabaseUser.auth.getUser();
+    if (caller) {
+      callerId = caller.id;
+      console.log('[manage-drivers] caller from getUser:', callerId);
+    } else {
+      console.error('[manage-drivers] getUser also failed:', callerError?.message);
+    }
+  }
+
+  if (!callerId) {
     return new Response(JSON.stringify({ error: 'Não autorizado' }), {
       status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -42,9 +60,10 @@ Deno.serve(async (req) => {
   const { data: roleData } = await supabaseAdmin
     .from('user_roles')
     .select('role')
-    .eq('user_id', caller.id)
+    .eq('user_id', callerId)
     .eq('role', 'admin')
     .maybeSingle();
+  console.log('[manage-drivers] role check for', callerId, ':', JSON.stringify(roleData));
 
   if (!roleData) {
     return new Response(JSON.stringify({ error: 'Apenas administradores podem gerenciar entregadores' }), {
