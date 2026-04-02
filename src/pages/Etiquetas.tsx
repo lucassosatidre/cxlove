@@ -282,19 +282,23 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedOrders.map(order => (
-            <div key={order.id} className="etiqueta">
-              <div className="label-order">{formatOrderNumber(order.sale_number)}</div>
-              <div className={cn("label-items", getItemsFontClass(order.items.length))}>
-                {order.items.length > 0
-                  ? order.items.map((item, i) => (
-                      <div key={i} className="label-item">{formatItemDisplay(item)}</div>
-                    ))
-                  : <div className="label-item">-</div>
-                }
+          {selectedOrders.map(order => {
+            const [firstItem, ...restItems] = order.items;
+            return (
+              <div key={order.id} className="etiqueta">
+                <div className={cn("label-items", getItemsFontClass(order.items.length))}>
+                  <div className="label-item">
+                    <span className="label-order">{formatOrderNumber(order.sale_number)}</span>
+                    {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
+                  </div>
+                  {restItems.map((item, i) => (
+                    <div key={i} className="label-item">{formatItemDisplay(item)}</div>
+                  ))}
+                  {order.items.length === 0 && <div className="label-item">-</div>}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Preview modal */}
