@@ -42,15 +42,32 @@ const getItemsFontClass = (itemCount: number) => {
   return '';
 };
 
-function LabelPreview({ order }: { order: Order }) {
+const getPizzaCount = (order: Order) =>
+  order.items.filter(i => i.type === 'pizza').reduce((sum, i) => sum + i.quantity, 0);
+
+const expandLabels = (orders: Order[]) => {
+  const labels: { order: Order; index: number; total: number }[] = [];
+  for (const order of orders) {
+    const count = Math.max(1, getPizzaCount(order));
+    for (let i = 0; i < count; i++) {
+      labels.push({ order, index: i + 1, total: count });
+    }
+  }
+  return labels;
+};
+
+function LabelPreview({ order, index, total }: { order: Order; index: number; total: number }) {
   const itemCount = order.items.length;
   const itemFontSize = itemCount >= 6 ? '8px' : itemCount >= 4 ? '9px' : '10px';
   const [firstItem, ...restItems] = order.items;
+  const numberStr = total > 1
+    ? `${formatOrderNumber(order.sale_number)} ${index}/${total}`
+    : formatOrderNumber(order.sale_number);
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center"
          style={{ width: '227px', minHeight: '113px', padding: '7.5px', fontFamily: 'Arial, sans-serif' }}>
       <div style={{ fontSize: itemFontSize, lineHeight: '1.3', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{formatOrderNumber(order.sale_number)}</span>
+        <span style={{ fontSize: '14px', fontWeight: 'bold' }}>{numberStr}</span>
         {firstItem ? <>{' '}{formatItemDisplay(firstItem)}</> : null}
       </div>
       {restItems.map((item, i) => (
