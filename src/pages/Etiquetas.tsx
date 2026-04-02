@@ -259,15 +259,20 @@ export default function Etiquetas() {
                   className="mt-1"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-foreground">
-                    {formatOrderNumber(order.sale_number)}
-                  </div>
-                  <div className="text-sm text-muted-foreground mt-1 space-y-0.5">
-                    {order.items.length > 0
-                      ? order.items.map((item, i) => (
+                  <div className="text-sm text-muted-foreground space-y-0.5">
+                    {order.items.length > 0 ? (
+                      <>
+                        <div>
+                          <span className="font-semibold text-foreground">{formatOrderNumber(order.sale_number)}</span>
+                          {' '}{formatItemDisplay(order.items[0])}
+                        </div>
+                        {order.items.slice(1).map((item, i) => (
                           <div key={i}>{formatItemDisplay(item)}</div>
-                        ))
-                      : <div>Sem itens</div>}
+                        ))}
+                      </>
+                    ) : (
+                      <div><span className="font-semibold text-foreground">{formatOrderNumber(order.sale_number)}</span> Sem itens</div>
+                    )}
                   </div>
                 </div>
               </div>
