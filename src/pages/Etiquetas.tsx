@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye } from 'lucide-react';
+
 import AppSidebar from '@/components/AppSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -143,6 +144,7 @@ export default function Etiquetas() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [printMode, setPrintMode] = useState<'single' | 'grid'>('single');
   const [filter, setFilter] = useState<FilterMode>('all');
+  const [printOrderIds, setPrintOrderIds] = useState<number[] | null>(null);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
@@ -271,6 +273,18 @@ export default function Etiquetas() {
     document.title = originalTitle;
   };
 
+  const handlePrintSingle = async (orderId: number) => {
+    setPrintOrderIds([orderId]);
+    await markAsPrinted([orderId]);
+    // Wait for React to render the print area with the single order
+    await new Promise(r => setTimeout(r, 100));
+    const originalTitle = document.title;
+    document.title = ' ';
+    window.print();
+    document.title = originalTitle;
+    setPrintOrderIds(null);
+  };
+
   const handlePreview = () => {
     if (selected.size === 0) {
       toast({ title: 'Selecione ao menos um pedido', variant: 'destructive' });
@@ -285,7 +299,12 @@ export default function Etiquetas() {
     return true;
   });
 
+  // For printing: use printOrderIds if set (single order print), otherwise use selected
+  const printOrders = printOrderIds
+    ? orders.filter(o => printOrderIds.includes(o.id))
+    : orders.filter(o => selected.has(o.id));
   const selectedOrders = orders.filter(o => selected.has(o.id));
+  const printLabels = expandLabels(printOrders);
   const selectedLabels = expandLabels(selectedOrders);
   const totalLabelCount = selectedLabels.length;
 
@@ -419,11 +438,19 @@ export default function Etiquetas() {
                     : 'border-border bg-card hover:bg-muted/50'
                 )}
               >
-                <Checkbox
-                  checked={selected.has(order.id)}
-                  onCheckedChange={() => toggleSelect(order.id)}
-                  className="mt-1"
-                />
+                <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selected.has(order.id)}
+                    onCheckedChange={() => toggleSelect(order.id)}
+                  />
+                </div>
+                <button
+                  title="Imprimir este pedido"
+                  onClick={(e) => { e.stopPropagation(); handlePrintSingle(order.id); }}
+                  className="mt-0.5 p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  <Printer className="h-4 w-4" />
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className={cn('text-sm space-y-0.5', order.printed ? 'text-muted-foreground' : 'text-muted-foreground')}>
                     <div className={cn('font-semibold', order.printed ? 'text-muted-foreground' : 'text-foreground')}>
@@ -451,7 +478,7 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedLabels.map(({ order, index, total }) => {
+          {printLabels.map(({ order, index, total }) => {
             const header = formatHeaderLine(order, index, total);
             const totalItems = getTotalItemCount(order);
             return (
