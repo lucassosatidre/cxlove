@@ -478,7 +478,7 @@ export default function Etiquetas() {
 
         {/* Print-only labels */}
         <div id="print-labels" ref={printRef} className={cn("hidden print:block", printMode === 'grid' ? 'print-grid' : 'print-single')}>
-          {selectedLabels.map(({ order, index, total }) => {
+          {printLabels.map(({ order, index, total }) => {
             const header = formatHeaderLine(order, index, total);
             const totalItems = getTotalItemCount(order);
             return (
