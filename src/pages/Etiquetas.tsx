@@ -61,6 +61,7 @@ export default function Etiquetas() {
 
       if (error) throw error;
       setOrders(data.orders || []);
+      setDebugRawItems(data.debug_raw_items || null);
       setFetched(true);
       toast({ title: `${data.total_sales} pedidos encontrados` });
     } catch (err: any) {
