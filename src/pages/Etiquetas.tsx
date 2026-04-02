@@ -36,6 +36,16 @@ const formatItemDisplay = (item: OrderItem) => {
   return `${icon} ${item.quantity}x ${item.name}`;
 };
 
+const formatOrderNumber = (saleNumber: string) => {
+  return `#${parseInt(saleNumber, 10) || saleNumber}`;
+};
+
+const getItemsFontClass = (itemCount: number) => {
+  if (itemCount >= 6) return 'font-xs';
+  if (itemCount >= 4) return 'font-sm';
+  return '';
+};
+
 function LabelPreview({ order }: { order: Order }) {
   return (
     <div className="border border-dashed border-muted-foreground/40 rounded bg-white text-black flex flex-col justify-center overflow-hidden"
