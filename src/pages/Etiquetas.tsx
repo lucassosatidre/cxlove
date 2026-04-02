@@ -183,6 +183,22 @@ export default function Etiquetas() {
                     {selected.size === orders.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                     {selected.size === orders.length ? 'Desmarcar todos' : 'Selecionar todos'}
                   </Button>
+
+                  <div className="flex items-center gap-1 border border-border rounded-md overflow-hidden">
+                    <button
+                      onClick={() => setPrintMode('single')}
+                      className={cn('px-3 py-1.5 text-xs font-medium transition-colors', printMode === 'single' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted')}
+                    >
+                      1 por página
+                    </button>
+                    <button
+                      onClick={() => setPrintMode('grid')}
+                      className={cn('px-3 py-1.5 text-xs font-medium transition-colors', printMode === 'grid' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted')}
+                    >
+                      Múltiplas
+                    </button>
+                  </div>
+
                   <Button variant="outline" onClick={handlePreview} disabled={selected.size === 0} className="gap-2">
                     <Eye className="h-4 w-4" />
                     Prévia
