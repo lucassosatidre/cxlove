@@ -119,7 +119,10 @@ export default function Etiquetas() {
       toast({ title: 'Selecione ao menos um pedido', variant: 'destructive' });
       return;
     }
+    const originalTitle = document.title;
+    document.title = ' ';
     window.print();
+    document.title = originalTitle;
   };
 
   const handlePreview = () => {

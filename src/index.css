@@ -94,6 +94,10 @@
 
 /* Print styles for etiquetas */
 @media print {
+  @page {
+    margin: 0;
+  }
+
   /* Hide everything */
   body * {
     visibility: hidden !important;
