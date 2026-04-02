@@ -1376,7 +1376,7 @@ export default function Reconciliation() {
               Calculadora de Dinheiro — Fechamento
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             <div className="grid grid-cols-[1fr_80px_1fr] gap-2 items-center text-xs font-medium text-muted-foreground uppercase tracking-wider px-1">
               <span>Cédula/Moeda</span>
               <span className="text-center">Qtd</span>
