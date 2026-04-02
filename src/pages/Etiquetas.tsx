@@ -7,8 +7,9 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square } from 'lucide-react';
+import { CalendarIcon, Printer, RefreshCw, Search, CheckSquare, Square, Eye } from 'lucide-react';
 import AppSidebar from '@/components/AppSidebar';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -35,6 +36,24 @@ const formatItemDisplay = (item: OrderItem) => {
   return `${icon} ${item.quantity}x ${item.name}`;
 };
 
+function LabelPreview({ order }: { order: Order }) {
+  return (
+    <div className="border border-border rounded bg-white text-black p-3 font-mono"
+         style={{ width: '227px', height: '113px', fontSize: '9px', lineHeight: '1.3', overflow: 'hidden' }}>
+      <div style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '2px' }}>
+        #{order.sale_number.padStart(4, '0')}
+      </div>
+      <div>
+        {order.items.length > 0
+          ? order.items.map((item, i) => (
+              <div key={i} className="truncate">{formatItemDisplay(item)}</div>
+            ))
+          : <div>-</div>}
+      </div>
+    </div>
+  );
+}
+
 export default function Etiquetas() {
   const [date, setDate] = useState<Date>(new Date());
   const [orders, setOrders] = useState<Order[]>([]);
@@ -42,6 +61,7 @@ export default function Etiquetas() {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const printRef = useRef<HTMLDivElement>(null);
@@ -99,6 +119,13 @@ export default function Etiquetas() {
     window.print();
   };
 
+  const handlePreview = () => {
+    if (selected.size === 0) {
+      toast({ title: 'Selecione ao menos um pedido', variant: 'destructive' });
+      return;
+    }
+    setPreviewOpen(true);
+  };
 
   const selectedOrders = orders.filter(o => selected.has(o.id));
 
@@ -152,6 +179,10 @@ export default function Etiquetas() {
                   <Button variant="outline" onClick={selectAll} className="gap-2">
                     {selected.size === orders.length ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                     {selected.size === orders.length ? 'Desmarcar todos' : 'Selecionar todos'}
+                  </Button>
+                  <Button variant="outline" onClick={handlePreview} disabled={selected.size === 0} className="gap-2">
+                    <Eye className="h-4 w-4" />
+                    Prévia
                   </Button>
                   <Button onClick={handlePrint} disabled={selected.size === 0} className="gap-2">
                     <Printer className="h-4 w-4" />
@@ -211,8 +242,8 @@ export default function Etiquetas() {
           </div>
         </div>
 
-        {/* Print-only labels — 5x3cm compact */}
-        <div ref={printRef} className="hidden print:block">
+        {/* Print-only labels */}
+        <div id="print-labels" ref={printRef} className="hidden print:block">
           {selectedOrders.map(order => (
             <div key={order.id} className="etiqueta">
               <div className="label-order">#{order.sale_number.padStart(4, '0')}</div>
@@ -227,6 +258,22 @@ export default function Etiquetas() {
             </div>
           ))}
         </div>
+
+        {/* Preview modal */}
+        <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Prévia das Etiquetas ({selectedOrders.length})</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              {selectedOrders.map(order => (
+                <div key={order.id} className="flex justify-center">
+                  <LabelPreview order={order} />
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </main>
     </div>
   );
