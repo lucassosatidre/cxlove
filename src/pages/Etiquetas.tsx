@@ -438,11 +438,19 @@ export default function Etiquetas() {
                     : 'border-border bg-card hover:bg-muted/50'
                 )}
               >
-                <Checkbox
-                  checked={selected.has(order.id)}
-                  onCheckedChange={() => toggleSelect(order.id)}
-                  className="mt-1"
-                />
+                <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selected.has(order.id)}
+                    onCheckedChange={() => toggleSelect(order.id)}
+                  />
+                </div>
+                <button
+                  title="Imprimir este pedido"
+                  onClick={(e) => { e.stopPropagation(); handlePrintSingle(order.id); }}
+                  className="mt-0.5 p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                >
+                  <Printer className="h-4 w-4" />
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className={cn('text-sm space-y-0.5', order.printed ? 'text-muted-foreground' : 'text-muted-foreground')}>
                     <div className={cn('font-semibold', order.printed ? 'text-muted-foreground' : 'text-foreground')}>
