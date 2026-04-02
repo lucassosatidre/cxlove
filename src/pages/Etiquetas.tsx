@@ -234,7 +234,7 @@ export default function Etiquetas() {
                   </Button>
                   <Button onClick={handlePrint} disabled={selected.size === 0} className="gap-2">
                     <Printer className="h-4 w-4" />
-                    Imprimir ({selected.size})
+                    Imprimir ({totalLabelCount})
                   </Button>
                 </>
               )}
