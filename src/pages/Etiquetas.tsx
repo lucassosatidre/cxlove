@@ -99,8 +99,6 @@ export default function Etiquetas() {
     window.print();
   };
 
-  const formatCurrency = (v: number) =>
-    v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
   const selectedOrders = orders.filter(o => selected.has(o.id));
 

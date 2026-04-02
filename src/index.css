@@ -148,12 +148,3 @@
     text-overflow: ellipsis;
   }
 
-  .label-footer {
-    font-size: 7px;
-    font-weight: bold;
-    border-top: 0.5px dashed #000;
-    padding-top: 0.5mm;
-    margin-top: 0.5mm;
-    white-space: nowrap;
-  }
-}
