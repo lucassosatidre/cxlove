@@ -407,51 +407,59 @@ export default function EntregadorPortal() {
                 {isBeforeWindow && (
                   <button
                     disabled
-                    className="w-full h-14 rounded-xl bg-muted text-muted-foreground font-semibold text-base uppercase tracking-wide cursor-not-allowed"
+                    className="w-full h-14 rounded-xl border border-border bg-muted/50 text-muted-foreground font-semibold text-lg cursor-not-allowed"
                   >
-                    Check-in
+                    Check-in disponível às 15h
                   </button>
                 )}
 
                 {/* In window 15h-17:59 */}
                 {isInWindow && checkinState === 'none' && hasVagas && (
                   <button
-                    className="w-full h-14 rounded-xl bg-[hsl(var(--chart-4))] hover:opacity-90 text-white font-bold text-base uppercase tracking-wide transition-opacity disabled:opacity-60"
+                    className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
                     disabled={actionLoading}
                     onClick={handleCheckin}
                   >
-                    {actionLoading ? 'Processando...' : 'Fazer Check-in'}
+                    {actionLoading ? 'Processando...' : 'FAZER CHECK-IN HOJE'}
                   </button>
                 )}
 
                 {isInWindow && checkinState === 'none' && !hasVagas && (
                   <button
-                    className="w-full h-14 rounded-xl border-2 border-[hsl(var(--chart-4))] text-[hsl(var(--chart-4))] font-bold text-base uppercase tracking-wide hover:bg-[hsl(var(--chart-4))]/10 transition-colors disabled:opacity-60"
+                    className="w-full h-14 rounded-xl border-2 border-orange-500 text-orange-600 font-bold text-lg uppercase tracking-wide hover:bg-orange-50 transition-colors disabled:opacity-60"
                     disabled={actionLoading}
                     onClick={handleJoinWaitlist}
                   >
-                    {actionLoading ? 'Processando...' : 'Entrar na Fila de Espera'}
+                    {actionLoading ? 'Processando...' : 'ENTRAR NA FILA DE ESPERA'}
                   </button>
                 )}
 
                 {isInWindow && checkinState === 'confirmed' && (
-                  <button
-                    className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-base uppercase tracking-wide transition-colors disabled:opacity-60"
-                    disabled={actionLoading}
-                    onClick={() => setCancelDialog(true)}
-                  >
-                    Cancelar Check-in
-                  </button>
+                  <div className="w-full space-y-4">
+                    <div className="bg-card rounded-xl border p-6 text-center space-y-2">
+                      <p className="text-lg font-semibold text-foreground">✅ Check-in confirmado para hoje</p>
+                      <p className="text-sm text-muted-foreground">Alterações permitidas até 17:59</p>
+                    </div>
+                    <button
+                      className="w-full h-14 rounded-xl border-2 border-destructive text-destructive font-bold text-lg uppercase tracking-wide hover:bg-destructive/10 transition-colors disabled:opacity-60"
+                      disabled={actionLoading}
+                      onClick={() => setCancelDialog(true)}
+                    >
+                      Cancelar Check-in
+                    </button>
+                  </div>
                 )}
 
                 {isInWindow && checkinState === 'waitlist' && (
-                  <div className="w-full space-y-3">
-                    <div className="bg-card rounded-xl border p-4 text-center space-y-1">
-                      <p className="text-sm font-semibold text-foreground">Você está na fila de espera — posição {waitlistPosition}</p>
-                      <p className="text-xs text-muted-foreground">Vagas disponíveis apenas em caso de cancelamento</p>
+                  <div className="w-full space-y-4">
+                    <div className="bg-card rounded-xl border p-6 text-center space-y-3">
+                      <p className="text-base font-semibold text-foreground">Você está na fila de espera</p>
+                      <p className="text-3xl font-bold text-foreground">Posição: {waitlistPosition}</p>
+                      <p className="text-sm text-muted-foreground">Vagas disponíveis apenas em caso de cancelamento</p>
+                      <p className="text-xs text-muted-foreground">Alterações permitidas até 17:59</p>
                     </div>
                     <button
-                      className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-base uppercase tracking-wide transition-colors disabled:opacity-60"
+                      className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
                       disabled={actionLoading}
                       onClick={handleLeaveWaitlist}
                     >
@@ -463,7 +471,7 @@ export default function EntregadorPortal() {
                 {/* After 18h */}
                 {isAfterWindow && (
                   <div className="w-full bg-card rounded-xl border p-6 text-center">
-                    <p className="text-sm font-medium text-foreground">
+                    <p className="text-lg font-medium text-foreground">
                       {checkinState === 'confirmed'
                         ? '✅ Check-in confirmado para hoje'
                         : 'Sem check-in para hoje'}
