@@ -570,7 +570,6 @@ export default function DriverShifts() {
                           ))}
                         </div>
                       )}
-                      )}
 
                       {/* Admin add driver button */}
                       {!past && shift.id && (
