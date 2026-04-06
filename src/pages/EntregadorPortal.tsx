@@ -176,7 +176,7 @@ export default function EntregadorPortal() {
     if (!driver || !todayShiftId) return;
     setActionLoading(true);
 
-    // Delete old cancelled/no_show records
+    // Check for ANY existing records for this driver+shift
     const { data: existing } = await supabase
       .from('delivery_checkins')
       .select('id, status')
@@ -186,10 +186,12 @@ export default function EntregadorPortal() {
     if (existing?.length) {
       const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido');
       if (active) {
-        toast.error('Você já confirmou este turno');
+        toast.info('Você já confirmou este turno');
         setActionLoading(false);
+        fetchAll();
         return;
       }
+      // Delete ALL old records (cancelled, no_show, fila_espera) to avoid unique constraint
       await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
     }
 
@@ -206,7 +208,12 @@ export default function EntregadorPortal() {
     } as any);
 
     if (error) {
-      toast.error('Erro ao fazer check-in');
+      if (error.code === '23505') {
+        toast.info('Você já está confirmado neste turno');
+        fetchAll();
+      } else {
+        toast.error('Erro ao fazer check-in');
+      }
     } else {
       toast.success('Check-in confirmado!');
       fetchAll();
@@ -218,7 +225,7 @@ export default function EntregadorPortal() {
     if (!driver || !todayShiftId) return;
     setActionLoading(true);
 
-    // Delete old cancelled/no_show records
+    // Check for ANY existing records for this driver+shift
     const { data: existing } = await supabase
       .from('delivery_checkins')
       .select('id, status')
@@ -226,12 +233,21 @@ export default function EntregadorPortal() {
       .eq('driver_id', driver.id);
 
     if (existing?.length) {
-      const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido' || c.status === 'fila_espera');
+      const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido');
       if (active) {
-        toast.error('Você já está neste turno ou na fila');
+        toast.info('Você já está confirmado neste turno');
         setActionLoading(false);
+        fetchAll();
         return;
       }
+      const inQueue = existing.find(c => c.status === 'fila_espera');
+      if (inQueue) {
+        toast.info('Você já está na fila de espera');
+        setActionLoading(false);
+        fetchAll();
+        return;
+      }
+      // Delete ALL old records (cancelled, no_show) to avoid unique constraint
       await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
     }
 
@@ -249,7 +265,12 @@ export default function EntregadorPortal() {
     } as any);
 
     if (error) {
-      toast.error('Erro ao entrar na fila');
+      if (error.code === '23505') {
+        toast.info('Você já está na fila de espera');
+        fetchAll();
+      } else {
+        toast.error('Erro ao entrar na fila');
+      }
     } else {
       toast.success('Você entrou na fila de espera');
       fetchAll();
