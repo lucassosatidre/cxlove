@@ -243,6 +243,14 @@ export default function DriverShifts() {
   const handleAdminRemoveDriver = async () => {
     if (!removeConfirm || !user) return;
     setRemovingDriver(true);
+
+    // Find the shift_id for this checkin to promote from waitlist
+    const { data: checkinData } = await supabase
+      .from('delivery_checkins')
+      .select('shift_id')
+      .eq('id', removeConfirm.checkinId)
+      .single();
+
     const { error } = await supabase
       .from('delivery_checkins')
       .update({
@@ -255,7 +263,18 @@ export default function DriverShifts() {
     if (error) {
       toast({ title: 'Erro ao remover', variant: 'destructive' });
     } else {
-      toast({ title: 'Entregador removido do turno' });
+      // Auto-promote from waitlist
+      if (checkinData?.shift_id) {
+        const isAfter18h = getBrasiliaHour() >= 18;
+        const promoted = await promoteFromWaitlist(checkinData.shift_id, isAfter18h);
+        if (promoted) {
+          toast({ title: 'Entregador removido — próximo da fila promovido' });
+        } else {
+          toast({ title: 'Entregador removido do turno' });
+        }
+      } else {
+        toast({ title: 'Entregador removido do turno' });
+      }
       fetchWeekData();
     }
     setRemovingDriver(false);
