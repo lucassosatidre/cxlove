@@ -265,7 +265,7 @@ export default function DriverShifts() {
       const copy = [...prev];
       copy[dayIdx] = {
         ...copy[dayIdx],
-        shifts: [...copy[dayIdx].shifts, { horario_inicio: '19:00', horario_fim: '23:00', vagas: 6, checkins: 0, confirmedDrivers: [] }],
+        shifts: [...copy[dayIdx].shifts, { horario_inicio: '19:00', horario_fim: '23:00', vagas: 6, checkins: 0, confirmedDrivers: [], waitlistDrivers: [] }],
       };
       return copy;
     });
@@ -379,6 +379,7 @@ export default function DriverShifts() {
         vagas: quickConfig.turno1Vagas,
         checkins: 0,
         confirmedDrivers: [],
+        waitlistDrivers: [],
       });
       if (quickConfig.turnosQtd >= 2) {
         newShifts.push({
@@ -387,6 +388,7 @@ export default function DriverShifts() {
           vagas: quickConfig.turno2Vagas,
           checkins: 0,
           confirmedDrivers: [],
+          waitlistDrivers: [],
         });
       }
       return { ...day, shifts: newShifts };
