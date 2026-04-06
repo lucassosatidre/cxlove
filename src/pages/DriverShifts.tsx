@@ -266,9 +266,9 @@ export default function DriverShifts() {
       // Auto-promote from waitlist
       if (checkinData?.shift_id) {
         const isAfter18h = getBrasiliaHour() >= 18;
-        const promoted = await promoteFromWaitlist(checkinData.shift_id, isAfter18h);
-        if (promoted) {
-          toast({ title: 'Entregador removido — próximo da fila promovido' });
+        const promoted = await promoteFromWaitlist(checkinData.shift_id, isAfter18h, 1);
+        if (promoted.length > 0) {
+          toast({ title: `Entregador removido — ${promoted[0].nome} promovido da fila` });
         } else {
           toast({ title: 'Entregador removido do turno' });
         }
@@ -325,16 +325,17 @@ export default function DriverShifts() {
     if (!user) return;
     setSaving(true);
     try {
-      // Get existing shift IDs for this week to track deletions
+      // Get existing shifts for this week to track deletions and vagas changes
       const startStr = weekData[0].dateStr;
       const endStr = weekData[6].dateStr;
       const { data: existingShifts } = await supabase
         .from('delivery_shifts')
-        .select('id')
+        .select('id, vagas')
         .gte('data', startStr)
         .lte('data', endStr);
-      const existingIds = new Set((existingShifts || []).map(s => s.id));
+      const existingMap = new Map((existingShifts || []).map(s => [s.id, s.vagas]));
       const keptIds = new Set<string>();
+      const shiftsWithIncreasedVagas: { id: string; oldVagas: number; newVagas: number }[] = [];
 
       for (const day of weekData) {
         for (const shift of day.shifts) {
@@ -347,6 +348,10 @@ export default function DriverShifts() {
               created_by: user.id,
             };
             if (shift.id) {
+              const oldVagas = existingMap.get(shift.id) ?? shift.vagas;
+              if (shift.vagas > oldVagas) {
+                shiftsWithIncreasedVagas.push({ id: shift.id, oldVagas, newVagas: shift.vagas });
+              }
               await supabase.from('delivery_shifts').update(payload).eq('id', shift.id);
               keptIds.add(shift.id);
             } else {
@@ -357,9 +362,8 @@ export default function DriverShifts() {
       }
 
       // Delete removed shifts (that had IDs but are no longer in the grid)
-      for (const id of existingIds) {
+      for (const [id] of existingMap) {
         if (!keptIds.has(id)) {
-          // Check if it has checkins before deleting
           const { count } = await supabase
             .from('delivery_checkins')
             .select('*', { count: 'exact', head: true })
@@ -371,7 +375,31 @@ export default function DriverShifts() {
         }
       }
 
-      toast({ title: 'Configuração salva com sucesso' });
+      // Auto-promote from waitlist for shifts where vagas increased
+      const isAfter18h = getBrasiliaHour() >= 18;
+      let totalPromoted = 0;
+      const promotedNames: string[] = [];
+
+      for (const s of shiftsWithIncreasedVagas) {
+        // Count current confirmed
+        const { count: confirmedCount } = await supabase
+          .from('delivery_checkins')
+          .select('id', { count: 'exact', head: true })
+          .eq('shift_id', s.id)
+          .in('status', ['confirmado', 'concluido']);
+        const openSlots = s.newVagas - (confirmedCount || 0);
+        if (openSlots > 0) {
+          const promoted = await promoteFromWaitlist(s.id, isAfter18h, openSlots);
+          totalPromoted += promoted.length;
+          promotedNames.push(...promoted.map(p => p.nome));
+        }
+      }
+
+      if (totalPromoted > 0) {
+        toast({ title: `Configuração salva — ${totalPromoted} entregador(es) promovido(s) da fila`, description: promotedNames.join(', ') });
+      } else {
+        toast({ title: 'Configuração salva com sucesso' });
+      }
       await fetchWeekData();
     } catch {
       toast({ title: 'Erro ao salvar', variant: 'destructive' });

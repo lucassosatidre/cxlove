@@ -664,73 +664,76 @@ export default function EntregadorPortal() {
  * Promote the next driver from the waitlist for a given shift.
  * Called when a confirmed driver cancels or is removed by admin.
  */
-export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean) {
-  // Find next in waitlist
+export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean, maxPromotions: number = 1): Promise<{ id: string; driver_id: string; nome: string }[]> {
+  // Find waitlist ordered by entry time
   const { data: waitlist } = await supabase
     .from('delivery_checkins')
     .select('id, driver_id')
     .eq('shift_id', shiftId)
     .eq('status', 'fila_espera')
     .order('waitlist_entered_at', { ascending: true })
-    .limit(1);
+    .limit(maxPromotions);
 
-  const next = waitlist?.[0];
-  if (!next) return null;
+  if (!waitlist?.length) return [];
 
-  // Promote
-  const updatePayload: any = {
-    status: 'confirmado',
-    confirmed_at: new Date().toISOString(),
-  };
-  if (isAfter18h) {
-    updatePayload.substituto_pos_18h = true;
-  }
-  await supabase.from('delivery_checkins').update(updatePayload).eq('id', next.id);
+  const promoted: { id: string; driver_id: string; nome: string }[] = [];
 
-  // Get driver name
-  const { data: driverData } = await supabase
-    .from('delivery_drivers')
-    .select('nome, auth_user_id')
-    .eq('id', next.driver_id)
-    .single();
+  for (const next of waitlist) {
+    const updatePayload: any = {
+      status: 'confirmado',
+      confirmed_at: new Date().toISOString(),
+    };
+    if (isAfter18h) {
+      updatePayload.substituto_pos_18h = true;
+    }
+    await supabase.from('delivery_checkins').update(updatePayload).eq('id', next.id);
 
-  const driverName = driverData?.nome || 'Entregador';
-  const driverAuthId = driverData?.auth_user_id;
+    // Get driver name
+    const { data: driverData } = await supabase
+      .from('delivery_drivers')
+      .select('nome, auth_user_id')
+      .eq('id', next.driver_id)
+      .single();
 
-  // Notify promoted driver
-  if (driverAuthId) {
-    const driverMessage = isAfter18h
-      ? 'Você foi chamado da fila de espera para o turno de hoje. Entre em contato com a pizzaria'
-      : 'Você foi promovido da fila de espera! Seu check-in está confirmado para hoje.';
+    const driverName = driverData?.nome || 'Entregador';
+    const driverAuthId = driverData?.auth_user_id;
+    promoted.push({ id: next.id, driver_id: next.driver_id, nome: driverName });
 
-    await supabase.from('notifications').insert({
-      user_id: driverAuthId,
-      title: 'Fila de espera',
-      message: driverMessage,
-      type: 'fila_promovido',
-    } as any);
-  }
+    // Notify promoted driver
+    if (driverAuthId) {
+      const driverMessage = isAfter18h
+        ? 'Você foi chamado da fila de espera para o turno de hoje. Entre em contato com a pizzaria'
+        : 'Você foi promovido da fila de espera! Seu check-in está confirmado para hoje.';
 
-  // Notify all admins
-  const { data: adminRoles } = await supabase
-    .from('user_roles')
-    .select('user_id')
-    .eq('role', 'admin');
-
-  if (adminRoles?.length) {
-    const adminMessage = isAfter18h
-      ? `O entregador ${driverName} foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
-      : `O entregador ${driverName} foi promovido automaticamente da fila de espera`;
-
-    for (const admin of adminRoles) {
       await supabase.from('notifications').insert({
-        user_id: admin.user_id,
-        title: 'Fila de espera — promoção',
-        message: adminMessage,
-        type: 'fila_promovido_admin',
+        user_id: driverAuthId,
+        title: 'Fila de espera',
+        message: driverMessage,
+        type: 'fila_promovido',
       } as any);
+    }
+
+    // Notify all admins
+    const { data: adminRoles } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('role', 'admin');
+
+    if (adminRoles?.length) {
+      const adminMessage = isAfter18h
+        ? `O entregador ${driverName} foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
+        : `O entregador ${driverName} foi promovido automaticamente da fila de espera`;
+
+      for (const admin of adminRoles) {
+        await supabase.from('notifications').insert({
+          user_id: admin.user_id,
+          title: 'Fila de espera — promoção',
+          message: adminMessage,
+          type: 'fila_promovido_admin',
+        } as any);
+      }
     }
   }
 
-  return next;
+  return promoted;
 }
