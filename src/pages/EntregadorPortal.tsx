@@ -1,68 +1,62 @@
 import { useState, useEffect, useCallback } from 'react';
-import { format, addDays, isBefore, isToday, startOfDay, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { LogOut, RefreshCw, Check, AlertTriangle, Settings } from 'lucide-react';
+import { LogOut, RefreshCw, AlertTriangle, Settings } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from 'sonner';
+import { getBrasiliaHour, getBrasiliaToday, getBrasiliaDateFormatted } from '@/lib/brasilia-time';
+import NotificationBell from '@/components/NotificationBell';
 
 interface DriverProfile {
   id: string;
   nome: string;
   status: string;
-  max_periodos_dia: number;
 }
 
-interface ConfirmedShift {
-  checkinId: string;
-  shiftId: string;
-  data: string;
-  horario_inicio: string;
-  horario_fim: string;
-  origin: string;
-}
-
-interface AvailableShift {
-  shiftId: string;
-  data: string;
-  vagas: number;
-  vagasRestantes: number;
-  horario_inicio: string;
-  horario_fim: string;
-  alreadyConfirmed: boolean;
-  _dayLimit?: boolean;
-}
+type CheckinState = 'none' | 'confirmed' | 'waitlist';
 
 export default function EntregadorPortal() {
   const { user, signOut } = useAuth();
-  const { toast } = useToast();
   const [driver, setDriver] = useState<DriverProfile | null>(null);
-  const [confirmedShifts, setConfirmedShifts] = useState<ConfirmedShift[]>([]);
-  const [availableShifts, setAvailableShifts] = useState<AvailableShift[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [cancelDialog, setCancelDialog] = useState<{ checkinId: string; data: string; horario: string } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Today's shift state
+  const [todayShiftId, setTodayShiftId] = useState<string | null>(null);
+  const [checkinState, setCheckinState] = useState<CheckinState>('none');
+  const [checkinId, setCheckinId] = useState<string | null>(null);
+  const [waitlistPosition, setWaitlistPosition] = useState(0);
+  const [hasVagas, setHasVagas] = useState(false);
+  const [shiftExists, setShiftExists] = useState(false);
+
+  // Dialogs
+  const [cancelDialog, setCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [passwordDialog, setPasswordDialog] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
 
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  // Promoted notification
+  const [promotedNotification, setPromotedNotification] = useState<string | null>(null);
+
+  const todayStr = getBrasiliaToday();
+  const todayFormatted = getBrasiliaDateFormatted();
+  const brasiliaHour = getBrasiliaHour();
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
 
+    // Fetch driver profile
     const { data: driverData } = await supabase
       .from('delivery_drivers')
-      .select('id, nome, status, max_periodos_dia')
+      .select('id, nome, status')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
@@ -74,69 +68,83 @@ export default function EntregadorPortal() {
     }
     setDriver(driverData);
 
-    const futureEnd = format(addDays(new Date(), 14), 'yyyy-MM-dd');
-
+    // Fetch today's shift (first one for today)
     const { data: shifts } = await supabase
       .from('delivery_shifts')
-      .select('*')
-      .gte('data', todayStr)
-      .lte('data', futureEnd)
-      .order('data', { ascending: true })
-      .order('horario_inicio', { ascending: true });
+      .select('id, vagas')
+      .eq('data', todayStr)
+      .order('horario_inicio', { ascending: true })
+      .limit(1);
 
-    const allShifts = shifts || [];
-    const shiftIds = allShifts.map(s => s.id);
+    const shift = shifts?.[0];
+    setShiftExists(!!shift);
 
-    let allCheckins: any[] = [];
-    if (shiftIds.length > 0) {
-      const { data } = await supabase
-        .from('delivery_checkins')
-        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason, origin')
-        .in('shift_id', shiftIds);
-      allCheckins = data || [];
+    if (!shift) {
+      setTodayShiftId(null);
+      setCheckinState('none');
+      setLoading(false);
+      setRefreshing(false);
+      return;
     }
 
-    const confirmedCountByShift: Record<string, number> = {};
-    allCheckins.forEach(c => {
-      if (c.status === 'confirmado') {
-        confirmedCountByShift[c.shift_id] = (confirmedCountByShift[c.shift_id] || 0) + 1;
+    setTodayShiftId(shift.id);
+
+    // Get confirmed count
+    const { count: confirmedCount } = await supabase
+      .from('delivery_checkins')
+      .select('*', { count: 'exact', head: true })
+      .eq('shift_id', shift.id)
+      .eq('status', 'confirmado');
+
+    setHasVagas((confirmedCount || 0) < shift.vagas);
+
+    // Check my checkin status
+    const { data: myCheckins } = await supabase
+      .from('delivery_checkins')
+      .select('id, status, waitlist_entered_at')
+      .eq('shift_id', shift.id)
+      .eq('driver_id', driverData.id)
+      .in('status', ['confirmado', 'fila_espera']);
+
+    const myCheckin = myCheckins?.[0];
+    if (myCheckin) {
+      if (myCheckin.status === 'confirmado') {
+        setCheckinState('confirmed');
+        setCheckinId(myCheckin.id);
+      } else if (myCheckin.status === 'fila_espera') {
+        setCheckinState('waitlist');
+        setCheckinId(myCheckin.id);
+        // Get position in waitlist
+        const { data: allWaitlist } = await supabase
+          .from('delivery_checkins')
+          .select('id, waitlist_entered_at')
+          .eq('shift_id', shift.id)
+          .eq('status', 'fila_espera')
+          .order('waitlist_entered_at', { ascending: true });
+        const pos = (allWaitlist || []).findIndex(w => w.id === myCheckin.id) + 1;
+        setWaitlistPosition(pos);
       }
-    });
+    } else {
+      setCheckinState('none');
+      setCheckinId(null);
+    }
 
-    const myCheckins = allCheckins.filter(c => c.driver_id === driverData.id && c.status === 'confirmado');
-    const myConfirmedShiftIds = new Set(myCheckins.map(c => c.shift_id));
-
-    const confirmed: ConfirmedShift[] = myCheckins
-      .map(c => {
-        const shift = allShifts.find(s => s.id === c.shift_id);
-        if (!shift) return null;
-        return {
-          checkinId: c.id,
-          shiftId: shift.id,
-          data: shift.data,
-          horario_inicio: shift.horario_inicio?.slice(0, 5) || '',
-          horario_fim: shift.horario_fim?.slice(0, 5) || '',
-          origin: (c as any).origin || 'entregador',
-        };
-      })
-      .filter(Boolean) as ConfirmedShift[];
-    confirmed.sort((a, b) => a.data.localeCompare(b.data) || a.horario_inicio.localeCompare(b.horario_inicio));
-    setConfirmedShifts(confirmed);
-
-    const available: AvailableShift[] = allShifts
-      .filter(s => s.vagas > 0)
-      .map(s => ({
-        shiftId: s.id,
-        data: s.data,
-        vagas: s.vagas,
-        vagasRestantes: s.vagas - (confirmedCountByShift[s.id] || 0),
-        horario_inicio: s.horario_inicio?.slice(0, 5) || '',
-        horario_fim: s.horario_fim?.slice(0, 5) || '',
-        alreadyConfirmed: myConfirmedShiftIds.has(s.id),
-        _dayLimit: false,
-      }))
-      .filter(s => !isShiftPast(s.data, s.horario_inicio));
-    setAvailableShifts(available);
+    // Check for unread promoted notification
+    const { data: promoNotifs } = await supabase
+      .from('notifications')
+      .select('id, message')
+      .eq('user_id', user.id)
+      .eq('type', 'fila_promovido')
+      .eq('read', false)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    if (promoNotifs?.[0]) {
+      setPromotedNotification(promoNotifs[0].message);
+      // Mark as read
+      await supabase.from('notifications').update({ read: true } as any).eq('id', promoNotifs[0].id);
+    } else {
+      setPromotedNotification(null);
+    }
 
     setLoading(false);
     setRefreshing(false);
@@ -144,20 +152,11 @@ export default function EntregadorPortal() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const isShiftPast = (data: string, horarioInicio: string | null): boolean => {
-    const shiftDate = parseISO(data);
-    if (isBefore(startOfDay(shiftDate), startOfDay(new Date())) && !isToday(shiftDate)) return true;
-    if (isToday(shiftDate) && horarioInicio) {
-      const now = new Date();
-      const [h, m] = horarioInicio.split(':').map(Number);
-      const shiftStart = new Date();
-      shiftStart.setHours(h, m, 0, 0);
-      if (now >= shiftStart) return true;
-    }
-    return false;
-  };
-
-  const canCancel = (data: string, horarioInicio: string | null): boolean => !isShiftPast(data, horarioInicio);
+  // Auto-refresh every 30s
+  useEffect(() => {
+    const interval = setInterval(fetchAll, 30000);
+    return () => clearInterval(interval);
+  }, [fetchAll]);
 
   const getDeviceInfo = async () => {
     let deviceIp = 'indisponível';
@@ -166,87 +165,141 @@ export default function EntregadorPortal() {
       const data = await res.json();
       deviceIp = data.ip || 'indisponível';
     } catch { /* ignore */ }
-    const deviceUserAgent = navigator.userAgent;
-    const deviceInfo = `${screen.width}x${screen.height}`;
-    return { deviceIp, deviceUserAgent, deviceInfo };
+    return {
+      deviceIp,
+      deviceUserAgent: navigator.userAgent,
+      deviceInfo: `${screen.width}x${screen.height}`,
+    };
   };
 
-  const handleConfirm = async (shift: AvailableShift) => {
-    if (!driver || !user) return;
-    setActionLoading(shift.shiftId);
-    try {
-      const { count } = await supabase
-        .from('delivery_checkins')
-        .select('*', { count: 'exact', head: true })
-        .eq('shift_id', shift.shiftId)
-        .eq('status', 'confirmado');
+  const handleCheckin = async () => {
+    if (!driver || !todayShiftId) return;
+    setActionLoading(true);
 
-      if ((count || 0) >= shift.vagas) {
-        toast({ title: 'Vagas esgotadas, tente outro turno', variant: 'destructive' });
-        fetchAll();
+    // Delete old cancelled/no_show records
+    const { data: existing } = await supabase
+      .from('delivery_checkins')
+      .select('id, status')
+      .eq('shift_id', todayShiftId)
+      .eq('driver_id', driver.id);
+
+    if (existing?.length) {
+      const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido');
+      if (active) {
+        toast.error('Você já confirmou este turno');
+        setActionLoading(false);
         return;
       }
-
-      const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
-
-      // Delete old cancelled/no_show records to allow re-confirmation
-      const { data: existingCheckins } = await supabase
-        .from('delivery_checkins')
-        .select('id, status')
-        .eq('shift_id', shift.shiftId)
-        .eq('driver_id', driver.id);
-
-      if (existingCheckins && existingCheckins.length > 0) {
-        const activeCheckin = existingCheckins.find(c => c.status === 'confirmado' || c.status === 'concluido');
-        if (activeCheckin) {
-          toast({ title: 'Você já confirmou este turno', variant: 'destructive' });
-          setActionLoading(null);
-          return;
-        }
-        const oldIds = existingCheckins.map(c => c.id);
-        await supabase.from('delivery_checkins').delete().in('id', oldIds);
-      }
-
-      const { error } = await supabase.from('delivery_checkins').insert({
-        shift_id: shift.shiftId,
-        driver_id: driver.id,
-        status: 'confirmado',
-        device_ip: deviceIp,
-        device_user_agent: deviceUserAgent,
-        device_info: deviceInfo,
-        origin: 'entregador',
-      } as any);
-
-      if (error) {
-        toast({ title: 'Erro ao confirmar', description: error.message, variant: 'destructive' });
-      } else {
-        const dateFormatted = format(parseISO(shift.data), "dd/MM (EEEE)", { locale: ptBR });
-        toast({ title: `Presença confirmada para ${dateFormatted}` });
-        fetchAll();
-      }
-    } catch {
-      toast({ title: 'Erro de conexão', variant: 'destructive' });
+      await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
     }
-    setActionLoading(null);
-  };
 
-  const handleCancel = async () => {
-    if (!cancelDialog) return;
-    setActionLoading(cancelDialog.checkinId);
-    const { error } = await supabase
-      .from('delivery_checkins')
-      .update({ status: 'cancelado', cancelled_at: new Date().toISOString(), cancel_reason: cancelReason || null })
-      .eq('id', cancelDialog.checkinId);
+    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+
+    const { error } = await supabase.from('delivery_checkins').insert({
+      shift_id: todayShiftId,
+      driver_id: driver.id,
+      status: 'confirmado',
+      device_ip: deviceIp,
+      device_user_agent: deviceUserAgent,
+      device_info: deviceInfo,
+      origin: 'entregador',
+    } as any);
 
     if (error) {
-      toast({ title: 'Erro ao cancelar', variant: 'destructive' });
+      toast.error('Erro ao fazer check-in');
     } else {
-      toast({ title: 'Presença cancelada' });
+      toast.success('Check-in confirmado!');
       fetchAll();
     }
-    setCancelDialog(null);
+    setActionLoading(false);
+  };
+
+  const handleJoinWaitlist = async () => {
+    if (!driver || !todayShiftId) return;
+    setActionLoading(true);
+
+    // Delete old cancelled/no_show records
+    const { data: existing } = await supabase
+      .from('delivery_checkins')
+      .select('id, status')
+      .eq('shift_id', todayShiftId)
+      .eq('driver_id', driver.id);
+
+    if (existing?.length) {
+      const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido' || c.status === 'fila_espera');
+      if (active) {
+        toast.error('Você já está neste turno ou na fila');
+        setActionLoading(false);
+        return;
+      }
+      await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
+    }
+
+    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+
+    const { error } = await supabase.from('delivery_checkins').insert({
+      shift_id: todayShiftId,
+      driver_id: driver.id,
+      status: 'fila_espera',
+      device_ip: deviceIp,
+      device_user_agent: deviceUserAgent,
+      device_info: deviceInfo,
+      origin: 'entregador',
+      waitlist_entered_at: new Date().toISOString(),
+    } as any);
+
+    if (error) {
+      toast.error('Erro ao entrar na fila');
+    } else {
+      toast.success('Você entrou na fila de espera');
+      fetchAll();
+    }
+    setActionLoading(false);
+  };
+
+  const handleCancelCheckin = async () => {
+    if (!checkinId || !todayShiftId) return;
+    setActionLoading(true);
+
+    const wasConfirmed = checkinState === 'confirmed';
+
+    const { error } = await supabase
+      .from('delivery_checkins')
+      .update({
+        status: 'cancelado',
+        cancelled_at: new Date().toISOString(),
+        cancel_reason: cancelReason || null,
+      } as any)
+      .eq('id', checkinId);
+
+    if (error) {
+      toast.error('Erro ao cancelar');
+      setActionLoading(false);
+      return;
+    }
+
+    // If was confirmed (not waitlist), try to promote from waitlist
+    if (wasConfirmed) {
+      await promoteFromWaitlist(todayShiftId, false);
+    }
+
+    toast.success(wasConfirmed ? 'Check-in cancelado' : 'Saiu da fila de espera');
+    setCancelDialog(false);
     setCancelReason('');
-    setActionLoading(null);
+    fetchAll();
+    setActionLoading(false);
+  };
+
+  const handleLeaveWaitlist = async () => {
+    if (!checkinId) return;
+    setActionLoading(true);
+    await supabase
+      .from('delivery_checkins')
+      .update({ status: 'cancelado', cancelled_at: new Date().toISOString() } as any)
+      .eq('id', checkinId);
+    toast.success('Saiu da fila de espera');
+    fetchAll();
+    setActionLoading(false);
   };
 
   const handleChangePassword = async () => {
@@ -261,27 +314,22 @@ export default function EntregadorPortal() {
     if (error) {
       setPasswordError(error.message);
     } else {
-      toast({ title: 'Senha alterada com sucesso!' });
+      toast.success('Senha alterada com sucesso!');
       setPasswordDialog(false);
       setNewPassword('');
     }
     setPasswordSaving(false);
   };
 
-  const formatDateFull = (dateStr: string) => {
-    const d = parseISO(dateStr);
-    return format(d, "EEEE, dd 'de' MMMM", { locale: ptBR }).replace(/^\w/, c => c.toUpperCase());
-  };
-
   // Blocked states
   if (!loading && driver && (driver.status === 'inativo' || driver.status === 'suspenso')) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4">
-        <div className="w-full max-w-[480px] bg-white rounded-xl border border-[#E5E7EB] p-6 text-center space-y-4">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <div className="w-full max-w-[480px] bg-card rounded-xl border p-6 text-center space-y-4">
           <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
-          <h2 className="text-lg font-semibold text-[#1A1A1A]">Conta {driver.status === 'inativo' ? 'inativa' : 'suspensa'}</h2>
-          <p className="text-[#6B7280] text-sm">Entre em contato com a administração.</p>
-          <button onClick={signOut} className="w-full h-12 rounded-lg border border-[#E5E7EB] text-[#6B7280] font-medium text-sm hover:bg-[#F3F4F6] transition-colors flex items-center justify-center gap-2">
+          <h2 className="text-lg font-semibold text-foreground">Conta {driver.status === 'inativo' ? 'inativa' : 'suspensa'}</h2>
+          <p className="text-muted-foreground text-sm">Entre em contato com a administração.</p>
+          <button onClick={signOut} className="w-full h-12 rounded-lg border text-muted-foreground font-medium text-sm hover:bg-muted transition-colors flex items-center justify-center gap-2">
             <LogOut className="h-4 w-4" /> Sair
           </button>
         </div>
@@ -291,10 +339,10 @@ export default function EntregadorPortal() {
 
   if (!loading && !driver) {
     return (
-      <div className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-4">
-        <div className="w-full max-w-[480px] bg-white rounded-xl border border-[#E5E7EB] p-6 text-center space-y-4">
-          <p className="text-[#6B7280] text-sm">Perfil de entregador não encontrado. Contacte a administração.</p>
-          <button onClick={signOut} className="w-full h-12 rounded-lg border border-[#E5E7EB] text-[#6B7280] font-medium text-sm hover:bg-[#F3F4F6] transition-colors flex items-center justify-center gap-2">
+      <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <div className="w-full max-w-[480px] bg-card rounded-xl border p-6 text-center space-y-4">
+          <p className="text-muted-foreground text-sm">Perfil de entregador não encontrado.</p>
+          <button onClick={signOut} className="w-full h-12 rounded-lg border text-muted-foreground font-medium text-sm hover:bg-muted transition-colors flex items-center justify-center gap-2">
             <LogOut className="h-4 w-4" /> Sair
           </button>
         </div>
@@ -302,149 +350,138 @@ export default function EntregadorPortal() {
     );
   }
 
-  // Group available by day
-  const availableByDay: Record<string, AvailableShift[]> = {};
-  availableShifts.forEach(s => {
-    if (!availableByDay[s.data]) availableByDay[s.data] = [];
-    availableByDay[s.data].push(s);
-  });
-  const sortedDays = Object.keys(availableByDay).sort();
+  // Determine time window
+  const isBeforeWindow = brasiliaHour < 15;
+  const isInWindow = brasiliaHour >= 15 && brasiliaHour < 18;
+  const isAfterWindow = brasiliaHour >= 18;
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA]">
-      {/* Header — 56px, black */}
-      <header className="sticky top-0 z-20 h-14 bg-[#1A1A1A] flex items-center justify-between px-4">
-        <span className="text-white font-bold text-base tracking-tight">CX Love</span>
+    <div className="min-h-screen bg-muted">
+      {/* Header */}
+      <header className="sticky top-0 z-20 h-14 bg-sidebar flex items-center justify-between px-4">
+        <span className="text-sidebar-accent-foreground font-bold text-base tracking-tight">CX Love</span>
         <div className="flex items-center gap-3">
-          {driver && <span className="text-white/70 text-sm hidden sm:block">{driver.nome}</span>}
-          <button onClick={() => fetchAll()} disabled={refreshing} className="text-white/70 hover:text-white transition-colors">
+          {driver && <span className="text-sidebar-foreground/70 text-sm hidden sm:block">{driver.nome}</span>}
+          <NotificationBell />
+          <button onClick={() => fetchAll()} disabled={refreshing} className="text-sidebar-foreground/70 hover:text-sidebar-accent-foreground transition-colors">
             <RefreshCw className={`h-[18px] w-[18px] ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-          <button onClick={() => setPasswordDialog(true)} className="text-white/70 hover:text-white transition-colors">
+          <button onClick={() => setPasswordDialog(true)} className="text-sidebar-foreground/70 hover:text-sidebar-accent-foreground transition-colors">
             <Settings className="h-[18px] w-[18px]" />
           </button>
-          <button onClick={signOut} className="text-white/70 hover:text-white transition-colors">
+          <button onClick={signOut} className="text-sidebar-foreground/70 hover:text-sidebar-accent-foreground transition-colors">
             <LogOut className="h-[18px] w-[18px]" />
           </button>
         </div>
       </header>
 
-      <main className="max-w-[480px] mx-auto px-4 py-5 space-y-6">
+      <main className="max-w-[480px] mx-auto px-4 py-8 flex flex-col items-center gap-6">
         {loading ? (
-          <LoadingSkeleton />
+          <div className="space-y-4 w-full">
+            <Skeleton className="h-8 w-40 mx-auto" />
+            <Skeleton className="h-14 w-full rounded-xl" />
+          </div>
         ) : (
           <>
-            {/* Próximos Turnos */}
-            <section>
-              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-3">Próximos Turnos</h2>
-              {confirmedShifts.length === 0 ? (
-                <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 text-center">
-                  <p className="text-sm text-[#6B7280]">Nenhum turno confirmado</p>
-                  <p className="text-sm text-[#9CA3AF] mt-0.5">Confira as vagas abaixo</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {confirmedShifts.map(cs => (
-                    <div key={cs.checkinId} className="bg-white rounded-xl border border-[#E5E7EB] border-l-4 border-l-[#F97316] p-4 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-[#1A1A1A] leading-snug">{formatDateFull(cs.data)}</p>
-                        <p className="text-[13px] text-[#6B7280] mt-0.5">{cs.horario_inicio} — {cs.horario_fim}</p>
-                        {cs.origin === 'admin' && (
-                          <p className="text-[11px] text-[#9CA3AF] mt-0.5 italic">adicionado pela gestão</p>
-                        )}
-                      </div>
-                      {canCancel(cs.data, cs.horario_inicio) && (
-                        <button
-                          className="shrink-0 h-8 px-3 rounded-md border border-destructive text-destructive text-xs font-semibold uppercase tracking-wide hover:bg-destructive/5 transition-colors disabled:opacity-50"
-                          disabled={actionLoading === cs.checkinId}
-                          onClick={() => setCancelDialog({ checkinId: cs.checkinId, data: cs.data, horario: `${cs.horario_inicio} — ${cs.horario_fim}` })}
-                        >
-                          Cancelar
-                        </button>
-                      )}
+            {/* Promoted notification banner */}
+            {promotedNotification && (
+              <div className="w-full bg-green-50 border border-green-200 rounded-xl p-4 text-center">
+                <p className="text-sm font-medium text-green-800">🟢 {promotedNotification}</p>
+              </div>
+            )}
+
+            {/* Date */}
+            <p className="text-xl font-bold text-foreground">{todayFormatted}</p>
+
+            {/* No shift configured */}
+            {!shiftExists && (
+              <div className="w-full bg-card rounded-xl border p-6 text-center">
+                <p className="text-sm text-muted-foreground">Sem escala configurada para hoje</p>
+              </div>
+            )}
+
+            {/* Shift exists */}
+            {shiftExists && (
+              <div className="w-full space-y-4">
+                {/* Before 15h */}
+                {isBeforeWindow && (
+                  <button
+                    disabled
+                    className="w-full h-14 rounded-xl bg-muted text-muted-foreground font-semibold text-base uppercase tracking-wide cursor-not-allowed"
+                  >
+                    Check-in
+                  </button>
+                )}
+
+                {/* In window 15h-17:59 */}
+                {isInWindow && checkinState === 'none' && hasVagas && (
+                  <button
+                    className="w-full h-14 rounded-xl bg-[hsl(var(--chart-4))] hover:opacity-90 text-white font-bold text-base uppercase tracking-wide transition-opacity disabled:opacity-60"
+                    disabled={actionLoading}
+                    onClick={handleCheckin}
+                  >
+                    {actionLoading ? 'Processando...' : 'Fazer Check-in'}
+                  </button>
+                )}
+
+                {isInWindow && checkinState === 'none' && !hasVagas && (
+                  <button
+                    className="w-full h-14 rounded-xl border-2 border-[hsl(var(--chart-4))] text-[hsl(var(--chart-4))] font-bold text-base uppercase tracking-wide hover:bg-[hsl(var(--chart-4))]/10 transition-colors disabled:opacity-60"
+                    disabled={actionLoading}
+                    onClick={handleJoinWaitlist}
+                  >
+                    {actionLoading ? 'Processando...' : 'Entrar na Fila de Espera'}
+                  </button>
+                )}
+
+                {isInWindow && checkinState === 'confirmed' && (
+                  <button
+                    className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-base uppercase tracking-wide transition-colors disabled:opacity-60"
+                    disabled={actionLoading}
+                    onClick={() => setCancelDialog(true)}
+                  >
+                    Cancelar Check-in
+                  </button>
+                )}
+
+                {isInWindow && checkinState === 'waitlist' && (
+                  <div className="w-full space-y-3">
+                    <div className="bg-card rounded-xl border p-4 text-center space-y-1">
+                      <p className="text-sm font-semibold text-foreground">Você está na fila de espera — posição {waitlistPosition}</p>
+                      <p className="text-xs text-muted-foreground">Vagas disponíveis apenas em caso de cancelamento</p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </section>
+                    <button
+                      className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-base uppercase tracking-wide transition-colors disabled:opacity-60"
+                      disabled={actionLoading}
+                      onClick={handleLeaveWaitlist}
+                    >
+                      Sair da Fila
+                    </button>
+                  </div>
+                )}
 
-            {/* Vagas Disponíveis */}
-            <section>
-              <h2 className="text-lg font-semibold text-[#1A1A1A] mb-3">Vagas Disponíveis</h2>
-              {sortedDays.length === 0 ? (
-                <div className="bg-white rounded-xl border border-[#E5E7EB] p-5 text-center">
-                  <p className="text-sm text-[#6B7280]">Nenhum turno com vagas nos próximos dias.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {sortedDays.map(dateStr => {
-                    const dayShifts = availableByDay[dateStr];
-                    return (
-                      <div key={dateStr}>
-                        <p className="text-sm font-semibold text-[#1A1A1A] mb-2">{formatDateFull(dateStr)}</p>
-                        <div className="space-y-2">
-                          {dayShifts.map(s => (
-                            <div key={s.shiftId} className="bg-white rounded-xl border border-[#E5E7EB] p-4 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-[#1A1A1A]">{s.horario_inicio} — {s.horario_fim}</span>
-                                {s.alreadyConfirmed && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-[#DCFCE7] text-[#166534] text-xs font-medium px-2.5 py-0.5">
-                                    <Check className="h-3 w-3" /> Confirmado
-                                  </span>
-                                )}
-                              </div>
-
-                              {!s.alreadyConfirmed && (
-                                <>
-                                  <p className={`text-[13px] ${s.vagasRestantes > 0 && s.vagasRestantes < 3 ? 'text-destructive font-medium' : s.vagasRestantes <= 0 ? 'text-destructive font-medium' : 'text-[#6B7280]'}`}>
-                                    {s.vagasRestantes <= 0
-                                      ? 'Esgotado'
-                                      : s.vagasRestantes < 3
-                                        ? `Últimas ${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''}!`
-                                        : `${s.vagasRestantes} vaga${s.vagasRestantes > 1 ? 's' : ''} restante${s.vagasRestantes > 1 ? 's' : ''}`}
-                                  </p>
-
-                                  {s.vagasRestantes > 0 && (
-                                    s._dayLimit ? (
-                                      <button disabled className="w-full h-12 rounded-lg bg-[#E5E7EB] text-[#9CA3AF] font-semibold text-sm uppercase tracking-wide cursor-not-allowed">
-                                        Limite diário atingido
-                                      </button>
-                                    ) : (
-                                      <button
-                                        className="w-full h-12 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white font-bold text-sm uppercase tracking-wide transition-colors disabled:opacity-60"
-                                        disabled={actionLoading === s.shiftId}
-                                        onClick={() => handleConfirm(s)}
-                                      >
-                                        {actionLoading === s.shiftId ? 'Confirmando...' : 'Confirmar'}
-                                      </button>
-                                    )
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
+                {/* After 18h */}
+                {isAfterWindow && (
+                  <div className="w-full bg-card rounded-xl border p-6 text-center">
+                    <p className="text-sm font-medium text-foreground">
+                      {checkinState === 'confirmed'
+                        ? '✅ Check-in confirmado para hoje'
+                        : 'Sem check-in para hoje'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </main>
 
       {/* Cancel dialog */}
-      <Dialog open={!!cancelDialog} onOpenChange={() => { setCancelDialog(null); setCancelReason(''); }}>
+      <Dialog open={cancelDialog} onOpenChange={(open) => { setCancelDialog(open); if (!open) setCancelReason(''); }}>
         <DialogContent className="sm:max-w-[400px] rounded-xl">
           <DialogHeader>
-            <DialogTitle className="text-base">Cancelar presença?</DialogTitle>
+            <DialogTitle className="text-base">Cancelar check-in?</DialogTitle>
           </DialogHeader>
-          {cancelDialog && (
-            <p className="text-sm text-[#6B7280]">
-              Turno: {formatDateFull(cancelDialog.data)} — {cancelDialog.horario}
-            </p>
-          )}
           <Textarea
             placeholder="Motivo (opcional)"
             value={cancelReason}
@@ -452,45 +489,43 @@ export default function EntregadorPortal() {
             className="min-h-[80px] text-sm"
           />
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setCancelDialog(null); setCancelReason(''); }} className="h-11">
+            <Button variant="outline" onClick={() => { setCancelDialog(false); setCancelReason(''); }} className="h-11">
               Voltar
             </Button>
-            <Button variant="destructive" onClick={handleCancel} disabled={actionLoading === cancelDialog?.checkinId} className="h-11">
+            <Button variant="destructive" onClick={handleCancelCheckin} disabled={actionLoading} className="h-11">
               Confirmar cancelamento
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Password change dialog */}
+      {/* Password dialog */}
       <Dialog open={passwordDialog} onOpenChange={(open) => { setPasswordDialog(open); if (!open) { setNewPassword(''); setPasswordError(''); } }}>
         <DialogContent className="sm:max-w-[360px] rounded-xl">
           <DialogHeader>
             <DialogTitle className="text-base">Alterar senha</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <div>
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                pattern="[0-9]*"
-                placeholder="Digite 4 dígitos"
-                value={newPassword}
-                onChange={e => {
-                  const v = e.target.value.replace(/\D/g, '').slice(0, 4);
-                  setNewPassword(v);
-                  setPasswordError('');
-                }}
-                className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-background"
-              />
-              <p className="text-xs text-[#9CA3AF] mt-1.5 text-center">Use 4 dígitos numéricos</p>
-            </div>
+            <Input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              pattern="[0-9]*"
+              placeholder="Digite 4 dígitos"
+              value={newPassword}
+              onChange={e => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setNewPassword(v);
+                setPasswordError('');
+              }}
+              className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-background"
+            />
+            <p className="text-xs text-muted-foreground text-center">Use 4 dígitos numéricos</p>
             {passwordError && <p className="text-sm text-destructive text-center">{passwordError}</p>}
           </div>
           <DialogFooter>
             <button
-              className="w-full h-12 rounded-lg bg-[#F97316] hover:bg-[#EA580C] text-white font-bold text-sm uppercase tracking-wide transition-colors disabled:opacity-60"
+              className="w-full h-12 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm uppercase tracking-wide transition-colors disabled:opacity-60"
               disabled={passwordSaving}
               onClick={handleChangePassword}
             >
@@ -503,21 +538,77 @@ export default function EntregadorPortal() {
   );
 }
 
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <Skeleton className="h-5 w-40 mb-3" />
-        <Skeleton className="h-20 w-full rounded-xl" />
-      </div>
-      <div>
-        <Skeleton className="h-5 w-40 mb-3" />
-        <div className="space-y-2">
-          <Skeleton className="h-4 w-48" />
-          <Skeleton className="h-28 w-full rounded-xl" />
-          <Skeleton className="h-28 w-full rounded-xl" />
-        </div>
-      </div>
-    </div>
-  );
+/**
+ * Promote the next driver from the waitlist for a given shift.
+ * Called when a confirmed driver cancels or is removed by admin.
+ */
+export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean) {
+  // Find next in waitlist
+  const { data: waitlist } = await supabase
+    .from('delivery_checkins')
+    .select('id, driver_id')
+    .eq('shift_id', shiftId)
+    .eq('status', 'fila_espera')
+    .order('waitlist_entered_at', { ascending: true })
+    .limit(1);
+
+  const next = waitlist?.[0];
+  if (!next) return null;
+
+  // Promote
+  const updatePayload: any = {
+    status: 'confirmado',
+    confirmed_at: new Date().toISOString(),
+  };
+  if (isAfter18h) {
+    updatePayload.substituto_pos_18h = true;
+  }
+  await supabase.from('delivery_checkins').update(updatePayload).eq('id', next.id);
+
+  // Get driver name
+  const { data: driverData } = await supabase
+    .from('delivery_drivers')
+    .select('nome, auth_user_id')
+    .eq('id', next.driver_id)
+    .single();
+
+  const driverName = driverData?.nome || 'Entregador';
+  const driverAuthId = driverData?.auth_user_id;
+
+  // Notify promoted driver
+  if (driverAuthId) {
+    const driverMessage = isAfter18h
+      ? 'Você foi chamado da fila de espera para o turno de hoje. Entre em contato com a pizzaria'
+      : 'Você foi promovido da fila de espera! Seu check-in está confirmado para hoje.';
+
+    await supabase.from('notifications').insert({
+      user_id: driverAuthId,
+      title: 'Fila de espera',
+      message: driverMessage,
+      type: 'fila_promovido',
+    } as any);
+  }
+
+  // Notify all admins
+  const { data: adminRoles } = await supabase
+    .from('user_roles')
+    .select('user_id')
+    .eq('role', 'admin');
+
+  if (adminRoles?.length) {
+    const adminMessage = isAfter18h
+      ? `O entregador ${driverName} foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
+      : `O entregador ${driverName} foi promovido automaticamente da fila de espera`;
+
+    for (const admin of adminRoles) {
+      await supabase.from('notifications').insert({
+        user_id: admin.user_id,
+        title: 'Fila de espera — promoção',
+        message: adminMessage,
+        type: 'fila_promovido_admin',
+      } as any);
+    }
+  }
+
+  return next;
 }
