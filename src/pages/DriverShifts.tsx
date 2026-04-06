@@ -665,6 +665,17 @@ export default function DriverShifts() {
                     ) : (
                       <p className="ml-6 text-sm text-muted-foreground">Nenhuma confirmação ainda</p>
                     )}
+                    {shift.waitlistDrivers.length > 0 && (
+                      <div className="ml-6 mt-1 pt-1 border-t border-dashed">
+                        <p className="text-xs text-muted-foreground font-medium">Fila de espera ({shift.waitlistDrivers.length})</p>
+                        {shift.waitlistDrivers.map((d, k) => (
+                          <div key={k} className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground">{k + 1}. {d.nome}</span>
+                            <span className="text-muted-foreground/60 text-xs">às {d.enteredAt}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
