@@ -19,7 +19,17 @@ interface DriverProfile {
 
 type CheckinState = 'none' | 'confirmed' | 'waitlist';
 
-const ACTIVE_CHECKIN_STATUSES = ['confirmado', 'fila_espera'] as const;
+const ACTIVE_CHECKIN_STATUSES = ['confirmado', 'fila_espera', 'em_rota'] as const;
+
+function normalizeCheckinStatus(status: string | null | undefined) {
+  return (status ?? '').trim().toLowerCase();
+}
+
+function isActiveCheckinStatus(status: string | null | undefined) {
+  return ACTIVE_CHECKIN_STATUSES.includes(
+    normalizeCheckinStatus(status) as (typeof ACTIVE_CHECKIN_STATUSES)[number]
+  );
+}
 
 export default function EntregadorPortal() {
   const { user, signOut } = useAuth();
@@ -56,7 +66,6 @@ export default function EntregadorPortal() {
       .from('delivery_checkins')
       .select('id, status, delivery_shifts!inner(data)')
       .eq('driver_id', driverId)
-      .in('status', [...ACTIVE_CHECKIN_STATUSES])
       .lt('delivery_shifts.data', todayStr);
 
     if (error) {
@@ -64,14 +73,18 @@ export default function EntregadorPortal() {
       return;
     }
 
-    if (!staleCheckins?.length) return;
+    const activeStaleCheckins = (staleCheckins ?? []).filter((checkin) =>
+      isActiveCheckinStatus(checkin.status)
+    );
 
-    const staleConfirmedIds = staleCheckins
-      .filter((checkin) => checkin.status === 'confirmado')
+    if (!activeStaleCheckins.length) return;
+
+    const staleConfirmedIds = activeStaleCheckins
+      .filter((checkin) => ['confirmado', 'em_rota'].includes(normalizeCheckinStatus(checkin.status)))
       .map((checkin) => checkin.id);
 
-    const staleWaitlistIds = staleCheckins
-      .filter((checkin) => checkin.status === 'fila_espera')
+    const staleWaitlistIds = activeStaleCheckins
+      .filter((checkin) => normalizeCheckinStatus(checkin.status) === 'fila_espera')
       .map((checkin) => checkin.id);
 
     const nowIso = new Date().toISOString();
@@ -102,6 +115,22 @@ export default function EntregadorPortal() {
       console.error('Erro ao expirar check-ins antigos do entregador', failed.error);
     }
   }, [todayStr]);
+
+  const getCurrentOperationalCheckins = useCallback(async (driverId: string, shiftId: string) => {
+    const { data, error } = await supabase
+      .from('delivery_checkins')
+      .select('id, status, waitlist_entered_at, created_at')
+      .eq('shift_id', shiftId)
+      .eq('driver_id', driverId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Erro ao buscar check-ins do dia operacional', error);
+      return null;
+    }
+
+    return data ?? [];
+  }, []);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
@@ -155,22 +184,12 @@ export default function EntregadorPortal() {
     setHasVagas((confirmedCount || 0) < shift.vagas);
 
     // Check my checkin status
-    const { data: myCheckins } = await supabase
-      .from('delivery_checkins')
-      .select('id, status, waitlist_entered_at')
-      .eq('shift_id', shift.id)
-      .eq('driver_id', driverData.id)
-      .in('status', [...ACTIVE_CHECKIN_STATUSES]);
-
-    const myCheckin = myCheckins?.[0];
+    const myCheckins = await getCurrentOperationalCheckins(driverData.id, shift.id);
+    const myCheckin = myCheckins?.find((checkin) => isActiveCheckinStatus(checkin.status));
     if (myCheckin) {
-      if (myCheckin.status === 'confirmado') {
-        setCheckinState('confirmed');
-        setCheckinId(myCheckin.id);
-      } else if (myCheckin.status === 'fila_espera') {
+      if (normalizeCheckinStatus(myCheckin.status) === 'fila_espera') {
         setCheckinState('waitlist');
         setCheckinId(myCheckin.id);
-        // Get position in waitlist
         const { data: allWaitlist } = await supabase
           .from('delivery_checkins')
           .select('id, waitlist_entered_at')
@@ -179,6 +198,9 @@ export default function EntregadorPortal() {
           .order('waitlist_entered_at', { ascending: true });
         const pos = (allWaitlist || []).findIndex(w => w.id === myCheckin.id) + 1;
         setWaitlistPosition(pos);
+      } else {
+        setCheckinState('confirmed');
+        setCheckinId(myCheckin.id);
       }
     } else {
       setCheckinState('none');
@@ -204,7 +226,7 @@ export default function EntregadorPortal() {
 
     setLoading(false);
     setRefreshing(false);
-  }, [cleanupStaleCheckins, user, todayStr]);
+  }, [cleanupStaleCheckins, getCurrentOperationalCheckins, user, todayStr]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -228,63 +250,102 @@ export default function EntregadorPortal() {
     };
   };
 
-  const handleCheckin = async () => {
-    if (!driver || !todayShiftId) return;
-    setActionLoading(true);
+  const submitCheckin = async (targetStatus: 'confirmado' | 'fila_espera') => {
+    if (!driver || !todayShiftId) {
+      return { type: 'error' as const };
+    }
 
     await cleanupStaleCheckins(driver.id);
 
-    // Check for ANY existing records for this driver+shift
-    const { data: existing } = await supabase
-      .from('delivery_checkins')
-      .select('id, status')
-      .eq('shift_id', todayShiftId)
-      .eq('driver_id', driver.id);
-
-    if (existing?.length) {
-      const alreadyConfirmed = existing.find(c => c.status === 'confirmado');
-      if (alreadyConfirmed) {
-        toast.info('Você já confirmou este turno');
-        setActionLoading(false);
-        fetchAll();
-        return;
-      }
-
-      const alreadyInWaitlist = existing.find(c => c.status === 'fila_espera');
-      if (alreadyInWaitlist) {
-        toast.info('Você já está na fila de espera');
-        setActionLoading(false);
-        fetchAll();
-        return;
-      }
-
-      // Delete finalizado/cancelado/no-show rows for the current operational day to avoid unique constraint
-      await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
+    const existing = await getCurrentOperationalCheckins(driver.id, todayShiftId);
+    if (!existing) {
+      return { type: 'error' as const };
     }
 
-    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+    const activeCheckin = existing.find((checkin) => isActiveCheckinStatus(checkin.status));
+    if (activeCheckin) {
+      const normalizedStatus = normalizeCheckinStatus(activeCheckin.status);
+      return {
+        type: normalizedStatus === 'fila_espera' ? 'already_waitlist' as const : 'already_confirmed' as const,
+      };
+    }
 
-    const { error } = await supabase.from('delivery_checkins').insert({
-      shift_id: todayShiftId,
-      driver_id: driver.id,
-      status: 'confirmado',
+    const reusableCheckin = existing.find((checkin) => !isActiveCheckinStatus(checkin.status));
+    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+    const nowIso = new Date().toISOString();
+    const payload = {
+      status: targetStatus,
       device_ip: deviceIp,
       device_user_agent: deviceUserAgent,
       device_info: deviceInfo,
       origin: 'entregador',
+      confirmed_at: targetStatus === 'confirmado' ? nowIso : null,
+      waitlist_entered_at: targetStatus === 'fila_espera' ? nowIso : null,
+      cancelled_at: null,
+      cancel_reason: null,
+      admin_removed_at: null,
+      admin_removed_by: null,
+    };
+
+    if (reusableCheckin) {
+      const { error } = await supabase
+        .from('delivery_checkins')
+        .update(payload as any)
+        .eq('id', reusableCheckin.id);
+
+      if (error) {
+        console.error('Erro ao reativar check-in do dia operacional', error);
+        return { type: 'error' as const };
+      }
+
+      return { type: 'success' as const };
+    }
+
+    const { error } = await supabase.from('delivery_checkins').insert({
+      shift_id: todayShiftId,
+      driver_id: driver.id,
+      ...payload,
     } as any);
 
     if (error) {
       if (error.code === '23505') {
-        toast.info('Você já está confirmado neste turno');
-        fetchAll();
-      } else {
-        toast.error('Erro ao fazer check-in');
+        const freshCheckins = await getCurrentOperationalCheckins(driver.id, todayShiftId);
+        const freshActiveCheckin = freshCheckins?.find((checkin) => isActiveCheckinStatus(checkin.status));
+
+        if (freshActiveCheckin) {
+          const normalizedStatus = normalizeCheckinStatus(freshActiveCheckin.status);
+          return {
+            type: normalizedStatus === 'fila_espera' ? 'already_waitlist' as const : 'already_confirmed' as const,
+          };
+        }
       }
-    } else {
+
+      console.error('Erro ao salvar check-in do entregador', error);
+      return { type: 'error' as const };
+    }
+
+    return { type: 'success' as const };
+  };
+
+  const handleCheckin = async () => {
+    if (!driver || !todayShiftId) return;
+    setActionLoading(true);
+
+    const result = await submitCheckin('confirmado');
+
+    if (result.type === 'already_confirmed') {
+      toast.info('Você já confirmou este turno');
+      fetchAll();
+    } else if (result.type === 'already_waitlist') {
+      toast.info('Você já está na fila de espera');
+      fetchAll();
+    } else if (result.type === 'success') {
       toast.success('Check-in confirmado!');
       fetchAll();
+    } else {
+      toast.error('Erro ao fazer check-in');
     }
+
     setActionLoading(false);
   };
 
@@ -292,58 +353,21 @@ export default function EntregadorPortal() {
     if (!driver || !todayShiftId) return;
     setActionLoading(true);
 
-    await cleanupStaleCheckins(driver.id);
+    const result = await submitCheckin('fila_espera');
 
-    // Check for ANY existing records for this driver+shift
-    const { data: existing } = await supabase
-      .from('delivery_checkins')
-      .select('id, status')
-      .eq('shift_id', todayShiftId)
-      .eq('driver_id', driver.id);
-
-    if (existing?.length) {
-      const alreadyConfirmed = existing.find(c => c.status === 'confirmado');
-      if (alreadyConfirmed) {
-        toast.info('Você já está confirmado neste turno');
-        setActionLoading(false);
-        fetchAll();
-        return;
-      }
-      const inQueue = existing.find(c => c.status === 'fila_espera');
-      if (inQueue) {
-        toast.info('Você já está na fila de espera');
-        setActionLoading(false);
-        fetchAll();
-        return;
-      }
-      // Delete ALL old records (cancelled, no_show) to avoid unique constraint
-      await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
-    }
-
-    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
-
-    const { error } = await supabase.from('delivery_checkins').insert({
-      shift_id: todayShiftId,
-      driver_id: driver.id,
-      status: 'fila_espera',
-      device_ip: deviceIp,
-      device_user_agent: deviceUserAgent,
-      device_info: deviceInfo,
-      origin: 'entregador',
-      waitlist_entered_at: new Date().toISOString(),
-    } as any);
-
-    if (error) {
-      if (error.code === '23505') {
-        toast.info('Você já está na fila de espera');
-        fetchAll();
-      } else {
-        toast.error('Erro ao entrar na fila');
-      }
-    } else {
+    if (result.type === 'already_confirmed') {
+      toast.info('Você já está confirmado neste turno');
+      fetchAll();
+    } else if (result.type === 'already_waitlist') {
+      toast.info('Você já está na fila de espera');
+      fetchAll();
+    } else if (result.type === 'success') {
       toast.success('Você entrou na fila de espera');
       fetchAll();
+    } else {
+      toast.error('Erro ao entrar na fila');
     }
+
     setActionLoading(false);
   };
 
