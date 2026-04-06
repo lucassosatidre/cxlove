@@ -19,6 +19,8 @@ interface DriverProfile {
 
 type CheckinState = 'none' | 'confirmed' | 'waitlist';
 
+const ACTIVE_CHECKIN_STATUSES = ['confirmado', 'fila_espera'] as const;
+
 export default function EntregadorPortal() {
   const { user, signOut } = useAuth();
   const [driver, setDriver] = useState<DriverProfile | null>(null);
@@ -49,6 +51,58 @@ export default function EntregadorPortal() {
   const todayFormatted = getBrasiliaDateFormatted();
   const brasiliaHour = getBrasiliaHour();
 
+  const cleanupStaleCheckins = useCallback(async (driverId: string) => {
+    const { data: staleCheckins, error } = await supabase
+      .from('delivery_checkins')
+      .select('id, status, delivery_shifts!inner(data)')
+      .eq('driver_id', driverId)
+      .in('status', [...ACTIVE_CHECKIN_STATUSES])
+      .lt('delivery_shifts.data', todayStr);
+
+    if (error) {
+      console.error('Erro ao buscar check-ins antigos do entregador', error);
+      return;
+    }
+
+    if (!staleCheckins?.length) return;
+
+    const staleConfirmedIds = staleCheckins
+      .filter((checkin) => checkin.status === 'confirmado')
+      .map((checkin) => checkin.id);
+
+    const staleWaitlistIds = staleCheckins
+      .filter((checkin) => checkin.status === 'fila_espera')
+      .map((checkin) => checkin.id);
+
+    const nowIso = new Date().toISOString();
+
+    const updates = [
+      staleConfirmedIds.length
+        ? supabase
+            .from('delivery_checkins')
+            .update({ status: 'concluido' } as any)
+            .in('id', staleConfirmedIds)
+        : Promise.resolve({ error: null }),
+      staleWaitlistIds.length
+        ? supabase
+            .from('delivery_checkins')
+            .update({
+              status: 'cancelado',
+              cancelled_at: nowIso,
+              cancel_reason: 'Expirado automaticamente ao iniciar novo dia operacional',
+            } as any)
+            .in('id', staleWaitlistIds)
+        : Promise.resolve({ error: null }),
+    ];
+
+    const results = await Promise.all(updates);
+    const failed = results.find((result) => result?.error);
+
+    if (failed?.error) {
+      console.error('Erro ao expirar check-ins antigos do entregador', failed.error);
+    }
+  }, [todayStr]);
+
   const fetchAll = useCallback(async () => {
     if (!user) return;
     setRefreshing(true);
@@ -67,6 +121,8 @@ export default function EntregadorPortal() {
       return;
     }
     setDriver(driverData);
+
+    await cleanupStaleCheckins(driverData.id);
 
     // Fetch today's shift (first one for today)
     const { data: shifts } = await supabase
@@ -104,7 +160,7 @@ export default function EntregadorPortal() {
       .select('id, status, waitlist_entered_at')
       .eq('shift_id', shift.id)
       .eq('driver_id', driverData.id)
-      .in('status', ['confirmado', 'fila_espera']);
+      .in('status', [...ACTIVE_CHECKIN_STATUSES]);
 
     const myCheckin = myCheckins?.[0];
     if (myCheckin) {
@@ -148,7 +204,7 @@ export default function EntregadorPortal() {
 
     setLoading(false);
     setRefreshing(false);
-  }, [user, todayStr]);
+  }, [cleanupStaleCheckins, user, todayStr]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -176,6 +232,8 @@ export default function EntregadorPortal() {
     if (!driver || !todayShiftId) return;
     setActionLoading(true);
 
+    await cleanupStaleCheckins(driver.id);
+
     // Check for ANY existing records for this driver+shift
     const { data: existing } = await supabase
       .from('delivery_checkins')
@@ -184,14 +242,23 @@ export default function EntregadorPortal() {
       .eq('driver_id', driver.id);
 
     if (existing?.length) {
-      const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido');
-      if (active) {
+      const alreadyConfirmed = existing.find(c => c.status === 'confirmado');
+      if (alreadyConfirmed) {
         toast.info('Você já confirmou este turno');
         setActionLoading(false);
         fetchAll();
         return;
       }
-      // Delete ALL old records (cancelled, no_show, fila_espera) to avoid unique constraint
+
+      const alreadyInWaitlist = existing.find(c => c.status === 'fila_espera');
+      if (alreadyInWaitlist) {
+        toast.info('Você já está na fila de espera');
+        setActionLoading(false);
+        fetchAll();
+        return;
+      }
+
+      // Delete finalizado/cancelado/no-show rows for the current operational day to avoid unique constraint
       await supabase.from('delivery_checkins').delete().in('id', existing.map(c => c.id));
     }
 
@@ -225,6 +292,8 @@ export default function EntregadorPortal() {
     if (!driver || !todayShiftId) return;
     setActionLoading(true);
 
+    await cleanupStaleCheckins(driver.id);
+
     // Check for ANY existing records for this driver+shift
     const { data: existing } = await supabase
       .from('delivery_checkins')
@@ -233,8 +302,8 @@ export default function EntregadorPortal() {
       .eq('driver_id', driver.id);
 
     if (existing?.length) {
-      const active = existing.find(c => c.status === 'confirmado' || c.status === 'concluido');
-      if (active) {
+      const alreadyConfirmed = existing.find(c => c.status === 'confirmado');
+      if (alreadyConfirmed) {
         toast.info('Você já está confirmado neste turno');
         setActionLoading(false);
         fetchAll();
