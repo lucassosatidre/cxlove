@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { promoteFromWaitlist } from '@/pages/EntregadorPortal';
+import { getBrasiliaHour } from '@/lib/brasilia-time';
 import { format, startOfWeek, addDays, isBefore, isToday, addWeeks, subWeeks, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Save, Settings2, CalendarDays, Plus, Trash2, Clock, UserPlus, X } from 'lucide-react';
@@ -24,6 +26,7 @@ interface ShiftSlot {
   vagas: number;
   checkins: number;
   confirmedDrivers: { checkinId: string; driverId: string; nome: string; confirmedAt: string; origin: string }[];
+  waitlistDrivers: { checkinId: string; driverId: string; nome: string; enteredAt: string }[];
 }
 
 interface DayData {
@@ -90,6 +93,7 @@ export default function DriverShifts() {
 
     const shiftIds = (shifts || []).map(s => s.id);
     let checkins: any[] = [];
+    let waitlistCheckins: any[] = [];
     if (shiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_checkins')
@@ -97,10 +101,18 @@ export default function DriverShifts() {
         .in('shift_id', shiftIds)
         .eq('status', 'confirmado');
       checkins = data || [];
+
+      const { data: wl } = await supabase
+        .from('delivery_checkins')
+        .select('id, shift_id, driver_id, waitlist_entered_at')
+        .in('shift_id', shiftIds)
+        .eq('status', 'fila_espera')
+        .order('waitlist_entered_at', { ascending: true });
+      waitlistCheckins = wl || [];
     }
 
-    // Fetch driver names for confirmed checkins
-    const driverIds = [...new Set(checkins.map(c => c.driver_id))];
+    // Fetch driver names for confirmed checkins + waitlist
+    const driverIds = [...new Set([...checkins.map(c => c.driver_id), ...waitlistCheckins.map(c => c.driver_id)])];
     let driverMap: Record<string, string> = {};
     if (driverIds.length > 0) {
       const { data: drivers } = await supabase
@@ -127,6 +139,19 @@ export default function DriverShifts() {
       });
     });
 
+    // Group waitlist by shift
+    const waitlistByShift: Record<string, { checkinId: string; driverId: string; nome: string; enteredAt: string }[]> = {};
+    waitlistCheckins.forEach(c => {
+      if (!waitlistByShift[c.shift_id]) waitlistByShift[c.shift_id] = [];
+      const firstName = (driverMap[c.driver_id] || 'Desconhecido').split(' ')[0];
+      waitlistByShift[c.shift_id].push({
+        checkinId: c.id,
+        driverId: c.driver_id,
+        nome: firstName,
+        enteredAt: c.waitlist_entered_at ? format(new Date(c.waitlist_entered_at), 'HH:mm') : '-',
+      });
+    });
+
     const updated = days.map(day => {
       const dayShifts = (shifts || []).filter(s => s.data === day.dateStr);
       return {
@@ -138,6 +163,7 @@ export default function DriverShifts() {
           vagas: s.vagas,
           checkins: checkinsByShift[s.id]?.count || 0,
           confirmedDrivers: checkinsByShift[s.id]?.drivers || [],
+          waitlistDrivers: waitlistByShift[s.id] || [],
         })),
       };
     });
@@ -217,6 +243,14 @@ export default function DriverShifts() {
   const handleAdminRemoveDriver = async () => {
     if (!removeConfirm || !user) return;
     setRemovingDriver(true);
+
+    // Find the shift_id for this checkin to promote from waitlist
+    const { data: checkinData } = await supabase
+      .from('delivery_checkins')
+      .select('shift_id')
+      .eq('id', removeConfirm.checkinId)
+      .single();
+
     const { error } = await supabase
       .from('delivery_checkins')
       .update({
@@ -229,7 +263,18 @@ export default function DriverShifts() {
     if (error) {
       toast({ title: 'Erro ao remover', variant: 'destructive' });
     } else {
-      toast({ title: 'Entregador removido do turno' });
+      // Auto-promote from waitlist
+      if (checkinData?.shift_id) {
+        const isAfter18h = getBrasiliaHour() >= 18;
+        const promoted = await promoteFromWaitlist(checkinData.shift_id, isAfter18h);
+        if (promoted) {
+          toast({ title: 'Entregador removido — próximo da fila promovido' });
+        } else {
+          toast({ title: 'Entregador removido do turno' });
+        }
+      } else {
+        toast({ title: 'Entregador removido do turno' });
+      }
       fetchWeekData();
     }
     setRemovingDriver(false);
@@ -241,7 +286,7 @@ export default function DriverShifts() {
       const copy = [...prev];
       copy[dayIdx] = {
         ...copy[dayIdx],
-        shifts: [...copy[dayIdx].shifts, { horario_inicio: '19:00', horario_fim: '23:00', vagas: 6, checkins: 0, confirmedDrivers: [] }],
+        shifts: [...copy[dayIdx].shifts, { horario_inicio: '19:00', horario_fim: '23:00', vagas: 6, checkins: 0, confirmedDrivers: [], waitlistDrivers: [] }],
       };
       return copy;
     });
@@ -355,6 +400,7 @@ export default function DriverShifts() {
         vagas: quickConfig.turno1Vagas,
         checkins: 0,
         confirmedDrivers: [],
+        waitlistDrivers: [],
       });
       if (quickConfig.turnosQtd >= 2) {
         newShifts.push({
@@ -363,6 +409,7 @@ export default function DriverShifts() {
           vagas: quickConfig.turno2Vagas,
           checkins: 0,
           confirmedDrivers: [],
+          waitlistDrivers: [],
         });
       }
       return { ...day, shifts: newShifts };
@@ -510,6 +557,20 @@ export default function DriverShifts() {
                         <p className="text-[10px] text-muted-foreground italic">sem confirmações</p>
                       )}
 
+                      {/* Waitlist */}
+                      {shift.waitlistDrivers.length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-dashed border-border">
+                          <p className="text-[9px] text-muted-foreground font-medium mb-0.5">Fila de espera ({shift.waitlistDrivers.length})</p>
+                          {shift.waitlistDrivers.map((d, i) => (
+                            <div key={d.checkinId} className="flex items-center justify-between group">
+                              <span className="text-[9px] text-muted-foreground/70 leading-tight">
+                                {i + 1}. {d.nome}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Admin add driver button */}
                       {!past && shift.id && (
                         <Popover
@@ -603,6 +664,17 @@ export default function DriverShifts() {
                       </div>
                     ) : (
                       <p className="ml-6 text-sm text-muted-foreground">Nenhuma confirmação ainda</p>
+                    )}
+                    {shift.waitlistDrivers.length > 0 && (
+                      <div className="ml-6 mt-1 pt-1 border-t border-dashed">
+                        <p className="text-xs text-muted-foreground font-medium">Fila de espera ({shift.waitlistDrivers.length})</p>
+                        {shift.waitlistDrivers.map((d, k) => (
+                          <div key={k} className="flex items-center gap-2 text-sm">
+                            <span className="text-muted-foreground">{k + 1}. {d.nome}</span>
+                            <span className="text-muted-foreground/60 text-xs">às {d.enteredAt}</span>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 ))}

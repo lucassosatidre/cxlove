@@ -220,6 +220,8 @@ export type Database = {
           origin: string
           shift_id: string
           status: string
+          substituto_pos_18h: boolean
+          waitlist_entered_at: string | null
         }
         Insert: {
           admin_inserted_by?: string | null
@@ -237,6 +239,8 @@ export type Database = {
           origin?: string
           shift_id: string
           status?: string
+          substituto_pos_18h?: boolean
+          waitlist_entered_at?: string | null
         }
         Update: {
           admin_inserted_by?: string | null
@@ -254,6 +258,8 @@ export type Database = {
           origin?: string
           shift_id?: string
           status?: string
+          substituto_pos_18h?: boolean
+          waitlist_entered_at?: string | null
         }
         Relationships: [
           {
@@ -573,6 +579,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       order_payment_breakdowns: {
         Row: {
