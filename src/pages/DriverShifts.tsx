@@ -161,6 +161,7 @@ export default function DriverShifts() {
           vagas: s.vagas,
           checkins: checkinsByShift[s.id]?.count || 0,
           confirmedDrivers: checkinsByShift[s.id]?.drivers || [],
+          waitlistDrivers: waitlistByShift[s.id] || [],
         })),
       };
     });
