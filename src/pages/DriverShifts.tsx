@@ -557,6 +557,21 @@ export default function DriverShifts() {
                         <p className="text-[10px] text-muted-foreground italic">sem confirmações</p>
                       )}
 
+                      {/* Waitlist */}
+                      {shift.waitlistDrivers.length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-dashed border-border">
+                          <p className="text-[9px] text-muted-foreground font-medium mb-0.5">Fila de espera ({shift.waitlistDrivers.length})</p>
+                          {shift.waitlistDrivers.map((d, i) => (
+                            <div key={d.checkinId} className="flex items-center justify-between group">
+                              <span className="text-[9px] text-muted-foreground/70 leading-tight">
+                                {i + 1}. {d.nome}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      )}
+
                       {/* Admin add driver button */}
                       {!past && shift.id && (
                         <Popover
