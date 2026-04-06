@@ -91,6 +91,7 @@ export default function DriverShifts() {
 
     const shiftIds = (shifts || []).map(s => s.id);
     let checkins: any[] = [];
+    let waitlistCheckins: any[] = [];
     if (shiftIds.length > 0) {
       const { data } = await supabase
         .from('delivery_checkins')
@@ -98,10 +99,18 @@ export default function DriverShifts() {
         .in('shift_id', shiftIds)
         .eq('status', 'confirmado');
       checkins = data || [];
+
+      const { data: wl } = await supabase
+        .from('delivery_checkins')
+        .select('id, shift_id, driver_id, waitlist_entered_at')
+        .in('shift_id', shiftIds)
+        .eq('status', 'fila_espera')
+        .order('waitlist_entered_at', { ascending: true });
+      waitlistCheckins = wl || [];
     }
 
-    // Fetch driver names for confirmed checkins
-    const driverIds = [...new Set(checkins.map(c => c.driver_id))];
+    // Fetch driver names for confirmed checkins + waitlist
+    const driverIds = [...new Set([...checkins.map(c => c.driver_id), ...waitlistCheckins.map(c => c.driver_id)])];
     let driverMap: Record<string, string> = {};
     if (driverIds.length > 0) {
       const { data: drivers } = await supabase
@@ -125,6 +134,19 @@ export default function DriverShifts() {
         nome: firstName,
         confirmedAt: c.confirmed_at ? format(new Date(c.confirmed_at), 'HH:mm') : '-',
         origin: (c as any).origin || 'entregador',
+      });
+    });
+
+    // Group waitlist by shift
+    const waitlistByShift: Record<string, { checkinId: string; driverId: string; nome: string; enteredAt: string }[]> = {};
+    waitlistCheckins.forEach(c => {
+      if (!waitlistByShift[c.shift_id]) waitlistByShift[c.shift_id] = [];
+      const firstName = (driverMap[c.driver_id] || 'Desconhecido').split(' ')[0];
+      waitlistByShift[c.shift_id].push({
+        checkinId: c.id,
+        driverId: c.driver_id,
+        nome: firstName,
+        enteredAt: c.waitlist_entered_at ? format(new Date(c.waitlist_entered_at), 'HH:mm') : '-',
       });
     });
 
