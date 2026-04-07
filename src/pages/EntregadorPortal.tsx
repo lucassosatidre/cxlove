@@ -382,7 +382,15 @@ export default function EntregadorPortal() {
 
     // If was confirmed (not waitlist), try to promote from waitlist
     if (wasConfirmed) {
-      await promoteFromWaitlist(todayShiftId, false);
+      const isAfter18h = getBrasiliaHour() >= 18;
+      try {
+        const promoted = await promoteFromWaitlist(todayShiftId, isAfter18h);
+        if (promoted.length > 0) {
+          toast.info(`${promoted[0].nome} foi promovido(a) da fila de espera`);
+        }
+      } catch (promoError) {
+        console.error('Erro ao promover da fila:', promoError);
+      }
     }
 
     toast.success(wasConfirmed ? 'Check-in cancelado' : 'Saiu da fila de espera');
