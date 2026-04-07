@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
@@ -7,7 +7,6 @@ import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,11 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Plus, Search, Pencil, UserCheck, UserX, Users, UserPlus, UserMinus, Copy } from 'lucide-react';
+import { Plus, Search, Pencil, UserCheck, UserX, Copy } from 'lucide-react';
 import DriverSummaryCards from '@/components/delivery/DriverSummaryCards';
 import DriverTodaySection from '@/components/delivery/DriverTodaySection';
 import DriverHistorySection from '@/components/delivery/DriverHistorySection';
 import DriverRankingSection from '@/components/delivery/DriverRankingSection';
+import DriverShiftsContent from '@/components/delivery/DriverShiftsContent';
 
 interface Driver {
   id: string;
@@ -35,7 +35,6 @@ interface Driver {
   created_at: string;
 }
 
-// Mask helpers
 function maskPhone(v: string) {
   const d = v.replace(/\D/g, '').slice(0, 11);
   if (d.length <= 2) return d;
@@ -62,13 +61,18 @@ export default function DriverManagement() {
   const { isAdmin, loading: roleLoading } = useUserRole();
   const { session } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const activeTab = searchParams.get('tab') || 'dashboard';
+  const setActiveTab = (tab: string) => {
+    setSearchParams({ tab }, { replace: true });
+  };
 
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('todos');
 
-  // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({
     nome: '', telefone: '', email: '', cnpj: '', password: '', notas: '',
@@ -76,14 +80,13 @@ export default function DriverManagement() {
   const [creating, setCreating] = useState(false);
   const [createdPassword, setCreatedPassword] = useState<string | null>(null);
 
-  // Edit modal
   const [editDriver, setEditDriver] = useState<Driver | null>(null);
   const [editForm, setEditForm] = useState({
     nome: '', telefone: '', cnpj: '', notas: '', status: 'ativo',
   });
   const [saving, setSaving] = useState(false);
-
-  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null); // kept for openEdit reset
+  const [editPassword, setEditPassword] = useState('');
+  const [resetPasswordResult, setResetPasswordResult] = useState<string | null>(null);
 
   const fetchDrivers = useCallback(async () => {
     const { data, error } = await supabase.from('delivery_drivers').select('*').order('nome');
@@ -103,7 +106,6 @@ export default function DriverManagement() {
     return data;
   };
 
-  // CREATE
   const handleCreate = async () => {
     if (!createForm.nome || !createForm.telefone || !createForm.email) {
       toast.error('Nome, telefone e email são obrigatórios');
@@ -127,13 +129,11 @@ export default function DriverManagement() {
     setCreatedPassword(null);
   };
 
-  // UPDATE
   const handleUpdate = async () => {
     if (!editDriver) return;
     setSaving(true);
     try {
       await invokeFunction({ action: 'update', driver_id: editDriver.id, ...editForm });
-      // If password field has a value, also reset password
       if (editPassword.trim()) {
         await invokeFunction({ action: 'reset_password', driver_id: editDriver.id, new_password: editPassword.trim() });
         toast.success('Entregador e senha atualizados!');
@@ -150,7 +150,6 @@ export default function DriverManagement() {
     }
   };
 
-  // TOGGLE STATUS
   const handleToggleStatus = async (driver: Driver) => {
     const newStatus = driver.status === 'ativo' ? 'inativo' : 'ativo';
     try {
@@ -162,10 +161,6 @@ export default function DriverManagement() {
     }
   };
 
-  const [editPassword, setEditPassword] = useState('');
-
-
-
   const openEdit = (d: Driver) => {
     setEditDriver(d);
     setEditForm({
@@ -176,7 +171,6 @@ export default function DriverManagement() {
     setEditPassword('');
   };
 
-  // Filters
   const filtered = drivers.filter(d => {
     if (statusFilter !== 'todos' && d.status !== statusFilter) return false;
     if (search) {
@@ -185,9 +179,6 @@ export default function DriverManagement() {
     }
     return true;
   });
-
-  const totalAtivos = drivers.filter(d => d.status === 'ativo').length;
-  const totalInativos = drivers.filter(d => d.status !== 'ativo').length;
 
   if (roleLoading || loading) {
     return (
@@ -204,41 +195,41 @@ export default function DriverManagement() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">Entregadores</h1>
-          <Button onClick={() => { resetCreateForm(); setShowCreate(true); }}>
-            <Plus className="h-4 w-4 mr-1" /> Novo Entregador
-          </Button>
+          {activeTab === 'cadastro' && (
+            <Button onClick={() => { resetCreateForm(); setShowCreate(true); }}>
+              <Plus className="h-4 w-4 mr-1" /> Novo Entregador
+            </Button>
+          )}
         </div>
 
-        <Tabs defaultValue="dashboard" className="space-y-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
           <TabsList>
             <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="escala">Escala</TabsTrigger>
             <TabsTrigger value="cadastro">Cadastro</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
             <DriverSummaryCards />
-
             <div>
               <h2 className="text-lg font-semibold text-foreground mb-3">Hoje</h2>
               <DriverTodaySection />
             </div>
-
             <div>
               <h2 className="text-lg font-semibold text-foreground mb-3">Histórico de Presenças</h2>
               <DriverHistorySection />
             </div>
-
             <div>
               <h2 className="text-lg font-semibold text-foreground mb-3">Ranking de Entregadores</h2>
               <DriverRankingSection />
             </div>
           </TabsContent>
 
+          <TabsContent value="escala">
+            <DriverShiftsContent />
+          </TabsContent>
+
           <TabsContent value="cadastro" className="space-y-4">
-
-
-
-
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -255,7 +246,6 @@ export default function DriverManagement() {
               </Select>
             </div>
 
-            {/* Table */}
             <div className="border rounded-lg overflow-auto">
               <Table>
                 <TableHeader>
@@ -363,12 +353,10 @@ export default function DriverManagement() {
                 </Select>
               </div>
               <div><Label>Observações</Label><Textarea value={editForm.notas} onChange={e => setEditForm(f => ({ ...f, notas: e.target.value }))} rows={2} /></div>
-
               <div className="border-t pt-3">
                 <Label>Nova senha (deixe vazio para manter a atual)</Label>
                 <Input type="text" value={editPassword} onChange={e => setEditPassword(e.target.value)} placeholder="Deixe vazio para manter a senha atual" className="mt-1" />
               </div>
-
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setEditDriver(null); setResetPasswordResult(null); }}>Cancelar</Button>
                 <Button onClick={handleUpdate} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
