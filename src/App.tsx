@@ -21,7 +21,7 @@ import SalonReconciliation from "./pages/SalonReconciliation";
 import NotFound from "./pages/NotFound";
 import EntregadorPortal from "./pages/EntregadorPortal";
 import DriverManagement from "./pages/DriverManagement";
-import DriverShifts from "./pages/DriverShifts";
+// DriverShifts merged into DriverManagement
 import Etiquetas from "./pages/Etiquetas";
 import CheckinAudit from "./pages/CheckinAudit";
 
