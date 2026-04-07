@@ -203,6 +203,50 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_checkin_logs: {
+        Row: {
+          action: string
+          checkin_id: string
+          created_at: string
+          device_info: string | null
+          device_ip: string | null
+          device_user_agent: string | null
+          driver_id: string
+          id: string
+          performed_by: string
+        }
+        Insert: {
+          action: string
+          checkin_id: string
+          created_at?: string
+          device_info?: string | null
+          device_ip?: string | null
+          device_user_agent?: string | null
+          driver_id: string
+          id?: string
+          performed_by: string
+        }
+        Update: {
+          action?: string
+          checkin_id?: string
+          created_at?: string
+          device_info?: string | null
+          device_ip?: string | null
+          device_user_agent?: string | null
+          driver_id?: string
+          id?: string
+          performed_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_checkin_logs_checkin_id_fkey"
+            columns: ["checkin_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_checkins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_checkins: {
         Row: {
           admin_inserted_by: string | null
@@ -288,6 +332,7 @@ export type Database = {
           max_periodos_dia: number
           nome: string
           notas: string | null
+          password_changed: boolean
           pix: string | null
           status: string
           telefone: string
@@ -302,6 +347,7 @@ export type Database = {
           max_periodos_dia?: number
           nome: string
           notas?: string | null
+          password_changed?: boolean
           pix?: string | null
           status?: string
           telefone: string
@@ -316,6 +362,7 @@ export type Database = {
           max_periodos_dia?: number
           nome?: string
           notas?: string | null
+          password_changed?: boolean
           pix?: string | null
           status?: string
           telefone?: string
