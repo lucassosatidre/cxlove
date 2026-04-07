@@ -1109,6 +1109,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      attempt_checkin: {
+        Args: {
+          p_device_info?: string
+          p_device_ip?: string
+          p_device_user_agent?: string
+          p_driver_id: string
+          p_shift_id: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
