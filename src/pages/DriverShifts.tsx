@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { promoteFromWaitlist } from '@/pages/EntregadorPortal';
 import { getBrasiliaHour } from '@/lib/brasilia-time';
+import { logCheckinAction } from '@/lib/checkin-logger';
 import { format, startOfWeek, addDays, isBefore, isToday, addWeeks, subWeeks, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Save, Settings2, CalendarDays, Plus, Trash2, Clock, UserPlus, X } from 'lucide-react';
