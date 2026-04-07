@@ -272,6 +272,20 @@ export default function DriverShifts() {
     if (error) {
       toast({ title: 'Erro ao remover', variant: 'destructive' });
     } else {
+      // Log admin removal - we need driver_id from the checkin
+      const { data: checkinFull } = await supabase
+        .from('delivery_checkins')
+        .select('driver_id')
+        .eq('id', removeConfirm.checkinId)
+        .single();
+      if (checkinFull?.driver_id) {
+        await logCheckinAction({
+          checkinId: removeConfirm.checkinId,
+          driverId: checkinFull.driver_id,
+          action: 'admin_removido',
+          performedBy: user.id,
+        });
+      }
       // Auto-promote from waitlist
       if (checkinData?.shift_id) {
         const isAfter18h = getBrasiliaHour() >= 18;
