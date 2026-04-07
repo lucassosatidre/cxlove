@@ -108,7 +108,7 @@ export default function DriverAttendanceSection({ closingDate, isCompleted, isAd
   const [updating, setUpdating] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  const readOnly = isCompleted && !isAdmin;
+  const readOnly = !isAdmin;
 
   const handleMark = async (checkinId: string, newStatus: 'concluido' | 'no_show', driverName: string) => {
     // Optimistic update
