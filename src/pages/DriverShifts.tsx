@@ -205,23 +205,31 @@ export default function DriverShifts() {
       await supabase.from('delivery_checkins').delete().in('id', oldIds);
     }
 
-    const { error } = await supabase.from('delivery_checkins').insert({
+    const { data: inserted, error } = await supabase.from('delivery_checkins').insert({
       shift_id: addDriverPopover.shiftId,
       driver_id: selectedDriverToAdd,
       status: 'confirmado',
       origin: 'admin',
       admin_inserted_by: user.id,
-    } as any);
+    } as any).select('id').single();
     if (error) {
       toast({ title: 'Erro ao adicionar', description: error.message, variant: 'destructive' });
     } else {
+      // Log admin add
+      if (inserted?.id) {
+        await logCheckinAction({
+          checkinId: inserted.id,
+          driverId: selectedDriverToAdd,
+          action: 'admin_adicionado',
+          performedBy: user.id,
+        });
+      }
       // Auto-increase vagas if confirmados exceed current capacity
       const { count } = await supabase
         .from('delivery_checkins')
         .select('id', { count: 'exact', head: true })
         .eq('shift_id', addDriverPopover.shiftId)
         .in('status', ['confirmado', 'concluido']);
-      // Find the shift's current vagas from DB
       const { data: shiftRow } = await supabase
         .from('delivery_shifts')
         .select('vagas')
