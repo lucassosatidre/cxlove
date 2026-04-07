@@ -141,7 +141,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     if (saveTimers[id]) clearTimeout(saveTimers[id]);
     saveTimers[id] = setTimeout(async () => {
       const updateData: Record<string, unknown> = { [field]: value, updated_at: new Date().toISOString() };
-      const { error } = await supabase.from('machine_readings').update(updateData).eq('id', id);
+      const { error } = await supabase.from('machine_readings').update(updateData as any).eq('id', id);
       if (error) toast.error('Erro ao salvar');
     }, 600);
   }, []);
