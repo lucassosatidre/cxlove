@@ -9,12 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { getBrasiliaHour, getBrasiliaToday, getBrasiliaDateFormatted } from '@/lib/brasilia-time';
+import { logCheckinAction } from '@/lib/checkin-logger';
 import NotificationBell from '@/components/NotificationBell';
 
 interface DriverProfile {
   id: string;
   nome: string;
   status: string;
+  password_changed: boolean;
 }
 
 type CheckinState = 'none' | 'confirmed' | 'waitlist';
@@ -53,6 +55,12 @@ export default function EntregadorPortal() {
   const [newPassword, setNewPassword] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
+
+  // Force password change dialog
+  const [forcePasswordDialog, setForcePasswordDialog] = useState(false);
+  const [forceNewPassword, setForceNewPassword] = useState('');
+  const [forcePasswordError, setForcePasswordError] = useState('');
+  const [forcePasswordSaving, setForcePasswordSaving] = useState(false);
 
   // Promoted notification
   const [promotedNotification, setPromotedNotification] = useState<string | null>(null);
@@ -139,7 +147,7 @@ export default function EntregadorPortal() {
     // Fetch driver profile
     const { data: driverData } = await supabase
       .from('delivery_drivers')
-      .select('id, nome, status')
+      .select('id, nome, status, password_changed')
       .eq('auth_user_id', user.id)
       .maybeSingle();
 
@@ -149,7 +157,15 @@ export default function EntregadorPortal() {
       setRefreshing(false);
       return;
     }
-    setDriver(driverData);
+    setDriver(driverData as any);
+
+    // Check if password change is required
+    if (!(driverData as any).password_changed) {
+      setForcePasswordDialog(true);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
 
     await cleanupStaleCheckins(driverData.id);
 
@@ -218,7 +234,6 @@ export default function EntregadorPortal() {
       .limit(1);
     if (promoNotifs?.[0]) {
       setPromotedNotification(promoNotifs[0].message);
-      // Mark as read
       await supabase.from('notifications').update({ read: true } as any).eq('id', promoNotifs[0].id);
     } else {
       setPromotedNotification(null);
@@ -287,6 +302,8 @@ export default function EntregadorPortal() {
       admin_removed_by: null,
     };
 
+    let resultCheckinId: string | null = null;
+
     if (reusableCheckin) {
       const { error } = await supabase
         .from('delivery_checkins')
@@ -297,31 +314,44 @@ export default function EntregadorPortal() {
         console.error('Erro ao reativar check-in do dia operacional', error);
         return { type: 'error' as const };
       }
+      resultCheckinId = reusableCheckin.id;
+    } else {
+      const { data: inserted, error } = await supabase.from('delivery_checkins').insert({
+        shift_id: todayShiftId,
+        driver_id: driver.id,
+        ...payload,
+      } as any).select('id').single();
 
-      return { type: 'success' as const };
+      if (error) {
+        if (error.code === '23505') {
+          const freshCheckins = await getCurrentOperationalCheckins(driver.id, todayShiftId);
+          const freshActiveCheckin = freshCheckins?.find((checkin) => isActiveCheckinStatus(checkin.status));
+
+          if (freshActiveCheckin) {
+            const normalizedStatus = normalizeCheckinStatus(freshActiveCheckin.status);
+            return {
+              type: normalizedStatus === 'fila_espera' ? 'already_waitlist' as const : 'already_confirmed' as const,
+            };
+          }
+        }
+
+        console.error('Erro ao salvar check-in do entregador', error);
+        return { type: 'error' as const };
+      }
+      resultCheckinId = inserted?.id || null;
     }
 
-    const { error } = await supabase.from('delivery_checkins').insert({
-      shift_id: todayShiftId,
-      driver_id: driver.id,
-      ...payload,
-    } as any);
-
-    if (error) {
-      if (error.code === '23505') {
-        const freshCheckins = await getCurrentOperationalCheckins(driver.id, todayShiftId);
-        const freshActiveCheckin = freshCheckins?.find((checkin) => isActiveCheckinStatus(checkin.status));
-
-        if (freshActiveCheckin) {
-          const normalizedStatus = normalizeCheckinStatus(freshActiveCheckin.status);
-          return {
-            type: normalizedStatus === 'fila_espera' ? 'already_waitlist' as const : 'already_confirmed' as const,
-          };
-        }
-      }
-
-      console.error('Erro ao salvar check-in do entregador', error);
-      return { type: 'error' as const };
+    // Log action
+    if (resultCheckinId && user) {
+      await logCheckinAction({
+        checkinId: resultCheckinId,
+        driverId: driver.id,
+        action: targetStatus === 'confirmado' ? 'checkin' : 'fila_entrada',
+        performedBy: user.id,
+        deviceIp,
+        deviceUserAgent,
+        deviceInfo,
+      });
     }
 
     return { type: 'success' as const };
@@ -372,10 +402,11 @@ export default function EntregadorPortal() {
   };
 
   const handleCancelCheckin = async () => {
-    if (!checkinId || !todayShiftId) return;
+    if (!checkinId || !todayShiftId || !driver || !user) return;
     setActionLoading(true);
 
     const wasConfirmed = checkinState === 'confirmed';
+    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
 
     const { error } = await supabase
       .from('delivery_checkins')
@@ -392,6 +423,17 @@ export default function EntregadorPortal() {
       return;
     }
 
+    // Log cancellation
+    await logCheckinAction({
+      checkinId,
+      driverId: driver.id,
+      action: 'cancelamento',
+      performedBy: user.id,
+      deviceIp,
+      deviceUserAgent,
+      deviceInfo,
+    });
+
     // If was confirmed (not waitlist), try to promote from waitlist
     if (wasConfirmed) {
       await promoteFromWaitlist(todayShiftId, false);
@@ -405,12 +447,26 @@ export default function EntregadorPortal() {
   };
 
   const handleLeaveWaitlist = async () => {
-    if (!checkinId) return;
+    if (!checkinId || !driver || !user) return;
     setActionLoading(true);
+    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+
     await supabase
       .from('delivery_checkins')
       .update({ status: 'cancelado', cancelled_at: new Date().toISOString() } as any)
       .eq('id', checkinId);
+
+    // Log leaving waitlist
+    await logCheckinAction({
+      checkinId,
+      driverId: driver.id,
+      action: 'fila_saida',
+      performedBy: user.id,
+      deviceIp,
+      deviceUserAgent,
+      deviceInfo,
+    });
+
     toast.success('Saiu da fila de espera');
     fetchAll();
     setActionLoading(false);
@@ -433,6 +489,32 @@ export default function EntregadorPortal() {
       setNewPassword('');
     }
     setPasswordSaving(false);
+  };
+
+  const handleForceChangePassword = async () => {
+    if (!/^\d{4}$/.test(forceNewPassword)) {
+      setForcePasswordError('A senha deve ter exatamente 4 dígitos numéricos');
+      return;
+    }
+    setForcePasswordSaving(true);
+    setForcePasswordError('');
+    const { padPin } = await import('@/lib/pin-utils');
+    const { error: authError } = await supabase.auth.updateUser({ password: padPin(forceNewPassword) });
+    if (authError) {
+      setForcePasswordError(authError.message);
+      setForcePasswordSaving(false);
+      return;
+    }
+    // Mark password as changed
+    if (driver) {
+      await supabase.from('delivery_drivers').update({ password_changed: true } as any).eq('id', driver.id);
+    }
+    toast.success('Senha alterada com sucesso!');
+    setForcePasswordDialog(false);
+    setForceNewPassword('');
+    setForcePasswordSaving(false);
+    // Reload to continue to portal
+    fetchAll();
   };
 
   // Blocked states
@@ -621,7 +703,7 @@ export default function EntregadorPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* Password dialog */}
+      {/* Password dialog (voluntary) */}
       <Dialog open={passwordDialog} onOpenChange={(open) => { setPasswordDialog(open); if (!open) { setNewPassword(''); setPasswordError(''); } }}>
         <DialogContent className="sm:max-w-[360px] rounded-xl">
           <DialogHeader>
@@ -656,21 +738,61 @@ export default function EntregadorPortal() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Force password change dialog (mandatory first login) */}
+      <Dialog open={forcePasswordDialog} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-[400px] rounded-xl [&>button]:hidden" onPointerDownOutside={e => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-base text-center">Troca de senha obrigatória</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground text-center">
+              Para sua segurança, você precisa criar uma nova senha antes de continuar.
+            </p>
+            <Input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              pattern="[0-9]*"
+              placeholder="Nova senha (4 dígitos)"
+              value={forceNewPassword}
+              onChange={e => {
+                const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setForceNewPassword(v);
+                setForcePasswordError('');
+              }}
+              className="text-center text-2xl tracking-[0.5em] font-mono h-14 bg-background"
+            />
+            <p className="text-xs text-muted-foreground text-center">Use 4 dígitos numéricos</p>
+            {forcePasswordError && <p className="text-sm text-destructive text-center">{forcePasswordError}</p>}
+          </div>
+          <DialogFooter>
+            <button
+              className="w-full h-12 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm uppercase tracking-wide transition-colors disabled:opacity-60"
+              disabled={forcePasswordSaving}
+              onClick={handleForceChangePassword}
+            >
+              {forcePasswordSaving ? 'Salvando...' : 'Definir nova senha'}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 /**
- * Promote the next driver from the waitlist for a given shift.
- * Called when a confirmed driver cancels or is removed by admin.
+ * Promote the next driver(s) from the waitlist for a given shift.
+ * Strictly orders by waitlist_entered_at ASC.
  */
 export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean, maxPromotions: number = 1): Promise<{ id: string; driver_id: string; nome: string }[]> {
-  // Find waitlist ordered by entry time
+  // Find waitlist ordered STRICTLY by entry time
   const { data: waitlist } = await supabase
     .from('delivery_checkins')
-    .select('id, driver_id')
+    .select('id, driver_id, waitlist_entered_at')
     .eq('shift_id', shiftId)
     .eq('status', 'fila_espera')
+    .not('waitlist_entered_at', 'is', null)
     .order('waitlist_entered_at', { ascending: true })
     .limit(maxPromotions);
 
@@ -679,9 +801,10 @@ export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean, 
   const promoted: { id: string; driver_id: string; nome: string }[] = [];
 
   for (const next of waitlist) {
+    const nowIso = new Date().toISOString();
     const updatePayload: any = {
       status: 'confirmado',
-      confirmed_at: new Date().toISOString(),
+      confirmed_at: nowIso,
     };
     if (isAfter18h) {
       updatePayload.substituto_pos_18h = true;
@@ -698,6 +821,16 @@ export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean, 
     const driverName = driverData?.nome || 'Entregador';
     const driverAuthId = driverData?.auth_user_id;
     promoted.push({ id: next.id, driver_id: next.driver_id, nome: driverName });
+
+    // Log the promotion
+    if (driverAuthId) {
+      await logCheckinAction({
+        checkinId: next.id,
+        driverId: next.driver_id,
+        action: 'fila_promovido',
+        performedBy: 'system' as any, // system-triggered
+      });
+    }
 
     // Notify promoted driver
     if (driverAuthId) {
@@ -720,9 +853,10 @@ export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean, 
       .eq('role', 'admin');
 
     if (adminRoles?.length) {
+      const waitlistPos = (waitlist.indexOf(next) + 1);
       const adminMessage = isAfter18h
-        ? `O entregador ${driverName} foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
-        : `O entregador ${driverName} foi promovido automaticamente da fila de espera`;
+        ? `O entregador ${driverName} (posição ${waitlistPos} da fila) foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
+        : `O entregador ${driverName} (posição ${waitlistPos} da fila) foi promovido automaticamente da fila de espera`;
 
       for (const admin of adminRoles) {
         await supabase.from('notifications').insert({

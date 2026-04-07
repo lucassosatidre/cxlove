@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { promoteFromWaitlist } from '@/pages/EntregadorPortal';
 import { getBrasiliaHour } from '@/lib/brasilia-time';
+import { logCheckinAction } from '@/lib/checkin-logger';
 import { format, startOfWeek, addDays, isBefore, isToday, addWeeks, subWeeks, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Save, Settings2, CalendarDays, Plus, Trash2, Clock, UserPlus, X } from 'lucide-react';
@@ -204,23 +205,31 @@ export default function DriverShifts() {
       await supabase.from('delivery_checkins').delete().in('id', oldIds);
     }
 
-    const { error } = await supabase.from('delivery_checkins').insert({
+    const { data: inserted, error } = await supabase.from('delivery_checkins').insert({
       shift_id: addDriverPopover.shiftId,
       driver_id: selectedDriverToAdd,
       status: 'confirmado',
       origin: 'admin',
       admin_inserted_by: user.id,
-    } as any);
+    } as any).select('id').single();
     if (error) {
       toast({ title: 'Erro ao adicionar', description: error.message, variant: 'destructive' });
     } else {
+      // Log admin add
+      if (inserted?.id) {
+        await logCheckinAction({
+          checkinId: inserted.id,
+          driverId: selectedDriverToAdd,
+          action: 'admin_adicionado',
+          performedBy: user.id,
+        });
+      }
       // Auto-increase vagas if confirmados exceed current capacity
       const { count } = await supabase
         .from('delivery_checkins')
         .select('id', { count: 'exact', head: true })
         .eq('shift_id', addDriverPopover.shiftId)
         .in('status', ['confirmado', 'concluido']);
-      // Find the shift's current vagas from DB
       const { data: shiftRow } = await supabase
         .from('delivery_shifts')
         .select('vagas')
@@ -263,6 +272,20 @@ export default function DriverShifts() {
     if (error) {
       toast({ title: 'Erro ao remover', variant: 'destructive' });
     } else {
+      // Log admin removal - we need driver_id from the checkin
+      const { data: checkinFull } = await supabase
+        .from('delivery_checkins')
+        .select('driver_id')
+        .eq('id', removeConfirm.checkinId)
+        .single();
+      if (checkinFull?.driver_id) {
+        await logCheckinAction({
+          checkinId: removeConfirm.checkinId,
+          driverId: checkinFull.driver_id,
+          action: 'admin_removido',
+          performedBy: user.id,
+        });
+      }
       // Auto-promote from waitlist
       if (checkinData?.shift_id) {
         const isAfter18h = getBrasiliaHour() >= 18;
