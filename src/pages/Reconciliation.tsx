@@ -387,7 +387,7 @@ export default function Reconciliation() {
 
     const { error } = await supabase
       .from('imported_orders')
-      .update({ [field]: value })
+      .update({ [field]: value } as any)
       .eq('id', orderId);
 
     if (error) {

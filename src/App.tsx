@@ -23,6 +23,7 @@ import EntregadorPortal from "./pages/EntregadorPortal";
 import DriverManagement from "./pages/DriverManagement";
 import DriverShifts from "./pages/DriverShifts";
 import Etiquetas from "./pages/Etiquetas";
+import CheckinAudit from "./pages/CheckinAudit";
 
 const queryClient = new QueryClient();
 
@@ -100,6 +101,7 @@ const App = () => (
             <Route path="/admin/escalas-entregadores" element={<ProtectedRoute><DriverShifts /></ProtectedRoute>} />
             <Route path="/etiquetas" element={<ProtectedRoute><SectorGuard sector="tele"><Etiquetas /></SectorGuard></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+            <Route path="/admin/audit" element={<ProtectedRoute><CheckinAudit /></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
             <Route path="/tele-teste/import" element={<Navigate to="/tele/import" replace />} />

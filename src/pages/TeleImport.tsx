@@ -90,7 +90,7 @@ export default function TeleImport() {
         if (!existing.partner_order_number && excelOrder.partner_order_number) updates.partner_order_number = excelOrder.partner_order_number;
 
         if (Object.keys(updates).length > 0) {
-          await supabase.from('imported_orders').update(updates).eq('id', existing.id);
+          await supabase.from('imported_orders').update(updates as any).eq('id', existing.id);
         }
       }
 
