@@ -265,139 +265,85 @@ export default function EntregadorPortal() {
     };
   };
 
-  const submitCheckin = async (targetStatus: 'confirmado' | 'fila_espera') => {
-    if (!driver || !todayShiftId) {
-      return { type: 'error' as const };
-    }
+  const handleCheckin = async () => {
+    if (!driver || !todayShiftId || !user) return;
+    setActionLoading(true);
 
     await cleanupStaleCheckins(driver.id);
 
-    const existing = await getCurrentOperationalCheckins(driver.id, todayShiftId);
-    if (!existing) {
-      return { type: 'error' as const };
-    }
-
-    const activeCheckin = existing.find((checkin) => isActiveCheckinStatus(checkin.status));
-    if (activeCheckin) {
-      const normalizedStatus = normalizeCheckinStatus(activeCheckin.status);
-      return {
-        type: normalizedStatus === 'fila_espera' ? 'already_waitlist' as const : 'already_confirmed' as const,
-      };
-    }
-
-    const reusableCheckin = existing.find((checkin) => !isActiveCheckinStatus(checkin.status));
     const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
-    const nowIso = new Date().toISOString();
-    const payload = {
-      status: targetStatus,
-      device_ip: deviceIp,
-      device_user_agent: deviceUserAgent,
-      device_info: deviceInfo,
-      origin: 'entregador',
-      confirmed_at: targetStatus === 'confirmado' ? nowIso : null,
-      waitlist_entered_at: targetStatus === 'fila_espera' ? nowIso : null,
-      cancelled_at: null,
-      cancel_reason: null,
-      admin_removed_at: null,
-      admin_removed_by: null,
-    };
 
-    let resultCheckinId: string | null = null;
+    const { data, error } = await supabase.rpc('attempt_checkin', {
+      p_shift_id: todayShiftId,
+      p_driver_id: driver.id,
+      p_device_ip: deviceIp,
+      p_device_user_agent: deviceUserAgent,
+      p_device_info: deviceInfo,
+    });
 
-    if (reusableCheckin) {
-      const { error } = await supabase
-        .from('delivery_checkins')
-        .update(payload as any)
-        .eq('id', reusableCheckin.id);
-
-      if (error) {
-        console.error('Erro ao reativar check-in do dia operacional', error);
-        return { type: 'error' as const };
-      }
-      resultCheckinId = reusableCheckin.id;
-    } else {
-      const { data: inserted, error } = await supabase.from('delivery_checkins').insert({
-        shift_id: todayShiftId,
-        driver_id: driver.id,
-        ...payload,
-      } as any).select('id').single();
-
-      if (error) {
-        if (error.code === '23505') {
-          const freshCheckins = await getCurrentOperationalCheckins(driver.id, todayShiftId);
-          const freshActiveCheckin = freshCheckins?.find((checkin) => isActiveCheckinStatus(checkin.status));
-
-          if (freshActiveCheckin) {
-            const normalizedStatus = normalizeCheckinStatus(freshActiveCheckin.status);
-            return {
-              type: normalizedStatus === 'fila_espera' ? 'already_waitlist' as const : 'already_confirmed' as const,
-            };
-          }
-        }
-
-        console.error('Erro ao salvar check-in do entregador', error);
-        return { type: 'error' as const };
-      }
-      resultCheckinId = inserted?.id || null;
-    }
-
-    // Log action
-    if (resultCheckinId && user) {
-      await logCheckinAction({
-        checkinId: resultCheckinId,
-        driverId: driver.id,
-        action: targetStatus === 'confirmado' ? 'checkin' : 'fila_entrada',
-        performedBy: user.id,
-        deviceIp,
-        deviceUserAgent,
-        deviceInfo,
-      });
-    }
-
-    return { type: 'success' as const };
-  };
-
-  const handleCheckin = async () => {
-    if (!driver || !todayShiftId) return;
-    setActionLoading(true);
-
-    const result = await submitCheckin('confirmado');
-
-    if (result.type === 'already_confirmed') {
-      toast.info('Você já confirmou este turno');
-      fetchAll();
-    } else if (result.type === 'already_waitlist') {
-      toast.info('Você já está na fila de espera');
-      fetchAll();
-    } else if (result.type === 'success') {
-      toast.success('Check-in confirmado!');
-      fetchAll();
-    } else {
+    if (error) {
+      console.error('Erro no attempt_checkin RPC:', error);
       toast.error('Erro ao fazer check-in');
+      setActionLoading(false);
+      return;
     }
 
+    const result = data as any;
+
+    if (result?.error) {
+      toast.error(result.error);
+    } else if (result?.status === 'already_confirmed') {
+      toast.info('Você já confirmou este turno');
+    } else if (result?.status === 'already_waitlist') {
+      toast.info('Você já está na fila de espera');
+    } else if (result?.status === 'confirmado') {
+      toast.success('Check-in confirmado!');
+    } else if (result?.status === 'fila_espera') {
+      toast.success(`Não havia vagas. Você entrou na fila de espera (posição ${result.posicao})`);
+    }
+
+    fetchAll();
     setActionLoading(false);
   };
 
   const handleJoinWaitlist = async () => {
-    if (!driver || !todayShiftId) return;
+    if (!driver || !todayShiftId || !user) return;
     setActionLoading(true);
 
-    const result = await submitCheckin('fila_espera');
+    await cleanupStaleCheckins(driver.id);
 
-    if (result.type === 'already_confirmed') {
-      toast.info('Você já está confirmado neste turno');
-      fetchAll();
-    } else if (result.type === 'already_waitlist') {
-      toast.info('Você já está na fila de espera');
-      fetchAll();
-    } else if (result.type === 'success') {
-      toast.success('Você entrou na fila de espera');
-      fetchAll();
-    } else {
+    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
+
+    const { data, error } = await supabase.rpc('attempt_checkin', {
+      p_shift_id: todayShiftId,
+      p_driver_id: driver.id,
+      p_device_ip: deviceIp,
+      p_device_user_agent: deviceUserAgent,
+      p_device_info: deviceInfo,
+    });
+
+    if (error) {
+      console.error('Erro no attempt_checkin RPC:', error);
       toast.error('Erro ao entrar na fila');
+      setActionLoading(false);
+      return;
     }
 
+    const result = data as any;
+
+    if (result?.status === 'already_confirmed') {
+      toast.info('Você já está confirmado neste turno');
+    } else if (result?.status === 'already_waitlist') {
+      toast.info('Você já está na fila de espera');
+    } else if (result?.status === 'confirmado') {
+      toast.success('Havia vaga disponível — check-in confirmado!');
+    } else if (result?.status === 'fila_espera') {
+      toast.success('Você entrou na fila de espera');
+    } else {
+      toast.error(result?.error || 'Erro ao entrar na fila');
+    }
+
+    fetchAll();
     setActionLoading(false);
   };
 
