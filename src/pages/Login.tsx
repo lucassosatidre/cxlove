@@ -5,6 +5,7 @@ import { Navigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { Mail, Lock } from 'lucide-react';
 import propositoLogo from '@/assets/proposito-logo.png';
@@ -16,6 +17,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   if (loading) {
     return (
@@ -83,8 +85,7 @@ export default function Login() {
   return (
     <div className="flex min-h-screen">
       {/* Left branding panel — motoboy background */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-center overflow-hidden">
-        {/* Background image */}
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-start overflow-hidden">
         <img
           src={motoboyBg}
           alt=""
@@ -92,8 +93,6 @@ export default function Login() {
           width={960}
           height={1440}
         />
-
-        {/* Dark overlay gradient */}
         <div
           className="absolute inset-0"
           style={{
@@ -101,14 +100,14 @@ export default function Login() {
           }}
         />
 
-        {/* Title */}
-        <div className="relative z-10 flex flex-col items-center text-center">
+        {/* Title in upper third */}
+        <div className="relative z-10 flex flex-col items-center text-center mt-[15%]">
           <h1
-            className="text-6xl font-black text-white tracking-[0.2em]"
+            className="text-6xl text-white"
             style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              textShadow: '0 2px 20px rgba(0,0,0,0.5)',
-              letterSpacing: '0.2em',
+              fontFamily: "'Permanent Marker', cursive",
+              textShadow: '2px 2px 8px rgba(0,0,0,0.8)',
+              letterSpacing: '0.08em',
             }}
           >
             CAIXA LOVE
@@ -144,10 +143,10 @@ export default function Login() {
                 }}
               />
               <h1
-                className="relative z-10 text-4xl font-black text-white tracking-[0.2em]"
+                className="relative z-10 text-4xl text-white"
                 style={{
-                  fontFamily: "'Bebas Neue', sans-serif",
-                  textShadow: '0 2px 20px rgba(0,0,0,0.5)',
+                  fontFamily: "'Permanent Marker', cursive",
+                  textShadow: '2px 2px 8px rgba(0,0,0,0.8)',
                 }}
               >
                 CAIXA LOVE
@@ -158,7 +157,7 @@ export default function Login() {
           {/* Form card */}
           <div className="bg-card rounded-2xl border border-border shadow-sm p-8">
             <div className="mb-8">
-              <h2 className="text-2xl font-bold text-foreground">Bem-vindo de volta</h2>
+              <h2 className="text-2xl font-bold text-foreground">Bem-vindo</h2>
               <p className="text-sm text-muted-foreground mt-1">Entre com suas credenciais</p>
             </div>
 
@@ -174,7 +173,6 @@ export default function Login() {
                     type="text"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
-                    placeholder="seu@email.com ou (XX) XXXXX-XXXX"
                     required
                     className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[hsl(var(--primary))] transition-colors"
                   />
@@ -192,7 +190,6 @@ export default function Login() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
                     required
                     className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[hsl(var(--primary))] transition-colors"
                   />
@@ -206,6 +203,17 @@ export default function Login() {
                     Esqueceu a senha?
                   </button>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="remember"
+                  checked={rememberMe}
+                  onCheckedChange={(v) => setRememberMe(v === true)}
+                />
+                <Label htmlFor="remember" className="text-sm text-muted-foreground font-normal cursor-pointer">
+                  Lembrar minha senha
+                </Label>
               </div>
 
               {error && (
