@@ -266,7 +266,7 @@ export default function EntregadorPortal() {
     };
   };
 
-  const handleCheckin = async () => {
+  const handleAttemptCheckin = async () => {
     if (!driver || !todayShiftId || !user) return;
     setActionLoading(true);
 
@@ -284,7 +284,7 @@ export default function EntregadorPortal() {
 
     if (error) {
       console.error('Erro no attempt_checkin RPC:', error);
-      toast.error('Erro ao fazer check-in');
+      toast.error('Erro ao processar check-in');
       setActionLoading(false);
       return;
     }
@@ -300,48 +300,7 @@ export default function EntregadorPortal() {
     } else if (result?.status === 'confirmado') {
       toast.success('Check-in confirmado!');
     } else if (result?.status === 'fila_espera') {
-      toast.success(`Não havia vagas. Você entrou na fila de espera (posição ${result.posicao})`);
-    }
-
-    fetchAll();
-    setActionLoading(false);
-  };
-
-  const handleJoinWaitlist = async () => {
-    if (!driver || !todayShiftId || !user) return;
-    setActionLoading(true);
-
-    await cleanupStaleCheckins(driver.id);
-
-    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
-
-    const { data, error } = await supabase.rpc('attempt_checkin', {
-      p_shift_id: todayShiftId,
-      p_driver_id: driver.id,
-      p_device_ip: deviceIp,
-      p_device_user_agent: deviceUserAgent,
-      p_device_info: deviceInfo,
-    });
-
-    if (error) {
-      console.error('Erro no attempt_checkin RPC:', error);
-      toast.error('Erro ao entrar na fila');
-      setActionLoading(false);
-      return;
-    }
-
-    const result = data as any;
-
-    if (result?.status === 'already_confirmed') {
-      toast.info('Você já está confirmado neste turno');
-    } else if (result?.status === 'already_waitlist') {
-      toast.info('Você já está na fila de espera');
-    } else if (result?.status === 'confirmado') {
-      toast.success('Havia vaga disponível — check-in confirmado!');
-    } else if (result?.status === 'fila_espera') {
-      toast.success('Você entrou na fila de espera');
-    } else {
-      toast.error(result?.error || 'Erro ao entrar na fila');
+      toast.success(`Você entrou na fila de espera (posição ${result.posicao})`);
     }
 
     fetchAll();
@@ -569,7 +528,7 @@ export default function EntregadorPortal() {
                   <button
                     className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
                     disabled={actionLoading}
-                    onClick={handleCheckin}
+                    onClick={handleAttemptCheckin}
                   >
                     {actionLoading ? 'Processando...' : 'FAZER CHECK-IN HOJE'}
                   </button>
@@ -579,7 +538,7 @@ export default function EntregadorPortal() {
                   <button
                     className="w-full h-14 rounded-xl border-2 border-orange-500 text-orange-600 font-bold text-lg uppercase tracking-wide hover:bg-orange-50 transition-colors disabled:opacity-60"
                     disabled={actionLoading}
-                    onClick={handleJoinWaitlist}
+                    onClick={handleAttemptCheckin}
                   >
                     {actionLoading ? 'Processando...' : 'ENTRAR NA FILA DE ESPERA'}
                   </button>
