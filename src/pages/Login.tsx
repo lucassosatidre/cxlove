@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { Mail, Lock, BarChart3, Truck } from 'lucide-react';
+import { Mail, Lock } from 'lucide-react';
 import propositoLogo from '@/assets/proposito-logo.png';
-import estrelaLogo from '@/assets/estrela-logo.png';
+import motoboyBg from '@/assets/motoboy-bg.jpg';
 
 export default function Login() {
   const { user, loading, signIn } = useAuth();
@@ -82,48 +82,42 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen">
-      {/* Left branding panel — hidden on mobile */}
-      <div
-        className="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-center p-12 overflow-hidden"
-        style={{
-          background: 'linear-gradient(160deg, #1A1A1A 0%, #2D2D2D 80%, rgba(249,115,22,0.08) 100%)',
-        }}
-      >
-        {/* Subtle pattern overlay */}
+      {/* Left branding panel — motoboy background */}
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-center overflow-hidden">
+        {/* Background image */}
+        <img
+          src={motoboyBg}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+          width={960}
+          height={1440}
+        />
+
+        {/* Dark overlay gradient */}
         <div
-          className="absolute inset-0 opacity-[0.03]"
+          className="absolute inset-0"
           style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-            backgroundSize: '32px 32px',
+            background: 'linear-gradient(180deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.45) 50%, rgba(0,0,0,0.8) 100%)',
           }}
         />
 
-        {/* Decorative glow */}
-        <div
-          className="absolute -bottom-32 -right-32 w-[500px] h-[500px] rounded-full opacity-[0.07]"
-          style={{ background: 'radial-gradient(circle, #F97316 0%, transparent 70%)' }}
-        />
-
-        {/* Center content */}
-        <div className="relative z-10 flex flex-col items-center text-center max-w-sm">
-          <h1 className="text-4xl font-bold text-white tracking-tight">Caixa lv</h1>
-          <p className="text-lg text-white/60 mt-2">Plataforma de gestão operacional</p>
-
-          <div className="mt-10 space-y-4 w-full">
-            <div className="flex items-center gap-4 px-5 py-3 rounded-xl bg-white/[0.06] border border-white/10">
-              <BarChart3 className="h-5 w-5 text-[#F97316] shrink-0" />
-              <span className="text-sm text-white/80">Controle de caixa</span>
-            </div>
-            <div className="flex items-center gap-4 px-5 py-3 rounded-xl bg-white/[0.06] border border-white/10">
-              <Truck className="h-5 w-5 text-[#F97316] shrink-0" />
-              <span className="text-sm text-white/80">Gestão de logística</span>
-            </div>
-          </div>
+        {/* Title */}
+        <div className="relative z-10 flex flex-col items-center text-center">
+          <h1
+            className="text-6xl font-black text-white tracking-[0.2em]"
+            style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              textShadow: '0 2px 20px rgba(0,0,0,0.5)',
+              letterSpacing: '0.2em',
+            }}
+          >
+            CAIXA LOVE
+          </h1>
         </div>
 
         {/* Footer */}
         <div className="absolute bottom-8 left-0 right-0 flex items-center justify-center gap-2">
-          <div className="h-6 w-6 rounded bg-white/5 border border-white/10 flex items-center justify-center p-0.5">
+          <div className="h-6 w-6 rounded bg-white/10 border border-white/10 flex items-center justify-center p-0.5">
             <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
           </div>
           <span className="text-[11px] text-white/30">By: Propósito Soluções</span>
@@ -133,20 +127,32 @@ export default function Login() {
       {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 bg-background lg:w-1/2">
         <div className="w-full max-w-md animate-fade-in">
-          {/* Mobile compact header */}
-          <div className="flex flex-col items-center gap-1 mb-8 lg:hidden">
-            <h1 className="text-2xl font-bold text-foreground">Caixa lv</h1>
-            <p className="text-sm text-muted-foreground">Plataforma de gestão operacional</p>
-          </div>
-
-          {/* Active client badge */}
-          <div className="flex items-center gap-2.5 mb-8 px-4 py-2.5 rounded-full bg-muted/50 border border-border w-fit mx-auto lg:mx-0">
-            <div className="h-6 w-6 rounded-full overflow-hidden shrink-0">
-              <img src={estrelaLogo} alt="" className="h-full w-full object-cover" />
+          {/* Mobile header with motoboy background */}
+          <div className="lg:hidden mb-8 -mx-6 -mt-12">
+            <div className="relative h-[200px] overflow-hidden flex items-center justify-center">
+              <img
+                src={motoboyBg}
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+                width={960}
+                height={1440}
+              />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.8) 100%)',
+                }}
+              />
+              <h1
+                className="relative z-10 text-4xl font-black text-white tracking-[0.2em]"
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  textShadow: '0 2px 20px rgba(0,0,0,0.5)',
+                }}
+              >
+                CAIXA LOVE
+              </h1>
             </div>
-            <span className="text-xs font-medium text-muted-foreground">
-              Pizzaria Estrela da Ilha
-            </span>
           </div>
 
           {/* Form card */}
@@ -170,7 +176,7 @@ export default function Login() {
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="seu@email.com ou (XX) XXXXX-XXXX"
                     required
-                    className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[#F97316] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[#F97316] transition-colors"
+                    className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[hsl(var(--primary))] transition-colors"
                   />
                 </div>
               </div>
@@ -188,7 +194,7 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[#F97316] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[#F97316] transition-colors"
+                    className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[hsl(var(--primary))] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[hsl(var(--primary))] transition-colors"
                   />
                 </div>
                 <div className="text-right">
@@ -211,8 +217,7 @@ export default function Login() {
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full h-12 rounded-xl text-base font-bold shadow-md hover:shadow-lg hover:brightness-110 transition-all"
-                style={{ backgroundColor: '#F97316', color: 'white' }}
+                className="w-full h-12 rounded-xl text-base font-bold shadow-md hover:shadow-lg hover:brightness-110 transition-all bg-primary text-primary-foreground"
               >
                 {submitting ? 'Entrando...' : 'Entrar'}
               </Button>
