@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
-import { Mail, Lock } from 'lucide-react';
+import { User, Lock } from 'lucide-react';
 import caixaLoveLogo from '@/assets/caixa-love-logo.png';
 
 export default function Login() {
