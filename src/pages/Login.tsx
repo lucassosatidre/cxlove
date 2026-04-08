@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { supabase } from '@/integrations/supabase/client';
-import { Mail, Lock } from 'lucide-react';
+import { Mail, Lock, BarChart3, Truck } from 'lucide-react';
 import propositoLogo from '@/assets/proposito-logo.png';
 import estrelaLogo from '@/assets/estrela-logo.png';
 
@@ -83,56 +83,60 @@ export default function Login() {
   return (
     <div className="flex min-h-screen">
       {/* Left branding panel — hidden on mobile */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden"
-        style={{ background: 'linear-gradient(160deg, #1A1A1A 0%, #2D2D2D 100%)' }}
+      <div
+        className="hidden lg:flex lg:w-1/2 relative flex-col items-center justify-center p-12 overflow-hidden"
+        style={{
+          background: 'linear-gradient(160deg, #1A1A1A 0%, #2D2D2D 80%, rgba(249,115,22,0.08) 100%)',
+        }}
       >
         {/* Subtle pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.04]"
+        <div
+          className="absolute inset-0 opacity-[0.03]"
           style={{
             backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
             backgroundSize: '32px 32px',
           }}
         />
 
-        {/* Decorative shapes */}
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full opacity-[0.06]"
-          style={{ background: 'radial-gradient(circle, #F97316 0%, transparent 70%)' }}
-        />
-        <div className="absolute -bottom-32 -left-32 w-[500px] h-[500px] rounded-full opacity-[0.04]"
+        {/* Decorative glow */}
+        <div
+          className="absolute -bottom-32 -right-32 w-[500px] h-[500px] rounded-full opacity-[0.07]"
           style={{ background: 'radial-gradient(circle, #F97316 0%, transparent 70%)' }}
         />
 
-        <div className="relative z-10 flex flex-col gap-2">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-12 w-12 rounded-xl overflow-hidden border border-white/10">
-              <img src={estrelaLogo} alt="Pizzaria Estrela da Ilha" className="h-full w-full object-cover" />
+        {/* Center content */}
+        <div className="relative z-10 flex flex-col items-center text-center max-w-sm">
+          <h1 className="text-4xl font-bold text-white tracking-tight">Caixa lv</h1>
+          <p className="text-lg text-white/60 mt-2">Plataforma de gestão operacional</p>
+
+          <div className="mt-10 space-y-4 w-full">
+            <div className="flex items-center gap-4 px-5 py-3 rounded-xl bg-white/[0.06] border border-white/10">
+              <BarChart3 className="h-5 w-5 text-[#F97316] shrink-0" />
+              <span className="text-sm text-white/80">Controle de caixa</span>
+            </div>
+            <div className="flex items-center gap-4 px-5 py-3 rounded-xl bg-white/[0.06] border border-white/10">
+              <Truck className="h-5 w-5 text-[#F97316] shrink-0" />
+              <span className="text-sm text-white/80">Gestão de logística</span>
             </div>
           </div>
-
-          <h1 className="text-5xl font-bold text-white tracking-tight">CX Love</h1>
-          <p className="text-lg text-white/50 mt-2">Plataforma de finanças</p>
         </div>
 
-        <div className="relative z-10 flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center p-1">
+        {/* Footer */}
+        <div className="absolute bottom-8 left-0 right-0 flex items-center justify-center gap-2">
+          <div className="h-6 w-6 rounded bg-white/5 border border-white/10 flex items-center justify-center p-0.5">
             <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
           </div>
-          <span className="text-xs text-white/30">By: Propósito Soluções</span>
+          <span className="text-[11px] text-white/30">By: Propósito Soluções</span>
         </div>
       </div>
 
       {/* Right form panel */}
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 bg-background lg:w-1/2">
         <div className="w-full max-w-md animate-fade-in">
-          {/* Mobile branding */}
-          <div className="flex flex-col items-center gap-3 mb-10 lg:hidden">
-            <div className="h-16 w-16 rounded-2xl overflow-hidden shadow-md">
-              <img src={estrelaLogo} alt="Pizzaria Estrela da Ilha" className="h-full w-full object-cover" />
-            </div>
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-foreground">CX Love</h1>
-              <p className="text-sm text-muted-foreground">Plataforma de finanças</p>
-            </div>
+          {/* Mobile compact header */}
+          <div className="flex flex-col items-center gap-1 mb-8 lg:hidden">
+            <h1 className="text-2xl font-bold text-foreground">Caixa lv</h1>
+            <p className="text-sm text-muted-foreground">Plataforma de gestão operacional</p>
           </div>
 
           {/* Active client badge */}
@@ -152,7 +156,7 @@ export default function Login() {
               <p className="text-sm text-muted-foreground mt-1">Entre com suas credenciais</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="identifier" className="text-foreground text-sm font-medium">
                   Email ou Telefone
@@ -166,7 +170,7 @@ export default function Login() {
                     onChange={(e) => setIdentifier(e.target.value)}
                     placeholder="seu@email.com ou (XX) XXXXX-XXXX"
                     required
-                    className="h-12 pl-11 rounded-xl bg-background border-border focus-visible:ring-[#F97316] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[#F97316] transition-colors"
+                    className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[#F97316] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[#F97316] transition-colors"
                   />
                 </div>
               </div>
@@ -184,8 +188,17 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    className="h-12 pl-11 rounded-xl bg-background border-border focus-visible:ring-[#F97316] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[#F97316] transition-colors"
+                    className="h-12 pl-11 rounded-xl bg-white border-border focus-visible:ring-[#F97316] focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:border-[#F97316] transition-colors"
                   />
+                </div>
+                <div className="text-right">
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={() => {}}
+                  >
+                    Esqueceu a senha?
+                  </button>
                 </div>
               </div>
 
@@ -198,7 +211,7 @@ export default function Login() {
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full h-12 rounded-xl text-base font-bold shadow-md hover:shadow-lg transition-all"
+                className="w-full h-12 rounded-xl text-base font-bold shadow-md hover:shadow-lg hover:brightness-110 transition-all"
                 style={{ backgroundColor: '#F97316', color: 'white' }}
               >
                 {submitting ? 'Entrando...' : 'Entrar'}

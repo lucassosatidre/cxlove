@@ -69,8 +69,8 @@ export default function AppSidebar({ open = true, onClose }: AppSidebarProps) {
             <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
           </div>
           <div>
-            <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight">CX Love</p>
-            <p className="text-[10px] text-sidebar-foreground/60">Plataforma de finanças</p>
+            <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight">Caixa lv</p>
+            <p className="text-[10px] text-sidebar-foreground/60">Gestão operacional</p>
           </div>
         </div>
         {isMobile && (
