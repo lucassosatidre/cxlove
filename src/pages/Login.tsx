@@ -84,6 +84,7 @@ export default function Login() {
           src={caixaLoveLogo}
           alt="CAIXA LOVE"
           className="w-[180px] sm:w-[250px] mb-8"
+          style={{ mixBlendMode: 'lighten' }}
         />
 
         {/* Heading */}
