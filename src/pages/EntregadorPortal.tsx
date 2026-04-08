@@ -398,6 +398,11 @@ export default function EntregadorPortal() {
     if (error) {
       setPasswordError(error.message);
     } else {
+      // Mark password as changed
+      const user = (await supabase.auth.getUser()).data.user;
+      if (user) {
+        await supabase.from('delivery_drivers').update({ password_changed: true } as any).eq('auth_user_id', user.id);
+      }
       toast.success('Senha alterada com sucesso!');
       setPasswordDialog(false);
       setNewPassword('');
