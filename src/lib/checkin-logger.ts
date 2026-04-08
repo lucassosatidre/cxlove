@@ -20,7 +20,7 @@ interface LogParams {
 }
 
 export async function logCheckinAction(params: LogParams) {
-  const { error } = await supabase.from('delivery_checkin_logs' as any).insert({
+  const { error } = await supabase.from('delivery_checkin_logs').insert({
     checkin_id: params.checkinId,
     driver_id: params.driverId,
     action: params.action,

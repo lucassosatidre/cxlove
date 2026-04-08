@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { getBrasiliaHour, getBrasiliaToday, getBrasiliaDateFormatted } from '@/lib/brasilia-time';
 import { logCheckinAction } from '@/lib/checkin-logger';
+import { promoteFromWaitlist } from '@/lib/promote-waitlist';
 import NotificationBell from '@/components/NotificationBell';
 
 interface DriverProfile {
@@ -265,7 +266,7 @@ export default function EntregadorPortal() {
     };
   };
 
-  const handleCheckin = async () => {
+  const handleAttemptCheckin = async () => {
     if (!driver || !todayShiftId || !user) return;
     setActionLoading(true);
 
@@ -283,7 +284,7 @@ export default function EntregadorPortal() {
 
     if (error) {
       console.error('Erro no attempt_checkin RPC:', error);
-      toast.error('Erro ao fazer check-in');
+      toast.error('Erro ao processar check-in');
       setActionLoading(false);
       return;
     }
@@ -299,48 +300,7 @@ export default function EntregadorPortal() {
     } else if (result?.status === 'confirmado') {
       toast.success('Check-in confirmado!');
     } else if (result?.status === 'fila_espera') {
-      toast.success(`Não havia vagas. Você entrou na fila de espera (posição ${result.posicao})`);
-    }
-
-    fetchAll();
-    setActionLoading(false);
-  };
-
-  const handleJoinWaitlist = async () => {
-    if (!driver || !todayShiftId || !user) return;
-    setActionLoading(true);
-
-    await cleanupStaleCheckins(driver.id);
-
-    const { deviceIp, deviceUserAgent, deviceInfo } = await getDeviceInfo();
-
-    const { data, error } = await supabase.rpc('attempt_checkin', {
-      p_shift_id: todayShiftId,
-      p_driver_id: driver.id,
-      p_device_ip: deviceIp,
-      p_device_user_agent: deviceUserAgent,
-      p_device_info: deviceInfo,
-    });
-
-    if (error) {
-      console.error('Erro no attempt_checkin RPC:', error);
-      toast.error('Erro ao entrar na fila');
-      setActionLoading(false);
-      return;
-    }
-
-    const result = data as any;
-
-    if (result?.status === 'already_confirmed') {
-      toast.info('Você já está confirmado neste turno');
-    } else if (result?.status === 'already_waitlist') {
-      toast.info('Você já está na fila de espera');
-    } else if (result?.status === 'confirmado') {
-      toast.success('Havia vaga disponível — check-in confirmado!');
-    } else if (result?.status === 'fila_espera') {
-      toast.success('Você entrou na fila de espera');
-    } else {
-      toast.error(result?.error || 'Erro ao entrar na fila');
+      toast.success(`Você entrou na fila de espera (posição ${result.posicao})`);
     }
 
     fetchAll();
@@ -568,7 +528,7 @@ export default function EntregadorPortal() {
                   <button
                     className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
                     disabled={actionLoading}
-                    onClick={handleCheckin}
+                    onClick={handleAttemptCheckin}
                   >
                     {actionLoading ? 'Processando...' : 'FAZER CHECK-IN HOJE'}
                   </button>
@@ -578,7 +538,7 @@ export default function EntregadorPortal() {
                   <button
                     className="w-full h-14 rounded-xl border-2 border-orange-500 text-orange-600 font-bold text-lg uppercase tracking-wide hover:bg-orange-50 transition-colors disabled:opacity-60"
                     disabled={actionLoading}
-                    onClick={handleJoinWaitlist}
+                    onClick={handleAttemptCheckin}
                   >
                     {actionLoading ? 'Processando...' : 'ENTRAR NA FILA DE ESPERA'}
                   </button>
@@ -735,93 +695,3 @@ export default function EntregadorPortal() {
   );
 }
 
-/**
- * Promote the next driver(s) from the waitlist for a given shift.
- * Strictly orders by waitlist_entered_at ASC.
- */
-export async function promoteFromWaitlist(shiftId: string, isAfter18h: boolean, maxPromotions: number = 1): Promise<{ id: string; driver_id: string; nome: string }[]> {
-  // Find waitlist ordered STRICTLY by entry time
-  const { data: waitlist } = await supabase
-    .from('delivery_checkins')
-    .select('id, driver_id, waitlist_entered_at')
-    .eq('shift_id', shiftId)
-    .eq('status', 'fila_espera')
-    .not('waitlist_entered_at', 'is', null)
-    .order('waitlist_entered_at', { ascending: true })
-    .limit(maxPromotions);
-
-  if (!waitlist?.length) return [];
-
-  const promoted: { id: string; driver_id: string; nome: string }[] = [];
-
-  for (const next of waitlist) {
-    const nowIso = new Date().toISOString();
-    const updatePayload: any = {
-      status: 'confirmado',
-      confirmed_at: nowIso,
-    };
-    if (isAfter18h) {
-      updatePayload.substituto_pos_18h = true;
-    }
-    await supabase.from('delivery_checkins').update(updatePayload).eq('id', next.id);
-
-    // Get driver name
-    const { data: driverData } = await supabase
-      .from('delivery_drivers')
-      .select('nome, auth_user_id')
-      .eq('id', next.driver_id)
-      .single();
-
-    const driverName = driverData?.nome || 'Entregador';
-    const driverAuthId = driverData?.auth_user_id;
-    promoted.push({ id: next.id, driver_id: next.driver_id, nome: driverName });
-
-    // Log the promotion
-    if (driverAuthId) {
-      await logCheckinAction({
-        checkinId: next.id,
-        driverId: next.driver_id,
-        action: 'fila_promovido',
-        performedBy: 'system' as any, // system-triggered
-      });
-    }
-
-    // Notify promoted driver
-    if (driverAuthId) {
-      const driverMessage = isAfter18h
-        ? 'Você foi chamado da fila de espera para o turno de hoje. Entre em contato com a pizzaria'
-        : 'Você foi promovido da fila de espera! Seu check-in está confirmado para hoje.';
-
-      await supabase.from('notifications').insert({
-        user_id: driverAuthId,
-        title: 'Fila de espera',
-        message: driverMessage,
-        type: 'fila_promovido',
-      } as any);
-    }
-
-    // Notify all admins
-    const { data: adminRoles } = await supabase
-      .from('user_roles')
-      .select('user_id')
-      .eq('role', 'admin');
-
-    if (adminRoles?.length) {
-      const waitlistPos = (waitlist.indexOf(next) + 1);
-      const adminMessage = isAfter18h
-        ? `O entregador ${driverName} (posição ${waitlistPos} da fila) foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
-        : `O entregador ${driverName} (posição ${waitlistPos} da fila) foi promovido automaticamente da fila de espera`;
-
-      for (const admin of adminRoles) {
-        await supabase.from('notifications').insert({
-          user_id: admin.user_id,
-          title: 'Fila de espera — promoção',
-          message: adminMessage,
-          type: 'fila_promovido_admin',
-        } as any);
-      }
-    }
-  }
-
-  return promoted;
-}

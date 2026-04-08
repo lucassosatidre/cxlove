@@ -97,11 +97,11 @@ const App = () => (
             <Route path="/salon/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="salon"><SalonReconciliation /></SectorGuard></ProtectedRoute>} />
             <Route path="/entregador" element={<ProtectedRoute><SectorGuard sector="entregador"><EntregadorPortal /></SectorGuard></ProtectedRoute>} />
             <Route path="/cash-control" element={<ProtectedRoute><Navigate to="/" replace /></ProtectedRoute>} />
-            <Route path="/admin/entregadores" element={<ProtectedRoute><DriverManagement /></ProtectedRoute>} />
+            <Route path="/admin/entregadores" element={<ProtectedRoute><SectorGuard sector="tele"><DriverManagement /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/escalas-entregadores" element={<Navigate to="/admin/entregadores?tab=escala" replace />} />
             <Route path="/etiquetas" element={<ProtectedRoute><SectorGuard sector="tele"><Etiquetas /></SectorGuard></ProtectedRoute>} />
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
-            <Route path="/admin/audit" element={<ProtectedRoute><CheckinAudit /></ProtectedRoute>} />
+            <Route path="/admin/audit" element={<ProtectedRoute><SectorGuard sector="tele"><CheckinAudit /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
             <Route path="/tele-teste/import" element={<Navigate to="/tele/import" replace />} />

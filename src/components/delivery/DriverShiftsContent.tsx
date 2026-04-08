@@ -1,6 +1,6 @@
 // Extracted shift management content (formerly DriverShifts page) — no AppLayout wrapper
 import { useState, useEffect, useMemo } from 'react';
-import { promoteFromWaitlist } from '@/pages/EntregadorPortal';
+import { promoteFromWaitlist } from '@/lib/promote-waitlist';
 import { getBrasiliaHour } from '@/lib/brasilia-time';
 import { logCheckinAction } from '@/lib/checkin-logger';
 import { format, startOfWeek, addDays, isBefore, isToday, addWeeks, subWeeks, startOfDay } from 'date-fns';
