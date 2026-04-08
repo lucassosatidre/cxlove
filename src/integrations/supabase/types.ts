@@ -1126,6 +1126,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
     }
     Enums: {
       app_role:
