@@ -91,14 +91,13 @@ export default function Login() {
         <p className="text-sm mb-8" style={{ color: '#999' }}>Entre com suas credenciais</p>
 
         {/* Form card */}
-        <div className="w-full rounded-2xl p-8" style={{ background: '#141414', border: '1px solid #222' }}>
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="w-full space-y-5">
             <div className="space-y-2">
               <Label htmlFor="identifier" className="text-sm font-medium" style={{ color: '#E5E5E5' }}>
-                Email ou Telefone
+                Usuário
               </Label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: '#999' }} />
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none" style={{ color: '#999' }} />
                 <Input
                   id="identifier"
                   type="text"
@@ -131,18 +130,18 @@ export default function Login() {
                   onBlur={(e) => (e.target.style.borderColor = '#444')}
                 />
               </div>
-              <div className="text-right">
-                <button type="button" className="text-xs hover:underline" style={{ color: '#F97316' }} onClick={() => {}}>
-                  Esqueceu a senha?
-                </button>
-              </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox id="remember" checked={rememberMe} onCheckedChange={(v) => setRememberMe(v === true)} />
-              <Label htmlFor="remember" className="text-sm font-normal cursor-pointer" style={{ color: '#AAA' }}>
-                Lembrar minha senha
-              </Label>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Checkbox id="remember" checked={rememberMe} onCheckedChange={(v) => setRememberMe(v === true)} />
+                <Label htmlFor="remember" className="text-sm font-normal cursor-pointer" style={{ color: '#AAA' }}>
+                  Lembrar minha senha
+                </Label>
+              </div>
+              <button type="button" className="text-sm hover:underline" style={{ color: '#F97316' }} onClick={() => {}}>
+                Esqueceu a senha?
+              </button>
             </div>
 
             {error && (
@@ -160,7 +159,6 @@ export default function Login() {
               {submitting ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
-        </div>
       </div>
     </div>
   );
