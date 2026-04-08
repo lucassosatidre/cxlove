@@ -266,6 +266,18 @@ export default function EntregadorPortal() {
     };
   };
 
+  const markPasswordChanged = useCallback(async () => {
+    if (!user) throw new Error('Usuário não autenticado');
+
+    const { error } = await (supabase as any).rpc('mark_password_changed', {
+      p_user_id: user.id,
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Erro ao confirmar troca de senha');
+    }
+  }, [user]);
+
   const handleAttemptCheckin = async () => {
     if (!driver || !todayShiftId || !user) return;
     setActionLoading(true);
@@ -398,14 +410,14 @@ export default function EntregadorPortal() {
     if (error) {
       setPasswordError(error.message);
     } else {
-      // Mark password as changed
-      const user = (await supabase.auth.getUser()).data.user;
-      if (user) {
-        await supabase.from('delivery_drivers').update({ password_changed: true } as any).eq('auth_user_id', user.id);
+      try {
+        await markPasswordChanged();
+        toast.success('Senha alterada com sucesso!');
+        setPasswordDialog(false);
+        setNewPassword('');
+      } catch (markError: any) {
+        setPasswordError(markError.message || 'Erro ao confirmar troca de senha');
       }
-      toast.success('Senha alterada com sucesso!');
-      setPasswordDialog(false);
-      setNewPassword('');
     }
     setPasswordSaving(false);
   };
@@ -424,17 +436,18 @@ export default function EntregadorPortal() {
       setForcePasswordSaving(false);
       return;
     }
-    // Mark password as changed using auth_user_id
-    const user = (await supabase.auth.getUser()).data.user;
-    if (user) {
-      await supabase.from('delivery_drivers').update({ password_changed: true } as any).eq('auth_user_id', user.id);
+
+    try {
+      await markPasswordChanged();
+      toast.success('Senha alterada com sucesso!');
+      setForcePasswordDialog(false);
+      setForceNewPassword('');
+      fetchAll();
+    } catch (markError: any) {
+      setForcePasswordError(markError.message || 'Erro ao confirmar troca de senha');
     }
-    toast.success('Senha alterada com sucesso!');
-    setForcePasswordDialog(false);
-    setForceNewPassword('');
     setForcePasswordSaving(false);
     // Reload to continue to portal
-    fetchAll();
   };
 
   // Blocked states
