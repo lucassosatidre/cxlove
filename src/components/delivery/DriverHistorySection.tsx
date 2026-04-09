@@ -37,11 +37,12 @@ interface DriverOption {
   nome: string;
 }
 
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  confirmado: { label: 'Confirmado', variant: 'default' },
-  cancelado: { label: 'Cancelado', variant: 'secondary' },
+const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; className?: string }> = {
+  confirmado: { label: 'Confirmado', variant: 'default', className: 'bg-green-600 text-white hover:bg-green-600' },
+  cancelado: { label: 'Cancelado', variant: 'secondary', className: 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800' },
   no_show: { label: 'Faltou', variant: 'destructive' },
-  concluido: { label: 'Concluído', variant: 'outline' },
+  concluido: { label: 'Concluído', variant: 'default', className: 'bg-green-800 text-white hover:bg-green-800' },
+  fila_espera: { label: 'Fila de espera', variant: 'secondary', className: 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800' },
 };
 
 function parseUserAgent(ua: string | null): string {
@@ -228,16 +229,16 @@ export default function DriverHistorySection() {
                 <TableRow><TableCell colSpan={showTechDetails ? 11 : 9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
                 <TableRow><TableCell colSpan={showTechDetails ? 11 : 9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</TableCell></TableRow>
-              ) : filtered.map(r => {
+              ) : filtered.map((r, idx) => {
                 const sc = statusConfig[r.status] || { label: r.status, variant: 'secondary' as const };
                 const isPast = r.data < format(new Date(), 'yyyy-MM-dd');
                 return (
-                  <TableRow key={r.checkinId}>
+                  <TableRow key={r.checkinId} className={`${idx % 2 === 1 ? 'bg-muted/30' : ''} hover:bg-muted/50 transition-colors`}>
                     <TableCell className="text-sm">{r.data ? format(parseISO(r.data), 'dd/MM/yyyy') : ''}</TableCell>
                     <TableCell className="text-sm">{r.horarioInicio} — {r.horarioFim}</TableCell>
                     <TableCell className="text-sm font-medium">{r.driverName}</TableCell>
                     <TableCell>
-                      <Badge variant={sc.variant} className={r.status === 'concluido' ? 'bg-blue-100 text-blue-700' : ''}>
+                      <Badge variant={sc.variant} className={sc.className || ''}>
                         {sc.label}
                       </Badge>
                     </TableCell>
