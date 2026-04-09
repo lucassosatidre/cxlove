@@ -16,10 +16,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Plus, Search, Pencil, UserCheck, UserX, Copy } from 'lucide-react';
 import DriverSummaryCards from '@/components/delivery/DriverSummaryCards';
-import DriverTodaySection from '@/components/delivery/DriverTodaySection';
+import DashboardTodayCard from '@/components/delivery/DashboardTodayCard';
 import DriverHistorySection from '@/components/delivery/DriverHistorySection';
 import DriverRankingSection from '@/components/delivery/DriverRankingSection';
 import DriverShiftsContent from '@/components/delivery/DriverShiftsContent';
+import DriverTodaySection from '@/components/delivery/DriverTodaySection';
 
 interface Driver {
   id: string;
