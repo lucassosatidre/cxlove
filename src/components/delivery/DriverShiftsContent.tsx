@@ -500,8 +500,16 @@ export default function DriverShiftsContent() {
             return (
               <div
                 key={day.dateStr}
-                className={`rounded-lg border p-2.5 space-y-2 text-xs transition-opacity ${
-                  past ? 'opacity-50 bg-muted/40' : today ? 'border-primary bg-primary/5' : 'bg-card'
+                className={`rounded-lg border p-2.5 space-y-2 text-xs transition-all ${
+                  past
+                    ? day.shifts.some(s => s.confirmedDrivers.length > 0)
+                      ? 'bg-green-50/60 dark:bg-green-950/20 border-green-200 dark:border-green-900'
+                      : 'bg-muted/40 border-border'
+                    : today
+                      ? 'border-primary border-2 bg-card'
+                      : day.shifts.length > 0
+                        ? 'bg-card border-dashed border-border'
+                        : 'bg-muted/20 border-border'
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -555,7 +563,9 @@ export default function DriverShiftsContent() {
 
                       <div className="space-y-0.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground text-[10px]">{shift.checkins}/{shift.vagas}</span>
+                          <span className={`text-[10px] font-bold ${shift.checkins === 0 ? 'text-destructive' : shift.checkins >= shift.vagas ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+                            {shift.checkins}/{shift.vagas}
+                          </span>
                         </div>
                         <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(fillPct, 100)}%` }} />
@@ -566,7 +576,11 @@ export default function DriverShiftsContent() {
                         <div className="space-y-0.5">
                           {shift.confirmedDrivers.map(d => (
                             <div key={d.checkinId} className="flex items-center justify-between group">
-                              <span className="text-[10px] text-muted-foreground leading-tight">
+                              <span className={`text-[10px] leading-tight px-1.5 py-0.5 rounded-full ${
+                                past
+                                  ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
+                                  : 'text-muted-foreground'
+                              }`}>
                                 {d.nome}
                               </span>
                               {!past && (
@@ -590,7 +604,7 @@ export default function DriverShiftsContent() {
                           <p className="text-[9px] text-muted-foreground font-medium mb-0.5">Fila de espera ({shift.waitlistDrivers.length})</p>
                           {shift.waitlistDrivers.map((d, i) => (
                             <div key={d.checkinId} className="flex items-center justify-between group">
-                              <span className="text-[9px] text-muted-foreground/70 leading-tight">
+                              <span className="text-[9px] leading-tight px-1.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">
                                 {i + 1}. {d.nome}
                               </span>
                             </div>
