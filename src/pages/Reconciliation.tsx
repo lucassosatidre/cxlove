@@ -59,7 +59,7 @@ interface ImportRecord {
 export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { isCaixaTele, isAdmin } = useUserRole();
+  const { isCaixaTele, isCaixaSalao, isAdmin } = useUserRole();
   
   const navigate = useNavigate();
   
@@ -969,6 +969,7 @@ export default function Reconciliation() {
             closingDate={closingData.closing_date}
             isCompleted={isCompleted}
             isAdmin={isAdmin}
+            isOperator={isCaixaTele || isCaixaSalao}
           />
         )}
 
