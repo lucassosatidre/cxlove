@@ -54,6 +54,60 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Parse body once
+    const body = await req.json();
+
+    // === RAW MODE: return Saipos data without saving ===
+    if (body.mode === "raw") {
+      const { start_date, end_date } = body;
+      if (!start_date || !end_date) {
+        return new Response(
+          JSON.stringify({ error: "start_date e end_date são obrigatórios no modo raw" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const allRawSales: any[] = [];
+      let rawOffset = 0;
+      const rawLimit = 1000;
+
+      while (true) {
+        const params = new URLSearchParams({
+          p_date_column_filter: "shift_date",
+          p_filter_date_start: `${start_date}T00:00:00`,
+          p_filter_date_end: `${end_date}T23:59:59`,
+          p_limit: String(rawLimit),
+          p_offset: String(rawOffset),
+        });
+
+        const apiRes = await fetch(
+          `https://data.saipos.io/v1/search_sales?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${saiposToken}` } }
+        );
+
+        if (!apiRes.ok) {
+          const errText = await apiRes.text();
+          return new Response(
+            JSON.stringify({ error: `Erro na API Saipos: ${apiRes.status}`, details: errText }),
+            { status: apiRes.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const data = await apiRes.json();
+        const sales = Array.isArray(data) ? data : data.data || data.results || [];
+        allRawSales.push(...sales);
+
+        if (sales.length < rawLimit) break;
+        rawOffset += rawLimit;
+      }
+
+      return new Response(
+        JSON.stringify({ total: allRawSales.length, sales: allRawSales }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // === NORMAL MODE ===
     // Use service role key for all DB operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -69,7 +123,7 @@ Deno.serve(async (req) => {
     }
     const userId = callerUser.id;
 
-    const { closing_date, daily_closing_id } = await req.json();
+    const { closing_date, daily_closing_id } = body;
     if (!closing_date || !daily_closing_id) {
       return new Response(
         JSON.stringify({ error: "closing_date e daily_closing_id são obrigatórios" }),
