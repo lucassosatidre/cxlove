@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+
 import { useUserRole } from '@/hooks/useUserRole';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -16,10 +16,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Plus, Search, Pencil, UserCheck, UserX, Copy } from 'lucide-react';
 import DriverSummaryCards from '@/components/delivery/DriverSummaryCards';
-import DriverTodaySection from '@/components/delivery/DriverTodaySection';
+import DashboardTodayCard from '@/components/delivery/DashboardTodayCard';
 import DriverHistorySection from '@/components/delivery/DriverHistorySection';
 import DriverRankingSection from '@/components/delivery/DriverRankingSection';
 import DriverShiftsContent from '@/components/delivery/DriverShiftsContent';
+
 
 interface Driver {
   id: string;
@@ -59,7 +60,6 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
 
 export default function DriverManagement() {
   const { isAdmin, loading: roleLoading } = useUserRole();
-  const { session } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -68,6 +68,7 @@ export default function DriverManagement() {
     setSearchParams({ tab }, { replace: true });
   };
 
+  const [dashboardPeriod, setDashboardPeriod] = useState('30d');
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -195,11 +196,24 @@ export default function DriverManagement() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">Entregadores</h1>
-          {activeTab === 'cadastro' && (
-            <Button onClick={() => { resetCreateForm(); setShowCreate(true); }}>
-              <Plus className="h-4 w-4 mr-1" /> Novo Entregador
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {activeTab === 'dashboard' && (
+              <Select value={dashboardPeriod} onValueChange={setDashboardPeriod}>
+                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7d">Últimos 7 dias</SelectItem>
+                  <SelectItem value="30d">Últimos 30 dias</SelectItem>
+                  <SelectItem value="this_month">Este mês</SelectItem>
+                  <SelectItem value="last_month">Mês anterior</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {activeTab === 'cadastro' && (
+              <Button onClick={() => { resetCreateForm(); setShowCreate(true); }}>
+                <Plus className="h-4 w-4 mr-1" /> Novo Entregador
+              </Button>
+            )}
+          </div>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -210,23 +224,20 @@ export default function DriverManagement() {
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-6">
-            <DriverSummaryCards />
+            <DriverSummaryCards period={dashboardPeriod} />
+            <DashboardTodayCard />
             <div>
-              <h2 className="text-lg font-semibold text-foreground mb-3">Hoje</h2>
-              <DriverTodaySection />
+              <h2 className="text-lg font-semibold text-foreground mb-3">Ranking de Entregadores</h2>
+              <DriverRankingSection period={dashboardPeriod} />
             </div>
+          </TabsContent>
+
+          <TabsContent value="escala" className="space-y-6">
+            <DriverShiftsContent />
             <div>
               <h2 className="text-lg font-semibold text-foreground mb-3">Histórico de Presenças</h2>
               <DriverHistorySection />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-foreground mb-3">Ranking de Entregadores</h2>
-              <DriverRankingSection />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="escala">
-            <DriverShiftsContent />
           </TabsContent>
 
           <TabsContent value="cadastro" className="space-y-4">
