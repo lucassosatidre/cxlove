@@ -193,7 +193,7 @@ export default function DriverAttendanceSection({ closingDate, isCompleted, isAd
                         <span className={`text-sm font-medium truncate ${isAbsent ? 'line-through opacity-50' : ''}`}>
                           {c.driverName}
                         </span>
-                        {c.confirmedAt && (
+                        {isAdmin && c.confirmedAt && (
                           <span className="text-[10px] text-muted-foreground flex items-center gap-0.5 shrink-0">
                             <Clock className="h-3 w-3" />
                             {format(new Date(c.confirmedAt), 'HH:mm')}
