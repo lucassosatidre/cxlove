@@ -100,7 +100,7 @@ export default function DriverShiftsContent() {
         .from('delivery_checkins')
         .select('id, shift_id, status, driver_id, confirmed_at, origin')
         .in('shift_id', shiftIds)
-        .eq('status', 'confirmado');
+        .in('status', ['confirmado', 'concluido']);
       checkins = data || [];
 
       const { data: wl } = await supabase
