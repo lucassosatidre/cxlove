@@ -60,7 +60,6 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
 
 export default function DriverManagement() {
   const { isAdmin, loading: roleLoading } = useUserRole();
-  const { session } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -69,6 +68,7 @@ export default function DriverManagement() {
     setSearchParams({ tab }, { replace: true });
   };
 
+  const [dashboardPeriod, setDashboardPeriod] = useState('30d');
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
