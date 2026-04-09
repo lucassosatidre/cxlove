@@ -121,10 +121,10 @@ export default function DriverRankingSection({ period }: Props) {
             <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
           ) : rows.length === 0 ? (
             <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Nenhum entregador</TableCell></TableRow>
-          ) : rows.map(r => {
+          ) : rows.map((r, idx) => {
             const hasActivity = r.confirmados + r.cancelamentos + r.noShows > 0;
             return (
-              <TableRow key={r.nome} className={getRowBg(r)}>
+              <TableRow key={r.nome} className={`${getRowBg(r)} ${idx % 2 === 1 ? 'bg-muted/30' : ''} hover:bg-muted/50 transition-colors`}>
                 <TableCell className="font-medium">{r.nome}</TableCell>
                 <TableCell className="text-center">{r.confirmados}</TableCell>
                 <TableCell className="text-center">{r.cancelamentos}</TableCell>
@@ -145,7 +145,7 @@ export default function DriverRankingSection({ period }: Props) {
                           style={{ width: `${r.taxa}%` }}
                         />
                       </div>
-                      <span className={`text-xs font-bold min-w-[32px] text-right ${r.taxa < 70 ? 'text-destructive' : r.taxa >= 90 ? 'text-green-600' : 'text-yellow-600'}`}>
+                      <span className={`text-xs font-bold min-w-[32px] text-right ${r.taxa < 70 ? 'text-destructive' : r.taxa >= 90 ? 'text-green-600 dark:text-green-400' : 'text-yellow-600 dark:text-yellow-400'}`}>
                         {r.taxa}%
                       </span>
                     </div>

@@ -6,6 +6,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import NotificationBell from './NotificationBell';
+import ThemeToggle from './ThemeToggle';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -17,8 +18,22 @@ interface AppLayoutProps {
 export default function AppLayout({ children, title, subtitle, headerActions }: AppLayoutProps) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('cx-sidebar-collapsed') === 'true';
+    }
+    return false;
+  });
   const { isAdmin } = useUserRole();
   const [noScheduleAlert, setNoScheduleAlert] = useState(false);
+
+  const handleToggleCollapse = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('cx-sidebar-collapsed', String(next));
+      return next;
+    });
+  };
 
   // Check if today has shifts configured (admin only)
   useEffect(() => {
@@ -34,6 +49,8 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
     checkTodaySchedule();
   }, [isAdmin]);
 
+  const sidebarWidth = isMobile ? '' : sidebarCollapsed ? 'ml-16' : 'ml-56';
+
   return (
     <div className="min-h-screen bg-background">
       {/* Mobile overlay */}
@@ -44,9 +61,14 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
         />
       )}
 
-      <AppSidebar open={!isMobile || sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <AppSidebar
+        open={!isMobile || sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        collapsed={!isMobile && sidebarCollapsed}
+        onToggleCollapse={handleToggleCollapse}
+      />
 
-      <div className={isMobile ? '' : 'ml-56'}>
+      <div className={`transition-all duration-300 ${sidebarWidth}`}>
         {/* Mobile header with hamburger */}
         {isMobile && (
           <header className="sticky top-0 z-10 bg-sidebar px-4 py-3 flex items-center justify-between">
@@ -56,22 +78,26 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
               </button>
               <span className="text-sm font-bold text-sidebar-accent-foreground">Conferência</span>
             </div>
-            <NotificationBell />
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <NotificationBell />
+            </div>
           </header>
         )}
 
-        {/* Desktop notification bell */}
+        {/* Desktop notification bell + theme toggle */}
         {!isMobile && (
-          <div className="absolute top-4 right-6 z-10">
+          <div className="absolute top-4 right-6 z-10 flex items-center gap-1">
+            <ThemeToggle />
             <NotificationBell />
           </div>
         )}
 
         {/* Admin alert: no schedule for today */}
         {isAdmin && noScheduleAlert && (
-          <div className="mx-4 sm:mx-8 mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center gap-2">
+          <div className="mx-4 sm:mx-8 mt-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-4 py-3 flex items-center gap-2">
             <span>⚠️</span>
-            <p className="text-sm text-amber-800 font-medium">
+            <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
               Atenção: não há escala de entregadores configurada para hoje ({format(new Date(), 'dd/MM')})
             </p>
           </div>
