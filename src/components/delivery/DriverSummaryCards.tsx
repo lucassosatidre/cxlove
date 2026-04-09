@@ -67,11 +67,11 @@ export default function DriverSummaryCards({ period }: Props) {
   }, [period]);
 
   const cards = [
-    { label: 'Ativos', value: stats.activeDrivers, icon: Users, color: 'text-green-600', bg: 'bg-green-500/10' },
-    { label: 'Turnos', value: stats.shiftsInPeriod, icon: Calendar, color: 'text-primary', bg: 'bg-primary/10' },
-    { label: 'Confirmações', value: stats.confirmationsInPeriod, icon: Check, color: 'text-blue-600', bg: 'bg-blue-500/10' },
+    { label: 'Ativos', value: stats.activeDrivers, icon: Users, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-950/40' },
+    { label: 'Turnos', value: stats.shiftsInPeriod, icon: Calendar, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-950/40' },
+    { label: 'Confirmações', value: stats.confirmationsInPeriod, icon: Check, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-100 dark:bg-green-950/40' },
     { label: 'Cancelamentos', value: stats.cancellationsInPeriod, icon: X, color: 'text-muted-foreground', bg: 'bg-muted' },
-    { label: 'No-shows', value: stats.noShowsInPeriod, icon: AlertTriangle, color: stats.noShowsInPeriod > 0 ? 'text-destructive' : 'text-muted-foreground', bg: stats.noShowsInPeriod > 0 ? 'bg-destructive/10' : 'bg-muted' },
+    { label: 'No-shows', value: stats.noShowsInPeriod, icon: AlertTriangle, color: stats.noShowsInPeriod > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground', bg: stats.noShowsInPeriod > 0 ? 'bg-red-100 dark:bg-red-950/40' : 'bg-muted' },
   ];
 
   return (
