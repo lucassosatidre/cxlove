@@ -2,53 +2,76 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Users, Calendar, Check, X, AlertTriangle } from 'lucide-react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, subDays, startOfMonth, endOfMonth, subMonths } from 'date-fns';
 
 interface Stats {
   activeDrivers: number;
-  shiftsThisMonth: number;
-  confirmationsThisMonth: number;
-  cancellationsThisMonth: number;
-  noShowsThisMonth: number;
+  shiftsInPeriod: number;
+  confirmationsInPeriod: number;
+  cancellationsInPeriod: number;
+  noShowsInPeriod: number;
 }
 
-export default function DriverSummaryCards() {
+interface Props {
+  period: string;
+}
+
+function getPeriodRange(period: string): { start: string; end: string } {
+  const now = new Date();
+  const today = format(now, 'yyyy-MM-dd');
+  switch (period) {
+    case '7d':
+      return { start: format(subDays(now, 7), 'yyyy-MM-dd'), end: today };
+    case '30d':
+      return { start: format(subDays(now, 30), 'yyyy-MM-dd'), end: today };
+    case 'this_month':
+      return { start: format(startOfMonth(now), 'yyyy-MM-dd'), end: format(endOfMonth(now), 'yyyy-MM-dd') };
+    case 'last_month': {
+      const prev = subMonths(now, 1);
+      return { start: format(startOfMonth(prev), 'yyyy-MM-dd'), end: format(endOfMonth(prev), 'yyyy-MM-dd') };
+    }
+    default:
+      return { start: format(subDays(now, 30), 'yyyy-MM-dd'), end: today };
+  }
+}
+
+export { getPeriodRange };
+
+export default function DriverSummaryCards({ period }: Props) {
   const [stats, setStats] = useState<Stats>({
-    activeDrivers: 0, shiftsThisMonth: 0, confirmationsThisMonth: 0,
-    cancellationsThisMonth: 0, noShowsThisMonth: 0,
+    activeDrivers: 0, shiftsInPeriod: 0, confirmationsInPeriod: 0,
+    cancellationsInPeriod: 0, noShowsInPeriod: 0,
   });
 
   useEffect(() => {
     const fetchStats = async () => {
-      const now = new Date();
-      const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
-      const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd');
+      const { start, end } = getPeriodRange(period);
 
       const [driversRes, shiftsRes, checkinsRes] = await Promise.all([
         supabase.from('delivery_drivers').select('id', { count: 'exact', head: true }).eq('status', 'ativo'),
-        supabase.from('delivery_shifts').select('id', { count: 'exact', head: true }).gte('data', monthStart).lte('data', monthEnd),
+        supabase.from('delivery_shifts').select('id', { count: 'exact', head: true }).gte('data', start).lte('data', end),
         supabase.from('delivery_checkins').select('status, shift_id, delivery_shifts!inner(data)')
-          .gte('delivery_shifts.data', monthStart).lte('delivery_shifts.data', monthEnd),
+          .gte('delivery_shifts.data', start).lte('delivery_shifts.data', end),
       ]);
 
       const checkins = checkinsRes.data || [];
       setStats({
         activeDrivers: driversRes.count || 0,
-        shiftsThisMonth: shiftsRes.count || 0,
-        confirmationsThisMonth: checkins.filter(c => c.status === 'confirmado' || c.status === 'concluido').length,
-        cancellationsThisMonth: checkins.filter(c => c.status === 'cancelado').length,
-        noShowsThisMonth: checkins.filter(c => c.status === 'no_show').length,
+        shiftsInPeriod: shiftsRes.count || 0,
+        confirmationsInPeriod: checkins.filter(c => c.status === 'confirmado' || c.status === 'concluido').length,
+        cancellationsInPeriod: checkins.filter(c => c.status === 'cancelado').length,
+        noShowsInPeriod: checkins.filter(c => c.status === 'no_show').length,
       });
     };
     fetchStats();
-  }, []);
+  }, [period]);
 
   const cards = [
     { label: 'Ativos', value: stats.activeDrivers, icon: Users, color: 'text-green-600', bg: 'bg-green-500/10' },
-    { label: 'Turnos (mês)', value: stats.shiftsThisMonth, icon: Calendar, color: 'text-primary', bg: 'bg-primary/10' },
-    { label: 'Confirmações', value: stats.confirmationsThisMonth, icon: Check, color: 'text-blue-600', bg: 'bg-blue-500/10' },
-    { label: 'Cancelamentos', value: stats.cancellationsThisMonth, icon: X, color: 'text-muted-foreground', bg: 'bg-muted' },
-    { label: 'No-shows', value: stats.noShowsThisMonth, icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
+    { label: 'Turnos', value: stats.shiftsInPeriod, icon: Calendar, color: 'text-primary', bg: 'bg-primary/10' },
+    { label: 'Confirmações', value: stats.confirmationsInPeriod, icon: Check, color: 'text-blue-600', bg: 'bg-blue-500/10' },
+    { label: 'Cancelamentos', value: stats.cancellationsInPeriod, icon: X, color: 'text-muted-foreground', bg: 'bg-muted' },
+    { label: 'No-shows', value: stats.noShowsInPeriod, icon: AlertTriangle, color: stats.noShowsInPeriod > 0 ? 'text-destructive' : 'text-muted-foreground', bg: stats.noShowsInPeriod > 0 ? 'bg-destructive/10' : 'bg-muted' },
   ];
 
   return (
