@@ -280,7 +280,30 @@ export default function EntregadorPortal() {
 
   const handleAttemptCheckin = async () => {
     if (!driver || !todayShiftId || !user) return;
+
+    // Re-check operational date at action time to prevent stale-state check-ins
+    const currentOpDate = getBrasiliaToday();
+    const currentHour = getBrasiliaHour();
+    if (currentHour < 15 || currentHour >= 18) {
+      toast.error('Check-in permitido apenas entre 15h e 17:59');
+      return;
+    }
+
     setActionLoading(true);
+
+    // Verify shift belongs to current operational date
+    const { data: shiftCheck } = await supabase
+      .from('delivery_shifts')
+      .select('data')
+      .eq('id', todayShiftId)
+      .single();
+
+    if (shiftCheck?.data !== currentOpDate) {
+      toast.error('Este turno não pertence ao dia operacional atual');
+      fetchAll(); // refresh to get correct shift
+      setActionLoading(false);
+      return;
+    }
 
     await cleanupStaleCheckins(driver.id);
 
