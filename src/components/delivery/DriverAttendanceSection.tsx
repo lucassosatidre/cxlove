@@ -24,6 +24,7 @@ interface Props {
   closingDate: string;
   isCompleted: boolean;
   isAdmin: boolean;
+  isOperator?: boolean;
 }
 
 export function useDriverAttendance(closingDate: string) {
@@ -103,24 +104,30 @@ export function useDriverAttendance(closingDate: string) {
   return { shifts, setShifts, loading, fetchAttendance, unmarkedCount, presentCount, absentCount, totalCount };
 }
 
-export default function DriverAttendanceSection({ closingDate, isCompleted, isAdmin }: Props) {
+export default function DriverAttendanceSection({ closingDate, isCompleted, isAdmin, isOperator = false }: Props) {
   const { shifts, setShifts, loading, presentCount, absentCount, totalCount } = useDriverAttendance(closingDate);
   const [updating, setUpdating] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
-  const readOnly = !isAdmin;
+  const canMark = isAdmin || isOperator;
 
   const handleMark = async (checkinId: string, newStatus: 'concluido' | 'no_show', driverName: string) => {
+    // Find current status to support undo
+    const currentCheckin = shifts.flatMap(s => s.checkins).find(c => c.checkinId === checkinId);
+    const previousStatus = currentCheckin?.status || 'confirmado';
+
+    // If clicking the same status, undo back to confirmado
+    const targetStatus = previousStatus === newStatus ? 'confirmado' : newStatus;
     // Optimistic update
     setShifts(prev => prev.map(s => ({
       ...s,
-      checkins: s.checkins.map(c => c.checkinId === checkinId ? { ...c, status: newStatus } : c),
+      checkins: s.checkins.map(c => c.checkinId === checkinId ? { ...c, status: targetStatus } : c),
     })));
     setUpdating(checkinId);
 
     const { data, error } = await supabase
       .from('delivery_checkins')
-      .update({ status: newStatus })
+      .update({ status: targetStatus })
       .eq('id', checkinId)
       .select();
 
@@ -129,13 +136,15 @@ export default function DriverAttendanceSection({ closingDate, isCompleted, isAd
       // Revert optimistic update
       setShifts(prev => prev.map(s => ({
         ...s,
-        checkins: s.checkins.map(c => c.checkinId === checkinId ? { ...c, status: 'confirmado' } : c),
+        checkins: s.checkins.map(c => c.checkinId === checkinId ? { ...c, status: previousStatus } : c),
       })));
     } else {
-      if (newStatus === 'concluido') {
+      if (targetStatus === 'concluido') {
         toast.success(`Presença confirmada: ${driverName}`);
-      } else {
+      } else if (targetStatus === 'no_show') {
         toast.success(`${driverName} marcado como falta`);
+      } else {
+        toast.success(`Marcação desfeita: ${driverName}`);
       }
     }
     setUpdating(null);
@@ -203,7 +212,7 @@ export default function DriverAttendanceSection({ closingDate, isCompleted, isAd
                         {isAbsent && <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Faltou</Badge>}
                       </div>
 
-                      {!readOnly && (
+                      {canMark && (
                         <div className="flex items-center gap-1 shrink-0">
                           <Button
                             variant={isPresent ? 'default' : 'outline'}
