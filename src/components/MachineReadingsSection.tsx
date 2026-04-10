@@ -3,11 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CreditCard, Plus, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import SerialAutocomplete from '@/components/SerialAutocomplete';
+import PersonAutocomplete from '@/components/PersonAutocomplete';
 
 interface SerialSuggestion {
   serial: string;
@@ -78,6 +79,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [conferenceCollapsed, setConferenceCollapsed] = useState(true);
   const [validationError, setValidationError] = useState('');
   const [serialSuggestions, setSerialSuggestions] = useState<SerialSuggestion[]>([]);
+  const [confirmedDriverNames, setConfirmedDriverNames] = useState<string[]>([]);
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
   const closingId = dailyClosingId || salonClosingId || '';
@@ -86,6 +88,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   useEffect(() => {
     loadReadings();
     loadSerialSuggestions();
+    loadConfirmedDrivers();
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
   }, [closingId]);
 
@@ -125,6 +128,25 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     setSerialSuggestions(
       Object.entries(map).map(([serial, v]) => ({ serial, count: v.count, lastUsed: v.lastUsed }))
     );
+  };
+
+  const loadConfirmedDrivers = async () => {
+    const now = new Date();
+    const brDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const brHour = brDate.getHours();
+    if (brHour < 3) brDate.setDate(brDate.getDate() - 1);
+    const dateStr = `${brDate.getFullYear()}-${String(brDate.getMonth() + 1).padStart(2, '0')}-${String(brDate.getDate()).padStart(2, '0')}`;
+    const { data: shifts } = await supabase.from('delivery_shifts').select('id').eq('data', dateStr);
+    if (!shifts || shifts.length === 0) return;
+    const shiftIds = shifts.map(s => s.id);
+    const { data: checkins } = await supabase.from('delivery_checkins').select('driver_id').in('shift_id', shiftIds).in('status', ['confirmado', 'concluido']);
+    if (!checkins || checkins.length === 0) return;
+    const driverIds = [...new Set(checkins.map(c => c.driver_id))];
+    const { data: drivers } = await supabase.from('delivery_drivers').select('nome').in('id', driverIds).order('nome');
+    if (drivers) {
+      const names = [...new Set(drivers.map(d => d.nome.split(' ')[0]))].sort();
+      setConfirmedDriverNames(names);
+    }
   };
 
   const addReading = async () => {
@@ -392,30 +414,14 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                 </div>
                                 <div className="flex-1 flex items-center gap-2">
                                   <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
-                                  {deliveryPersons.length > 0 ? (
-                                    <Select
-                                      value={r.delivery_person}
-                                      onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
-                                      disabled={isCompleted}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs flex-1">
-                                        <SelectValue placeholder="Selecione..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {deliveryPersons.map(d => (
-                                          <SelectItem key={d} value={d}>{d}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : (
-                                    <Input
-                                      value={r.delivery_person}
-                                      onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
-                                      className="h-8 text-xs flex-1"
-                                      placeholder={`Nome do ${personLabel.toLowerCase()}...`}
-                                      disabled={isCompleted}
-                                    />
-                                  )}
+                                  <PersonAutocomplete
+                                    value={r.delivery_person}
+                                    onChange={(v) => updateField(r.id, 'delivery_person', v)}
+                                    suggestions={confirmedDriverNames.length > 0 ? confirmedDriverNames : deliveryPersons}
+                                    className="h-8 text-xs flex-1"
+                                    placeholder={`Nome do ${personLabel.toLowerCase()}...`}
+                                    disabled={isCompleted}
+                                  />
                                 </div>
                               </div>
                               <div className="grid grid-cols-4 gap-2">
