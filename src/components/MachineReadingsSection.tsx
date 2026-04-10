@@ -414,30 +414,14 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                 </div>
                                 <div className="flex-1 flex items-center gap-2">
                                   <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
-                                  {deliveryPersons.length > 0 ? (
-                                    <Select
-                                      value={r.delivery_person}
-                                      onValueChange={(v) => updateField(r.id, 'delivery_person', v)}
-                                      disabled={isCompleted}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs flex-1">
-                                        <SelectValue placeholder="Selecione..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {deliveryPersons.map(d => (
-                                          <SelectItem key={d} value={d}>{d}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  ) : (
-                                    <Input
-                                      value={r.delivery_person}
-                                      onChange={(e) => updateField(r.id, 'delivery_person', e.target.value)}
-                                      className="h-8 text-xs flex-1"
-                                      placeholder={`Nome do ${personLabel.toLowerCase()}...`}
-                                      disabled={isCompleted}
-                                    />
-                                  )}
+                                  <PersonAutocomplete
+                                    value={r.delivery_person}
+                                    onChange={(v) => updateField(r.id, 'delivery_person', v)}
+                                    suggestions={confirmedDriverNames.length > 0 ? confirmedDriverNames : deliveryPersons}
+                                    className="h-8 text-xs flex-1"
+                                    placeholder={`Nome do ${personLabel.toLowerCase()}...`}
+                                    disabled={isCompleted}
+                                  />
                                 </div>
                               </div>
                               <div className="grid grid-cols-4 gap-2">
