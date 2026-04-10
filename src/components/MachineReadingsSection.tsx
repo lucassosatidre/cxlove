@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { CreditCard, Plus, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import SerialAutocomplete from '@/components/SerialAutocomplete';
+import PersonAutocomplete from '@/components/PersonAutocomplete';
 
 interface SerialSuggestion {
   serial: string;
