@@ -106,6 +106,27 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     setLoading(false);
   };
 
+  const loadSerialSuggestions = async () => {
+    const filterField = dailyClosingId ? 'daily_closing_id' : 'salon_closing_id';
+    const { data } = await supabase
+      .from('machine_readings')
+      .select('machine_serial, created_at')
+      .not('machine_serial', 'eq', '')
+      .not(filterField, 'is', null);
+    if (!data) return;
+    const map: Record<string, { count: number; lastUsed: string | null }> = {};
+    for (const row of data) {
+      const s = row.machine_serial;
+      if (!s) continue;
+      if (!map[s]) map[s] = { count: 0, lastUsed: null };
+      map[s].count++;
+      if (!map[s].lastUsed || row.created_at > map[s].lastUsed!) map[s].lastUsed = row.created_at;
+    }
+    setSerialSuggestions(
+      Object.entries(map).map(([serial, v]) => ({ serial, count: v.count, lastUsed: v.lastUsed }))
+    );
+  };
+
   const addReading = async () => {
     if (!user || !closingId) return;
     if (readings.length > 0) {
