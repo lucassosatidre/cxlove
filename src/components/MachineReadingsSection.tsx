@@ -79,6 +79,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [conferenceCollapsed, setConferenceCollapsed] = useState(true);
   const [validationError, setValidationError] = useState('');
   const [serialSuggestions, setSerialSuggestions] = useState<SerialSuggestion[]>([]);
+  const [confirmedDriverNames, setConfirmedDriverNames] = useState<string[]>([]);
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
   const closingId = dailyClosingId || salonClosingId || '';
@@ -87,6 +88,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   useEffect(() => {
     loadReadings();
     loadSerialSuggestions();
+    loadConfirmedDrivers();
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
   }, [closingId]);
 
