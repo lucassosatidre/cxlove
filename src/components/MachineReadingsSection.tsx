@@ -7,6 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CreditCard, Plus, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
+import SerialAutocomplete from '@/components/SerialAutocomplete';
+
+interface SerialSuggestion {
+  serial: string;
+  count: number;
+  lastUsed: string | null;
+}
 
 interface MachineReading {
   id: string;
@@ -70,6 +77,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [conferenceCollapsed, setConferenceCollapsed] = useState(true);
   const [validationError, setValidationError] = useState('');
+  const [serialSuggestions, setSerialSuggestions] = useState<SerialSuggestion[]>([]);
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
   const closingId = dailyClosingId || salonClosingId || '';
@@ -77,6 +85,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
 
   useEffect(() => {
     loadReadings();
+    loadSerialSuggestions();
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
   }, [closingId]);
 
@@ -95,6 +104,27 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       .order('created_at', { ascending: true });
     setReadings((data || []).map(parseRow));
     setLoading(false);
+  };
+
+  const loadSerialSuggestions = async () => {
+    const filterField = dailyClosingId ? 'daily_closing_id' : 'salon_closing_id';
+    const { data } = await supabase
+      .from('machine_readings')
+      .select('machine_serial, created_at')
+      .not('machine_serial', 'eq', '')
+      .not(filterField, 'is', null);
+    if (!data) return;
+    const map: Record<string, { count: number; lastUsed: string | null }> = {};
+    for (const row of data) {
+      const s = row.machine_serial;
+      if (!s) continue;
+      if (!map[s]) map[s] = { count: 0, lastUsed: null };
+      map[s].count++;
+      if (!map[s].lastUsed || row.created_at > map[s].lastUsed!) map[s].lastUsed = row.created_at;
+    }
+    setSerialSuggestions(
+      Object.entries(map).map(([serial, v]) => ({ serial, count: v.count, lastUsed: v.lastUsed }))
+    );
   };
 
   const addReading = async () => {
@@ -350,9 +380,10 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                     <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
                                       {SERIAL_PREFIX}
                                     </span>
-                                    <Input
+                                    <SerialAutocomplete
                                       value={r.machine_serial}
-                                      onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
+                                      onChange={(v) => updateField(r.id, 'machine_serial', v)}
+                                      suggestions={serialSuggestions}
                                       className="h-8 text-xs w-24 rounded-l-none font-mono"
                                       placeholder="000"
                                       disabled={isCompleted}
