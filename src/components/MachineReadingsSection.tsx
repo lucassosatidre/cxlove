@@ -77,6 +77,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [conferenceCollapsed, setConferenceCollapsed] = useState(true);
   const [validationError, setValidationError] = useState('');
+  const [serialSuggestions, setSerialSuggestions] = useState<SerialSuggestion[]>([]);
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
 
   const closingId = dailyClosingId || salonClosingId || '';
