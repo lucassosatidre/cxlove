@@ -380,9 +380,10 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                     <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
                                       {SERIAL_PREFIX}
                                     </span>
-                                    <Input
+                                    <SerialAutocomplete
                                       value={r.machine_serial}
-                                      onChange={(e) => updateField(r.id, 'machine_serial', e.target.value)}
+                                      onChange={(v) => updateField(r.id, 'machine_serial', v)}
+                                      suggestions={serialSuggestions}
                                       className="h-8 text-xs w-24 rounded-l-none font-mono"
                                       placeholder="000"
                                       disabled={isCompleted}
