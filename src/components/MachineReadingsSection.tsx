@@ -130,6 +130,25 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     );
   };
 
+  const loadConfirmedDrivers = async () => {
+    const now = new Date();
+    const brDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+    const brHour = brDate.getHours();
+    if (brHour < 3) brDate.setDate(brDate.getDate() - 1);
+    const dateStr = `${brDate.getFullYear()}-${String(brDate.getMonth() + 1).padStart(2, '0')}-${String(brDate.getDate()).padStart(2, '0')}`;
+    const { data: shifts } = await supabase.from('delivery_shifts').select('id').eq('data', dateStr);
+    if (!shifts || shifts.length === 0) return;
+    const shiftIds = shifts.map(s => s.id);
+    const { data: checkins } = await supabase.from('delivery_checkins').select('driver_id').in('shift_id', shiftIds).in('status', ['confirmado', 'concluido']);
+    if (!checkins || checkins.length === 0) return;
+    const driverIds = [...new Set(checkins.map(c => c.driver_id))];
+    const { data: drivers } = await supabase.from('delivery_drivers').select('nome').in('id', driverIds).order('nome');
+    if (drivers) {
+      const names = [...new Set(drivers.map(d => d.nome.split(' ')[0]))].sort();
+      setConfirmedDriverNames(names);
+    }
+  };
+
   const addReading = async () => {
     if (!user || !closingId) return;
     if (readings.length > 0) {
