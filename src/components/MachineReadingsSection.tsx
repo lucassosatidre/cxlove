@@ -85,6 +85,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
 
   useEffect(() => {
     loadReadings();
+    loadSerialSuggestions();
     return () => { Object.values(saveTimers).forEach(clearTimeout); };
   }, [closingId]);
 
