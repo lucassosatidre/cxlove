@@ -143,136 +143,141 @@ export default function Reconciliation() {
 
 
   const loadData = async () => {
-    // Load closing data
-    const { data: closing } = await supabase
-      .from('daily_closings')
-      .select('closing_date, status')
-      .eq('id', id!)
-      .single();
+    try {
+      // Load closing data
+      const { data: closing } = await supabase
+        .from('daily_closings')
+        .select('closing_date, status')
+        .eq('id', id!)
+        .single();
 
-    setClosingData(closing ? { closing_date: closing.closing_date, status: closing.status } : null);
+      setClosingData(closing ? { closing_date: closing.closing_date, status: closing.status } : null);
 
-    // Load orders and imports for this closing
-    const [{ data: ordData }, { data: impData }] = await Promise.all([
-      supabase
-        .from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed, sale_date, sale_time, sales_channel, partner_order_number')
-        .eq('daily_closing_id', id!),
-      supabase
-        .from('imports')
-        .select('id, file_name, created_at, total_rows, new_rows, duplicate_rows')
-        .eq('daily_closing_id', id!)
-        .order('created_at', { ascending: false }),
-    ]);
+      // Load orders and imports for this closing
+      const [{ data: ordData }, { data: impData }] = await Promise.all([
+        supabase
+          .from('imported_orders')
+          .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed, sale_date, sale_time, sales_channel, partner_order_number')
+          .eq('daily_closing_id', id!),
+        supabase
+          .from('imports')
+          .select('id, file_name, created_at, total_rows, new_rows, duplicate_rows')
+          .eq('daily_closing_id', id!)
+          .order('created_at', { ascending: false }),
+      ]);
 
-    const ordersList = ordData || [];
-    setOrders(ordersList);
-    setImportRecords(impData || []);
+      const ordersList = ordData || [];
+      setOrders(ordersList);
+      setImportRecords(impData || []);
 
-    // Load all breakdowns for orders in this closing
-    if (ordersList.length > 0) {
-      const orderIds = ordersList.map(o => o.id);
-      const { data: bkData } = await supabase
-        .from('order_payment_breakdowns')
-        .select('imported_order_id, payment_method_name, payment_type, amount')
-        .in('imported_order_id', orderIds);
-      const breakdowns = (bkData || []).map(b => ({ ...b, amount: Number(b.amount) }));
-      setAllBreakdowns(breakdowns);
+      // Load all breakdowns for orders in this closing
+      if (ordersList.length > 0) {
+        const orderIds = ordersList.map(o => o.id);
+        const { data: bkData } = await supabase
+          .from('order_payment_breakdowns')
+          .select('imported_order_id, payment_method_name, payment_type, amount')
+          .in('imported_order_id', orderIds);
+        const breakdowns = (bkData || []).map(b => ({ ...b, amount: Number(b.amount) }));
+        setAllBreakdowns(breakdowns);
 
-      // Pre-compute breakdown validity so orders with completed rateio aren't shown as pending
-      const validityMap: Record<string, boolean> = {};
-      for (const order of ordersList) {
-        if (needsBreakdown(order.payment_method)) {
-          const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === order.id);
-          if (orderBreakdowns.length > 0) {
-            const sum = orderBreakdowns.reduce((s, b) => s + b.amount, 0);
-            const diff = Math.abs(sum - Number(order.total_amount));
-            validityMap[order.id] = diff < 0.01;
-          } else {
-            validityMap[order.id] = false;
+        // Pre-compute breakdown validity so orders with completed rateio aren't shown as pending
+        const validityMap: Record<string, boolean> = {};
+        for (const order of ordersList) {
+          if (needsBreakdown(order.payment_method)) {
+            const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === order.id);
+            if (orderBreakdowns.length > 0) {
+              const sum = orderBreakdowns.reduce((s, b) => s + b.amount, 0);
+              const diff = Math.abs(sum - Number(order.total_amount));
+              validityMap[order.id] = diff < 0.01;
+            } else {
+              validityMap[order.id] = false;
+            }
           }
         }
+        setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
       }
-      setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
-    }
 
-    // Load saved cash snapshots (abertura + fechamento)
-    if (id) {
-      const { data: snapList } = await supabase
-        .from('cash_snapshots')
-        .select('counts, total, updated_at, snapshot_type')
-        .eq('daily_closing_id', id)
-        .order('updated_at', { ascending: false });
+      // Load saved cash snapshots (abertura + fechamento)
+      if (id) {
+        const { data: snapList } = await supabase
+          .from('cash_snapshots')
+          .select('counts, total, updated_at, snapshot_type')
+          .eq('daily_closing_id', id)
+          .order('updated_at', { ascending: false });
 
-      setCashSnapshotDataAbertura(null);
-      setCashSnapshotSavedAbertura(false);
-      setCashCountsAbertura({});
-      setCashSnapshotDataFechamento(null);
-      setCashSnapshotSavedFechamento(false);
-      setCashCountsFechamento({});
+        setCashSnapshotDataAbertura(null);
+        setCashSnapshotSavedAbertura(false);
+        setCashCountsAbertura({});
+        setCashSnapshotDataFechamento(null);
+        setCashSnapshotSavedFechamento(false);
+        setCashCountsFechamento({});
 
-      const latestSnapshots = getLatestCashSnapshots(snapList || []);
+        const latestSnapshots = getLatestCashSnapshots(snapList || []);
 
-      if (latestSnapshots.abertura) {
-        const counts = latestSnapshots.abertura.counts as Record<string, number>;
-        const restored: Record<number, number> = {};
-        for (const [k, v] of Object.entries(counts)) {
-          restored[parseFloat(k)] = v;
+        if (latestSnapshots.abertura) {
+          const counts = latestSnapshots.abertura.counts as Record<string, number>;
+          const restored: Record<number, number> = {};
+          for (const [k, v] of Object.entries(counts)) {
+            restored[parseFloat(k)] = v;
+          }
+          setCashSnapshotDataAbertura({
+            counts,
+            total: Number(latestSnapshots.abertura.total),
+            updated_at: latestSnapshots.abertura.updated_at,
+          });
+          setCashSnapshotSavedAbertura(true);
+          setCashCountsAbertura(restored);
         }
-        setCashSnapshotDataAbertura({
-          counts,
-          total: Number(latestSnapshots.abertura.total),
-          updated_at: latestSnapshots.abertura.updated_at,
-        });
-        setCashSnapshotSavedAbertura(true);
-        setCashCountsAbertura(restored);
-      }
 
-      if (latestSnapshots.fechamento) {
-        const counts = latestSnapshots.fechamento.counts as Record<string, number>;
-        const restored: Record<number, number> = {};
-        for (const [k, v] of Object.entries(counts)) {
-          restored[parseFloat(k)] = v;
+        if (latestSnapshots.fechamento) {
+          const counts = latestSnapshots.fechamento.counts as Record<string, number>;
+          const restored: Record<number, number> = {};
+          for (const [k, v] of Object.entries(counts)) {
+            restored[parseFloat(k)] = v;
+          }
+          setCashSnapshotDataFechamento({
+            counts,
+            total: Number(latestSnapshots.fechamento.total),
+            updated_at: latestSnapshots.fechamento.updated_at,
+          });
+          setCashSnapshotSavedFechamento(true);
+          setCashCountsFechamento(restored);
         }
-        setCashSnapshotDataFechamento({
-          counts,
-          total: Number(latestSnapshots.fechamento.total),
-          updated_at: latestSnapshots.fechamento.updated_at,
-        });
-        setCashSnapshotSavedFechamento(true);
-        setCashCountsFechamento(restored);
       }
-    }
 
-    // Load admin's expected cash for this date
-    if (closing?.closing_date) {
-      const { data: expectation } = await supabase
-        .from('cash_expectations')
-        .select('counts, total')
-        .eq('closing_date', closing.closing_date)
-        .eq('sector', 'tele')
+      // Load admin's expected cash for this date
+      if (closing?.closing_date) {
+        const { data: expectation } = await supabase
+          .from('cash_expectations')
+          .select('counts, total')
+          .eq('closing_date', closing.closing_date)
+          .eq('sector', 'tele')
+          .maybeSingle();
+
+        if (expectation) {
+          setExpectedCash({
+            counts: expectation.counts as Record<string, number>,
+            total: Number(expectation.total),
+          });
+        }
+      }
+
+      // Load last auto-sync timestamp
+      const { data: lastSyncImport } = await supabase
+        .from('imports')
+        .select('created_at')
+        .like('file_name', 'saipos-api-%')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
-
-      if (expectation) {
-        setExpectedCash({
-          counts: expectation.counts as Record<string, number>,
-          total: Number(expectation.total),
-        });
-      }
+      
+      setLastAutoSync(lastSyncImport?.created_at || null);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao carregar dados do fechamento.');
+    } finally {
+      setLoading(false);
     }
-
-    // Load last auto-sync timestamp
-    const { data: lastSyncImport } = await supabase
-      .from('imports')
-      .select('created_at')
-      .like('file_name', 'saipos-api-%')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    
-    setLastAutoSync(lastSyncImport?.created_at || null);
-
-    setLoading(false);
   };
 
   const toggleImportSelection = (importId: string) => {
