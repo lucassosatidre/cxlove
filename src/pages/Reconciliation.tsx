@@ -143,136 +143,141 @@ export default function Reconciliation() {
 
 
   const loadData = async () => {
-    // Load closing data
-    const { data: closing } = await supabase
-      .from('daily_closings')
-      .select('closing_date, status')
-      .eq('id', id!)
-      .single();
+    try {
+      // Load closing data
+      const { data: closing } = await supabase
+        .from('daily_closings')
+        .select('closing_date, status')
+        .eq('id', id!)
+        .single();
 
-    setClosingData(closing ? { closing_date: closing.closing_date, status: closing.status } : null);
+      setClosingData(closing ? { closing_date: closing.closing_date, status: closing.status } : null);
 
-    // Load orders and imports for this closing
-    const [{ data: ordData }, { data: impData }] = await Promise.all([
-      supabase
-        .from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed, sale_date, sale_time, sales_channel, partner_order_number')
-        .eq('daily_closing_id', id!),
-      supabase
-        .from('imports')
-        .select('id, file_name, created_at, total_rows, new_rows, duplicate_rows')
-        .eq('daily_closing_id', id!)
-        .order('created_at', { ascending: false }),
-    ]);
+      // Load orders and imports for this closing
+      const [{ data: ordData }, { data: impData }] = await Promise.all([
+        supabase
+          .from('imported_orders')
+          .select('id, order_number, payment_method, total_amount, delivery_person, is_confirmed, sale_date, sale_time, sales_channel, partner_order_number')
+          .eq('daily_closing_id', id!),
+        supabase
+          .from('imports')
+          .select('id, file_name, created_at, total_rows, new_rows, duplicate_rows')
+          .eq('daily_closing_id', id!)
+          .order('created_at', { ascending: false }),
+      ]);
 
-    const ordersList = ordData || [];
-    setOrders(ordersList);
-    setImportRecords(impData || []);
+      const ordersList = ordData || [];
+      setOrders(ordersList);
+      setImportRecords(impData || []);
 
-    // Load all breakdowns for orders in this closing
-    if (ordersList.length > 0) {
-      const orderIds = ordersList.map(o => o.id);
-      const { data: bkData } = await supabase
-        .from('order_payment_breakdowns')
-        .select('imported_order_id, payment_method_name, payment_type, amount')
-        .in('imported_order_id', orderIds);
-      const breakdowns = (bkData || []).map(b => ({ ...b, amount: Number(b.amount) }));
-      setAllBreakdowns(breakdowns);
+      // Load all breakdowns for orders in this closing
+      if (ordersList.length > 0) {
+        const orderIds = ordersList.map(o => o.id);
+        const { data: bkData } = await supabase
+          .from('order_payment_breakdowns')
+          .select('imported_order_id, payment_method_name, payment_type, amount')
+          .in('imported_order_id', orderIds);
+        const breakdowns = (bkData || []).map(b => ({ ...b, amount: Number(b.amount) }));
+        setAllBreakdowns(breakdowns);
 
-      // Pre-compute breakdown validity so orders with completed rateio aren't shown as pending
-      const validityMap: Record<string, boolean> = {};
-      for (const order of ordersList) {
-        if (needsBreakdown(order.payment_method)) {
-          const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === order.id);
-          if (orderBreakdowns.length > 0) {
-            const sum = orderBreakdowns.reduce((s, b) => s + b.amount, 0);
-            const diff = Math.abs(sum - Number(order.total_amount));
-            validityMap[order.id] = diff < 0.01;
-          } else {
-            validityMap[order.id] = false;
+        // Pre-compute breakdown validity so orders with completed rateio aren't shown as pending
+        const validityMap: Record<string, boolean> = {};
+        for (const order of ordersList) {
+          if (needsBreakdown(order.payment_method)) {
+            const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === order.id);
+            if (orderBreakdowns.length > 0) {
+              const sum = orderBreakdowns.reduce((s, b) => s + b.amount, 0);
+              const diff = Math.abs(sum - Number(order.total_amount));
+              validityMap[order.id] = diff < 0.01;
+            } else {
+              validityMap[order.id] = false;
+            }
           }
         }
+        setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
       }
-      setBreakdownValidity(prev => ({ ...prev, ...validityMap }));
-    }
 
-    // Load saved cash snapshots (abertura + fechamento)
-    if (id) {
-      const { data: snapList } = await supabase
-        .from('cash_snapshots')
-        .select('counts, total, updated_at, snapshot_type')
-        .eq('daily_closing_id', id)
-        .order('updated_at', { ascending: false });
+      // Load saved cash snapshots (abertura + fechamento)
+      if (id) {
+        const { data: snapList } = await supabase
+          .from('cash_snapshots')
+          .select('counts, total, updated_at, snapshot_type')
+          .eq('daily_closing_id', id)
+          .order('updated_at', { ascending: false });
 
-      setCashSnapshotDataAbertura(null);
-      setCashSnapshotSavedAbertura(false);
-      setCashCountsAbertura({});
-      setCashSnapshotDataFechamento(null);
-      setCashSnapshotSavedFechamento(false);
-      setCashCountsFechamento({});
+        setCashSnapshotDataAbertura(null);
+        setCashSnapshotSavedAbertura(false);
+        setCashCountsAbertura({});
+        setCashSnapshotDataFechamento(null);
+        setCashSnapshotSavedFechamento(false);
+        setCashCountsFechamento({});
 
-      const latestSnapshots = getLatestCashSnapshots(snapList || []);
+        const latestSnapshots = getLatestCashSnapshots(snapList || []);
 
-      if (latestSnapshots.abertura) {
-        const counts = latestSnapshots.abertura.counts as Record<string, number>;
-        const restored: Record<number, number> = {};
-        for (const [k, v] of Object.entries(counts)) {
-          restored[parseFloat(k)] = v;
+        if (latestSnapshots.abertura) {
+          const counts = latestSnapshots.abertura.counts as Record<string, number>;
+          const restored: Record<number, number> = {};
+          for (const [k, v] of Object.entries(counts)) {
+            restored[parseFloat(k)] = v;
+          }
+          setCashSnapshotDataAbertura({
+            counts,
+            total: Number(latestSnapshots.abertura.total),
+            updated_at: latestSnapshots.abertura.updated_at,
+          });
+          setCashSnapshotSavedAbertura(true);
+          setCashCountsAbertura(restored);
         }
-        setCashSnapshotDataAbertura({
-          counts,
-          total: Number(latestSnapshots.abertura.total),
-          updated_at: latestSnapshots.abertura.updated_at,
-        });
-        setCashSnapshotSavedAbertura(true);
-        setCashCountsAbertura(restored);
-      }
 
-      if (latestSnapshots.fechamento) {
-        const counts = latestSnapshots.fechamento.counts as Record<string, number>;
-        const restored: Record<number, number> = {};
-        for (const [k, v] of Object.entries(counts)) {
-          restored[parseFloat(k)] = v;
+        if (latestSnapshots.fechamento) {
+          const counts = latestSnapshots.fechamento.counts as Record<string, number>;
+          const restored: Record<number, number> = {};
+          for (const [k, v] of Object.entries(counts)) {
+            restored[parseFloat(k)] = v;
+          }
+          setCashSnapshotDataFechamento({
+            counts,
+            total: Number(latestSnapshots.fechamento.total),
+            updated_at: latestSnapshots.fechamento.updated_at,
+          });
+          setCashSnapshotSavedFechamento(true);
+          setCashCountsFechamento(restored);
         }
-        setCashSnapshotDataFechamento({
-          counts,
-          total: Number(latestSnapshots.fechamento.total),
-          updated_at: latestSnapshots.fechamento.updated_at,
-        });
-        setCashSnapshotSavedFechamento(true);
-        setCashCountsFechamento(restored);
       }
-    }
 
-    // Load admin's expected cash for this date
-    if (closing?.closing_date) {
-      const { data: expectation } = await supabase
-        .from('cash_expectations')
-        .select('counts, total')
-        .eq('closing_date', closing.closing_date)
-        .eq('sector', 'tele')
+      // Load admin's expected cash for this date
+      if (closing?.closing_date) {
+        const { data: expectation } = await supabase
+          .from('cash_expectations')
+          .select('counts, total')
+          .eq('closing_date', closing.closing_date)
+          .eq('sector', 'tele')
+          .maybeSingle();
+
+        if (expectation) {
+          setExpectedCash({
+            counts: expectation.counts as Record<string, number>,
+            total: Number(expectation.total),
+          });
+        }
+      }
+
+      // Load last auto-sync timestamp
+      const { data: lastSyncImport } = await supabase
+        .from('imports')
+        .select('created_at')
+        .like('file_name', 'saipos-api-%')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
-
-      if (expectation) {
-        setExpectedCash({
-          counts: expectation.counts as Record<string, number>,
-          total: Number(expectation.total),
-        });
-      }
+      
+      setLastAutoSync(lastSyncImport?.created_at || null);
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
+      toast.error('Erro ao carregar dados do fechamento.');
+    } finally {
+      setLoading(false);
     }
-
-    // Load last auto-sync timestamp
-    const { data: lastSyncImport } = await supabase
-      .from('imports')
-      .select('created_at')
-      .like('file_name', 'saipos-api-%')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    
-    setLastAutoSync(lastSyncImport?.created_at || null);
-
-    setLoading(false);
   };
 
   const toggleImportSelection = (importId: string) => {
@@ -482,30 +487,41 @@ export default function Reconciliation() {
   }, [id, orders, breakdownValidity]);
 
   const handleAdminForceFinalize = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
-    if (!confirmed) return;
-    setCompleting(true);
-    const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
-    if (error) {
-      toast.error('Erro ao finalizar fechamento.');
-    } else {
-      setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
-      toast.success('Fechamento finalizado pelo administrador.');
+    try {
+      if (!id || !isAdmin) return;
+      const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
+      if (!confirmed) return;
+      setCompleting(true);
+      const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
+      if (error) {
+        toast.error('Erro ao finalizar fechamento.');
+      } else {
+        setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
+        toast.success('Fechamento finalizado pelo administrador.');
+      }
+      setCompleting(false);
+    } catch (error) {
+      console.error('Erro ao forçar fechamento:', error);
+      toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+      setCompleting(false);
     }
-    setCompleting(false);
   }, [id, isAdmin]);
 
   const handleReopenClosing = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    const confirmed = window.confirm('Deseja reabrir este fechamento? O status voltará para pendente.');
-    if (!confirmed) return;
-    const { error } = await supabase.from('daily_closings').update({ status: 'pending' }).eq('id', id);
-    if (error) {
-      toast.error('Erro ao reabrir fechamento.');
-    } else {
-      setClosingData(prev => prev ? { ...prev, status: 'pending' } : prev);
-      toast.success('Fechamento reaberto com sucesso.');
+    try {
+      if (!id || !isAdmin) return;
+      const confirmed = window.confirm('Deseja reabrir este fechamento? O status voltará para pendente.');
+      if (!confirmed) return;
+      const { error } = await supabase.from('daily_closings').update({ status: 'pending' }).eq('id', id);
+      if (error) {
+        toast.error('Erro ao reabrir fechamento.');
+      } else {
+        setClosingData(prev => prev ? { ...prev, status: 'pending' } : prev);
+        toast.success('Fechamento reaberto com sucesso.');
+      }
+    } catch (error) {
+      console.error('Erro ao reabrir fechamento:', error);
+      toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     }
   }, [id, isAdmin]);
 
@@ -579,67 +595,72 @@ export default function Reconciliation() {
   const { unmarkedCount: attendanceUnmarked } = useDriverAttendance(closingData?.closing_date || '');
 
   const handleSaveConference = useCallback(() => {
-    // Admin can force-finalize even with errors
-    if (isAdmin) {
-      const errors: string[] = [];
+    try {
+      // Admin can force-finalize even with errors
+      if (isAdmin) {
+        const errors: string[] = [];
 
-      if (!cashSnapshotSavedAbertura) errors.push('Contagem de Dinheiro na Abertura não salva.');
-      if (!cashSnapshotSavedFechamento) errors.push('Contagem de Dinheiro no Fechamento não salva.');
+        if (!cashSnapshotSavedAbertura) errors.push('Contagem de Dinheiro na Abertura não salva.');
+        if (!cashSnapshotSavedFechamento) errors.push('Contagem de Dinheiro no Fechamento não salva.');
+
+        for (const order of orders) {
+          if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
+          if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
+          
+        }
+
+        if (attendanceUnmarked > 0) {
+          errors.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
+        }
+
+        if (errors.length === 0) {
+          finalize();
+        } else {
+          // Show errors but allow admin to force
+          setConferenceErrors(errors);
+          setShowConferenceErrors(true);
+        }
+        return;
+      }
+
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      if (!cashSnapshotSavedAbertura) {
+        errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
+      }
+      if (!cashSnapshotSavedFechamento) {
+        errors.push('Contagem de Dinheiro no Fechamento: não foi salva. Abra a calculadora e salve antes de finalizar.');
+      }
 
       for (const order of orders) {
-        if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
-        if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
-        
+        if (!order.is_confirmed) {
+          errors.push(`Comanda #${order.order_number}: não está confirmada.`);
+        }
+        if (!order.delivery_person || order.delivery_person.trim() === '') {
+          warnings.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
+        }
       }
 
       if (attendanceUnmarked > 0) {
-        errors.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
+        warnings.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
       }
 
-      if (errors.length === 0) {
+      if (errors.length === 0 && warnings.length === 0) {
         finalize();
+      } else if (errors.length === 0 && warnings.length > 0) {
+        // Only warnings — allow finalization with confirmation
+        setConferenceErrors(warnings);
+        setConferenceOnlyWarnings(true);
+        setShowConferenceErrors(true);
       } else {
-        // Show errors but allow admin to force
-        setConferenceErrors(errors);
+        setConferenceErrors([...errors, ...warnings]);
+        setConferenceOnlyWarnings(false);
         setShowConferenceErrors(true);
       }
-      return;
-    }
-
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (!cashSnapshotSavedAbertura) {
-      errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
-    }
-    if (!cashSnapshotSavedFechamento) {
-      errors.push('Contagem de Dinheiro no Fechamento: não foi salva. Abra a calculadora e salve antes de finalizar.');
-    }
-
-    for (const order of orders) {
-      if (!order.is_confirmed) {
-        errors.push(`Comanda #${order.order_number}: não está confirmada.`);
-      }
-      if (!order.delivery_person || order.delivery_person.trim() === '') {
-        warnings.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
-      }
-    }
-
-    if (attendanceUnmarked > 0) {
-      warnings.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
-    }
-
-    if (errors.length === 0 && warnings.length === 0) {
-      finalize();
-    } else if (errors.length === 0 && warnings.length > 0) {
-      // Only warnings — allow finalization with confirmation
-      setConferenceErrors(warnings);
-      setConferenceOnlyWarnings(true);
-      setShowConferenceErrors(true);
-    } else {
-      setConferenceErrors([...errors, ...warnings]);
-      setConferenceOnlyWarnings(false);
-      setShowConferenceErrors(true);
+    } catch (error) {
+      console.error('Erro ao salvar conferência:', error);
+      toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     }
   }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin, attendanceUnmarked]);
 
