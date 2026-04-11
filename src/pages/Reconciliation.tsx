@@ -482,18 +482,24 @@ export default function Reconciliation() {
   }, [id, orders, breakdownValidity]);
 
   const handleAdminForceFinalize = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
-    if (!confirmed) return;
-    setCompleting(true);
-    const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
-    if (error) {
-      toast.error('Erro ao finalizar fechamento.');
-    } else {
-      setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
-      toast.success('Fechamento finalizado pelo administrador.');
+    try {
+      if (!id || !isAdmin) return;
+      const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
+      if (!confirmed) return;
+      setCompleting(true);
+      const { error } = await supabase.from('daily_closings').update({ status: 'completed' }).eq('id', id);
+      if (error) {
+        toast.error('Erro ao finalizar fechamento.');
+      } else {
+        setClosingData(prev => prev ? { ...prev, status: 'completed' } : prev);
+        toast.success('Fechamento finalizado pelo administrador.');
+      }
+      setCompleting(false);
+    } catch (error) {
+      console.error('Erro ao forçar fechamento:', error);
+      toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
+      setCompleting(false);
     }
-    setCompleting(false);
   }, [id, isAdmin]);
 
   const handleReopenClosing = useCallback(async () => {
