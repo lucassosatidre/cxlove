@@ -503,15 +503,20 @@ export default function Reconciliation() {
   }, [id, isAdmin]);
 
   const handleReopenClosing = useCallback(async () => {
-    if (!id || !isAdmin) return;
-    const confirmed = window.confirm('Deseja reabrir este fechamento? O status voltará para pendente.');
-    if (!confirmed) return;
-    const { error } = await supabase.from('daily_closings').update({ status: 'pending' }).eq('id', id);
-    if (error) {
-      toast.error('Erro ao reabrir fechamento.');
-    } else {
-      setClosingData(prev => prev ? { ...prev, status: 'pending' } : prev);
-      toast.success('Fechamento reaberto com sucesso.');
+    try {
+      if (!id || !isAdmin) return;
+      const confirmed = window.confirm('Deseja reabrir este fechamento? O status voltará para pendente.');
+      if (!confirmed) return;
+      const { error } = await supabase.from('daily_closings').update({ status: 'pending' }).eq('id', id);
+      if (error) {
+        toast.error('Erro ao reabrir fechamento.');
+      } else {
+        setClosingData(prev => prev ? { ...prev, status: 'pending' } : prev);
+        toast.success('Fechamento reaberto com sucesso.');
+      }
+    } catch (error) {
+      console.error('Erro ao reabrir fechamento:', error);
+      toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     }
   }, [id, isAdmin]);
 
@@ -585,67 +590,72 @@ export default function Reconciliation() {
   const { unmarkedCount: attendanceUnmarked } = useDriverAttendance(closingData?.closing_date || '');
 
   const handleSaveConference = useCallback(() => {
-    // Admin can force-finalize even with errors
-    if (isAdmin) {
-      const errors: string[] = [];
+    try {
+      // Admin can force-finalize even with errors
+      if (isAdmin) {
+        const errors: string[] = [];
 
-      if (!cashSnapshotSavedAbertura) errors.push('Contagem de Dinheiro na Abertura não salva.');
-      if (!cashSnapshotSavedFechamento) errors.push('Contagem de Dinheiro no Fechamento não salva.');
+        if (!cashSnapshotSavedAbertura) errors.push('Contagem de Dinheiro na Abertura não salva.');
+        if (!cashSnapshotSavedFechamento) errors.push('Contagem de Dinheiro no Fechamento não salva.');
+
+        for (const order of orders) {
+          if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
+          if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
+          
+        }
+
+        if (attendanceUnmarked > 0) {
+          errors.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
+        }
+
+        if (errors.length === 0) {
+          finalize();
+        } else {
+          // Show errors but allow admin to force
+          setConferenceErrors(errors);
+          setShowConferenceErrors(true);
+        }
+        return;
+      }
+
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      if (!cashSnapshotSavedAbertura) {
+        errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
+      }
+      if (!cashSnapshotSavedFechamento) {
+        errors.push('Contagem de Dinheiro no Fechamento: não foi salva. Abra a calculadora e salve antes de finalizar.');
+      }
 
       for (const order of orders) {
-        if (!order.is_confirmed) errors.push(`Comanda #${order.order_number}: não confirmada.`);
-        if (!order.delivery_person || order.delivery_person.trim() === '') errors.push(`Comanda #${order.order_number}: sem entregador.`);
-        
+        if (!order.is_confirmed) {
+          errors.push(`Comanda #${order.order_number}: não está confirmada.`);
+        }
+        if (!order.delivery_person || order.delivery_person.trim() === '') {
+          warnings.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
+        }
       }
 
       if (attendanceUnmarked > 0) {
-        errors.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
+        warnings.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
       }
 
-      if (errors.length === 0) {
+      if (errors.length === 0 && warnings.length === 0) {
         finalize();
+      } else if (errors.length === 0 && warnings.length > 0) {
+        // Only warnings — allow finalization with confirmation
+        setConferenceErrors(warnings);
+        setConferenceOnlyWarnings(true);
+        setShowConferenceErrors(true);
       } else {
-        // Show errors but allow admin to force
-        setConferenceErrors(errors);
+        setConferenceErrors([...errors, ...warnings]);
+        setConferenceOnlyWarnings(false);
         setShowConferenceErrors(true);
       }
-      return;
-    }
-
-    const errors: string[] = [];
-    const warnings: string[] = [];
-
-    if (!cashSnapshotSavedAbertura) {
-      errors.push('Contagem de Dinheiro na Abertura: não foi salva. Abra a calculadora e salve antes de finalizar.');
-    }
-    if (!cashSnapshotSavedFechamento) {
-      errors.push('Contagem de Dinheiro no Fechamento: não foi salva. Abra a calculadora e salve antes de finalizar.');
-    }
-
-    for (const order of orders) {
-      if (!order.is_confirmed) {
-        errors.push(`Comanda #${order.order_number}: não está confirmada.`);
-      }
-      if (!order.delivery_person || order.delivery_person.trim() === '') {
-        warnings.push(`Comanda #${order.order_number}: sem entregador atribuído.`);
-      }
-    }
-
-    if (attendanceUnmarked > 0) {
-      warnings.push(`Atenção: ${attendanceUnmarked} entregador(es) ainda não tiveram presença confirmada.`);
-    }
-
-    if (errors.length === 0 && warnings.length === 0) {
-      finalize();
-    } else if (errors.length === 0 && warnings.length > 0) {
-      // Only warnings — allow finalization with confirmation
-      setConferenceErrors(warnings);
-      setConferenceOnlyWarnings(true);
-      setShowConferenceErrors(true);
-    } else {
-      setConferenceErrors([...errors, ...warnings]);
-      setConferenceOnlyWarnings(false);
-      setShowConferenceErrors(true);
+    } catch (error) {
+      console.error('Erro ao salvar conferência:', error);
+      toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
     }
   }, [orders, breakdownValidity, finalize, cashSnapshotSavedAbertura, cashSnapshotSavedFechamento, isAdmin, attendanceUnmarked]);
 
