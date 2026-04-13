@@ -336,8 +336,8 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
 
             {/* Empty state + add button on same line, or just add button when readings exist */}
             {!isCompleted && readings.length === 0 && (
-              <div className="mt-2 flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
+              <div className="mt-2 flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</span>
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
                   setConferenceCollapsed(false);
                   addReading();
