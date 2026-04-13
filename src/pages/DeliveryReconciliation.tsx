@@ -133,6 +133,7 @@ export default function DeliveryReconciliation() {
     const ordersList = ordData || [];
     setOrders(ordersList);
     setTransactions((txData || []) as CardTransaction[]);
+    setMachineReadingsData((mrData || []).map(r => ({ machine_serial: r.machine_serial, delivery_person: r.delivery_person })));
     setCashSnapshotDataAbertura(null);
     setCashSnapshotDataFechamento(null);
     const latestSnapshots = getLatestCashSnapshots(snapData || []);
