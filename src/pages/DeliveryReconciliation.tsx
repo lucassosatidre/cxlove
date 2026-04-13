@@ -35,6 +35,7 @@ import {
 } from '@/lib/delivery-export';
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
+import { useMachineRegistry } from '@/hooks/useMachineRegistry';
 
 interface Order {
   id: string;
