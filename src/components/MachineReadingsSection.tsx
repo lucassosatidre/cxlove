@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useMachineRegistry } from '@/hooks/useMachineRegistry';
+import { useMachineRegistry, MachineRegistryEntry } from '@/hooks/useMachineRegistry';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { CreditCard, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import SerialAutocomplete from '@/components/SerialAutocomplete';
@@ -29,6 +30,12 @@ interface MachineReading {
   credit_count: number;
   voucher_count: number;
   pix_count: number;
+}
+
+interface ConfirmedDriverOption {
+  id: string;
+  nome: string;
+  firstName: string;
 }
 
 interface Props {
@@ -73,7 +80,7 @@ function parseRow(r: any): MachineReading {
 
 export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all', onCountChange }: Props) {
   const { user } = useAuth();
-  const { registry, getFriendlyName } = useMachineRegistry();
+  const { registry, entries, getFriendlyName } = useMachineRegistry();
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
@@ -82,10 +89,18 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const [validationError, setValidationError] = useState('');
   const [serialSuggestions, setSerialSuggestions] = useState<SerialSuggestion[]>([]);
   const [confirmedDriverNames, setConfirmedDriverNames] = useState<string[]>([]);
+  const [confirmedDriverOptions, setConfirmedDriverOptions] = useState<ConfirmedDriverOption[]>([]);
   const saveTimers = useState<Record<string, ReturnType<typeof setTimeout>>>({})[0];
+
+  // Add machine dialog state
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [selectedMachineSerial, setSelectedMachineSerial] = useState('');
+  const [selectedDriverName, setSelectedDriverName] = useState('');
+  const [addingMachine, setAddingMachine] = useState(false);
 
   const closingId = dailyClosingId || salonClosingId || '';
   const closingField = dailyClosingId ? 'daily_closing_id' : 'salon_closing_id';
+  const isTele = !!dailyClosingId;
 
   useEffect(() => {
     loadReadings();
@@ -144,13 +159,81 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     const { data: checkins } = await supabase.from('delivery_checkins').select('driver_id').in('shift_id', shiftIds).in('status', ['confirmado', 'concluido']);
     if (!checkins || checkins.length === 0) return;
     const driverIds = [...new Set(checkins.map(c => c.driver_id))];
-    const { data: drivers } = await supabase.from('delivery_drivers').select('nome').in('id', driverIds).order('nome');
+    const { data: drivers } = await supabase.from('delivery_drivers').select('id, nome').in('id', driverIds).order('nome');
     if (drivers) {
       const names = [...new Set(drivers.map(d => d.nome.split(' ')[0]))].sort();
       setConfirmedDriverNames(names);
+      setConfirmedDriverOptions(drivers.map(d => ({
+        id: d.id,
+        nome: d.nome,
+        firstName: d.nome.split(' ')[0],
+      })));
     }
   };
 
+  // Get tele machines available for selection (not yet added)
+  const availableTeleMachines = useMemo(() => {
+    const addedSerials = new Set(readings.map(r => r.machine_serial));
+    return entries
+      .filter(e => e.category === 'tele')
+      .map(e => ({
+        ...e,
+        alreadyAdded: addedSerials.has(e.serial_number),
+      }));
+  }, [entries, readings]);
+
+  // Unique confirmed driver first names for select
+  const uniqueDriverFirstNames = useMemo(() => {
+    const seen = new Set<string>();
+    return confirmedDriverOptions
+      .filter(d => {
+        if (seen.has(d.firstName)) return false;
+        seen.add(d.firstName);
+        return true;
+      })
+      .sort((a, b) => a.firstName.localeCompare(b.firstName));
+  }, [confirmedDriverOptions]);
+
+  const openAddDialog = () => {
+    setSelectedMachineSerial('');
+    setSelectedDriverName('');
+    setAddDialogOpen(true);
+    setConferenceCollapsed(false);
+  };
+
+  const handleAddFromDialog = async () => {
+    if (!user || !closingId) return;
+    if (!selectedMachineSerial) {
+      toast.error('Selecione uma maquininha');
+      return;
+    }
+    if (!selectedDriverName) {
+      toast.error('Selecione um entregador');
+      return;
+    }
+    setAddingMachine(true);
+    const insertData: Record<string, unknown> = {
+      user_id: user.id,
+      machine_serial: selectedMachineSerial,
+      delivery_person: selectedDriverName,
+      [closingField]: closingId,
+    };
+    const { data, error } = await supabase
+      .from('machine_readings')
+      .insert(insertData as any)
+      .select(SELECT_COLS)
+      .single();
+    if (error) { toast.error('Erro ao adicionar maquininha'); setAddingMachine(false); return; }
+    if (data) {
+      setReadings(prev => [...prev, parseRow(data)]);
+      setExpandedIds(prev => new Set(prev).add(data.id));
+    }
+    setAddingMachine(false);
+    setAddDialogOpen(false);
+    toast.success('Maquininha adicionada');
+  };
+
+  // Legacy add (for salon / manual scenarios)
   const addReading = async () => {
     if (!user || !closingId) return;
     if (readings.length > 0) {
@@ -338,20 +421,14 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
             {!isCompleted && readings.length === 0 && (
               <div className="mt-2 flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</span>
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-                  setConferenceCollapsed(false);
-                  addReading();
-                }}>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={isTele ? openAddDialog : () => { setConferenceCollapsed(false); addReading(); }}>
                   💳 Adicionar Maquininha
                 </Button>
               </div>
             )}
             {!isCompleted && readings.length > 0 && (
               <div className="mt-2">
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
-                  setConferenceCollapsed(false);
-                  addReading();
-                }}>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={isTele ? openAddDialog : () => { setConferenceCollapsed(false); addReading(); }}>
                   💳 Adicionar Maquininha
                 </Button>
               </div>
@@ -363,6 +440,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                 {readings.length === 0 ? null : (
                   <div className="space-y-2">
                     {readings.map((r) => {
+                      const friendlyName = getFriendlyName(r.machine_serial);
                       const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
                       const isExpanded = expandedIds.has(r.id) || !isFilled;
                       const toggleExpand = () => {
@@ -384,15 +462,27 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                               ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             }
-                            {getFriendlyName(r.machine_serial) ? (
-                              <span className="text-xs font-semibold text-foreground">{getFriendlyName(r.machine_serial)}</span>
-                            ) : (
-                              <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
-                            )}
-                            {getFriendlyName(r.machine_serial) && (
-                              <span className="text-[10px] font-mono text-muted-foreground">({r.machine_serial})</span>
-                            )}
-                            <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
+                            {/* Header: "Tele 1 — Junior" or fallback */}
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                {friendlyName ? (
+                                  <>
+                                    <span className="text-xs font-semibold text-foreground">{friendlyName}</span>
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                    <span className="text-xs font-medium text-foreground">{r.delivery_person || noPersonLabel}</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                    <span className="text-xs font-medium text-foreground">{r.delivery_person || noPersonLabel}</span>
+                                  </>
+                                )}
+                              </div>
+                              {friendlyName && r.machine_serial && (
+                                <span className="text-[10px] font-mono text-muted-foreground">SN {r.machine_serial}</span>
+                              )}
+                            </div>
                             <span className="ml-auto text-xs font-bold font-mono text-foreground">
                               {formatCurrency(blockTotal(r))}
                               {blockOps(r) > 0 && (
@@ -413,37 +503,40 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
 
                           {isExpanded && (
                             <div className="px-3 pb-3 space-y-2 border-t border-border">
-                              <div className="flex items-center gap-2 pt-2">
-                                <div className="flex-1 flex items-center gap-2">
-                                  <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
-                                  <div className="flex items-center gap-0">
-                                    <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
-                                      {SERIAL_PREFIX}
-                                    </span>
-                                    <SerialAutocomplete
-                                      value={r.machine_serial}
-                                      onChange={(v) => updateField(r.id, 'machine_serial', v)}
-                                      suggestions={serialSuggestions}
-                                      registry={registry}
-                                      className="h-8 text-xs w-24 rounded-l-none font-mono"
-                                      placeholder="000"
+                              {/* SN + Person fields (for salon or manual editing) */}
+                              {!isTele && (
+                                <div className="flex items-center gap-2 pt-2">
+                                  <div className="flex-1 flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground whitespace-nowrap">🔢 S/N</label>
+                                    <div className="flex items-center gap-0">
+                                      <span className="text-xs font-mono bg-muted px-2 py-1.5 rounded-l-md border border-r-0 border-input text-muted-foreground">
+                                        {SERIAL_PREFIX}
+                                      </span>
+                                      <SerialAutocomplete
+                                        value={r.machine_serial}
+                                        onChange={(v) => updateField(r.id, 'machine_serial', v)}
+                                        suggestions={serialSuggestions}
+                                        registry={registry}
+                                        className="h-8 text-xs w-24 rounded-l-none font-mono"
+                                        placeholder="000"
+                                        disabled={isCompleted}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex-1 flex items-center gap-2">
+                                    <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
+                                    <PersonAutocomplete
+                                      value={r.delivery_person}
+                                      onChange={(v) => updateField(r.id, 'delivery_person', v)}
+                                      suggestions={confirmedDriverNames.length > 0 ? confirmedDriverNames : deliveryPersons}
+                                      className="h-8 text-xs flex-1"
+                                      placeholder={`Nome do ${personLabel.toLowerCase()}...`}
                                       disabled={isCompleted}
                                     />
                                   </div>
                                 </div>
-                                <div className="flex-1 flex items-center gap-2">
-                                  <label className="text-xs text-muted-foreground whitespace-nowrap">👤 {personLabel}</label>
-                                  <PersonAutocomplete
-                                    value={r.delivery_person}
-                                    onChange={(v) => updateField(r.id, 'delivery_person', v)}
-                                    suggestions={confirmedDriverNames.length > 0 ? confirmedDriverNames : deliveryPersons}
-                                    className="h-8 text-xs flex-1"
-                                    placeholder={`Nome do ${personLabel.toLowerCase()}...`}
-                                    disabled={isCompleted}
-                                  />
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-4 gap-2">
+                              )}
+                              <div className={`grid grid-cols-4 gap-2 ${isTele ? 'pt-2' : ''}`}>
                                 {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
                                   const amountVal = r[amountField];
                                   const countDisabled = isCompleted || amountVal === 0;
@@ -490,6 +583,53 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
           </div>
         </div>
       )}
+
+      {/* Add Machine Dialog (Tele only) */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Adicionar Maquininha</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Maquininha</label>
+              <Select value={selectedMachineSerial} onValueChange={setSelectedMachineSerial}>
+                <SelectTrigger><SelectValue placeholder="Selecione a maquininha..." /></SelectTrigger>
+                <SelectContent>
+                  {availableTeleMachines.map(m => (
+                    <SelectItem key={m.serial_number} value={m.serial_number} disabled={m.alreadyAdded}>
+                      {m.friendly_name}{m.alreadyAdded ? ' (já adicionada)' : ''}
+                    </SelectItem>
+                  ))}
+                  {availableTeleMachines.length === 0 && (
+                    <SelectItem value="__none" disabled>Nenhuma maquininha disponível</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Entregador</label>
+              <Select value={selectedDriverName} onValueChange={setSelectedDriverName}>
+                <SelectTrigger><SelectValue placeholder="Selecione o entregador..." /></SelectTrigger>
+                <SelectContent>
+                  {uniqueDriverFirstNames.map(d => (
+                    <SelectItem key={d.id} value={d.firstName}>{d.firstName}</SelectItem>
+                  ))}
+                  {uniqueDriverFirstNames.length === 0 && (
+                    <SelectItem value="__none" disabled>Nenhum entregador confirmado</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAddFromDialog} disabled={addingMachine || !selectedMachineSerial || !selectedDriverName}>
+              {addingMachine ? 'Adicionando...' : 'Confirmar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* By Person Dialog */}
       <Dialog open={showByDriver} onOpenChange={setShowByDriver}>
