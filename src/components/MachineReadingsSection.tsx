@@ -175,7 +175,6 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const availableTeleMachines = useMemo(() => {
     const addedSerials = new Set(readings.map(r => r.machine_serial));
     return entries
-      .filter(e => e.category === 'tele')
       .map(e => ({
         ...e,
         alreadyAdded: addedSerials.has(e.serial_number),
@@ -207,7 +206,8 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       toast.error('Selecione uma maquininha');
       return;
     }
-    if (!selectedDriverName) {
+    const selectedMachine = entries.find(e => e.serial_number === selectedMachineSerial);
+    if (selectedMachine?.category === 'tele' && !selectedDriverName) {
       toast.error('Selecione um entregador');
       return;
     }
@@ -608,7 +608,9 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Entregador</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Entregador{(() => { const sel = entries.find(e => e.serial_number === selectedMachineSerial); return sel?.category === 'frota' ? ' (opcional)' : ''; })()}
+              </label>
               <Select value={selectedDriverName} onValueChange={setSelectedDriverName}>
                 <SelectTrigger><SelectValue placeholder="Selecione o entregador..." /></SelectTrigger>
                 <SelectContent>
@@ -624,7 +626,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddFromDialog} disabled={addingMachine || !selectedMachineSerial || !selectedDriverName}>
+            <Button onClick={handleAddFromDialog} disabled={addingMachine || !selectedMachineSerial || (entries.find(e => e.serial_number === selectedMachineSerial)?.category === 'tele' && !selectedDriverName)}>
               {addingMachine ? 'Adicionando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
