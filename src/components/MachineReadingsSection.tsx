@@ -74,6 +74,7 @@ function parseRow(r: any): MachineReading {
 export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all', onCountChange }: Props) {
   const { user } = useAuth();
   const { registry, getFriendlyName } = useMachineRegistry();
+  const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
