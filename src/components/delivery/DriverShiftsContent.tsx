@@ -146,7 +146,7 @@ export default function DriverShiftsContent() {
         checkinId: c.id,
         driverId: c.driver_id,
         nome: firstName,
-        enteredAt: c.waitlist_entered_at ? format(new Date(c.waitlist_entered_at), 'HH:mm') : '-',
+        enteredAt: c.waitlist_entered_at ? format(new Date(c.waitlist_entered_at), 'HH:mm:ss') : '-',
       });
     });
 

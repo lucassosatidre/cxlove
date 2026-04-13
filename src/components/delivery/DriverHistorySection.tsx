@@ -25,6 +25,7 @@ interface HistoryRow {
   confirmedAt: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  waitlistEnteredAt: string | null;
   origin: string;
   deviceIp: string | null;
   deviceUserAgent: string | null;
@@ -71,7 +72,7 @@ export default function DriverHistorySection() {
     const [driversRes, checkinsRes] = await Promise.all([
       supabase.from('delivery_drivers').select('id, nome').order('nome'),
       supabase.from('delivery_checkins')
-        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason, origin, device_ip, device_user_agent, device_info, admin_inserted_by, delivery_shifts!inner(data, horario_inicio, horario_fim)')
+        .select('id, shift_id, driver_id, status, confirmed_at, cancelled_at, cancel_reason, origin, device_ip, device_user_agent, device_info, admin_inserted_by, waitlist_entered_at, delivery_shifts!inner(data, horario_inicio, horario_fim)')
         .gte('delivery_shifts.data', format(dateFrom, 'yyyy-MM-dd'))
         .lte('delivery_shifts.data', format(dateTo, 'yyyy-MM-dd'))
         .order('created_at', { ascending: false }),
@@ -99,6 +100,7 @@ export default function DriverHistorySection() {
         deviceUserAgent: c.device_user_agent,
         deviceInfo: c.device_info,
         adminInsertedBy: c.admin_inserted_by,
+        waitlistEnteredAt: c.waitlist_entered_at,
       };
     });
 
@@ -133,6 +135,7 @@ export default function DriverHistorySection() {
       'Status': statusConfig[r.status]?.label || r.status,
       'Origem': r.origin === 'admin' ? 'Admin' : 'Entregador',
       'Confirmado em': r.confirmedAt ? format(new Date(r.confirmedAt), 'dd/MM/yyyy HH:mm:ss') : '',
+      'Entrou na fila às': r.waitlistEnteredAt ? format(new Date(r.waitlistEnteredAt), 'dd/MM/yyyy HH:mm:ss') : '',
       'Cancelado em': r.cancelledAt ? format(new Date(r.cancelledAt), 'dd/MM/yyyy HH:mm:ss') : '',
       'Motivo cancelamento': r.cancelReason || '',
       'IP Dispositivo': r.deviceIp || '',
@@ -217,6 +220,7 @@ export default function DriverHistorySection() {
                 <TableHead>Status</TableHead>
                 <TableHead>Origem</TableHead>
                 <TableHead className="hidden md:table-cell">Confirmado às</TableHead>
+                <TableHead className="hidden md:table-cell">Entrou na fila às</TableHead>
                 <TableHead className="hidden md:table-cell">Cancelado às</TableHead>
                 <TableHead className="hidden lg:table-cell">Motivo</TableHead>
                 {showTechDetails && <TableHead>IP</TableHead>}
@@ -226,9 +230,9 @@ export default function DriverHistorySection() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={showTechDetails ? 11 : 9} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={showTechDetails ? 12 : 10} className="text-center py-8 text-muted-foreground">Carregando...</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={showTechDetails ? 11 : 9} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</TableCell></TableRow>
+                <TableRow><TableCell colSpan={showTechDetails ? 12 : 10} className="text-center py-8 text-muted-foreground">Nenhum registro encontrado</TableCell></TableRow>
               ) : filtered.map((r, idx) => {
                 const sc = statusConfig[r.status] || { label: r.status, variant: 'secondary' as const };
                 const isPast = r.data < format(new Date(), 'yyyy-MM-dd');
@@ -248,10 +252,13 @@ export default function DriverHistorySection() {
                       </span>
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
-                      {r.confirmedAt ? format(new Date(r.confirmedAt), 'dd/MM HH:mm') : '—'}
+                      {r.confirmedAt ? format(new Date(r.confirmedAt), 'dd/MM HH:mm:ss') : '—'}
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
-                      {r.cancelledAt ? format(new Date(r.cancelledAt), 'dd/MM HH:mm') : '—'}
+                      {r.waitlistEnteredAt ? format(new Date(r.waitlistEnteredAt), 'dd/MM HH:mm:ss') : '—'}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-xs text-muted-foreground">
+                      {r.cancelledAt ? format(new Date(r.cancelledAt), 'dd/MM HH:mm:ss') : '—'}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-xs text-muted-foreground max-w-[200px] truncate">
                       {r.cancelReason || '—'}
