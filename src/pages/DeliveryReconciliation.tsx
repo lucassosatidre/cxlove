@@ -74,6 +74,7 @@ export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { registry, getFriendlyName } = useMachineRegistry();
   
   const navigate = useNavigate();
 
