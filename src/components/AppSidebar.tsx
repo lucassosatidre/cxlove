@@ -1,12 +1,14 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
+import { useAvatarEmoji } from '@/hooks/useAvatarEmoji';
 import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import propositoLogo from '@/assets/proposito-logo.png';
-import estrelaLogo from '@/assets/estrela-logo.png';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import caixaLoveLogo from '@/assets/caixa-love-logo.png';
 
 interface AppSidebarProps {
   open?: boolean;
@@ -19,9 +21,11 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
   const { user, signOut } = useAuth();
   const { isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
   const { hasPermission } = useUserPermissions();
+  const { emoji, updateEmoji, EMOJI_OPTIONS } = useAvatarEmoji();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 
   let navItems: { icon: any; label: string; path: string; permission: string }[] = [];
 
@@ -43,7 +47,6 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     if (isAdmin) {
       navItems.push({ icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' });
       navItems.push({ icon: CreditCard, label: 'Maquininhas', path: '/admin/maquininhas', permission: 'dashboard' });
-      // Etiquetas hidden — functionality moved to external script
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }
   }
@@ -96,48 +99,76 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* App header */}
-        <div className={`px-4 pt-5 pb-2 flex items-start justify-between ${collapsed ? 'px-2' : ''}`}>
-          <div className="flex items-center gap-3">
-            <div className={`${collapsed ? 'h-8 w-8' : 'h-10 w-10'} rounded-lg bg-sidebar-accent border border-sidebar-border flex items-center justify-center p-1.5 shrink-0`}>
-              <img src={propositoLogo} alt="Propósito Soluções" className="h-full w-full object-contain" />
-            </div>
-            {!collapsed && (
-              <div>
-                <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight">CAIXA LOVE</p>
-                <p className="text-[10px] text-sidebar-foreground/60">Gestão operacional</p>
-              </div>
-            )}
-          </div>
-          {isMobile && (
+        {/* Close button mobile */}
+        {isMobile && (
+          <div className="flex justify-end px-3 pt-3">
             <button onClick={onClose} className="text-sidebar-foreground hover:text-sidebar-accent-foreground">
               <X className="h-5 w-5" />
             </button>
-          )}
-        </div>
-
-        {/* Cliente Ativo */}
-        {!collapsed && (
-          <div className="mx-3 mt-2 mb-3 px-3 py-2.5 bg-sidebar-accent rounded-lg flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-md overflow-hidden shrink-0">
-              <img src={estrelaLogo} alt="Pizzaria Estrela da Ilha" className="h-full w-full object-cover" />
-            </div>
-            <div>
-              <p className="text-[9px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">Cliente Ativo</p>
-              <p className="text-xs font-semibold text-sidebar-accent-foreground leading-tight">Pizzaria Estrela da Ilha</p>
-            </div>
           </div>
         )}
 
-        {!collapsed && <div className="mx-3 mb-3 border-b border-sidebar-border" />}
+        {/* Logo + branding */}
+        {!collapsed ? (
+          <div className="flex flex-col items-center px-4 pt-5 pb-2">
+            <img
+              src={caixaLoveLogo}
+              alt="Caixa Love"
+              className="w-[120px] object-contain"
+              style={{ mixBlendMode: 'lighten' }}
+            />
+            <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight mt-2">CAIXA LOVE</p>
+            <p className="text-[10px] text-sidebar-foreground/60">Logística & Fechamento de Caixa</p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center px-2 pt-5 pb-2">
+            <img
+              src={caixaLoveLogo}
+              alt="Caixa Love"
+              className="h-8 w-8 object-contain"
+              style={{ mixBlendMode: 'lighten' }}
+            />
+          </div>
+        )}
 
-        {/* User info */}
-        {!collapsed && (
-          <div className="mx-3 mb-4 px-3 py-2 bg-sidebar-accent/50 rounded-lg">
-            <p className="text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-medium">Usuário</p>
-            <p className="text-xs font-semibold text-sidebar-accent-foreground truncate mt-0.5">
+        {!collapsed && <div className="mx-3 mb-2 border-b border-sidebar-border" />}
+
+        {/* User block */}
+        {!collapsed ? (
+          <div className="mx-3 mb-4 px-3 py-2 bg-sidebar-accent/50 rounded-lg flex items-center gap-2.5">
+            <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+              <PopoverTrigger asChild>
+                <button className="text-xl hover:scale-110 transition-transform cursor-pointer shrink-0" title="Trocar emoji">
+                  {emoji}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="right" className="w-64 p-2" align="start">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Escolha seu avatar</p>
+                <div className="grid grid-cols-6 gap-1">
+                  {EMOJI_OPTIONS.map((e, i) => (
+                    <button
+                      key={`${e}-${i}`}
+                      onClick={() => { updateEmoji(e); setEmojiPickerOpen(false); }}
+                      className={`text-xl p-1.5 rounded-md hover:bg-accent transition-colors ${emoji === e ? 'bg-accent ring-1 ring-primary' : ''}`}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+            <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
               {userName}
             </p>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center mb-3">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-lg cursor-default">{emoji}</span>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">{userName}</TooltipContent>
+            </Tooltip>
           </div>
         )}
 
