@@ -73,7 +73,7 @@ function parseRow(r: any): MachineReading {
 
 export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all', onCountChange }: Props) {
   const { user } = useAuth();
-  const [readings, setReadings] = useState<MachineReading[]>([]);
+  const { registry, getFriendlyName } = useMachineRegistry();
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -374,8 +374,14 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                               ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             }
-                            <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
-                            <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
+                            {getFriendlyName(r.machine_serial) ? (
+                              <span className="text-xs font-semibold text-foreground">{getFriendlyName(r.machine_serial)}</span>
+                            ) : (
+                              <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                            )}
+                            {getFriendlyName(r.machine_serial) && (
+                              <span className="text-[10px] font-mono text-muted-foreground">({r.machine_serial})</span>
+                            )}
                             <span className="ml-auto text-xs font-bold font-mono text-foreground">
                               {formatCurrency(blockTotal(r))}
                               {blockOps(r) > 0 && (
