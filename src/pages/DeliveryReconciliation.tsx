@@ -109,7 +109,7 @@ export default function DeliveryReconciliation() {
   }, [id]);
 
   const loadData = useCallback(async () => {
-    const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }] = await Promise.all([
+    const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }, { data: mrData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
         .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
@@ -121,6 +121,10 @@ export default function DeliveryReconciliation() {
         .select('counts, total, updated_at, snapshot_type')
         .eq('daily_closing_id', id!)
         .order('updated_at', { ascending: false }),
+      supabase.from('machine_readings')
+        .select('machine_serial, delivery_person')
+        .eq('daily_closing_id', id!)
+        .not('machine_serial', 'eq', ''),
     ]);
 
     const dateStr = closing?.closing_date || '';
