@@ -608,7 +608,9 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
               </Select>
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">Entregador</label>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Entregador{(() => { const sel = entries.find(e => e.serial_number === selectedMachineSerial); return sel?.category === 'frota' ? ' (opcional)' : ''; })()}
+              </label>
               <Select value={selectedDriverName} onValueChange={setSelectedDriverName}>
                 <SelectTrigger><SelectValue placeholder="Selecione o entregador..." /></SelectTrigger>
                 <SelectContent>
@@ -624,7 +626,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddFromDialog} disabled={addingMachine || !selectedMachineSerial || !selectedDriverName}>
+            <Button onClick={handleAddFromDialog} disabled={addingMachine || !selectedMachineSerial || (entries.find(e => e.serial_number === selectedMachineSerial)?.category === 'tele' && !selectedDriverName)}>
               {addingMachine ? 'Adicionando...' : 'Confirmar'}
             </Button>
           </DialogFooter>
