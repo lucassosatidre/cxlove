@@ -227,18 +227,46 @@ export default function DeliveryReconciliation() {
     return map;
   }, [transactions]);
 
-  // Build serial → delivery person map from matched data
+  // Build serial → delivery person map from machine_readings (conference data)
+  // For tele machines: use the driver linked during conference
+  // For frota machines: use the friendly_name (e.g. "Frota 1")
+  // Fallback to old inference if no machine_readings data
   const serialToDeliveryPerson = useMemo(() => {
+    const result = new Map<string, string>();
+
+    // Primary source: machine_readings from this closing
+    for (const mr of machineReadingsData) {
+      if (!mr.machine_serial) continue;
+      // Check registry for category
+      const regEntry = registry.get(mr.machine_serial);
+      if (regEntry?.category === 'frota') {
+        // Frota machines: show friendly_name instead of driver
+        result.set(mr.machine_serial, regEntry.friendly_name);
+      } else if (mr.delivery_person) {
+        result.set(mr.machine_serial, mr.delivery_person);
+      }
+    }
+
+    // Also check for frota machines from registry that appear in transactions but not in readings
+    transactions.forEach(tx => {
+      if (!tx.machine_serial || result.has(tx.machine_serial)) return;
+      const regEntry = registry.get(tx.machine_serial);
+      if (regEntry?.category === 'frota') {
+        result.set(tx.machine_serial, regEntry.friendly_name);
+      }
+    });
+
+    // Fallback: for serials not in machine_readings, use old inference from matched transactions
     const serialCounts = new Map<string, Map<string, number>>();
     transactions.forEach(tx => {
       if (!tx.matched_order_id || !tx.machine_serial) return;
+      if (result.has(tx.machine_serial)) return; // already resolved
       const order = orders.find(o => o.id === tx.matched_order_id);
       if (!order?.delivery_person) return;
       if (!serialCounts.has(tx.machine_serial)) serialCounts.set(tx.machine_serial, new Map());
       const counts = serialCounts.get(tx.machine_serial)!;
       counts.set(order.delivery_person, (counts.get(order.delivery_person) || 0) + 1);
     });
-    const result = new Map<string, string>();
     for (const [serial, counts] of serialCounts) {
       let maxCount = 0;
       let bestPerson = '';
@@ -247,8 +275,9 @@ export default function DeliveryReconciliation() {
       }
       if (bestPerson) result.set(serial, bestPerson);
     }
+
     return result;
-  }, [transactions, orders]);
+  }, [transactions, orders, machineReadingsData, registry]);
 
   const unmatchedTransactions = useMemo(() =>
     transactions.filter(tx => !tx.matched_order_id), [transactions]
