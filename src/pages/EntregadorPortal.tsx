@@ -68,7 +68,14 @@ export default function EntregadorPortal() {
 
   const todayStr = getBrasiliaToday();
   const todayFormatted = getBrasiliaDateFormatted();
-  const brasiliaHour = getBrasiliaHour();
+  const [brasiliaHour, setBrasiliaHour] = useState(getBrasiliaHour());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setBrasiliaHour(getBrasiliaHour());
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const cleanupStaleCheckins = useCallback(async (driverId: string) => {
     const { data: staleCheckins, error } = await supabase
