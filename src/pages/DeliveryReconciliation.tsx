@@ -100,6 +100,7 @@ export default function DeliveryReconciliation() {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [hasAutoReprocessed, setHasAutoReprocessed] = useState(false);
   const [activeTab, setActiveTab] = useState<'classic' | 'atlas'>('classic');
+  const [machineReadingsData, setMachineReadingsData] = useState<Array<{ machine_serial: string; delivery_person: string }>>([]);
 
   useEffect(() => {
     if (!id) return;
