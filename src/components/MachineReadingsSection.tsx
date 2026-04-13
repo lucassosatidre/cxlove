@@ -383,6 +383,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                             {getFriendlyName(r.machine_serial) && (
                               <span className="text-[10px] font-mono text-muted-foreground">({r.machine_serial})</span>
                             )}
+                            <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
                             <span className="ml-auto text-xs font-bold font-mono text-foreground">
                               {formatCurrency(blockTotal(r))}
                               {blockOps(r) > 0 && (
@@ -414,6 +415,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                       value={r.machine_serial}
                                       onChange={(v) => updateField(r.id, 'machine_serial', v)}
                                       suggestions={serialSuggestions}
+                                      registry={registry}
                                       className="h-8 text-xs w-24 rounded-l-none font-mono"
                                       placeholder="000"
                                       disabled={isCompleted}
