@@ -175,7 +175,6 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const availableTeleMachines = useMemo(() => {
     const addedSerials = new Set(readings.map(r => r.machine_serial));
     return entries
-      .filter(e => e.category === 'tele')
       .map(e => ({
         ...e,
         alreadyAdded: addedSerials.has(e.serial_number),
@@ -207,7 +206,8 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       toast.error('Selecione uma maquininha');
       return;
     }
-    if (!selectedDriverName) {
+    const selectedMachine = entries.find(e => e.serial_number === selectedMachineSerial);
+    if (selectedMachine?.category === 'tele' && !selectedDriverName) {
       toast.error('Selecione um entregador');
       return;
     }
