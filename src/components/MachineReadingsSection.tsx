@@ -334,8 +334,19 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
               )}
             </div>
 
-            {/* Add button - always visible below title */}
-            {!isCompleted && (
+            {/* Empty state + add button on same line, or just add button when readings exist */}
+            {!isCompleted && readings.length === 0 && (
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                  setConferenceCollapsed(false);
+                  addReading();
+                }}>
+                  💳 Adicionar Maquininha
+                </Button>
+              </div>
+            )}
+            {!isCompleted && readings.length > 0 && (
               <div className="mt-2">
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
                   setConferenceCollapsed(false);
@@ -349,9 +360,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
             {/* Collapsible content */}
             {!conferenceCollapsed && (
               <div className="mt-3">
-                {readings.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Nenhuma maquininha adicionada.</p>
-                ) : (
+                {readings.length === 0 ? null : (
                   <div className="space-y-2">
                     {readings.map((r) => {
                       const isFilled = r.machine_serial.trim() && r.delivery_person.trim();
