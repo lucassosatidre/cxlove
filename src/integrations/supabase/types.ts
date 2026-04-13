@@ -627,6 +627,36 @@ export type Database = {
           },
         ]
       }
+      machine_registry: {
+        Row: {
+          category: string
+          created_at: string
+          friendly_name: string
+          id: string
+          is_active: boolean
+          serial_number: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string
+          created_at?: string
+          friendly_name: string
+          id?: string
+          is_active?: boolean
+          serial_number: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          friendly_name?: string
+          id?: string
+          is_active?: boolean
+          serial_number?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
