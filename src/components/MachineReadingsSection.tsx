@@ -303,7 +303,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       {showConference && (
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3">
-            {/* Collapsible header */}
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div
                 className="flex items-center gap-2 cursor-pointer select-none flex-1"
@@ -326,25 +326,25 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                   </span>
                 )}
               </div>
-              {!isCompleted && (
-                <div className="flex items-center gap-2 shrink-0">
-                  {validationError && (
-                    <span className="flex items-center gap-1 text-xs text-destructive">
-                      <AlertCircle className="h-3 w-3" />
-                      {validationError}
-                    </span>
-                  )}
-                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={(e) => {
-                    e.stopPropagation();
-                    setConferenceCollapsed(false);
-                    addReading();
-                  }}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Adicionar Maquininha
-                  </Button>
-                </div>
+              {validationError && !isCompleted && (
+                <span className="flex items-center gap-1 text-xs text-destructive shrink-0">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationError}
+                </span>
               )}
             </div>
+
+            {/* Add button - always visible below title */}
+            {!isCompleted && (
+              <div className="mt-2">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => {
+                  setConferenceCollapsed(false);
+                  addReading();
+                }}>
+                  💳 Adicionar Maquininha
+                </Button>
+              </div>
+            )}
 
             {/* Collapsible content */}
             {!conferenceCollapsed && (
