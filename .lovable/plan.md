@@ -1,55 +1,37 @@
 
 
-## Plan: Machine Registry with Friendly Names
+## Plan: Ajustes no Histórico de Presenças e Fila de Espera
 
-### Overview
-Create a `machine_registry` table to store machine serial numbers with friendly names, then display those names throughout the app. Add an admin management page.
+### 1. DriverHistorySection.tsx — Adicionar campo `waitlistEnteredAt` e ajustar formato de hora
 
-### 1. Database Migration
-Create `machine_registry` table and seed data:
-- Columns: `id`, `serial_number` (unique), `friendly_name`, `category` (tele/frota), `is_active` (default true), `created_at`, `updated_at`
-- RLS: authenticated SELECT for all, admin ALL
-- Insert all 17 machines (4 Frota + 13 Tele)
+**Interface `HistoryRow`**: Adicionar `waitlistEnteredAt: string | null`
 
-### 2. Custom Hook: `useMachineRegistry`
-New file `src/hooks/useMachineRegistry.ts`:
-- Fetches all active machines from `machine_registry` on mount
-- Returns a `Map<string, { friendly_name, category }>` keyed by serial_number
-- Helper function `getFriendlyName(serial)` returns friendly name or null
-- Cache in React Query or local state (single fetch per page load)
+**Query**: Adicionar `waitlist_entered_at` no select da query de `delivery_checkins`
 
-### 3. Update `SerialAutocomplete`
-- Accept machine registry map as prop
-- Show friendly name next to each suggestion (e.g., "**Tele 1** — 158242609374")
-- Allow searching by friendly name too (filter matches on both `serial` and `friendly_name`)
-- When user types "Tele 5", match the corresponding serial
+**Mapeamento**: Incluir `waitlistEnteredAt: c.waitlist_entered_at` no map
 
-### 4. Update `MachineReadingsSection`
-- Load machine registry via the new hook
-- Pass registry to `SerialAutocomplete`
-- In the collapsed header line, show friendly name instead of raw serial: "**Tele 1** — Sem entregador" with small SN below
-- In totals-by-driver dialog, show friendly name if available
-- In the expanded detail, show friendly name label next to the SN input
+**Coluna "Confirmado às"**: Mudar formato de `'dd/MM HH:mm'` para `'dd/MM HH:mm:ss'` (linha 251)
 
-### 5. Admin Page: `/admin/maquininhas`
-New file `src/pages/MachineRegistry.tsx`:
-- Simple CRUD table for machines
-- Fields: friendly_name, serial_number, category (dropdown: tele/frota), is_active (toggle)
-- Add new machine button, inline edit, delete confirmation
-- Admin-only access
+**Nova coluna "Entrou na fila às"**: Adicionar `<TableHead>` após "Confirmado às" e `<TableCell>` correspondente mostrando `waitlistEnteredAt` formatado como `'dd/MM HH:mm:ss'` ou "—"
 
-### 6. Routing & Navigation
-- Add route `/admin/maquininhas` in `App.tsx` (admin-guarded)
-- Add sidebar entry in `AppSidebar.tsx` for admins only
+**Ajustar colSpan**: Incrementar os colSpan de 9/11 para 10/12
 
-### Files to Create/Edit
-| File | Action |
-|------|--------|
-| Migration SQL | Create table + seed data |
-| `src/hooks/useMachineRegistry.ts` | Create |
-| `src/components/SerialAutocomplete.tsx` | Edit — add friendly name display + search |
-| `src/components/MachineReadingsSection.tsx` | Edit — integrate registry, update display |
-| `src/pages/MachineRegistry.tsx` | Create — admin CRUD page |
-| `src/App.tsx` | Edit — add route |
-| `src/components/AppSidebar.tsx` | Edit — add nav item |
+**Exportação Excel**: Adicionar coluna `'Entrou na fila às'` no `exportData` com formato `'dd/MM/yyyy HH:mm:ss'`
+
+### 2. DriverShiftsContent.tsx — Segundos na fila de espera (linha 149)
+
+Mudar `format(new Date(c.waitlist_entered_at), 'HH:mm')` para `'HH:mm:ss'`
+
+### 3. DriverShifts.tsx — Segundos na fila de espera (linha 152)
+
+Mudar `format(new Date(c.waitlist_entered_at), 'HH:mm')` para `'HH:mm:ss'`
+
+### Arquivos modificados
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/components/delivery/DriverHistorySection.tsx` | Nova coluna, formato HH:mm:ss, exportação |
+| `src/components/delivery/DriverShiftsContent.tsx` | HH:mm → HH:mm:ss na fila |
+| `src/pages/DriverShifts.tsx` | HH:mm → HH:mm:ss na fila |
+
+Nenhuma lógica de negócio alterada. Apenas formatação visual e adição de coluna.
 
