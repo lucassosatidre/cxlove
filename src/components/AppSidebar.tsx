@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
-import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import propositoLogo from '@/assets/proposito-logo.png';
@@ -42,6 +42,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     navItems = allNavItems.filter(item => hasPermission(item.permission));
     if (isAdmin) {
       navItems.push({ icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' });
+      navItems.push({ icon: CreditCard, label: 'Maquininhas', path: '/admin/maquininhas', permission: 'dashboard' });
       // Etiquetas hidden — functionality moved to external script
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }

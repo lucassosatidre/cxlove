@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useMachineRegistry } from '@/hooks/useMachineRegistry';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -72,6 +73,7 @@ function parseRow(r: any): MachineReading {
 
 export default function MachineReadingsSection({ dailyClosingId, salonClosingId, deliveryPersons, isCompleted, personLabel = 'Entregador', mode = 'all', onCountChange }: Props) {
   const { user } = useAuth();
+  const { registry, getFriendlyName } = useMachineRegistry();
   const [readings, setReadings] = useState<MachineReading[]>([]);
   const [loading, setLoading] = useState(true);
   const [showByDriver, setShowByDriver] = useState(false);
@@ -373,7 +375,14 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                               ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                               : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             }
-                            <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                            {getFriendlyName(r.machine_serial) ? (
+                              <span className="text-xs font-semibold text-foreground">{getFriendlyName(r.machine_serial)}</span>
+                            ) : (
+                              <span className="text-xs font-mono text-muted-foreground">{SERIAL_PREFIX}{r.machine_serial || '---'}</span>
+                            )}
+                            {getFriendlyName(r.machine_serial) && (
+                              <span className="text-[10px] font-mono text-muted-foreground">({r.machine_serial})</span>
+                            )}
                             <span className="text-xs text-foreground font-medium">{r.delivery_person || noPersonLabel}</span>
                             <span className="ml-auto text-xs font-bold font-mono text-foreground">
                               {formatCurrency(blockTotal(r))}
@@ -406,6 +415,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                       value={r.machine_serial}
                                       onChange={(v) => updateField(r.id, 'machine_serial', v)}
                                       suggestions={serialSuggestions}
+                                      registry={registry}
                                       className="h-8 text-xs w-24 rounded-l-none font-mono"
                                       placeholder="000"
                                       disabled={isCompleted}
