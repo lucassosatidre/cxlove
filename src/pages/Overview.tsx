@@ -28,6 +28,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import CashExpectationDialog from '@/components/CashExpectationDialog';
 import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
 import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts } from '@/components/DenominationCountTable';
+import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
 
 // ── Types ──────────────────────────────────────────────
 
@@ -122,6 +123,17 @@ export default function Overview() {
   const [trocosSalao, setTrocosSalao] = useState<DenomCounts>(emptyDenomCounts());
   const [trocosTele, setTrocosTele] = useState<DenomCounts>(emptyDenomCounts());
   const [cofreFinal, setCofreFinal] = useState<DenomCounts>(emptyDenomCounts());
+
+  // Auto-fill Block 1 from cash_snapshots + previous cofre_final
+  const autoFill = useBlock1AutoFill(formDate, editingId);
+
+  useEffect(() => {
+    if (autoFill.loaded && !editingId) {
+      setContagemSalao(autoFill.salao);
+      setContagemTele(autoFill.tele);
+      setContagemCofre(autoFill.cofre);
+    }
+  }, [autoFill, editingId]);
 
   // ─ Data loading
   useEffect(() => {
