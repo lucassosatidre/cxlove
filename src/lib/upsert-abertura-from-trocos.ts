@@ -5,10 +5,11 @@ const DENOMINATIONS = ['200', '100', '50', '20', '10', '5', '2'] as const;
 
 /**
  * Convert Bloco 2 trocos (stored as R$ per denomination) to quantity per denomination,
- * then upsert cash_snapshots with snapshot_type='abertura' for the same-day closing.
+ * then upsert cash_expectations for the same closing_date so that the
+ * "ESPERADO" column in the operator's Abertura calculator is pre-filled.
  *
  * The trocos DenomCounts stores R$ values (e.g. {100: 300} means 3 × R$100).
- * cash_snapshots.counts expects QUANTITIES (e.g. {100: 3}).
+ * cash_expectations.counts expects QUANTITIES (e.g. {100: 3}).
  */
 export async function upsertAberturaFromTrocos(
   trocosSalao: DenomCounts,
@@ -35,82 +36,51 @@ export async function upsertAberturaFromTrocos(
   // Skip if both are empty
   if (salonTotal === 0 && teleTotal === 0) return {};
 
-  // Find same-day closings
-  const [salonClosing, teleClosing] = await Promise.all([
-    supabase
-      .from('salon_closings')
+  const upsertExpectation = async (
+    sector: 'salao' | 'tele',
+    counts: Record<string, number>,
+    total: number,
+  ) => {
+    const now = new Date().toISOString();
+
+    // Check if expectation already exists for this date+sector
+    const { data: existing } = await supabase
+      .from('cash_expectations')
       .select('id')
       .eq('closing_date', closingDate)
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from('daily_closings')
-      .select('id')
-      .eq('closing_date', closingDate)
-      .limit(1)
-      .maybeSingle(),
-  ]);
+      .eq('sector', sector)
+      .maybeSingle();
 
-  const errors: string[] = [];
+    if (existing?.id) {
+      await supabase
+        .from('cash_expectations')
+        .update({
+          counts,
+          total,
+          created_by: userId,
+          updated_at: now,
+        })
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('cash_expectations')
+        .insert({
+          closing_date: closingDate,
+          sector,
+          counts,
+          total,
+          created_by: userId,
+        });
+    }
+  };
 
-  // Upsert salon abertura
   if (salonTotal > 0) {
-    if (!salonClosing?.data?.id) {
-      errors.push('Salão');
-    } else {
-      await upsertSnapshot(salonClosing.data.id, null, salonQty, salonTotal, userId);
-    }
+    await upsertExpectation('salao', salonQty, salonTotal);
   }
 
-  // Upsert tele abertura
   if (teleTotal > 0) {
-    if (!teleClosing?.data?.id) {
-      errors.push('Tele');
-    } else {
-      await upsertSnapshot(null, teleClosing.data.id, teleQty, teleTotal, userId);
-    }
-  }
-
-  if (errors.length > 0) {
-    return { error: `Caixa do dia ainda não foi aberto (${errors.join(', ')}). Aguarde a abertura automática às 03h.` };
+    await upsertExpectation('tele', teleQty, teleTotal);
   }
 
   return {};
-}
-
-async function upsertSnapshot(
-  salonClosingId: string | null,
-  dailyClosingId: string | null,
-  counts: Record<string, number>,
-  total: number,
-  userId: string,
-) {
-  const now = new Date().toISOString();
-  const filterCol = salonClosingId ? 'salon_closing_id' : 'daily_closing_id';
-  const filterVal = salonClosingId || dailyClosingId;
-
-  // Check if abertura snapshot already exists for this closing
-  const { data: existing } = await supabase
-    .from('cash_snapshots')
-    .select('id')
-    .eq(filterCol, filterVal!)
-    .eq('snapshot_type', 'abertura')
-    .limit(1)
-    .maybeSingle();
-
-  const payload = {
-    salon_closing_id: salonClosingId,
-    daily_closing_id: dailyClosingId,
-    user_id: userId,
-    counts,
-    total,
-    snapshot_type: 'abertura',
-    updated_at: now,
-  };
-
-  if (existing?.id) {
-    await supabase.from('cash_snapshots').update(payload).eq('id', existing.id);
-  } else {
-    await supabase.from('cash_snapshots').insert(payload);
-  }
 }
