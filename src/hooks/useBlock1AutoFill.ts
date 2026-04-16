@@ -12,8 +12,8 @@ interface AutoFillResult {
 
 /**
  * Auto-fills Block 1 denomination counts from:
- * - Salon: cash_snapshots with snapshot_type='fechamento' + salon_closing_id (latest by date)
- * - Tele: cash_snapshots with snapshot_type='fechamento' + daily_closing_id (latest by date)
+ * - Salon: cash_snapshots with snapshot_type='fechamento' + salon_closing_id (latest by closing_date)
+ * - Tele: cash_snapshots with snapshot_type='fechamento' + daily_closing_id (latest by closing_date)
  * - Cofre: vault_daily_closings.cofre_final from previous closing (before formDate)
  *
  * cash_snapshots.counts stores QTY per denomination → converted to R$ via snapshotCountsToReais
@@ -37,47 +37,29 @@ export function useBlock1AutoFill(formDate: Date, editingId: string | null) {
     }
 
     const [salonSnap, teleSnap, prevVault] = await Promise.all([
-      // Latest salon cash_snapshot (fechamento) up to selected date
+      // Latest salon fechamento snapshot: query cash_snapshots directly,
+      // joining salon_closings to get closing_date for ordering.
+      // We filter closing_date <= dateStr so we get the most recent one.
       supabase
-        .from('salon_closings')
-        .select('id')
-        .lte('closing_date', dateStr)
-        .order('closing_date', { ascending: false })
+        .from('cash_snapshots')
+        .select('counts, salon_closings!inner(closing_date)')
+        .eq('snapshot_type', 'fechamento')
+        .not('salon_closing_id', 'is', null)
+        .lte('salon_closings.closing_date', dateStr)
+        .order('updated_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
-        .then(async ({ data: closing }) => {
-          if (!closing) return null;
-          const { data } = await supabase
-            .from('cash_snapshots')
-            .select('counts')
-            .eq('salon_closing_id', closing.id)
-            .eq('snapshot_type', 'fechamento')
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          return data;
-        }),
+        .maybeSingle(),
 
-      // Latest tele cash_snapshot (fechamento) up to selected date
+      // Latest tele fechamento snapshot
       supabase
-        .from('daily_closings')
-        .select('id')
-        .lte('closing_date', dateStr)
-        .order('closing_date', { ascending: false })
+        .from('cash_snapshots')
+        .select('counts, daily_closings!inner(closing_date)')
+        .eq('snapshot_type', 'fechamento')
+        .not('daily_closing_id', 'is', null)
+        .lte('daily_closings.closing_date', dateStr)
+        .order('updated_at', { ascending: false })
         .limit(1)
-        .maybeSingle()
-        .then(async ({ data: closing }) => {
-          if (!closing) return null;
-          const { data } = await supabase
-            .from('cash_snapshots')
-            .select('counts')
-            .eq('daily_closing_id', closing.id)
-            .eq('snapshot_type', 'fechamento')
-            .order('updated_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          return data;
-        }),
+        .maybeSingle(),
 
       // Previous vault closing cofre_final (before formDate)
       supabase
@@ -89,12 +71,12 @@ export function useBlock1AutoFill(formDate: Date, editingId: string | null) {
         .maybeSingle(),
     ]);
 
-    const salao = salonSnap?.counts
-      ? snapshotCountsToReais(salonSnap.counts as Record<string, number>)
+    const salao = salonSnap?.data?.counts
+      ? snapshotCountsToReais(salonSnap.data.counts as Record<string, number>)
       : emptyDenomCounts();
 
-    const tele = teleSnap?.counts
-      ? snapshotCountsToReais(teleSnap.counts as Record<string, number>)
+    const tele = teleSnap?.data?.counts
+      ? snapshotCountsToReais(teleSnap.data.counts as Record<string, number>)
       : emptyDenomCounts();
 
     const cofre = prevVault?.data?.cofre_final
