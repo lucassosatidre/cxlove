@@ -37,12 +37,12 @@ export function useBlock1AutoFill(formDate: Date, editingId: string | null) {
     }
 
     const [salonSnap, teleSnap, prevVault] = await Promise.all([
-      // Latest salon cash_snapshot (fechamento) for the selected date
-      // Find salon_closing for the date, then get its snapshot
+      // Latest salon cash_snapshot (fechamento) up to selected date
       supabase
         .from('salon_closings')
         .select('id')
-        .eq('closing_date', dateStr)
+        .lte('closing_date', dateStr)
+        .order('closing_date', { ascending: false })
         .limit(1)
         .maybeSingle()
         .then(async ({ data: closing }) => {
@@ -58,11 +58,12 @@ export function useBlock1AutoFill(formDate: Date, editingId: string | null) {
           return data;
         }),
 
-      // Latest tele cash_snapshot (fechamento) for the selected date
+      // Latest tele cash_snapshot (fechamento) up to selected date
       supabase
         .from('daily_closings')
         .select('id')
-        .eq('closing_date', dateStr)
+        .lte('closing_date', dateStr)
+        .order('closing_date', { ascending: false })
         .limit(1)
         .maybeSingle()
         .then(async ({ data: closing }) => {
