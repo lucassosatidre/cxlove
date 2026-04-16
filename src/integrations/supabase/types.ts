@@ -1083,8 +1083,14 @@ export type Database = {
           change_salon: number
           change_tele: number
           closing_date: string
+          cofre_final: Json | null
+          contagem_cofre: Json | null
+          contagem_salao: Json | null
+          contagem_tele: Json | null
           created_at: string
           id: string
+          trocos_salao: Json | null
+          trocos_tele: Json | null
           updated_at: string
           user_id: string
           vault_entry: number
@@ -1099,8 +1105,14 @@ export type Database = {
           change_salon?: number
           change_tele?: number
           closing_date: string
+          cofre_final?: Json | null
+          contagem_cofre?: Json | null
+          contagem_salao?: Json | null
+          contagem_tele?: Json | null
           created_at?: string
           id?: string
+          trocos_salao?: Json | null
+          trocos_tele?: Json | null
           updated_at?: string
           user_id: string
           vault_entry?: number
@@ -1115,8 +1127,14 @@ export type Database = {
           change_salon?: number
           change_tele?: number
           closing_date?: string
+          cofre_final?: Json | null
+          contagem_cofre?: Json | null
+          contagem_salao?: Json | null
+          contagem_tele?: Json | null
           created_at?: string
           id?: string
+          trocos_salao?: Json | null
+          trocos_tele?: Json | null
           updated_at?: string
           user_id?: string
           vault_entry?: number
