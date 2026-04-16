@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,18 +16,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   CalendarDays, Store, Bike, ChevronRight, CheckCircle2, Clock, Vault,
-  CalendarIcon, Plus, ArrowUpCircle, ArrowDownCircle, Trash2,
+  CalendarIcon, Plus, Trash2, Calculator, Eye,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useUserRole } from '@/hooks/useUserRole';
 import CashExpectationDialog from '@/components/CashExpectationDialog';
 import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
-import { Calculator, Eye } from 'lucide-react';
+import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts } from '@/components/DenominationCountTable';
 
 // ── Types ──────────────────────────────────────────────
 
@@ -58,6 +58,12 @@ interface VaultClosing {
   balance: number;
   user_id: string;
   created_at: string;
+  contagem_salao: DenomCounts | null;
+  contagem_tele: DenomCounts | null;
+  contagem_cofre: DenomCounts | null;
+  trocos_salao: DenomCounts | null;
+  trocos_tele: DenomCounts | null;
+  cofre_final: DenomCounts | null;
 }
 
 interface MiscExpense {
@@ -108,6 +114,14 @@ export default function Overview() {
   const [loadingVault, setLoadingVault] = useState(true);
   const [filterStart, setFilterStart] = useState<Date | undefined>();
   const [filterEnd, setFilterEnd] = useState<Date | undefined>();
+
+  // Denomination counting state
+  const [contagemSalao, setContagemSalao] = useState<DenomCounts>(emptyDenomCounts());
+  const [contagemTele, setContagemTele] = useState<DenomCounts>(emptyDenomCounts());
+  const [contagemCofre, setContagemCofre] = useState<DenomCounts>(emptyDenomCounts());
+  const [trocosSalao, setTrocosSalao] = useState<DenomCounts>(emptyDenomCounts());
+  const [trocosTele, setTrocosTele] = useState<DenomCounts>(emptyDenomCounts());
+  const [cofreFinal, setCofreFinal] = useState<DenomCounts>(emptyDenomCounts());
 
   // ─ Data loading
   useEffect(() => {
@@ -183,6 +197,13 @@ export default function Overview() {
 
   // ── Cash Control logic ───────────────────────────────
 
+  const currentVaultBalance = useMemo(() => {
+    const sorted = [...vaultClosings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
+    if (sorted.length === 0) return 0;
+    const last = sorted[sorted.length - 1];
+    return last.cofre_final ? sumDenomCounts(last.cofre_final) : last.balance;
+  }, [vaultClosings]);
+
   const previousBalance = useMemo(() => {
     const dateStr = format(formDate, 'yyyy-MM-dd');
     const sorted = [...vaultClosings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
@@ -205,34 +226,12 @@ export default function Overview() {
     return previousBalance + entry - exit - cs - ct - totalDayExpenses;
   }, [previousBalance, vaultEntry, vaultExit, changeSalon, changeTele, totalDayExpenses]);
 
-  const monthlySummary = useMemo(() => {
-    const now = new Date();
-    const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
-    const monthEnd = format(endOfMonth(now), 'yyyy-MM-dd');
-    const monthClosings = vaultClosings.filter(c => c.closing_date >= monthStart && c.closing_date <= monthEnd);
-    const monthExpenses = expenses.filter(e => e.expense_date >= monthStart && e.expense_date <= monthEnd);
-    const totalEntries = monthClosings.reduce((s, c) => s + Number(c.vault_entry), 0);
-    const totalExits = monthClosings.reduce((s, c) => s + Number(c.vault_exit), 0)
-      + monthExpenses.reduce((s, e) => s + Number(e.amount), 0)
-      + monthClosings.reduce((s, c) => s + Number(c.change_salon) + Number(c.change_tele), 0);
-    const sorted = [...vaultClosings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
-    const currentBalance = sorted.length > 0 ? sorted[sorted.length - 1].balance : 0;
-    return { currentBalance, totalEntries, totalExits };
-  }, [vaultClosings, expenses]);
-
   const filteredVaultClosings = useMemo(() => {
     let filtered = vaultClosings;
     if (filterStart) filtered = filtered.filter(c => c.closing_date >= format(filterStart, 'yyyy-MM-dd'));
     if (filterEnd) filtered = filtered.filter(c => c.closing_date <= format(filterEnd, 'yyyy-MM-dd'));
     return filtered;
   }, [vaultClosings, filterStart, filterEnd]);
-
-  // Last entry counts for balance detail
-  const lastEntryCounts = useMemo(() => {
-    const sorted = [...vaultClosings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));
-    if (sorted.length === 0) return null;
-    return sorted[sorted.length - 1].vault_entry_counts || null;
-  }, [vaultClosings]);
 
   const loadClosingForEdit = (closing: VaultClosing) => {
     setEditingId(closing.id);
@@ -245,6 +244,12 @@ export default function Overview() {
     setVaultExit(String(closing.vault_exit));
     setVaultExitDesc(closing.vault_exit_description || '');
     setVaultExitCounts(closing.vault_exit_counts || null);
+    setContagemSalao(closing.contagem_salao || emptyDenomCounts());
+    setContagemTele(closing.contagem_tele || emptyDenomCounts());
+    setContagemCofre(closing.contagem_cofre || emptyDenomCounts());
+    setTrocosSalao(closing.trocos_salao || emptyDenomCounts());
+    setTrocosTele(closing.trocos_tele || emptyDenomCounts());
+    setCofreFinal(closing.cofre_final || emptyDenomCounts());
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -259,15 +264,31 @@ export default function Overview() {
     setVaultExit('');
     setVaultExitDesc('');
     setVaultExitCounts(null);
+    setContagemSalao(emptyDenomCounts());
+    setContagemTele(emptyDenomCounts());
+    setContagemCofre(emptyDenomCounts());
+    setTrocosSalao(emptyDenomCounts());
+    setTrocosTele(emptyDenomCounts());
+    setCofreFinal(emptyDenomCounts());
   };
+
+  const handleDenomChange = useCallback((setter: React.Dispatch<React.SetStateAction<DenomCounts>>) => {
+    return (_colKey: string, denom: string, value: number) => {
+      setter(prev => ({ ...prev, [denom]: value }));
+    };
+  }, []);
+
+  const handleMultiColDenomChange = useCallback((
+    setters: Record<string, React.Dispatch<React.SetStateAction<DenomCounts>>>
+  ) => {
+    return (colKey: string, denom: string, value: number) => {
+      const setter = setters[colKey];
+      if (setter) setter(prev => ({ ...prev, [denom]: value }));
+    };
+  }, []);
 
   const handleSave = async () => {
     if (!user) return;
-    const exitVal = parseFloat(vaultExit) || 0;
-    if (exitVal > 0 && !vaultExitDesc.trim()) {
-      toast.error('Descrição obrigatória para saída do cofre');
-      return;
-    }
     setSaving(true);
     const record = {
       closing_date: format(formDate, 'yyyy-MM-dd'),
@@ -276,12 +297,18 @@ export default function Overview() {
       vault_entry: parseFloat(vaultEntry) || 0,
       vault_entry_description: vaultEntryDesc.trim() || null,
       vault_entry_counts: vaultEntryCounts || {},
-      vault_exit: exitVal,
+      vault_exit: parseFloat(vaultExit) || 0,
       vault_exit_description: vaultExitDesc.trim() || null,
       vault_exit_counts: vaultExitCounts || {},
       balance: calculatedBalance,
       user_id: user.id,
       updated_at: new Date().toISOString(),
+      contagem_salao: contagemSalao,
+      contagem_tele: contagemTele,
+      contagem_cofre: contagemCofre,
+      trocos_salao: trocosSalao,
+      trocos_tele: trocosTele,
+      cofre_final: cofreFinal,
     };
     let error;
     if (editingId) {
@@ -478,38 +505,20 @@ export default function Overview() {
         {/* ═══ Tab: Controle de Caixa ═══ */}
         {isAdmin && (
           <TabsContent value="vault">
-            {/* Monthly Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* Saldo Atual no Cofre — single card */}
+            <div className="grid grid-cols-1 gap-4 mb-6">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">Saldo Atual no Cofre</CardTitle>
                   <Vault className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <p className={cn("text-2xl font-bold", monthlySummary.currentBalance >= 0 ? 'text-emerald-500' : 'text-destructive')}>
-                    {fmt(monthlySummary.currentBalance)}
+                  <p className={cn("text-2xl font-bold", currentVaultBalance >= 0 ? 'text-emerald-500' : 'text-destructive')}>
+                    {fmt(currentVaultBalance)}
                   </p>
                   <Button variant="ghost" size="sm" className="mt-1 h-7 text-xs text-muted-foreground" onClick={() => setShowBalanceDetail(true)}>
                     <Eye className="h-3 w-3 mr-1" /> Ver detalhes
                   </Button>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Entradas no Mês</CardTitle>
-                  <ArrowUpCircle className="h-4 w-4 text-emerald-500" />
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold text-emerald-500">{fmt(monthlySummary.totalEntries)}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">Saídas no Mês</CardTitle>
-                  <ArrowDownCircle className="h-4 w-4 text-destructive" />
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold text-destructive">{fmt(monthlySummary.totalExits)}</p>
                 </CardContent>
               </Card>
             </div>
@@ -522,7 +531,7 @@ export default function Overview() {
                   <Plus className="h-4 w-4 mr-1" /> Saída Avulsa
                 </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <Label>📅 Data</Label>
@@ -575,11 +584,7 @@ export default function Overview() {
                     )}
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Descrição saída (obrigatório)</Label>
-                    <Input placeholder="Ex: pagamento fornecedor" value={vaultExitDesc} onChange={e => setVaultExitDesc(e.target.value)} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>💰 Saldo Calculado</Label>
+                    <Label>💰 Saldo</Label>
                     <div className={cn("h-10 flex items-center px-3 rounded-md border bg-muted font-bold", calculatedBalance >= 0 ? 'text-emerald-500' : 'text-destructive')}>
                       {fmt(calculatedBalance)}
                     </div>
@@ -594,7 +599,7 @@ export default function Overview() {
                 </div>
 
                 {dayExpenses.length > 0 && (
-                  <div className="mt-4 border rounded-lg p-3">
+                  <div className="border rounded-lg p-3">
                     <p className="text-xs font-semibold text-muted-foreground mb-2">Saídas avulsas do dia</p>
                     {dayExpenses.map(e => (
                       <div key={e.id} className="flex items-center justify-between text-sm py-1 border-b last:border-0">
@@ -608,6 +613,40 @@ export default function Overview() {
                     ))}
                   </div>
                 )}
+
+                {/* ── Denomination Counting Blocks ── */}
+                <div className="space-y-6 pt-4 border-t">
+                  <h2 className="text-base font-semibold text-foreground">Contagem por Nota</h2>
+
+                  <DenominationCountTable
+                    title="Bloco 1 — Sobra dos Caixas + Cofre"
+                    columns={[
+                      { key: 'salao', label: 'Salão (R$)' },
+                      { key: 'tele', label: 'Tele (R$)' },
+                      { key: 'cofre', label: 'Cofre (R$)' },
+                    ]}
+                    values={{ salao: contagemSalao, tele: contagemTele, cofre: contagemCofre }}
+                    onChange={handleMultiColDenomChange({ salao: setContagemSalao, tele: setContagemTele, cofre: setContagemCofre })}
+                    showTotalColumn
+                  />
+
+                  <DenominationCountTable
+                    title="Bloco 2 — Trocos do Próximo Dia"
+                    columns={[
+                      { key: 'salao', label: 'Salão (R$)' },
+                      { key: 'tele', label: 'Tele (R$)' },
+                    ]}
+                    values={{ salao: trocosSalao, tele: trocosTele }}
+                    onChange={handleMultiColDenomChange({ salao: setTrocosSalao, tele: setTrocosTele })}
+                  />
+
+                  <DenominationCountTable
+                    title="Bloco 3 — Cofre Final"
+                    columns={[{ key: 'cofre', label: 'Cofre (R$)' }]}
+                    values={{ cofre: cofreFinal }}
+                    onChange={handleDenomChange(setCofreFinal)}
+                  />
+                </div>
 
                 <div className="flex gap-2 mt-4">
                   <Button onClick={handleSave} disabled={saving}>
@@ -672,6 +711,7 @@ export default function Overview() {
                           <TableHead className="text-right">Saídas</TableHead>
                           <TableHead className="text-right">Avulsas</TableHead>
                           <TableHead className="text-right">Saldo</TableHead>
+                          <TableHead className="text-right">Cofre Final</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                       </TableHeader>
@@ -679,6 +719,7 @@ export default function Overview() {
                         {filteredVaultClosings.map(c => {
                           const dateExpenses = expenses.filter(e => e.expense_date === c.closing_date);
                           const totalMisc = dateExpenses.reduce((s, e) => s + Number(e.amount), 0);
+                          const cofreFinalTotal = c.cofre_final ? sumDenomCounts(c.cofre_final) : 0;
                           return (
                             <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => loadClosingForEdit(c)}>
                               <TableCell className="font-medium">{format(parseISO(c.closing_date), 'dd/MM/yyyy')}</TableCell>
@@ -688,6 +729,7 @@ export default function Overview() {
                               <TableCell className="text-right text-destructive">{fmt(c.vault_exit)}</TableCell>
                               <TableCell className="text-right text-destructive">{totalMisc > 0 ? fmt(totalMisc) : '-'}</TableCell>
                               <TableCell className={cn("text-right font-bold", c.balance >= 0 ? 'text-emerald-500' : 'text-destructive')}>{fmt(c.balance)}</TableCell>
+                              <TableCell className="text-right font-bold text-primary">{cofreFinalTotal > 0 ? fmt(cofreFinalTotal) : '-'}</TableCell>
                               <TableCell>
                                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); handleDeleteClosing(c.id); }}>
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -764,8 +806,8 @@ export default function Overview() {
       <VaultBalanceDetail
         open={showBalanceDetail}
         onOpenChange={setShowBalanceDetail}
-        balance={monthlySummary.currentBalance}
-        entryCounts={lastEntryCounts}
+        balance={currentVaultBalance}
+        entryCounts={vaultClosings.length > 0 ? (vaultClosings.sort((a, b) => a.closing_date.localeCompare(b.closing_date))[vaultClosings.length - 1].cofre_final || null) : null}
       />
     </AppLayout>
   );
