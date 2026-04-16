@@ -29,6 +29,7 @@ import CashExpectationDialog from '@/components/CashExpectationDialog';
 import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
 import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts } from '@/components/DenominationCountTable';
 import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
+import { upsertAberturaFromTrocos } from '@/lib/upsert-abertura-from-trocos';
 
 // ── Types ──────────────────────────────────────────────
 
@@ -332,6 +333,13 @@ export default function Overview() {
       if (error.code === '23505') toast.error('Já existe um fechamento para esta data. Clique nele para editar.');
       else toast.error('Erro ao salvar: ' + error.message);
     } else {
+      // Upsert abertura snapshots from Bloco 2 trocos
+      const aberturaResult = await upsertAberturaFromTrocos(
+        trocosSalao, trocosTele, format(formDate, 'yyyy-MM-dd'), user.id
+      );
+      if (aberturaResult.error) {
+        toast.warning(aberturaResult.error);
+      }
       toast.success(editingId ? 'Fechamento atualizado!' : 'Fechamento registrado!');
       resetForm();
       await loadVaultData();
@@ -538,7 +546,7 @@ export default function Overview() {
             {/* Daily Record Form */}
             <Card className="mb-6">
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-base">{editingId ? 'Editar Fechamento' : 'Novo Registro Diário'}</CardTitle>
+                <CardTitle className="text-base">{editingId ? 'Editar Fechamento' : 'Fechamento do Dia'}</CardTitle>
                 <Button size="sm" variant="outline" onClick={() => setShowExpenseDialog(true)}>
                   <Plus className="h-4 w-4 mr-1" /> Saída Avulsa
                 </Button>
