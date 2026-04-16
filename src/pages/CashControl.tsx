@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
 import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts } from '@/components/DenominationCountTable';
+import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
 
 interface VaultClosing {
   id: string;

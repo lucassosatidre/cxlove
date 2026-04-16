@@ -28,6 +28,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import CashExpectationDialog from '@/components/CashExpectationDialog';
 import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashCalculator';
 import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts } from '@/components/DenominationCountTable';
+import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
 
 // ── Types ──────────────────────────────────────────────
 
