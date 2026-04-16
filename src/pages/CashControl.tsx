@@ -111,6 +111,16 @@ export default function CashControl() {
 
   useEffect(() => { loadData(); }, []);
 
+  // Auto-fill Block 1 from cash_snapshots + previous cofre_final
+  const autoFill = useBlock1AutoFill(formDate, editingId);
+
+  useEffect(() => {
+    if (autoFill.loaded && !editingId) {
+      setContagemSalao(autoFill.salao);
+      setContagemTele(autoFill.tele);
+      setContagemCofre(autoFill.cofre);
+    }
+  }, [autoFill, editingId]);
   // Saldo Atual = total do cofre_final do último registro
   const currentVaultBalance = useMemo(() => {
     const sorted = [...closings].sort((a, b) => a.closing_date.localeCompare(b.closing_date));

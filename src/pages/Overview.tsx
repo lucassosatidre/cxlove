@@ -124,6 +124,17 @@ export default function Overview() {
   const [trocosTele, setTrocosTele] = useState<DenomCounts>(emptyDenomCounts());
   const [cofreFinal, setCofreFinal] = useState<DenomCounts>(emptyDenomCounts());
 
+  // Auto-fill Block 1 from cash_snapshots + previous cofre_final
+  const autoFill = useBlock1AutoFill(formDate, editingId);
+
+  useEffect(() => {
+    if (autoFill.loaded && !editingId) {
+      setContagemSalao(autoFill.salao);
+      setContagemTele(autoFill.tele);
+      setContagemCofre(autoFill.cofre);
+    }
+  }, [autoFill, editingId]);
+
   // ─ Data loading
   useEffect(() => {
     loadOverviewData();
