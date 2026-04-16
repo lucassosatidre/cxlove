@@ -97,7 +97,7 @@ export function useBlock1AutoFill(formDate: Date, editingId: string | null) {
       : emptyDenomCounts();
 
     const cofre = prevVault?.data?.cofre_final
-      ? (prevVault.data.cofre_final as DenomCounts)
+      ? (prevVault.data.cofre_final as unknown as DenomCounts)
       : emptyDenomCounts();
 
     setAutoFill({ salao, tele, cofre, loaded: true });
