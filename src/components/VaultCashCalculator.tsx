@@ -112,17 +112,21 @@ export function VaultBalanceDetail({ open, onOpenChange, balance, entryCounts }:
             <div className="grid grid-cols-[1fr_40px_1fr] gap-1 text-xs font-semibold text-muted-foreground">
               <span>Cédula</span><span className="text-center">Qtd</span><span className="text-right">Subtotal</span>
             </div>
-            {CASH_DENOMINATIONS.filter(d => (entryCounts![String(d)] || 0) > 0).map(d => (
-              <div key={d} className="grid grid-cols-[1fr_40px_1fr] gap-1 items-center text-sm">
-                <span>{formatCurrency(d)}</span>
-                <span className="text-center font-medium">{entryCounts![String(d)]}</span>
-                <span className="text-right">{formatCurrency(d * entryCounts![String(d)])}</span>
-              </div>
-            ))}
+            {CASH_DENOMINATIONS.filter(d => (entryCounts![String(d)] || 0) > 0).map(d => {
+              const subtotal = entryCounts![String(d)] || 0;
+              const qty = Math.round(subtotal / d);
+              return (
+                <div key={d} className="grid grid-cols-[1fr_40px_1fr] gap-1 items-center text-sm">
+                  <span>{formatCurrency(d)}</span>
+                  <span className="text-center font-medium">{qty}</span>
+                  <span className="text-right">{formatCurrency(subtotal)}</span>
+                </div>
+              );
+            })}
             <div className="flex justify-between pt-2 border-t mt-2 font-semibold text-sm">
               <span>Total contado:</span>
               <span className="text-primary">
-                {formatCurrency(CASH_DENOMINATIONS.reduce((s, d) => s + d * (entryCounts![String(d)] || 0), 0))}
+                {formatCurrency(CASH_DENOMINATIONS.reduce((s, d) => s + (entryCounts![String(d)] || 0), 0))}
               </span>
             </div>
           </div>
