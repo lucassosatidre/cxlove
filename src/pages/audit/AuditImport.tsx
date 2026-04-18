@@ -166,6 +166,9 @@ export default function AuditImport() {
       }
       toast.success('✓ Importação concluída', { description });
       await refresh(period.id);
+      setTimeout(() => {
+        navigate('/admin/auditoria', { state: { month: period.month, year: period.year } });
+      }, 2000);
     } catch (e: any) {
       toast.error('Erro na importação', { description: e?.message ?? 'Erro inesperado' });
       throw e;
