@@ -1545,11 +1545,11 @@ export type Database = {
       get_audit_period_totals: {
         Args: { p_period_id: string }
         Returns: {
+          total_bruto: number
           total_count: number
-          total_gross: number
-          total_net: number
-          total_promotion: number
-          total_tax: number
+          total_liquido_declarado: number
+          total_promocao: number
+          total_taxa_declarada: number
         }[]
       }
       has_role: {
