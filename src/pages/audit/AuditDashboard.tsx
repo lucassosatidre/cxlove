@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,6 +40,8 @@ type Totals = {
   txCount: number;
   bruto: number;
   taxa: number;
+  liquidoDeclarado: number;
+  custoDeclarado: number;
 };
 
 type VoucherMatch = {
@@ -100,17 +102,24 @@ const formatDateTime = (iso: string) =>
 
 export default function AuditDashboard() {
   const navigate = useNavigate();
-  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const now = new Date();
-  const initialMonth = (location.state as any)?.month ?? now.getMonth() + 1;
-  const initialYear = (location.state as any)?.year ?? now.getFullYear();
-  const [month, setMonth] = useState<number>(initialMonth);
-  const [year, setYear] = useState<number>(initialYear);
+
+  const getInitial = (key: 'month' | 'year', fallback: number) => {
+    const url = searchParams.get(key);
+    if (url) return Number(url);
+    const saved = sessionStorage.getItem(`auditDashboard_${key}`);
+    if (saved) return Number(saved);
+    return fallback;
+  };
+
+  const [month, setMonth] = useState<number>(() => getInitial('month', now.getMonth() + 1));
+  const [year, setYear] = useState<number>(() => getInitial('year', now.getFullYear()));
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
-  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0 });
+  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0 });
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -122,13 +131,19 @@ export default function AuditDashboard() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
 
+  // Persist month/year to sessionStorage + URL on every change
+  useEffect(() => {
+    sessionStorage.setItem('auditDashboard_month', String(month));
+    sessionStorage.setItem('auditDashboard_year', String(year));
+    setSearchParams({ month: String(month), year: String(year) }, { replace: true });
+  }, [month, year, setSearchParams]);
+
   const years = useMemo(() => {
     const y = now.getFullYear();
     return [y - 2, y - 1, y, y + 1];
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    // Use RPC aggregations to bypass the 1000-row implicit limit on .select()
     const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
@@ -140,18 +155,24 @@ export default function AuditDashboard() {
     setImports((imps as AuditImport[]) ?? []);
 
     const t = (totalsRpc as any[])?.[0] ?? {};
-    const vendido = Number(t.total_gross ?? 0);
-    const taxa = Number(t.total_tax ?? 0);
+    const bruto = Number(t.total_bruto ?? 0);
+    const liquidoDeclarado = Number(t.total_liquido_declarado ?? 0);
+    const taxa = Number(t.total_taxa_declarada ?? 0);
+    const promocao = Number(t.total_promocao ?? 0);
     const txCount = Number(t.total_count ?? 0);
+    const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0); // taxa + promoção declaradas
 
     const depRows = (depsRpc as { category: string | null; total_amount: number }[]) ?? [];
     const recebido = depRows
       .filter(d => ['ifood', 'alelo', 'ticket', 'pluxee', 'vr'].includes(d.category ?? ''))
       .reduce((s, d) => s + Number(d.total_amount || 0), 0);
-    const custo = Math.max(vendido - recebido, 0);
-    const taxaEfetiva = vendido > 0 ? (custo / vendido) * 100 : 0;
+    const custoReal = Math.max(bruto - recebido, 0);
+    const taxaEfetiva = bruto > 0 ? (custoReal / bruto) * 100 : 0;
 
-    setTotals({ vendido, recebido, custo, taxaPct: taxaEfetiva, txCount, bruto: vendido, taxa });
+    setTotals({
+      vendido: bruto, recebido, custo: custoReal, taxaPct: taxaEfetiva,
+      txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
+    });
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
