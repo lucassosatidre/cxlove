@@ -68,7 +68,7 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(now.getFullYear());
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
-  const [totals, setTotals] = useState<Totals>({ vendido: 0, taxaPct: 0, txCount: 0 });
+  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0 });
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
