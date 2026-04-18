@@ -1,6 +1,6 @@
 // @ts-nocheck
+// Receives pre-parsed JSON rows from the frontend (array of arrays — header=1).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -66,9 +66,9 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_base64, file_name } = body || {};
-    if (!audit_period_id || !file_base64 || !file_name) {
-      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes' }), {
+    const { audit_period_id, file_name, rows } = body || {};
+    if (!audit_period_id || !file_name || !Array.isArray(rows)) {
+      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, rows)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -86,30 +86,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    const bin = atob(file_base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-
-    let workbook: any;
-    try {
-      workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
-    } catch {
-      return new Response(JSON.stringify({ error: 'Não foi possível ler o arquivo .xlsx' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) {
-      return new Response(JSON.stringify({ error: 'Arquivo sem abas' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const sheet = workbook.Sheets[sheetName];
-    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-
-    // Dados começam na linha 10 (índice 10) — linha 9 é o cabeçalho
-    const dataRows = rows.slice(10).filter(r => r && r.some(c => c != null && c !== ''));
+    // Cresol export: header on row 9 (index 9), data starts row 10.
+    // Frontend sends the raw matrix (header=1). Skip until row 10 if needed,
+    // otherwise just iterate and let the date/amount filters drop noise rows.
+    const dataRows = rows.length > 10
+      ? rows.slice(10).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''))
+      : rows.filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
     const totalRows = dataRows.length;
 
     const { data: importRec, error: importErr } = await supabase
@@ -134,14 +116,12 @@ Deno.serve(async (req) => {
       const description = r[1] != null ? String(r[1]).trim() : '';
       const amount = parseNumber(r[4]);
 
-      // Pula linhas de rodapé / sem data
       if (!description) continue;
       if (/consulta posicao|periodo de/i.test(description) && !rawDate) continue;
       const depositDate = parseDateBR(rawDate);
       if (!depositDate) continue;
       if (amount <= 0) continue;
 
-      // Filtra apenas IFOOD
       if (!/ifood/i.test(description)) {
         skippedNonIfood++;
         continue;
@@ -160,12 +140,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Dedup por (bank, deposit_date, amount, description) no período
     let inserted = 0;
     let duplicates = 0;
     const CHUNK = 200;
 
-    // Carrega existentes do período pra deduplicar
     const { data: existing } = await supabase
       .from('audit_bank_deposits')
       .select('deposit_date,amount,description')

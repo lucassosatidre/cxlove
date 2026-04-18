@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -61,15 +62,41 @@ function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
 
-async function fileToBase64(file: File): Promise<string> {
+// Parse XLSX in browser → JSON. Returns the right shape for each importer.
+async function parseXlsxFile(file: File, type: FileType): Promise<{ rows: any[]; error?: string }> {
   const buf = await file.arrayBuffer();
-  let bin = '';
-  const bytes = new Uint8Array(buf);
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+  } catch {
+    return { rows: [], error: 'Não foi possível ler o arquivo .xlsx' };
   }
-  return btoa(bin);
+
+  if (type === 'maquinona') {
+    // Find the "Transações" tab (tolerant to accent/case)
+    const sheetName = workbook.SheetNames.find(
+      n => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'transacoes',
+    );
+    if (!sheetName) {
+      return { rows: [], error: 'Aba "Transações" não encontrada. Exporte novamente do Portal iFood em Financeiro > Relatório de Transações.' };
+    }
+    const sheet = workbook.Sheets[sheetName];
+    // Use header row → array of objects, keyed by the header label
+    const rows = XLSX.utils.sheet_to_json<any>(sheet, { defval: null, raw: false });
+    if (!rows.length) return { rows: [], error: 'Aba "Transações" está vazia' };
+    return { rows };
+  }
+
+  // Cresol / BB: send the raw matrix (header=1)
+  const sheetName =
+    type === 'bb'
+      ? workbook.SheetNames.find(n => /extrato/i.test(n)) ?? workbook.SheetNames[0]
+      : workbook.SheetNames[0];
+  if (!sheetName) return { rows: [], error: 'Arquivo sem abas' };
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+  if (!rows.length) return { rows: [], error: 'Arquivo vazio' };
+  return { rows };
 }
 
 export default function AuditImport() {
@@ -77,6 +104,8 @@ export default function AuditImport() {
   const [searchParams] = useSearchParams();
   const tipoParam = searchParams.get('tipo') as FileType | null;
   const periodIdParam = searchParams.get('period');
+  const monthParam = searchParams.get('month');
+  const yearParam = searchParams.get('year');
   const { isAdmin, loading: roleLoading } = useUserRole();
 
   const now = new Date();
@@ -84,6 +113,13 @@ export default function AuditImport() {
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmReimport, setConfirmReimport] = useState<FileType | null>(null);
+
+  // Build a back URL that preserves the dashboard's selected month/year
+  const backUrl = useMemo(() => {
+    const m = monthParam ?? (period ? String(period.month) : '');
+    const y = yearParam ?? (period ? String(period.year) : '');
+    return m && y ? `/admin/auditoria?month=${m}&year=${y}` : '/admin/auditoria';
+  }, [monthParam, yearParam, period]);
 
   const refresh = async (periodId: string) => {
     const { data: imps } = await supabase
@@ -146,16 +182,18 @@ export default function AuditImport() {
   const doImport = async (type: FileType, file: File) => {
     if (!period) return;
     try {
-      const b64 = await fileToBase64(file);
+      const { rows, error: parseErr } = await parseXlsxFile(file, type);
+      if (parseErr) throw new Error(parseErr);
+
       const { data, error } = await supabase.functions.invoke(CARD_META[type].functionName, {
-        body: { audit_period_id: period.id, file_base64: b64, file_name: file.name },
+        body: { audit_period_id: period.id, rows, file_name: file.name },
       });
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Falha na importação');
 
       let description = '';
       if (type === 'maquinona') {
-        description = `${data.imported_rows} transações importadas, ${data.duplicate_rows} duplicadas ignoradas`;
+        description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
       } else if (type === 'cresol') {
         description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
       } else if (type === 'bb') {
@@ -165,8 +203,8 @@ export default function AuditImport() {
       toast.success('✓ Importação concluída', { description });
       await refresh(period.id);
       setTimeout(() => {
-        navigate('/admin/auditoria', { state: { month: period.month, year: period.year } });
-      }, 2000);
+        navigate(backUrl);
+      }, 1500);
     } catch (e: any) {
       toast.error('Erro na importação', { description: e?.message ?? 'Erro inesperado' });
       throw e;
@@ -179,7 +217,7 @@ export default function AuditImport() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink onClick={() => navigate('/admin/auditoria')} className="cursor-pointer">
+              <BreadcrumbLink onClick={() => navigate(backUrl)} className="cursor-pointer">
                 Auditoria
               </BreadcrumbLink>
             </BreadcrumbItem>
@@ -214,7 +252,7 @@ export default function AuditImport() {
           />
         ))}
 
-        <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
+        <Button variant="outline" onClick={() => navigate(backUrl)} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Voltar ao Dashboard
         </Button>
       </div>
@@ -263,6 +301,7 @@ function ImportCard({
     try {
       await onImport(file);
       setFile(null);
+      if (inputRef.current) inputRef.current.value = '';
     } catch {
       // toast já exibido em onImport
     } finally {

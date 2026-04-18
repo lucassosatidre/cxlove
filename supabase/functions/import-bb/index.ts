@@ -1,6 +1,6 @@
 // @ts-nocheck
+// Receives pre-parsed JSON rows from the frontend (array of arrays — header=1).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,7 +26,6 @@ function parseDateBR(v: any): string | null {
   return null;
 }
 
-// Parse "311,49 C" / "-1.613,32 D" / "2.740,13 C" → { amount: number, isCredit: boolean }
 function parseBBValue(v: any): { amount: number; isCredit: boolean } | null {
   if (v == null || v === '') return null;
   if (typeof v === 'number') {
@@ -35,7 +34,6 @@ function parseBBValue(v: any): { amount: number; isCredit: boolean } | null {
   const s = String(v).trim();
   const m = s.match(/^(-?[\d\.\,]+)\s*([CD])?$/i);
   if (!m) {
-    // tenta só número
     const n = Number(s.replace(/\./g, '').replace(',', '.'));
     if (!isFinite(n)) return null;
     return { amount: Math.abs(n), isCredit: n >= 0 };
@@ -90,9 +88,9 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_base64, file_name } = body || {};
-    if (!audit_period_id || !file_base64 || !file_name) {
-      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes' }), {
+    const { audit_period_id, file_name, rows } = body || {};
+    if (!audit_period_id || !file_name || !Array.isArray(rows)) {
+      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, rows)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -110,31 +108,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    const bin = atob(file_base64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-
-    let workbook: any;
-    try {
-      workbook = XLSX.read(bytes, { type: 'array', cellDates: true });
-    } catch {
-      return new Response(JSON.stringify({ error: 'Não foi possível ler o arquivo .xlsx' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // Procura aba "Extrato Conta" ou usa a primeira
-    const sheetName = workbook.SheetNames.find((n: string) => /extrato/i.test(n)) || workbook.SheetNames[0];
-    if (!sheetName) {
-      return new Response(JSON.stringify({ error: 'Arquivo sem abas' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    const sheet = workbook.Sheets[sheetName];
-    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-
-    // Linha 0 = cabeçalho. Dados começam na linha 1.
-    const dataRows = rows.slice(1).filter(r => r && r.some(c => c != null && c !== ''));
+    // Frontend sends the raw matrix (header=1). Drop the header row.
+    const dataRows = rows.slice(1).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
     const totalRows = dataRows.length;
 
     const { data: importRec, error: importErr } = await supabase
@@ -165,11 +140,9 @@ Deno.serve(async (req) => {
       const tipo = r[5] != null ? String(r[5]).trim() : '';
 
       if (!depositDate || !description) continue;
-      // Ignora linhas de saldo
       if (/saldo anterior|saldo do dia|saldo/i.test(description)) continue;
       if (!valueParsed) continue;
 
-      // Apenas créditos (Entrada ou C)
       const isEntrada = /entrada/i.test(tipo);
       if (!isEntrada && !valueParsed.isCredit) {
         skippedDebits++;
@@ -193,7 +166,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Dedup por (bank, deposit_date, amount, doc_number)
     const { data: existing } = await supabase
       .from('audit_bank_deposits')
       .select('deposit_date,amount,doc_number')
