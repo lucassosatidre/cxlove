@@ -223,9 +223,9 @@ export default function AuditDashboard() {
         {/* Cards de resumo */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard title="Vendido" value={formatCurrency(totals.vendido)} />
-          <SummaryCard title="Recebido" value={formatCurrency(0)} />
-          <SummaryCard title="Custo" value={formatCurrency(0)} />
-          <SummaryCard title="Taxa" value={`${totals.taxaPct.toFixed(2).replace('.', ',')}%`} />
+          <SummaryCard title="Recebido" value={formatCurrency(totals.recebido)} />
+          <SummaryCard title="Custo" value={formatCurrency(totals.custo)} />
+          <SummaryCard title="Taxa efetiva" value={`${totals.taxaPct.toFixed(2).replace('.', ',')}%`} />
         </div>
 
         {/* Cards iFood + Voucher */}
