@@ -78,7 +78,7 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: txs }] = await Promise.all([
+    const [{ data: imps }, { data: txs }, { data: deps }] = await Promise.all([
       supabase
         .from('audit_imports')
         .select('file_type,status,file_name,imported_rows,created_at')
@@ -88,14 +88,27 @@ export default function AuditDashboard() {
         .from('audit_card_transactions')
         .select('gross_amount,tax_amount')
         .eq('audit_period_id', periodId),
+      supabase
+        .from('audit_bank_deposits')
+        .select('amount,category')
+        .eq('audit_period_id', periodId),
     ]);
     setImports((imps as AuditImport[]) ?? []);
     const rows = (txs as { gross_amount: number; tax_amount: number }[]) ?? [];
     const vendido = rows.reduce((s, r) => s + Number(r.gross_amount || 0), 0);
-    const taxa = rows.reduce((s, r) => s + Number(r.tax_amount || 0), 0);
+
+    const depRows = (deps as { amount: number; category: string | null }[]) ?? [];
+    const recebido = depRows
+      .filter(d => ['ifood', 'alelo', 'ticket', 'pluxee', 'vr'].includes(d.category ?? ''))
+      .reduce((s, d) => s + Number(d.amount || 0), 0);
+    const custo = Math.max(vendido - recebido, 0);
+    const taxaEfetiva = vendido > 0 ? (custo / vendido) * 100 : 0;
+
     setTotals({
       vendido,
-      taxaPct: vendido > 0 ? (taxa / vendido) * 100 : 0,
+      recebido,
+      custo,
+      taxaPct: taxaEfetiva,
       txCount: rows.length,
     });
   };
@@ -119,7 +132,7 @@ export default function AuditDashboard() {
         await loadPeriodData((p as AuditPeriod).id);
       } else {
         setImports([]);
-        setTotals({ vendido: 0, taxaPct: 0, txCount: 0 });
+        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0 });
       }
       setLoading(false);
     })();
