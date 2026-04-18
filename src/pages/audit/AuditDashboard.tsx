@@ -29,6 +29,8 @@ type AuditImport = {
 
 type Totals = {
   vendido: number;
+  recebido: number;
+  custo: number;
   taxaPct: number;
   txCount: number;
 };
