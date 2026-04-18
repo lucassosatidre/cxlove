@@ -5,11 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History } from 'lucide-react';
+import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
+import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 
 type AuditPeriod = {
   id: string;
@@ -17,6 +20,8 @@ type AuditPeriod = {
   year: number;
   status: 'aberto' | 'importado' | 'conciliado' | 'fechado';
   updated_at: string;
+  closed_at: string | null;
+  closed_by: string | null;
 };
 
 type AuditImport = {
@@ -33,6 +38,8 @@ type Totals = {
   custo: number;
   taxaPct: number;
   txCount: number;
+  bruto: number;
+  taxa: number;
 };
 
 type VoucherMatch = {
@@ -42,12 +49,25 @@ type VoucherMatch = {
   difference: number;
   effective_tax_rate: number;
   status: string;
+  sold_count?: number;
+  deposit_count?: number;
 };
 
 type DailyMatch = {
+  match_date: string;
   expected_amount: number;
   deposited_amount: number;
   difference: number;
+  transaction_count: number;
+  status: string;
+};
+
+type LogEntry = {
+  id: string;
+  action: 'fechado' | 'reaberto';
+  user_id: string | null;
+  reason: string | null;
+  created_at: string;
 };
 
 const MONTHS = [
@@ -87,12 +107,17 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(now.getFullYear());
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
-  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0 });
+  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0 });
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [reconciling, setReconciling] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [reopenOpen, setReopenOpen] = useState(false);
 
   const years = useMemo(() => {
     const y = now.getFullYear();
@@ -100,16 +125,18 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: txs }, { data: deps }, { data: vMatches }, { data: dMatches }] = await Promise.all([
+    const [{ data: imps }, { data: txs }, { data: deps }, { data: vMatches }, { data: dMatches }, { data: logRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.from('audit_card_transactions').select('gross_amount,tax_amount').eq('audit_period_id', periodId),
       supabase.from('audit_bank_deposits').select('amount,category').eq('audit_period_id', periodId),
-      supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status').eq('audit_period_id', periodId),
-      supabase.from('audit_daily_matches').select('expected_amount,deposited_amount,difference').eq('audit_period_id', periodId),
+      supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
+      supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
+      supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
     ]);
     setImports((imps as AuditImport[]) ?? []);
     const rows = (txs as { gross_amount: number; tax_amount: number }[]) ?? [];
     const vendido = rows.reduce((s, r) => s + Number(r.gross_amount || 0), 0);
+    const taxa = rows.reduce((s, r) => s + Number(r.tax_amount || 0), 0);
 
     const depRows = (deps as { amount: number; category: string | null }[]) ?? [];
     const recebido = depRows
@@ -118,9 +145,10 @@ export default function AuditDashboard() {
     const custo = Math.max(vendido - recebido, 0);
     const taxaEfetiva = vendido > 0 ? (custo / vendido) * 100 : 0;
 
-    setTotals({ vendido, recebido, custo, taxaPct: taxaEfetiva, txCount: rows.length });
+    setTotals({ vendido, recebido, custo, taxaPct: taxaEfetiva, txCount: rows.length, bruto: vendido, taxa });
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
+    setLogs((logRows as LogEntry[]) ?? []);
   };
 
   useEffect(() => {
@@ -139,14 +167,34 @@ export default function AuditDashboard() {
         await loadPeriodData((p as AuditPeriod).id);
       } else {
         setImports([]);
-        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0 });
+        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0 });
         setVoucherMatches([]);
         setDailyMatches([]);
+        setLogs([]);
       }
       setLoading(false);
     })();
     return () => { active = false; };
   }, [month, year, isAdmin]);
+
+  // Resolve user names for the closed_by + log entries
+  useEffect(() => {
+    const ids = new Set<string>();
+    if (period?.closed_by) ids.add(period.closed_by);
+    for (const l of logs) if (l.user_id) ids.add(l.user_id);
+    const missing = Array.from(ids).filter(id => !(id in userNamesById));
+    if (missing.length === 0) return;
+    (async () => {
+      // Try delivery_drivers first, then user metadata via fallback (email/uuid)
+      const { data: drivers } = await supabase
+        .from('delivery_drivers').select('auth_user_id,nome').in('auth_user_id', missing);
+      const map: Record<string, string> = {};
+      for (const d of drivers ?? []) map[(d as any).auth_user_id] = (d as any).nome;
+      // For ids not found, just keep "Admin"
+      for (const id of missing) if (!map[id]) map[id] = 'Admin';
+      setUserNamesById(prev => ({ ...prev, ...map }));
+    })();
+  }, [period?.closed_by, logs]);
 
   const handleCreatePeriod = async () => {
     if (!user) return;
@@ -166,6 +214,8 @@ export default function AuditDashboard() {
   const importByType = (t: 'maquinona' | 'cresol' | 'bb') => imports.find(i => i.file_type === t);
   const allImported = ['maquinona', 'cresol', 'bb'].every(t => importByType(t as any)?.status === 'completed');
   const isConciliated = period?.status === 'conciliado';
+  const isClosed = period?.status === 'fechado';
+  const canExport = isConciliated || isClosed;
 
   const handleRunMatch = async () => {
     if (!period) return;
@@ -180,7 +230,6 @@ export default function AuditDashboard() {
         title: '✓ Conciliação concluída',
         description: `${(data as any).daily_matches_count} matches diários · ${(data as any).voucher_matches_count} matches voucher`,
       });
-      // refresh
       const { data: p } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
       if (p) setPeriod(p as AuditPeriod);
       await loadPeriodData(period.id);
@@ -189,6 +238,85 @@ export default function AuditDashboard() {
     } finally {
       setReconciling(false);
     }
+  };
+
+  const buildPdfData = (): AuditPdfData => {
+    const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
+    return {
+      periodLabel: makePeriodLabel(month, year),
+      periodFileTag: periodFileTag(month, year),
+      emittedBy: user?.email ?? 'Admin',
+      totals: {
+        vendido: totals.vendido,
+        recebido: totals.recebido,
+        custoTotal: totals.custo,
+        taxaEfetiva: totals.taxaPct,
+      },
+      criticalVouchers: voucherMatches.filter(v => v.status === 'critico'),
+      ifoodSummary: {
+        bruto: totals.bruto,
+        taxaDeclarada: totals.taxa,
+        liquidoEsperado: dailyMatches.reduce((s, m) => s + Number(m.expected_amount), 0),
+        depositoCresol: dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0),
+        diferenca: ifoodGap,
+      },
+      dailyRows: dailyMatches,
+      voucherRows: voucherMatches,
+    };
+  };
+
+  const handleExportPdf = async () => {
+    if (!canExport) return;
+    setExportingPdf(true);
+    try {
+      generateAuditPdf('completo', buildPdfData());
+      toast({ title: '✓ Relatório exportado' });
+    } catch (e: any) {
+      toast({ title: 'Erro ao gerar PDF', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (!period || !user) return;
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase
+      .from('audit_periods')
+      .update({ status: 'fechado', closed_at: nowIso, closed_by: user.id, updated_at: nowIso })
+      .eq('id', period.id);
+    if (error) {
+      toast({ title: 'Erro ao fechar', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await supabase.from('audit_period_log').insert({
+      audit_period_id: period.id, action: 'fechado', user_id: user.id, reason: null,
+    });
+    toast({ title: '✓ Período fechado', description: `${MONTHS[month - 1]}/${year} fechado com sucesso` });
+    setCloseOpen(false);
+    const { data: p } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
+    if (p) setPeriod(p as AuditPeriod);
+    await loadPeriodData(period.id);
+  };
+
+  const handleReopen = async (reason: string) => {
+    if (!period || !user) return;
+    const { error } = await supabase
+      .from('audit_periods')
+      .update({ status: 'conciliado', closed_at: null, closed_by: null, updated_at: new Date().toISOString() })
+      .eq('id', period.id);
+    if (error) {
+      toast({ title: 'Erro ao reabrir', description: error.message, variant: 'destructive' });
+      return;
+    }
+    await supabase.from('audit_period_log').insert({
+      audit_period_id: period.id, action: 'reaberto', user_id: user.id, reason,
+    });
+    toast({ title: '✓ Período reaberto' });
+    setReopenOpen(false);
+    const { data: p } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
+    if (p) setPeriod(p as AuditPeriod);
+    await loadPeriodData(period.id);
   };
 
   if (roleLoading) {
@@ -212,17 +340,60 @@ export default function AuditDashboard() {
   const statusBadge = period ? STATUS_VARIANTS[period.status] : null;
   const criticalVouchers = voucherMatches.filter(v => v.status === 'critico');
 
-  // Refined totals when conciliated
   const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
   const voucherGap = voucherMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
-  // When conciliated, custo = taxa declarada + |gap antecipação se negativo|
-  const custoReal = isConciliated
+  const custoReal = isConciliated || isClosed
     ? Math.abs(Math.min(ifoodGap, 0)) + Math.max(voucherGap, 0) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido - Math.max(voucherGap, 0)) : 0)
     : totals.custo;
+
+  const periodLabelStr = makePeriodLabel(month, year);
+
+  const exportBtn = (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <Button
+              variant="outline"
+              onClick={handleExportPdf}
+              disabled={!canExport || exportingPdf}
+              className="gap-2"
+            >
+              {exportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {exportingPdf ? 'Gerando PDF...' : 'Exportar PDF'}
+            </Button>
+          </span>
+        </TooltipTrigger>
+        {!canExport && (
+          <TooltipContent>Execute a conciliação antes de exportar</TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
 
   return (
     <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Bancos">
       <div className="space-y-6">
+        {/* Closed banner */}
+        {isClosed && period && (
+          <Card className="border-slate-400/60 bg-slate-500/5">
+            <CardContent className="py-3 flex flex-wrap items-center gap-3">
+              <Lock className="h-5 w-5 text-slate-500" />
+              <div className="flex-1 min-w-[260px] text-sm">
+                <p className="font-semibold">PERÍODO FECHADO</p>
+                <p className="text-muted-foreground text-xs">
+                  Fechado em {period.closed_at ? formatDateTime(period.closed_at) : '—'}
+                  {period.closed_by ? ` por ${userNamesById[period.closed_by] ?? 'Admin'}` : ''}.
+                  {' '}Apenas visualização e exportação disponíveis.
+                </p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setReopenOpen(true)} className="gap-2">
+                <LockOpen className="h-4 w-4" /> Reabrir Período
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Critical alert */}
         {criticalVouchers.length > 0 && (
           <Card className="border-red-500 bg-red-500/5">
@@ -263,15 +434,18 @@ export default function AuditDashboard() {
               </Select>
             </div>
 
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex items-center gap-3 flex-wrap">
               {period && statusBadge && (
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Status:</span>
                   <Badge className={statusBadge.className} variant="secondary">{statusBadge.label}</Badge>
-                  <span className="text-muted-foreground hidden md:inline">
-                    Atualizado: {formatDateTime(period.updated_at)}
-                  </span>
                 </div>
+              )}
+              {period && exportBtn}
+              {period && isConciliated && !isClosed && (
+                <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
+                  <Lock className="h-4 w-4" /> Fechar Período
+                </Button>
               )}
               {!period && !loading && (
                 <Button onClick={handleCreatePeriod} disabled={creating} className="gap-2">
@@ -284,7 +458,7 @@ export default function AuditDashboard() {
         </Card>
 
         {/* Reconcile button */}
-        {period && (
+        {period && !isClosed && (
           <Card>
             <CardContent className="py-4 flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm">
@@ -327,7 +501,7 @@ export default function AuditDashboard() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Gap:</span><span className={`font-semibold ${ifoodGap < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{formatCurrency(ifoodGap)}</span></div>
                 </div>
               )}
-              <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!isConciliated} onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}>
+              <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!canExport} onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}>
                 Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </CardContent>
@@ -354,7 +528,7 @@ export default function AuditDashboard() {
                   })}
                 </div>
               )}
-              <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!isConciliated} onClick={() => navigate(`/admin/auditoria/voucher?period=${period?.id}`)}>
+              <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!canExport} onClick={() => navigate(`/admin/auditoria/voucher?period=${period?.id}`)}>
                 Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
               </Button>
             </CardContent>
@@ -365,6 +539,9 @@ export default function AuditDashboard() {
         <Card>
           <CardHeader><CardTitle className="text-base">Importações do período</CardTitle></CardHeader>
           <CardContent className="space-y-2">
+            {isClosed && (
+              <p className="text-xs text-muted-foreground italic">Este período está fechado. Para importar novos arquivos, reabra o período.</p>
+            )}
             {(['maquinona', 'cresol', 'bb'] as const).map(t => {
               const imp = importByType(t);
               const isCompleted = imp?.status === 'completed';
@@ -381,7 +558,7 @@ export default function AuditDashboard() {
                       <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" disabled={!period} onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}`)}>
+                  <Button size="sm" variant="outline" disabled={!period || isClosed} onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}`)}>
                     {isCompleted ? 'Re-importar' : 'Importar'}
                   </Button>
                 </div>
@@ -390,7 +567,48 @@ export default function AuditDashboard() {
             {!period && (<p className="text-xs text-muted-foreground pt-1">Crie o período acima antes de importar arquivos.</p>)}
           </CardContent>
         </Card>
+
+        {/* History */}
+        {logs.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <History className="h-4 w-4 text-muted-foreground" /> Histórico deste período
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-1.5 text-xs text-muted-foreground">
+              {logs.map(l => (
+                <div key={l.id}>
+                  <span className="font-mono">{formatDateTime(l.created_at)}</span>
+                  {' — '}
+                  <span className={l.action === 'fechado' ? 'text-foreground font-medium' : 'text-blue-600 dark:text-blue-400 font-medium'}>
+                    {l.action === 'fechado' ? 'Fechado' : 'Reaberto'}
+                  </span>
+                  {l.user_id ? ` por ${userNamesById[l.user_id] ?? 'Admin'}` : ''}
+                  {l.reason ? <span className="block pl-4 italic">Motivo: "{l.reason}"</span> : null}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
       </div>
+
+      {period && (
+        <>
+          <CloseConfirmDialog
+            open={closeOpen}
+            onOpenChange={setCloseOpen}
+            periodLabel={periodLabelStr}
+            onConfirm={handleClose}
+          />
+          <ReopenDialog
+            open={reopenOpen}
+            onOpenChange={setReopenOpen}
+            periodLabel={periodLabelStr}
+            onConfirm={handleReopen}
+          />
+        </>
+      )}
     </AppLayout>
   );
 }
