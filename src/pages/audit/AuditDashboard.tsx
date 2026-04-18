@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -100,11 +100,14 @@ const formatDateTime = (iso: string) =>
 
 export default function AuditDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const now = new Date();
-  const [month, setMonth] = useState<number>(now.getMonth() + 1);
-  const [year, setYear] = useState<number>(now.getFullYear());
+  const initialMonth = (location.state as any)?.month ?? now.getMonth() + 1;
+  const initialYear = (location.state as any)?.year ?? now.getFullYear();
+  const [month, setMonth] = useState<number>(initialMonth);
+  const [year, setYear] = useState<number>(initialYear);
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0 });
@@ -558,7 +561,7 @@ export default function AuditDashboard() {
                       <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" disabled={!period || isClosed} onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}`)}>
+                  <Button size="sm" variant="outline" disabled={!period || isClosed} onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}&period=${period?.id}`, { state: { month, year } })}>
                     {isCompleted ? 'Re-importar' : 'Importar'}
                   </Button>
                 </div>

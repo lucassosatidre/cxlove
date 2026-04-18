@@ -76,6 +76,7 @@ export default function AuditImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tipoParam = searchParams.get('tipo') as FileType | null;
+  const periodIdParam = searchParams.get('period');
   const { isAdmin, loading: roleLoading } = useUserRole();
 
   const now = new Date();
@@ -96,17 +97,25 @@ export default function AuditImport() {
     let active = true;
     (async () => {
       setLoading(true);
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-      const { data: p } = await supabase
-        .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+      let p: AuditPeriod | null = null;
+      if (periodIdParam) {
+        const { data } = await supabase
+          .from('audit_periods').select('*').eq('id', periodIdParam).maybeSingle();
+        p = (data as AuditPeriod) ?? null;
+      } else {
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        const { data } = await supabase
+          .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+        p = (data as AuditPeriod) ?? null;
+      }
       if (!active) return;
-      setPeriod((p as AuditPeriod) ?? null);
-      if (p) await refresh((p as AuditPeriod).id);
+      setPeriod(p);
+      if (p) await refresh(p.id);
       setLoading(false);
     })();
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [isAdmin, periodIdParam]);
 
   const lastImportByType = useMemo(() => {
     const map: Partial<Record<FileType, AuditImport>> = {};
@@ -155,6 +164,9 @@ export default function AuditImport() {
       }
       toast.success('✓ Importação concluída', { description });
       await refresh(period.id);
+      setTimeout(() => {
+        navigate('/admin/auditoria', { state: { month: period.month, year: period.year } });
+      }, 2000);
     } catch (e: any) {
       toast.error('Erro na importação', { description: e?.message ?? 'Erro inesperado' });
       throw e;
@@ -304,7 +316,10 @@ function ImportCard({
           >
             <UploadCloud className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
             {file ? (
-              <p className="text-sm font-medium text-foreground">{file.name}</p>
+              <div className="text-sm">
+                <p className="font-medium text-foreground">{file.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+              </div>
             ) : (
               <p className="text-sm text-foreground">Arraste ou clique para selecionar o arquivo .xlsx</p>
             )}
