@@ -76,6 +76,7 @@ export default function AuditImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tipoParam = searchParams.get('tipo') as FileType | null;
+  const periodIdParam = searchParams.get('period');
   const { isAdmin, loading: roleLoading } = useUserRole();
 
   const now = new Date();
@@ -83,6 +84,8 @@ export default function AuditImport() {
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirmReimport, setConfirmReimport] = useState<FileType | null>(null);
+
+  const backState = period ? { month: period.month, year: period.year } : undefined;
 
   const refresh = async (periodId: string) => {
     const { data: imps } = await supabase
@@ -96,17 +99,25 @@ export default function AuditImport() {
     let active = true;
     (async () => {
       setLoading(true);
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-      const { data: p } = await supabase
-        .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+      let p: AuditPeriod | null = null;
+      if (periodIdParam) {
+        const { data } = await supabase
+          .from('audit_periods').select('*').eq('id', periodIdParam).maybeSingle();
+        p = (data as AuditPeriod) ?? null;
+      } else {
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        const { data } = await supabase
+          .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+        p = (data as AuditPeriod) ?? null;
+      }
       if (!active) return;
-      setPeriod((p as AuditPeriod) ?? null);
-      if (p) await refresh((p as AuditPeriod).id);
+      setPeriod(p);
+      if (p) await refresh(p.id);
       setLoading(false);
     })();
     return () => { active = false; };
-  }, [isAdmin]);
+  }, [isAdmin, periodIdParam]);
 
   const lastImportByType = useMemo(() => {
     const map: Partial<Record<FileType, AuditImport>> = {};
