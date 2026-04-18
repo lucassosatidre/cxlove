@@ -7,7 +7,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { ArrowLeft, Download, Loader2 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
+import { ArrowLeft, Download, FileDown, Loader2 } from 'lucide-react';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (iso: string) => {
@@ -44,11 +46,13 @@ type MatchRow = {
 export default function AuditIfood() {
   const navigate = useNavigate();
   const { isAdmin, loading: roleLoading } = useUserRole();
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const periodId = params.get('period');
   const [rows, setRows] = useState<MatchRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodLabel, setPeriodLabel] = useState('');
+  const [periodMY, setPeriodMY] = useState<{ month: number; year: number } | null>(null);
 
   useEffect(() => {
     if (!isAdmin || !periodId) return;
@@ -63,6 +67,7 @@ export default function AuditIfood() {
       if (period) {
         const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
         setPeriodLabel(`${months[(period as any).month - 1]}/${(period as any).year}`);
+        setPeriodMY({ month: (period as any).month, year: (period as any).year });
       }
 
       const grossByDate = new Map<string, { gross: number; tax: number }>();
@@ -187,13 +192,45 @@ export default function AuditIfood() {
           </CardContent>
         </Card>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
             <ArrowLeft className="h-4 w-4" /> Voltar
           </Button>
-          <Button onClick={exportCSV} disabled={rows.length === 0} className="gap-2">
-            <Download className="h-4 w-4" /> Exportar CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!periodMY) return;
+                generateAuditPdf('ifood', {
+                  periodLabel: makePeriodLabel(periodMY.month, periodMY.year),
+                  periodFileTag: periodFileTag(periodMY.month, periodMY.year),
+                  emittedBy: user?.email ?? 'Admin',
+                  totals: {
+                    vendido: rows.reduce((s, r) => s + Number(r.gross || 0), 0),
+                    recebido: totals.deposited,
+                    custoTotal: Math.abs(Math.min(totals.diff, 0)),
+                    taxaEfetiva: totals.antecRate,
+                  },
+                  criticalVouchers: [],
+                  ifoodSummary: {
+                    bruto: rows.reduce((s, r) => s + Number(r.gross || 0), 0),
+                    taxaDeclarada: rows.reduce((s, r) => s + Number(r.tax || 0), 0),
+                    liquidoEsperado: totals.expected,
+                    depositoCresol: totals.deposited,
+                    diferenca: totals.diff,
+                  },
+                  dailyRows: rows,
+                });
+              }}
+              disabled={rows.length === 0}
+              className="gap-2"
+            >
+              <FileDown className="h-4 w-4" /> Exportar PDF
+            </Button>
+            <Button onClick={exportCSV} disabled={rows.length === 0} className="gap-2">
+              <Download className="h-4 w-4" /> Exportar CSV
+            </Button>
+          </div>
         </div>
       </div>
     </AppLayout>
