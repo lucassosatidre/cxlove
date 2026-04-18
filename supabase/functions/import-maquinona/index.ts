@@ -1,4 +1,5 @@
 // @ts-nocheck
+// NOTE: insert loop replaced by batched UPSERT with ignoreDuplicates below to handle re-imports safely.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import * as XLSX from 'https://esm.sh/xlsx@0.18.5';
 
