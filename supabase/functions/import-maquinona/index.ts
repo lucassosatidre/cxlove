@@ -234,25 +234,37 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Insere em chunks com onConflict no transaction_id
+    // Dedup interno por transaction_id (o arquivo pode trazer linhas duplicadas)
+    const seen = new Set<string>();
+    const dedupedTxs: any[] = [];
+    for (const t of txs) {
+      if (seen.has(t.transaction_id)) continue;
+      seen.add(t.transaction_id);
+      dedupedTxs.push(t);
+    }
+
+    // UPSERT em batches com ignoreDuplicates — robusto para re-importações
     let inserted = 0;
     const CHUNK = 500;
-    for (let i = 0; i < txs.length; i += CHUNK) {
-      const chunk = txs.slice(i, i + CHUNK);
-      // Verifica existentes
+    for (let i = 0; i < dedupedTxs.length; i += CHUNK) {
+      const chunk = dedupedTxs.slice(i, i + CHUNK);
       const ids = chunk.map(t => t.transaction_id);
-      const { data: existing } = await supabase
+      // Checa existência GLOBAL (a unique constraint é em transaction_id sem partição por período)
+      const { data: existingGlobal } = await supabase
         .from('audit_card_transactions')
         .select('transaction_id')
         .in('transaction_id', ids);
-      const existingSet = new Set((existing ?? []).map((e: any) => e.transaction_id));
-      const toInsert = chunk.filter(t => !existingSet.has(t.transaction_id));
+      const globalSet = new Set((existingGlobal ?? []).map((e: any) => e.transaction_id));
+      const toInsert = chunk.filter(t => !globalSet.has(t.transaction_id));
+
       if (toInsert.length) {
-        const { error: insErr } = await supabase.from('audit_card_transactions').insert(toInsert);
+        const { error: insErr } = await supabase
+          .from('audit_card_transactions')
+          .upsert(toInsert, { onConflict: 'transaction_id', ignoreDuplicates: true });
         if (insErr) {
           await supabase.from('audit_imports').update({
             status: 'failed', error_message: insErr.message,
-            imported_rows: inserted, duplicate_rows: txs.length - inserted - toInsert.length,
+            imported_rows: inserted, duplicate_rows: dedupedTxs.length - inserted - toInsert.length,
           }).eq('id', importRec.id);
           return new Response(JSON.stringify({ error: `Erro ao inserir: ${insErr.message}` }), {
             status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -260,6 +272,7 @@ Deno.serve(async (req) => {
         }
         inserted += toInsert.length;
       }
+      console.log(`[import-maquinona] batch ${Math.floor(i / CHUNK) + 1}: ${toInsert.length} new, ${chunk.length - toInsert.length} dup`);
     }
 
     const duplicates = txs.length - inserted;
