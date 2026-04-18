@@ -58,10 +58,31 @@ export default function AuditIfood() {
     if (!isAdmin || !periodId) return;
     (async () => {
       setLoading(true);
-      const [{ data: period }, { data: matches }, { data: txs }] = await Promise.all([
+
+      // Paginated fetch to bypass the 1000-row .select() default limit
+      async function fetchAllIfoodTxs() {
+        const all: any[] = [];
+        let from = 0;
+        const pageSize = 1000;
+        while (true) {
+          const { data, error } = await supabase
+            .from('audit_card_transactions')
+            .select('expected_deposit_date,gross_amount,tax_amount')
+            .eq('audit_period_id', periodId!)
+            .eq('deposit_group', 'ifood')
+            .range(from, from + pageSize - 1);
+          if (error || !data || data.length === 0) break;
+          all.push(...data);
+          if (data.length < pageSize) break;
+          from += pageSize;
+        }
+        return all;
+      }
+
+      const [{ data: period }, { data: matches }, txs] = await Promise.all([
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
         supabase.from('audit_daily_matches').select('*').eq('audit_period_id', periodId).order('match_date', { ascending: true }),
-        supabase.from('audit_card_transactions').select('expected_deposit_date,gross_amount,tax_amount').eq('audit_period_id', periodId).eq('deposit_group', 'ifood'),
+        fetchAllIfoodTxs(),
       ]);
 
       if (period) {
@@ -71,7 +92,7 @@ export default function AuditIfood() {
       }
 
       const grossByDate = new Map<string, { gross: number; tax: number }>();
-      for (const t of txs ?? []) {
+      for (const t of (txs as any[]) ?? []) {
         const d = (t as any).expected_deposit_date;
         if (!d) continue;
         const cur = grossByDate.get(d) ?? { gross: 0, tax: 0 };

@@ -128,27 +128,30 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: txs }, { data: deps }, { data: vMatches }, { data: dMatches }, { data: logRows }] = await Promise.all([
+    // Use RPC aggregations to bypass the 1000-row implicit limit on .select()
+    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
-      supabase.from('audit_card_transactions').select('gross_amount,tax_amount').eq('audit_period_id', periodId),
-      supabase.from('audit_bank_deposits').select('amount,category').eq('audit_period_id', periodId),
+      supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
+      supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
     ]);
     setImports((imps as AuditImport[]) ?? []);
-    const rows = (txs as { gross_amount: number; tax_amount: number }[]) ?? [];
-    const vendido = rows.reduce((s, r) => s + Number(r.gross_amount || 0), 0);
-    const taxa = rows.reduce((s, r) => s + Number(r.tax_amount || 0), 0);
 
-    const depRows = (deps as { amount: number; category: string | null }[]) ?? [];
+    const t = (totalsRpc as any[])?.[0] ?? {};
+    const vendido = Number(t.total_gross ?? 0);
+    const taxa = Number(t.total_tax ?? 0);
+    const txCount = Number(t.total_count ?? 0);
+
+    const depRows = (depsRpc as { category: string | null; total_amount: number }[]) ?? [];
     const recebido = depRows
       .filter(d => ['ifood', 'alelo', 'ticket', 'pluxee', 'vr'].includes(d.category ?? ''))
-      .reduce((s, d) => s + Number(d.amount || 0), 0);
+      .reduce((s, d) => s + Number(d.total_amount || 0), 0);
     const custo = Math.max(vendido - recebido, 0);
     const taxaEfetiva = vendido > 0 ? (custo / vendido) * 100 : 0;
 
-    setTotals({ vendido, recebido, custo, taxaPct: taxaEfetiva, txCount: rows.length, bruto: vendido, taxa });
+    setTotals({ vendido, recebido, custo, taxaPct: taxaEfetiva, txCount, bruto: vendido, taxa });
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
