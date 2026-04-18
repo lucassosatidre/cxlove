@@ -1533,6 +1533,25 @@ export type Database = {
         }
         Returns: Json
       }
+      get_audit_period_deposits: {
+        Args: { p_period_id: string }
+        Returns: {
+          bank: string
+          category: string
+          deposit_count: number
+          total_amount: number
+        }[]
+      }
+      get_audit_period_totals: {
+        Args: { p_period_id: string }
+        Returns: {
+          total_count: number
+          total_gross: number
+          total_net: number
+          total_promotion: number
+          total_tax: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
