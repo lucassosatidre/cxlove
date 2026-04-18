@@ -85,8 +85,6 @@ export default function AuditImport() {
   const [loading, setLoading] = useState(true);
   const [confirmReimport, setConfirmReimport] = useState<FileType | null>(null);
 
-  const backState = period ? { month: period.month, year: period.year } : undefined;
-
   const refresh = async (periodId: string) => {
     const { data: imps } = await supabase
       .from('audit_imports').select('*').eq('audit_period_id', periodId)
