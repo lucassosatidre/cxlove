@@ -40,6 +40,8 @@ type Totals = {
   txCount: number;
   bruto: number;
   taxa: number;
+  liquidoDeclarado: number;
+  custoDeclarado: number;
 };
 
 type VoucherMatch = {
