@@ -8,7 +8,9 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { AlertTriangle, ArrowLeft, ChevronDown, Download, Loader2 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
+import { AlertTriangle, ArrowLeft, ChevronDown, Download, FileDown, Loader2 } from 'lucide-react';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (iso?: string | null) => {
@@ -51,12 +53,14 @@ type Detail = {
 export default function AuditVoucher() {
   const navigate = useNavigate();
   const { isAdmin, loading: roleLoading } = useUserRole();
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const periodId = params.get('period');
   const [matches, setMatches] = useState<VoucherMatch[]>([]);
   const [details, setDetails] = useState<Record<string, Detail>>({});
   const [loading, setLoading] = useState(true);
   const [periodLabel, setPeriodLabel] = useState('');
+  const [periodMY, setPeriodMY] = useState<{ month: number; year: number } | null>(null);
 
   useEffect(() => {
     if (!isAdmin || !periodId) return;
@@ -73,6 +77,7 @@ export default function AuditVoucher() {
       if (period) {
         const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
         setPeriodLabel(`${months[(period as any).month - 1]}/${(period as any).year}`);
+        setPeriodMY({ month: (period as any).month, year: (period as any).year });
       }
 
       setMatches((m as any[]) ?? []);
@@ -244,13 +249,38 @@ export default function AuditVoucher() {
           </CardContent>
         </Card>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
             <ArrowLeft className="h-4 w-4" /> Voltar
           </Button>
-          <Button onClick={exportCSV} disabled={matches.length === 0} className="gap-2">
-            <Download className="h-4 w-4" /> Exportar CSV
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!periodMY) return;
+                generateAuditPdf('voucher', {
+                  periodLabel: makePeriodLabel(periodMY.month, periodMY.year),
+                  periodFileTag: periodFileTag(periodMY.month, periodMY.year),
+                  emittedBy: user?.email ?? 'Admin',
+                  totals: {
+                    vendido: totals.sold,
+                    recebido: totals.dep,
+                    custoTotal: Math.max(totals.sold - totals.dep, 0),
+                    taxaEfetiva: totals.rate,
+                  },
+                  criticalVouchers: matches.filter(m => m.status === 'critico'),
+                  voucherRows: matches,
+                });
+              }}
+              disabled={matches.length === 0}
+              className="gap-2"
+            >
+              <FileDown className="h-4 w-4" /> Exportar PDF
+            </Button>
+            <Button onClick={exportCSV} disabled={matches.length === 0} className="gap-2">
+              <Download className="h-4 w-4" /> Exportar CSV
+            </Button>
+          </div>
         </div>
       </div>
     </AppLayout>
