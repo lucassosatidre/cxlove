@@ -27,8 +27,9 @@ import Etiquetas from "./pages/Etiquetas";
 import MachineRegistry from "./pages/MachineRegistry";
 import CheckinAudit from "./pages/CheckinAudit";
 import AuditDashboard from "./pages/audit/AuditDashboard";
-import AuditPlaceholder from "./pages/audit/AuditPlaceholder";
 import AuditImport from "./pages/audit/AuditImport";
+import AuditIfood from "./pages/audit/AuditIfood";
+import AuditVoucher from "./pages/audit/AuditVoucher";
 
 const queryClient = new QueryClient();
 
@@ -111,8 +112,8 @@ const App = () => (
             <Route path="/admin/audit" element={<ProtectedRoute><SectorGuard sector="tele"><CheckinAudit /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboard /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImport /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditPlaceholder title="Conciliação iFood" /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/voucher" element={<ProtectedRoute><SectorGuard sector="tele"><AuditPlaceholder title="Conciliação Voucher" /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfood /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/voucher" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVoucher /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
             <Route path="/tele-teste/import" element={<Navigate to="/tele/import" replace />} />
