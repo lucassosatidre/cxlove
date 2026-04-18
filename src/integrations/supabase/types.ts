@@ -235,8 +235,45 @@ export type Database = {
           },
         ]
       }
+      audit_period_log: {
+        Row: {
+          action: string
+          audit_period_id: string
+          created_at: string
+          id: string
+          reason: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          audit_period_id: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          audit_period_id?: string
+          created_at?: string
+          id?: string
+          reason?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_period_log_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_periods: {
         Row: {
+          closed_at: string | null
+          closed_by: string | null
           created_at: string
           created_by: string | null
           id: string
@@ -246,6 +283,8 @@ export type Database = {
           year: number
         }
         Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -255,6 +294,8 @@ export type Database = {
           year: number
         }
         Update: {
+          closed_at?: string | null
+          closed_by?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
