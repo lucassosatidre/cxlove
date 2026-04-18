@@ -215,7 +215,6 @@ export default function AuditDashboard() {
   // Refined totals when conciliated
   const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
   const voucherGap = voucherMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
-  const taxDeclared = totals.vendido - totals.recebido; // approx already in custo
   // When conciliated, custo = taxa declarada + |gap antecipação se negativo|
   const custoReal = isConciliated
     ? Math.abs(Math.min(ifoodGap, 0)) + Math.max(voucherGap, 0) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido - Math.max(voucherGap, 0)) : 0)
