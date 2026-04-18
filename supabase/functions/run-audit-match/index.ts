@@ -21,6 +21,15 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // Block when period is closed
+    const { data: periodRow } = await supabase
+      .from('audit_periods').select('status').eq('id', audit_period_id).maybeSingle();
+    if (periodRow?.status === 'fechado') {
+      return new Response(JSON.stringify({
+        error: 'Período fechado. Reabra antes de fazer alterações.',
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     // Validate 3 imports exist
     const { data: imports } = await supabase
       .from('audit_imports')
