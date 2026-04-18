@@ -14,6 +14,307 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_bank_deposits: {
+        Row: {
+          amount: number
+          audit_period_id: string
+          auto_categorized: boolean
+          bank: string
+          category: string | null
+          created_at: string
+          deposit_date: string
+          description: string | null
+          detail: string | null
+          doc_number: string | null
+          id: string
+          matched: boolean
+        }
+        Insert: {
+          amount: number
+          audit_period_id: string
+          auto_categorized?: boolean
+          bank: string
+          category?: string | null
+          created_at?: string
+          deposit_date: string
+          description?: string | null
+          detail?: string | null
+          doc_number?: string | null
+          id?: string
+          matched?: boolean
+        }
+        Update: {
+          amount?: number
+          audit_period_id?: string
+          auto_categorized?: boolean
+          bank?: string
+          category?: string | null
+          created_at?: string
+          deposit_date?: string
+          description?: string | null
+          detail?: string | null
+          doc_number?: string | null
+          id?: string
+          matched?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_bank_deposits_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_card_transactions: {
+        Row: {
+          audit_period_id: string
+          brand: string | null
+          created_at: string
+          deposit_group: string | null
+          expected_deposit_date: string | null
+          gross_amount: number
+          id: string
+          machine_serial: string | null
+          matched: boolean
+          net_amount: number
+          nsu: string | null
+          payment_method: string
+          promotion_amount: number | null
+          sale_date: string
+          sale_time: string | null
+          tax_amount: number
+          tax_rate: number | null
+          transaction_id: string
+        }
+        Insert: {
+          audit_period_id: string
+          brand?: string | null
+          created_at?: string
+          deposit_group?: string | null
+          expected_deposit_date?: string | null
+          gross_amount: number
+          id?: string
+          machine_serial?: string | null
+          matched?: boolean
+          net_amount: number
+          nsu?: string | null
+          payment_method: string
+          promotion_amount?: number | null
+          sale_date: string
+          sale_time?: string | null
+          tax_amount?: number
+          tax_rate?: number | null
+          transaction_id: string
+        }
+        Update: {
+          audit_period_id?: string
+          brand?: string | null
+          created_at?: string
+          deposit_group?: string | null
+          expected_deposit_date?: string | null
+          gross_amount?: number
+          id?: string
+          machine_serial?: string | null
+          matched?: boolean
+          net_amount?: number
+          nsu?: string | null
+          payment_method?: string
+          promotion_amount?: number | null
+          sale_date?: string
+          sale_time?: string | null
+          tax_amount?: number
+          tax_rate?: number | null
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_card_transactions_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_daily_matches: {
+        Row: {
+          audit_period_id: string
+          created_at: string
+          deposit_count: number
+          deposited_amount: number
+          difference: number
+          expected_amount: number
+          id: string
+          match_date: string
+          status: string
+          transaction_count: number
+        }
+        Insert: {
+          audit_period_id: string
+          created_at?: string
+          deposit_count?: number
+          deposited_amount?: number
+          difference?: number
+          expected_amount?: number
+          id?: string
+          match_date: string
+          status?: string
+          transaction_count?: number
+        }
+        Update: {
+          audit_period_id?: string
+          created_at?: string
+          deposit_count?: number
+          deposited_amount?: number
+          difference?: number
+          expected_amount?: number
+          id?: string
+          match_date?: string
+          status?: string
+          transaction_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_daily_matches_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_imports: {
+        Row: {
+          audit_period_id: string
+          created_at: string
+          created_by: string | null
+          duplicate_rows: number
+          error_message: string | null
+          file_name: string
+          file_type: string
+          id: string
+          imported_rows: number
+          status: string
+          total_rows: number
+        }
+        Insert: {
+          audit_period_id: string
+          created_at?: string
+          created_by?: string | null
+          duplicate_rows?: number
+          error_message?: string | null
+          file_name: string
+          file_type: string
+          id?: string
+          imported_rows?: number
+          status?: string
+          total_rows?: number
+        }
+        Update: {
+          audit_period_id?: string
+          created_at?: string
+          created_by?: string | null
+          duplicate_rows?: number
+          error_message?: string | null
+          file_name?: string
+          file_type?: string
+          id?: string
+          imported_rows?: number
+          status?: string
+          total_rows?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_imports_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_periods: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          month: number
+          status: string
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month: number
+          status?: string
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          month?: number
+          status?: string
+          updated_at?: string
+          year?: number
+        }
+        Relationships: []
+      }
+      audit_voucher_matches: {
+        Row: {
+          audit_period_id: string
+          company: string
+          created_at: string
+          deposit_count: number
+          deposited_amount: number
+          difference: number
+          effective_tax_rate: number | null
+          id: string
+          sold_amount: number
+          sold_count: number
+          status: string
+        }
+        Insert: {
+          audit_period_id: string
+          company: string
+          created_at?: string
+          deposit_count?: number
+          deposited_amount?: number
+          difference?: number
+          effective_tax_rate?: number | null
+          id?: string
+          sold_amount?: number
+          sold_count?: number
+          status?: string
+        }
+        Update: {
+          audit_period_id?: string
+          company?: string
+          created_at?: string
+          deposit_count?: number
+          deposited_amount?: number
+          difference?: number
+          effective_tax_rate?: number | null
+          id?: string
+          sold_amount?: number
+          sold_count?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_voucher_matches_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_transactions: {
         Row: {
           brand: string | null
