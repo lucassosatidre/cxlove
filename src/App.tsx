@@ -28,6 +28,7 @@ import MachineRegistry from "./pages/MachineRegistry";
 import CheckinAudit from "./pages/CheckinAudit";
 import AuditDashboard from "./pages/audit/AuditDashboard";
 import AuditPlaceholder from "./pages/audit/AuditPlaceholder";
+import AuditImport from "./pages/audit/AuditImport";
 
 const queryClient = new QueryClient();
 
@@ -109,7 +110,7 @@ const App = () => (
             <Route path="/admin/maquininhas" element={<ProtectedRoute><SectorGuard sector="tele"><MachineRegistry /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/audit" element={<ProtectedRoute><SectorGuard sector="tele"><CheckinAudit /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboard /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditPlaceholder title="Importar Arquivos" /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditPlaceholder title="Conciliação iFood" /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/voucher" element={<ProtectedRoute><SectorGuard sector="tele"><AuditPlaceholder title="Conciliação Voucher" /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}

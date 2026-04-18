@@ -23,7 +23,14 @@ type AuditImport = {
   file_type: 'maquinona' | 'cresol' | 'bb';
   status: string;
   file_name: string;
+  imported_rows: number;
   created_at: string;
+};
+
+type Totals = {
+  vendido: number;
+  taxaPct: number;
+  txCount: number;
 };
 
 const MONTHS = [
@@ -59,6 +66,7 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(now.getFullYear());
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
+  const [totals, setTotals] = useState<Totals>({ vendido: 0, taxaPct: 0, txCount: 0 });
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
@@ -66,6 +74,29 @@ export default function AuditDashboard() {
     const y = now.getFullYear();
     return [y - 2, y - 1, y, y + 1];
   }, []);
+
+  const loadPeriodData = async (periodId: string) => {
+    const [{ data: imps }, { data: txs }] = await Promise.all([
+      supabase
+        .from('audit_imports')
+        .select('file_type,status,file_name,imported_rows,created_at')
+        .eq('audit_period_id', periodId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('audit_card_transactions')
+        .select('gross_amount,tax_amount')
+        .eq('audit_period_id', periodId),
+    ]);
+    setImports((imps as AuditImport[]) ?? []);
+    const rows = (txs as { gross_amount: number; tax_amount: number }[]) ?? [];
+    const vendido = rows.reduce((s, r) => s + Number(r.gross_amount || 0), 0);
+    const taxa = rows.reduce((s, r) => s + Number(r.tax_amount || 0), 0);
+    setTotals({
+      vendido,
+      taxaPct: vendido > 0 ? (taxa / vendido) * 100 : 0,
+      txCount: rows.length,
+    });
+  };
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -83,14 +114,10 @@ export default function AuditDashboard() {
       setPeriod((p as AuditPeriod) ?? null);
 
       if (p) {
-        const { data: imps } = await supabase
-          .from('audit_imports')
-          .select('file_type,status,file_name,created_at')
-          .eq('audit_period_id', p.id)
-          .order('created_at', { ascending: false });
-        if (active) setImports((imps as AuditImport[]) ?? []);
+        await loadPeriodData((p as AuditPeriod).id);
       } else {
         setImports([]);
+        setTotals({ vendido: 0, taxaPct: 0, txCount: 0 });
       }
       setLoading(false);
     })();
@@ -180,10 +207,10 @@ export default function AuditDashboard() {
 
         {/* Cards de resumo */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard title="Vendido" value={formatCurrency(0)} />
+          <SummaryCard title="Vendido" value={formatCurrency(totals.vendido)} />
           <SummaryCard title="Recebido" value={formatCurrency(0)} />
           <SummaryCard title="Custo" value={formatCurrency(0)} />
-          <SummaryCard title="Taxa" value="0,00%" />
+          <SummaryCard title="Taxa" value={`${totals.taxaPct.toFixed(2).replace('.', ',')}%`} />
         </div>
 
         {/* Cards iFood + Voucher */}
@@ -204,14 +231,15 @@ export default function AuditDashboard() {
           <CardContent className="space-y-2">
             {(['maquinona', 'cresol', 'bb'] as const).map(t => {
               const imp = importByType(t);
+              const isCompleted = imp?.status === 'completed';
               return (
                 <div key={t} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
                   <div className="flex items-center gap-3">
                     <FileSpreadsheet className="h-4 w-4 text-primary" />
                     <span className="font-medium">{FILE_LABELS[t]}</span>
-                    {imp ? (
+                    {isCompleted && imp ? (
                       <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400">
-                        {imp.file_name}
+                        ✓ importado em {formatDateTime(imp.created_at)} ({imp.imported_rows} transações)
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
@@ -223,7 +251,7 @@ export default function AuditDashboard() {
                     disabled={!period}
                     onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}`)}
                   >
-                    Importar
+                    {isCompleted ? 'Re-importar' : 'Importar'}
                   </Button>
                 </div>
               );
