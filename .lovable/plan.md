@@ -1,70 +1,48 @@
 
 
-## Bug do Total Teórico via Saipos (importação Excel) — diferença R$ 3k+
+## Bug: Vínculo SN → Entregador não funciona (prefixo `S1F2-000`)
 
-### Diagnóstico
+### Diagnóstico confirmado via DB
 
-Conferi o fechamento `2026-04-19`:
+Para o fechamento atual `39af9d02-...`:
 
-- **183 pedidos**, R$ 23.363,62 total, **0 breakdowns** (Excel não cria `order_payment_breakdowns`)
-- **77 pedidos contêm "Voucher Parceiro Desconto"**, somando **R$ 10.718,76**
-- Desses, a maioria é `(PAGO) Online Ifood, Voucher Parceiro Desconto` — 100% online, não deveria entrar mesmo
-- Mas há pedidos como `Crédito, Voucher Parceiro Desconto` (R$ 196,59 etc.) cuja **parte física desaparece totalmente** do Total Teórico
+| Fonte | Formato do serial |
+|-------|-------------------|
+| `card_transactions.machine_serial` | `S1F2-000158242606488` (com prefixo) |
+| `machine_readings.machine_serial` | `158242606488` (sem prefixo) |
+| `machine_registry.serial_number` | `158242606488` (sem prefixo) |
 
-### Causa raiz
-
-No fallback do `offlineMethodTotals` (sem breakdowns) em `Reconciliation.tsx:764` e `DeliveryReconciliation.tsx:366`:
-
-```ts
-const hasVoucherParceiro = methods.some(m => m.toLowerCase().includes('voucher parceiro'));
-if (hasVoucherParceiro) continue;   // ← pula o pedido inteiro
-```
-
-Qualquer pedido que mencione "Voucher Parceiro Desconto" é descartado por inteiro, mesmo quando vem combinado com Crédito/Débito/Pix físico. Isso vai contra a regra de memória `voucher-partner-decomposition`, que diz para **decompor** (mostrar a parte física separada do voucher), não ignorar.
-
-Adicional: pedidos `Online + Voucher Parceiro` corretamente não entram, mas pelo motivo errado (cai no `hasVoucherParceiro`); deveriam cair no filtro online normal.
+O map `serialToDeliveryPerson` é montado com chaves **sem prefixo** (vindas de `machine_readings` e `registry`), mas todas as buscas usam `serialToDeliveryPerson.get(tx.machine_serial)` passando o serial **com prefixo** direto da `card_transactions`. Resultado: lookup sempre `undefined` → exibe "Pickngo".
 
 ### Correção
 
-Em ambos `src/pages/Reconciliation.tsx` (linhas ~760-780) e `src/pages/DeliveryReconciliation.tsx` (linhas ~363-380), trocar o `continue` por uma decomposição que segue a mesma lógica de divisão usada em outros lugares:
+Normalizar o serial em **toda** leitura/escrita do map, removendo o prefixo `S1F2-000`.
 
-```ts
-// Remover: const hasVoucherParceiro = ...; if (...) continue;
+**Arquivo:** `src/pages/DeliveryReconciliation.tsx`
 
-const matchingCats = methods
-  .map(m => matchCategory(m))
-  .filter((c): c is string => c !== null);
+1. Criar helper local no topo do componente:
+   ```ts
+   const normalizeSerial = (s: string | null | undefined) => 
+     s ? s.replace(/^S1F2-000/, '') : '';
+   ```
 
-if (matchingCats.length === 0) continue;       // tudo online/voucher parceiro
+2. No `useMemo` do `serialToDeliveryPerson` (~L234-280):
+   - Normalizar `tx.machine_serial` antes de checar `result.has(...)` e antes de inserir/buscar no `registry`.
+   - Normalizar a chave do `serialCounts` no fallback.
 
-if (matchingCats.length === 1) {
-  // Há 1 método físico + N online (incluindo Voucher Parceiro):
-  // a parte física vale total_amount - (soma estimada das partes online)
-  // Como sem breakdown não dá pra saber a divisão, atribui o total inteiro
-  // ao único método físico (estimativa coerente com a regra atual de 1 físico + 1 online)
-  totals[matchingCats[0]] += order.total_amount;
-} else {
-  // múltiplos físicos — divide igual entre eles (mantém comportamento atual)
-  const share = order.total_amount / matchingCats.length;
-  matchingCats.forEach(cat => { totals[cat] += share; });
-}
-```
+3. Nos 3 lugares que fazem lookup no map:
+   - **L1228** (header da comanda — entregador inferido):  
+     `serialToDeliveryPerson.get(normalizeSerial(t.machine_serial))`
+   - **L1263** (tag inline ao lado da transação matchada): idem
+   - **L1407 e L1410** (transações sem vínculo — badge do entregador): idem
 
-Resumindo o efeito:
-- `(PAGO) Online Ifood, Voucher Parceiro Desconto` → `matchingCats = []` → continue (ok, fica fora)
-- `Crédito, Voucher Parceiro Desconto` → `matchingCats = ['Crédito']` → conta o total no Crédito (estimativa máxima; quando o operador preencher o rateio manual, o breakdown sobrescreve)
-- `Crédito, Pix, Voucher Parceiro Desconto` → divide entre Crédito e Pix
+Sem mudanças de banco. Sem mudanças no algoritmo de matching. Apenas normalização do serial nos lookups visuais e na construção do map.
 
-### Arquivos alterados
+### Validação
 
-1. `src/pages/Reconciliation.tsx` — bloco `offlineMethodTotals` (~L760-780)
-2. `src/pages/DeliveryReconciliation.tsx` — bloco `offlineMethodTotals` (~L363-380)
-
-Sem mudança de banco, sem mudança de parser de Excel, sem mudança no fluxo de matching. Apenas o cálculo do **Total Teórico via Saipos** passa a refletir corretamente a parte física dos pedidos com Voucher Parceiro Desconto.
-
-### Validação após fix (fechamento 2026-04-19)
-
-- Soma do "Total Geral" do Total Teórico deve subir em ~R$ 3-4k (parte física dos 77 pedidos com Voucher Parceiro)
-- Pedidos `(PAGO) Online + Voucher Parceiro` continuam fora (corretamente)
-- Memória `voucher-partner-decomposition` continua respeitada (matching automático segue bloqueado pelo `classifyPendingOrder`)
+Após o fix, no fechamento atual:
+- Comanda `#6` → "Tele 2 — Elisson" (em vez de "Pickngo") quando vinculada ao SN `158242606488`
+- Frota sem entregador → exibe "Frota 2"
+- Coluna **TRANSAÇÕES SEM VÍNCULO** mostra o nome do motoboy abaixo do valor quando o SN tem leitura cadastrada
+- Pedidos online (sem `card_transaction` vinculada) continuam exibindo "Pickngo" (regra mantida)
 
