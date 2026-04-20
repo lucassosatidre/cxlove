@@ -194,7 +194,7 @@ export default function AuditDashboard() {
         await loadPeriodData((p as AuditPeriod).id);
       } else {
         setImports([]);
-        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0 });
+        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0 });
         setVoucherMatches([]);
         setDailyMatches([]);
         setLogs([]);
