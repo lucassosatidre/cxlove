@@ -70,6 +70,9 @@ interface UndoAction {
   previousConfidence: string | null;
 }
 
+const normalizeSerial = (s: string | null | undefined): string =>
+  s ? s.replace(/^S1F2-000/, '') : '';
+
 export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
