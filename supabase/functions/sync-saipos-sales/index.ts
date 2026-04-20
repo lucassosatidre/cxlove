@@ -113,7 +113,9 @@ Deno.serve(async (req) => {
 
     // Validate caller using getUser
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: callerUser }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+    const userResult = await supabaseAdmin.auth.getUser(token);
+    const callerUser = userResult?.data?.user ?? null;
+    const userErr = userResult?.error ?? null;
     if (userErr || !callerUser) {
       console.error("Auth error:", userErr?.message);
       return new Response(JSON.stringify({ error: "Não autorizado" }), {
