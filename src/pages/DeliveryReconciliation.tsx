@@ -362,9 +362,7 @@ export default function DeliveryReconciliation() {
         }
       } else {
         const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
-        // If order has Voucher Parceiro Desconto without breakdowns, skip — we can't know the split
-        const hasVoucherParceiro = methods.some(m => m.toLowerCase().includes('voucher parceiro'));
-        if (hasVoucherParceiro) continue;
+        // Voucher Parceiro Desconto: do not skip the entire order — decompose to keep physical part
 
         const matchingCats = methods
           .map(m => matchCategory(m))
