@@ -70,6 +70,9 @@ interface UndoAction {
   previousConfidence: string | null;
 }
 
+const normalizeSerial = (s: string | null | undefined): string =>
+  s ? s.replace(/^S1F2-000/, '') : '';
+
 export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -237,22 +240,25 @@ export default function DeliveryReconciliation() {
     // Primary source: machine_readings from this closing
     for (const mr of machineReadingsData) {
       if (!mr.machine_serial) continue;
+      const key = normalizeSerial(mr.machine_serial);
       // Check registry for category
-      const regEntry = registry.get(mr.machine_serial);
+      const regEntry = registry.get(key);
       if (regEntry?.category === 'frota') {
         // Frota machines: show friendly_name instead of driver
-        result.set(mr.machine_serial, regEntry.friendly_name);
+        result.set(key, regEntry.friendly_name);
       } else if (mr.delivery_person) {
-        result.set(mr.machine_serial, mr.delivery_person);
+        result.set(key, mr.delivery_person);
       }
     }
 
     // Also check for frota machines from registry that appear in transactions but not in readings
     transactions.forEach(tx => {
-      if (!tx.machine_serial || result.has(tx.machine_serial)) return;
-      const regEntry = registry.get(tx.machine_serial);
+      if (!tx.machine_serial) return;
+      const key = normalizeSerial(tx.machine_serial);
+      if (result.has(key)) return;
+      const regEntry = registry.get(key);
       if (regEntry?.category === 'frota') {
-        result.set(tx.machine_serial, regEntry.friendly_name);
+        result.set(key, regEntry.friendly_name);
       }
     });
 
@@ -260,11 +266,12 @@ export default function DeliveryReconciliation() {
     const serialCounts = new Map<string, Map<string, number>>();
     transactions.forEach(tx => {
       if (!tx.matched_order_id || !tx.machine_serial) return;
-      if (result.has(tx.machine_serial)) return; // already resolved
+      const key = normalizeSerial(tx.machine_serial);
+      if (result.has(key)) return; // already resolved
       const order = orders.find(o => o.id === tx.matched_order_id);
       if (!order?.delivery_person) return;
-      if (!serialCounts.has(tx.machine_serial)) serialCounts.set(tx.machine_serial, new Map());
-      const counts = serialCounts.get(tx.machine_serial)!;
+      if (!serialCounts.has(key)) serialCounts.set(key, new Map());
+      const counts = serialCounts.get(key)!;
       counts.set(order.delivery_person, (counts.get(order.delivery_person) || 0) + 1);
     });
     for (const [serial, counts] of serialCounts) {
@@ -1225,7 +1232,7 @@ export default function DeliveryReconciliation() {
                           <span className="font-medium text-foreground">#{order.order_number}</span>
                           {(() => {
                             // Prefer real driver name inferred from matched transaction's machine SN
-                            const inferredFromMatch = matchedTxs?.map(t => t.machine_serial ? serialToDeliveryPerson.get(t.machine_serial) : null).find(Boolean) || null;
+                            const inferredFromMatch = matchedTxs?.map(t => t.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(t.machine_serial)) : null).find(Boolean) || null;
                             const display = inferredFromMatch || order.delivery_person || '—';
                             return <span className="text-xs text-muted-foreground ml-2">{display}</span>;
                           })()}
@@ -1260,7 +1267,7 @@ export default function DeliveryReconciliation() {
                               <span className="text-muted-foreground">
                                 {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''}
                                 {(() => {
-                                  const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(tx.machine_serial) : null;
+                                  const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(tx.machine_serial)) : null;
                                   const orderPerson = order.delivery_person?.trim().toLowerCase();
                                   const inferredLower = inferredPerson?.trim().toLowerCase();
                                   const isDivergent = !!(inferredPerson && orderPerson && inferredLower !== orderPerson);
@@ -1404,10 +1411,10 @@ export default function DeliveryReconciliation() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
-                          {tx.machine_serial && serialToDeliveryPerson.has(tx.machine_serial) ? (
+                          {tx.machine_serial && serialToDeliveryPerson.has(normalizeSerial(tx.machine_serial)) ? (
                             <span className="text-[10px] font-medium text-primary flex items-center gap-0.5">
                               <Truck className="h-2.5 w-2.5" />
-                              {serialToDeliveryPerson.get(tx.machine_serial)}
+                              {serialToDeliveryPerson.get(normalizeSerial(tx.machine_serial))}
                             </span>
                           ) : tx.brand ? (
                             <span className="text-[10px] text-muted-foreground">{tx.brand}</span>
