@@ -1267,7 +1267,7 @@ export default function DeliveryReconciliation() {
                               <span className="text-muted-foreground">
                                 {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''}
                                 {(() => {
-                                  const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(tx.machine_serial) : null;
+                                  const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(tx.machine_serial)) : null;
                                   const orderPerson = order.delivery_person?.trim().toLowerCase();
                                   const inferredLower = inferredPerson?.trim().toLowerCase();
                                   const isDivergent = !!(inferredPerson && orderPerson && inferredLower !== orderPerson);
