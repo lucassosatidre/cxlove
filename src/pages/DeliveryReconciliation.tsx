@@ -1232,7 +1232,7 @@ export default function DeliveryReconciliation() {
                           <span className="font-medium text-foreground">#{order.order_number}</span>
                           {(() => {
                             // Prefer real driver name inferred from matched transaction's machine SN
-                            const inferredFromMatch = matchedTxs?.map(t => t.machine_serial ? serialToDeliveryPerson.get(t.machine_serial) : null).find(Boolean) || null;
+                            const inferredFromMatch = matchedTxs?.map(t => t.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(t.machine_serial)) : null).find(Boolean) || null;
                             const display = inferredFromMatch || order.delivery_person || '—';
                             return <span className="text-xs text-muted-foreground ml-2">{display}</span>;
                           })()}
