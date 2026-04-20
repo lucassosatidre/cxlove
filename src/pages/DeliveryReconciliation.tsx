@@ -1225,7 +1225,12 @@ export default function DeliveryReconciliation() {
                         </div>
                         <div>
                           <span className="font-medium text-foreground">#{order.order_number}</span>
-                          <span className="text-xs text-muted-foreground ml-2">{order.delivery_person || '—'}</span>
+                          {(() => {
+                            // Prefer real driver name inferred from matched transaction's machine SN
+                            const inferredFromMatch = matchedTxs?.map(t => t.machine_serial ? serialToDeliveryPerson.get(t.machine_serial) : null).find(Boolean) || null;
+                            const display = inferredFromMatch || order.delivery_person || '—';
+                            return <span className="text-xs text-muted-foreground ml-2">{display}</span>;
+                          })()}
                           {order.sale_time && (
                             <span className="text-xs text-muted-foreground ml-2">
                               <Clock className="h-3 w-3 inline mr-0.5" />{order.sale_time}
