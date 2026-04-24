@@ -12,7 +12,17 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
 import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History } from 'lucide-react';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
+import {
+  generateContabilPdf,
+  CATEGORIAS_ORDEM,
+  CATEGORIA_LABELS,
+  type ContabilCategoria,
+  type ContabilResumoRow,
+  type ContabilDetalhamento,
+} from '@/lib/audit-pdf-contabil';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { FileText, ChevronDown } from 'lucide-react';
 
 type AuditPeriod = {
   id: string;
