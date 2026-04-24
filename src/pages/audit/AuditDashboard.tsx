@@ -12,7 +12,17 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
 import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History } from 'lucide-react';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
+import {
+  generateContabilPdf,
+  CATEGORIAS_ORDEM,
+  CATEGORIA_LABELS,
+  type ContabilCategoria,
+  type ContabilResumoRow,
+  type ContabilDetalhamento,
+} from '@/lib/audit-pdf-contabil';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { FileText, ChevronDown } from 'lucide-react';
 
 type AuditPeriod = {
   id: string;
@@ -128,6 +138,7 @@ export default function AuditDashboard() {
   const [creating, setCreating] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingContabil, setExportingContabil] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
 
@@ -305,6 +316,81 @@ export default function AuditDashboard() {
     }
   };
 
+  const handleExportContabil = async (mode: 'resumido' | 'detalhado') => {
+    if (!period) return;
+    setExportingContabil(true);
+    try {
+      const { data: breakdown, error } = await supabase
+        .rpc('get_audit_contabil_breakdown' as any, { p_period_id: period.id });
+      if (error) throw error;
+
+      const rows = (breakdown as Array<{ categoria: string; dia: number; qtd: number; bruto: number; liquido: number; taxa: number }>) ?? [];
+      const validCats = new Set<ContabilCategoria>(CATEGORIAS_ORDEM);
+
+      // Aggregate per categoria
+      const resumoMap = new Map<ContabilCategoria, ContabilResumoRow>();
+      for (const r of rows) {
+        if (!validCats.has(r.categoria as ContabilCategoria)) continue;
+        const cat = r.categoria as ContabilCategoria;
+        const cur = resumoMap.get(cat) ?? {
+          categoria: cat, nome: CATEGORIA_LABELS[cat], qtd: 0, bruto: 0, liquido: 0, taxa: 0,
+        };
+        cur.qtd += Number(r.qtd ?? 0);
+        cur.bruto += Number(r.bruto ?? 0);
+        cur.liquido += Number(r.liquido ?? 0);
+        cur.taxa += Number(r.taxa ?? 0);
+        resumoMap.set(cat, cur);
+      }
+      const resumoPorCategoria: ContabilResumoRow[] = CATEGORIAS_ORDEM
+        .filter(c => c !== 'brendi')
+        .map(c => resumoMap.get(c) ?? {
+          categoria: c, nome: CATEGORIA_LABELS[c], qtd: 0, bruto: 0, liquido: 0, taxa: 0,
+        });
+
+      const monthDays = new Date(year, month, 0).getDate();
+
+      let detalhamentoDiario: ContabilDetalhamento[] | undefined;
+      if (mode === 'detalhado') {
+        const detMap = new Map<ContabilCategoria, Map<number, { qtd: number; bruto: number; liquido: number; taxa: number }>>();
+        for (const r of rows) {
+          if (!validCats.has(r.categoria as ContabilCategoria)) continue;
+          const cat = r.categoria as ContabilCategoria;
+          if (!detMap.has(cat)) detMap.set(cat, new Map());
+          detMap.get(cat)!.set(Number(r.dia), {
+            qtd: Number(r.qtd ?? 0),
+            bruto: Number(r.bruto ?? 0),
+            liquido: Number(r.liquido ?? 0),
+            taxa: Number(r.taxa ?? 0),
+          });
+        }
+        detalhamentoDiario = CATEGORIAS_ORDEM
+          .filter(c => c !== 'brendi')
+          .map(cat => ({
+            categoria: cat,
+            dias: Array.from({ length: monthDays }, (_, i) => {
+              const d = i + 1;
+              const v = detMap.get(cat)?.get(d);
+              return { dia: d, qtd: v?.qtd ?? 0, bruto: v?.bruto ?? 0, liquido: v?.liquido ?? 0, taxa: v?.taxa ?? 0 };
+            }),
+          }));
+      }
+
+      generateContabilPdf(mode, {
+        periodLabel: makePeriodLabel(month, year),
+        periodFileTag: periodFileTag(month, year),
+        monthDays,
+        emittedBy: user?.email ?? 'Admin',
+        resumoPorCategoria,
+        detalhamentoDiario,
+      });
+      toast({ title: '✓ Relatório Contábil gerado' });
+    } catch (e: any) {
+      toast({ title: 'Erro ao gerar relatório', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
+    } finally {
+      setExportingContabil(false);
+    }
+  };
+
   const handleClose = async () => {
     if (!period || !user) return;
     const nowIso = new Date().toISOString();
@@ -398,6 +484,44 @@ export default function AuditDashboard() {
     </TooltipProvider>
   );
 
+  const maquinonaImported = importByType('maquinona')?.status === 'completed';
+  const contabilBtn = (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={!maquinonaImported || exportingContabil}
+                  className="gap-2"
+                >
+                  {exportingContabil ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  {exportingContabil ? 'Gerando...' : 'Relatório Contábil'}
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExportContabil('resumido')}>
+                  Resumido
+                  <span className="ml-2 text-xs text-muted-foreground">1 página · totais</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportContabil('detalhado')}>
+                  Detalhado
+                  <span className="ml-2 text-xs text-muted-foreground">dia-a-dia por categoria</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </TooltipTrigger>
+        {!maquinonaImported && (
+          <TooltipContent>Importe a Maquinona para habilitar</TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+
   return (
     <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Bancos">
       <div className="space-y-6">
@@ -469,6 +593,7 @@ export default function AuditDashboard() {
                 </div>
               )}
               {period && exportBtn}
+              {period && contabilBtn}
               {period && isConciliated && !isClosed && (
                 <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
                   <Lock className="h-4 w-4" /> Fechar Período
