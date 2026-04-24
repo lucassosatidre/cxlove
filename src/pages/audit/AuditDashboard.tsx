@@ -138,6 +138,7 @@ export default function AuditDashboard() {
   const [creating, setCreating] = useState(false);
   const [reconciling, setReconciling] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingContabil, setExportingContabil] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
 
