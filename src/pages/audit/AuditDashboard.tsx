@@ -390,6 +390,8 @@ export default function AuditDashboard() {
       setExportingContabil(false);
     }
   };
+
+  const handleClose = async () => {
     if (!period || !user) return;
     const nowIso = new Date().toISOString();
     const { error } = await supabase
