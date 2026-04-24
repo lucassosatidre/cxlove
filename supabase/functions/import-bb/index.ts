@@ -155,6 +155,7 @@ Deno.serve(async (req) => {
 
       deposits.push({
         audit_period_id,
+        import_id: importRec.id,
         bank: 'bb',
         deposit_date: depositDate,
         description,

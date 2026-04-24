@@ -52,6 +52,8 @@ type Totals = {
   taxa: number;
   liquidoDeclarado: number;
   custoDeclarado: number;
+  liquidoIfood: number;
+  brutoIfood: number;
 };
 
 type VoucherMatch = {
@@ -129,7 +131,7 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(() => getInitial('year', now.getFullYear()));
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
-  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0 });
+  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -168,12 +170,14 @@ export default function AuditDashboard() {
     const t = (totalsRpc as any[])?.[0] ?? {};
     const bruto = Number(t.total_bruto ?? 0);
     const liquidoDeclarado = Number(t.total_liquido_declarado ?? 0);
+    const liquidoIfood = Number(t.total_liquido_ifood ?? 0);
+    const brutoIfood = Number(t.total_bruto_ifood ?? 0);
     const taxa = Number(t.total_taxa_declarada ?? 0);
     const promocao = Number(t.total_promocao ?? 0);
     const txCount = Number(t.total_count ?? 0);
-    const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0); // taxa + promoção declaradas
+    const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0);
 
-    const depRows = (depsRpc as { category: string | null; total_amount: number }[]) ?? [];
+    const depRows = (depsRpc as { category: string | null; total_amount: number; match_status?: string }[]) ?? [];
     const recebido = depRows
       .filter(d => ['ifood', 'alelo', 'ticket', 'pluxee', 'vr'].includes(d.category ?? ''))
       .reduce((s, d) => s + Number(d.total_amount || 0), 0);
@@ -183,6 +187,7 @@ export default function AuditDashboard() {
     setTotals({
       vendido: bruto, recebido, custo: custoReal, taxaPct: taxaEfetiva,
       txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
+      liquidoIfood, brutoIfood,
     });
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
@@ -205,7 +210,7 @@ export default function AuditDashboard() {
         await loadPeriodData((p as AuditPeriod).id);
       } else {
         setImports([]);
-        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0 });
+        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
         setVoucherMatches([]);
         setDailyMatches([]);
         setLogs([]);
@@ -644,15 +649,25 @@ export default function AuditDashboard() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">iFood (Cresol)</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {dailyMatches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma conciliação executada.</p>
-              ) : (
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(dailyMatches.reduce((s, m) => s + Number(m.expected_amount), 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol:</span><span className="font-medium">{formatCurrency(dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Gap:</span><span className={`font-semibold ${ifoodGap < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{formatCurrency(ifoodGap)}</span></div>
-                </div>
-              )}
+              {totals.liquidoIfood === 0 && dailyMatches.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
+              ) : (() => {
+                const liquidoEsperado = totals.liquidoIfood;
+                const recebidoCresol = dailyMatches.length > 0
+                  ? dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0)
+                  : 0;
+                const gap = recebidoCresol - liquidoEsperado;
+                return (
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol:</span><span className="font-medium">{formatCurrency(recebidoCresol)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Gap:</span><span className={`font-semibold ${gap < 0 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span></div>
+                    {gap < -0.5 && (
+                      <p className="text-xs text-muted-foreground italic pt-1">⚠ Gap negativo indica custo oculto (ex: taxa de antecipação iFood).</p>
+                    )}
+                  </div>
+                );
+              })()}
               <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!canExport} onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}>
                 Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
               </Button>

@@ -27,6 +27,9 @@ export type Database = {
           detail: string | null
           doc_number: string | null
           id: string
+          import_id: string | null
+          match_confidence: number | null
+          match_status: string
           matched: boolean
         }
         Insert: {
@@ -41,6 +44,9 @@ export type Database = {
           detail?: string | null
           doc_number?: string | null
           id?: string
+          import_id?: string | null
+          match_confidence?: number | null
+          match_status?: string
           matched?: boolean
         }
         Update: {
@@ -55,6 +61,9 @@ export type Database = {
           detail?: string | null
           doc_number?: string | null
           id?: string
+          import_id?: string | null
+          match_confidence?: number | null
+          match_status?: string
           matched?: boolean
         }
         Relationships: [
@@ -63,6 +72,13 @@ export type Database = {
             columns: ["audit_period_id"]
             isOneToOne: false
             referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_bank_deposits_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "audit_imports"
             referencedColumns: ["id"]
           },
         ]
@@ -1533,6 +1549,14 @@ export type Database = {
         }
         Returns: Json
       }
+      classify_ifood_deposits: {
+        Args: { p_period_id: string }
+        Returns: undefined
+      }
+      classify_voucher_deposits: {
+        Args: { p_period_id: string }
+        Returns: undefined
+      }
       get_audit_contabil_breakdown: {
         Args: { p_period_id: string }
         Returns: {
@@ -1557,8 +1581,10 @@ export type Database = {
         Args: { p_period_id: string }
         Returns: {
           total_bruto: number
+          total_bruto_ifood: number
           total_count: number
           total_liquido_declarado: number
+          total_liquido_ifood: number
           total_promocao: number
           total_taxa_declarada: number
         }[]
