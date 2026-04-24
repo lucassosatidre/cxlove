@@ -649,15 +649,25 @@ export default function AuditDashboard() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">iFood (Cresol)</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {dailyMatches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma conciliação executada.</p>
-              ) : (
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(dailyMatches.reduce((s, m) => s + Number(m.expected_amount), 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol:</span><span className="font-medium">{formatCurrency(dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Gap:</span><span className={`font-semibold ${ifoodGap < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{formatCurrency(ifoodGap)}</span></div>
-                </div>
-              )}
+              {totals.liquidoIfood === 0 && dailyMatches.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
+              ) : (() => {
+                const liquidoEsperado = totals.liquidoIfood;
+                const recebidoCresol = dailyMatches.length > 0
+                  ? dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0)
+                  : 0;
+                const gap = recebidoCresol - liquidoEsperado;
+                return (
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol:</span><span className="font-medium">{formatCurrency(recebidoCresol)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Gap:</span><span className={`font-semibold ${gap < 0 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span></div>
+                    {gap < -0.5 && (
+                      <p className="text-xs text-muted-foreground italic pt-1">⚠ Gap negativo indica custo oculto (ex: taxa de antecipação iFood).</p>
+                    )}
+                  </div>
+                );
+              })()}
               <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!canExport} onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}>
                 Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
               </Button>
