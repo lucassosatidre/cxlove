@@ -521,6 +521,8 @@ export default function AuditDashboard() {
       </Tooltip>
     </TooltipProvider>
   );
+
+  return (
     <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Bancos">
       <div className="space-y-6">
         {/* Closed banner */}
