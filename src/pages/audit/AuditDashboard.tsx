@@ -131,7 +131,7 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(() => getInitial('year', now.getFullYear()));
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
-  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0 });
+  const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -210,7 +210,7 @@ export default function AuditDashboard() {
         await loadPeriodData((p as AuditPeriod).id);
       } else {
         setImports([]);
-        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0 });
+        setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
         setVoucherMatches([]);
         setDailyMatches([]);
         setLogs([]);
