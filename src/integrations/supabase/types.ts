@@ -1533,6 +1533,17 @@ export type Database = {
         }
         Returns: Json
       }
+      get_audit_contabil_breakdown: {
+        Args: { p_period_id: string }
+        Returns: {
+          bruto: number
+          categoria: string
+          dia: number
+          liquido: number
+          qtd: number
+          taxa: number
+        }[]
+      }
       get_audit_period_deposits: {
         Args: { p_period_id: string }
         Returns: {
