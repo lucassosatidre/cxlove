@@ -484,7 +484,43 @@ export default function AuditDashboard() {
     </TooltipProvider>
   );
 
-  return (
+  const maquinonaImported = importByType('maquinona')?.status === 'completed';
+  const contabilBtn = (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={!maquinonaImported || exportingContabil}
+                  className="gap-2"
+                >
+                  {exportingContabil ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+                  {exportingContabil ? 'Gerando...' : 'Relatório Contábil'}
+                  <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleExportContabil('resumido')}>
+                  Resumido
+                  <span className="ml-2 text-xs text-muted-foreground">1 página · totais</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleExportContabil('detalhado')}>
+                  Detalhado
+                  <span className="ml-2 text-xs text-muted-foreground">dia-a-dia por categoria</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </TooltipTrigger>
+        {!maquinonaImported && (
+          <TooltipContent>Importe a Maquinona para habilitar</TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
     <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Bancos">
       <div className="space-y-6">
         {/* Closed banner */}
