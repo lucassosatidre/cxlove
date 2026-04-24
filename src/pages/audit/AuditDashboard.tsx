@@ -52,6 +52,8 @@ type Totals = {
   taxa: number;
   liquidoDeclarado: number;
   custoDeclarado: number;
+  liquidoIfood: number;
+  brutoIfood: number;
 };
 
 type VoucherMatch = {
@@ -168,12 +170,14 @@ export default function AuditDashboard() {
     const t = (totalsRpc as any[])?.[0] ?? {};
     const bruto = Number(t.total_bruto ?? 0);
     const liquidoDeclarado = Number(t.total_liquido_declarado ?? 0);
+    const liquidoIfood = Number(t.total_liquido_ifood ?? 0);
+    const brutoIfood = Number(t.total_bruto_ifood ?? 0);
     const taxa = Number(t.total_taxa_declarada ?? 0);
     const promocao = Number(t.total_promocao ?? 0);
     const txCount = Number(t.total_count ?? 0);
-    const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0); // taxa + promoção declaradas
+    const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0);
 
-    const depRows = (depsRpc as { category: string | null; total_amount: number }[]) ?? [];
+    const depRows = (depsRpc as { category: string | null; total_amount: number; match_status?: string }[]) ?? [];
     const recebido = depRows
       .filter(d => ['ifood', 'alelo', 'ticket', 'pluxee', 'vr'].includes(d.category ?? ''))
       .reduce((s, d) => s + Number(d.total_amount || 0), 0);
@@ -183,6 +187,7 @@ export default function AuditDashboard() {
     setTotals({
       vendido: bruto, recebido, custo: custoReal, taxaPct: taxaEfetiva,
       txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
+      liquidoIfood, brutoIfood,
     });
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
