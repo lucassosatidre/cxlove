@@ -593,6 +593,7 @@ export default function AuditDashboard() {
                 </div>
               )}
               {period && exportBtn}
+              {period && contabilBtn}
               {period && isConciliated && !isClosed && (
                 <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
                   <Lock className="h-4 w-4" /> Fechar Período
