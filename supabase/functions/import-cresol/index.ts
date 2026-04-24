@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
 
       deposits.push({
         audit_period_id,
+        import_id: importRec.id,
         bank: 'cresol',
         deposit_date: depositDate,
         description,
