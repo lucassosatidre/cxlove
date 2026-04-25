@@ -12,6 +12,7 @@ import { getBrasiliaHour, getBrasiliaToday, getBrasiliaDateFormatted } from '@/l
 import { logCheckinAction } from '@/lib/checkin-logger';
 import { promoteFromWaitlist } from '@/lib/promote-waitlist';
 import NotificationBell from '@/components/NotificationBell';
+import { computeShiftCapacity } from '@/lib/shift-capacity';
 
 interface DriverProfile {
   id: string;
@@ -48,6 +49,9 @@ export default function EntregadorPortal() {
   const [waitlistPosition, setWaitlistPosition] = useState(0);
   const [hasVagas, setHasVagas] = useState(false);
   const [shiftExists, setShiftExists] = useState(false);
+  const [shiftVagas, setShiftVagas] = useState(0);
+  const [shiftConfirmados, setShiftConfirmados] = useState(0);
+  const [shiftFilaCount, setShiftFilaCount] = useState(0);
 
   // Dialogs
   const [cancelDialog, setCancelDialog] = useState(false);
@@ -198,13 +202,23 @@ export default function EntregadorPortal() {
 
     setTodayShiftId(shift.id);
 
-    // Get confirmed count
-    const { count: confirmedCount } = await supabase
-      .from('delivery_checkins')
-      .select('*', { count: 'exact', head: true })
-      .eq('shift_id', shift.id)
-      .eq('status', 'confirmado');
+    // Get confirmed count + waitlist count
+    const [{ count: confirmedCount }, { count: filaCount }] = await Promise.all([
+      supabase
+        .from('delivery_checkins')
+        .select('*', { count: 'exact', head: true })
+        .eq('shift_id', shift.id)
+        .eq('status', 'confirmado'),
+      supabase
+        .from('delivery_checkins')
+        .select('*', { count: 'exact', head: true })
+        .eq('shift_id', shift.id)
+        .eq('status', 'fila_espera'),
+    ]);
 
+    setShiftVagas(shift.vagas);
+    setShiftConfirmados(confirmedCount || 0);
+    setShiftFilaCount(filaCount || 0);
     setHasVagas((confirmedCount || 0) < shift.vagas);
 
     // Check my checkin status
