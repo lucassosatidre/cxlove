@@ -7,6 +7,7 @@ import { Clock, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { getBrasiliaHour, getBrasiliaToday } from '@/lib/brasilia-time';
+import { computeShiftCapacity } from '@/lib/shift-capacity';
 
 interface ShiftCheckin {
   checkinId: string;
@@ -142,6 +143,7 @@ export default function DashboardTodayCard() {
           {shifts.map(s => {
             const status = getShiftStatus(s.horarioInicio, s.horarioFim);
             const activeCount = s.confirmados.length;
+            const cap = computeShiftCapacity(s.vagas, activeCount, s.waitlistCount);
             return (
               <div key={s.shiftId} className="space-y-2">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -149,10 +151,12 @@ export default function DashboardTodayCard() {
                   <Badge variant={status.variant} className="text-[10px]">{status.label}</Badge>
                   <span className="text-sm text-muted-foreground flex items-center gap-1">
                     <Users className="h-3.5 w-3.5" />
-                    <span className="font-medium text-foreground">{activeCount}/{s.vagas}</span> confirmados
+                    <span className={`font-bold ${cap.colorClass}`}>{activeCount}/{s.vagas}</span> confirmados
                   </span>
-                  {s.waitlistCount > 0 && (
-                    <span className="text-xs text-muted-foreground">Fila: {s.waitlistCount} entregador{s.waitlistCount > 1 ? 'es' : ''}</span>
+                  {cap.auxiliaryText && (
+                    <span className={`text-xs ${cap.state === 'over' ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                      {cap.auxiliaryText}
+                    </span>
                   )}
                 </div>
                 {s.confirmados.length > 0 && (

@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { computeShiftCapacity } from '@/lib/shift-capacity';
 
 const DAY_LABELS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
@@ -524,8 +525,9 @@ export default function DriverShiftsContent() {
                 )}
 
                 {day.shifts.map((shift, shiftIdx) => {
+                  const cap = computeShiftCapacity(shift.vagas, shift.checkins, shift.waitlistDrivers.length);
                   const fillPct = shift.vagas > 0 ? Math.round((shift.checkins / shift.vagas) * 100) : 0;
-                  const barColor = fillPct >= 100 ? 'bg-destructive' : fillPct > 75 ? 'bg-warning' : 'bg-green-500';
+                  const barColor = cap.state === 'over' ? 'bg-destructive' : cap.state === 'full' ? 'bg-orange-500' : 'bg-green-500';
                   return (
                     <div key={shiftIdx} className="rounded-md border border-border p-2 space-y-1.5 bg-background">
                       <div className="flex items-center justify-between">
@@ -563,13 +565,18 @@ export default function DriverShiftsContent() {
 
                       <div className="space-y-0.5">
                         <div className="flex items-center justify-between">
-                          <span className={`text-[10px] font-bold ${shift.checkins === 0 ? 'text-destructive' : shift.checkins >= shift.vagas ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>
+                          <span className={`text-[10px] font-bold ${cap.colorClass}`}>
                             {shift.checkins}/{shift.vagas}
                           </span>
                         </div>
                         <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${Math.min(fillPct, 100)}%` }} />
                         </div>
+                        {cap.state === 'over' && (
+                          <p className="text-[9px] text-destructive font-medium leading-tight">
+                            +{cap.extras} {cap.extras === 1 ? 'extra' : 'extras'} do admin
+                          </p>
+                        )}
                       </div>
 
                       {shift.confirmedDrivers.length > 0 ? (
@@ -683,14 +690,21 @@ export default function DriverShiftsContent() {
               <p className="text-sm text-muted-foreground">Nenhum turno configurado para hoje</p>
             ) : (
               <div className="space-y-3">
-                {todayData.shifts.map((shift, i) => (
+                {todayData.shifts.map((shift, i) => {
+                  const cap = computeShiftCapacity(shift.vagas, shift.checkins, shift.waitlistDrivers.length);
+                  return (
                   <div key={i} className="space-y-1.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-semibold text-foreground">{shift.horario_inicio} — {shift.horario_fim}</span>
-                      <Badge variant={shift.checkins >= shift.vagas ? 'default' : 'secondary'} className="text-[10px]">
+                      <span className={`text-sm font-bold ${cap.colorClass}`}>
                         {shift.checkins}/{shift.vagas} confirmados
-                      </Badge>
+                      </span>
+                      {cap.auxiliaryText && (
+                        <span className={`text-xs ${cap.state === 'over' ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                          {cap.auxiliaryText}
+                        </span>
+                      )}
                     </div>
                     {shift.confirmedDrivers.length > 0 ? (
                       <div className="ml-6 space-y-0.5">
@@ -716,7 +730,8 @@ export default function DriverShiftsContent() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>

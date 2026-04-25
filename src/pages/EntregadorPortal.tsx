@@ -12,6 +12,7 @@ import { getBrasiliaHour, getBrasiliaToday, getBrasiliaDateFormatted } from '@/l
 import { logCheckinAction } from '@/lib/checkin-logger';
 import { promoteFromWaitlist } from '@/lib/promote-waitlist';
 import NotificationBell from '@/components/NotificationBell';
+import { computeShiftCapacity } from '@/lib/shift-capacity';
 
 interface DriverProfile {
   id: string;
@@ -48,6 +49,9 @@ export default function EntregadorPortal() {
   const [waitlistPosition, setWaitlistPosition] = useState(0);
   const [hasVagas, setHasVagas] = useState(false);
   const [shiftExists, setShiftExists] = useState(false);
+  const [shiftVagas, setShiftVagas] = useState(0);
+  const [shiftConfirmados, setShiftConfirmados] = useState(0);
+  const [shiftFilaCount, setShiftFilaCount] = useState(0);
 
   // Dialogs
   const [cancelDialog, setCancelDialog] = useState(false);
@@ -198,13 +202,23 @@ export default function EntregadorPortal() {
 
     setTodayShiftId(shift.id);
 
-    // Get confirmed count
-    const { count: confirmedCount } = await supabase
-      .from('delivery_checkins')
-      .select('*', { count: 'exact', head: true })
-      .eq('shift_id', shift.id)
-      .eq('status', 'confirmado');
+    // Get confirmed count + waitlist count
+    const [{ count: confirmedCount }, { count: filaCount }] = await Promise.all([
+      supabase
+        .from('delivery_checkins')
+        .select('*', { count: 'exact', head: true })
+        .eq('shift_id', shift.id)
+        .eq('status', 'confirmado'),
+      supabase
+        .from('delivery_checkins')
+        .select('*', { count: 'exact', head: true })
+        .eq('shift_id', shift.id)
+        .eq('status', 'fila_espera'),
+    ]);
 
+    setShiftVagas(shift.vagas);
+    setShiftConfirmados(confirmedCount || 0);
+    setShiftFilaCount(filaCount || 0);
     setHasVagas((confirmedCount || 0) < shift.vagas);
 
     // Check my checkin status
@@ -573,25 +587,57 @@ export default function EntregadorPortal() {
                 )}
 
                 {/* In window 15h-17:59 */}
-                {isInWindow && checkinState === 'none' && hasVagas && (
-                  <button
-                    className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
-                    disabled={actionLoading}
-                    onClick={handleAttemptCheckin}
-                  >
-                    {actionLoading ? 'Processando...' : 'FAZER CHECK-IN HOJE'}
-                  </button>
-                )}
+                {isInWindow && checkinState === 'none' && (() => {
+                  const cap = computeShiftCapacity(shiftVagas, shiftConfirmados, shiftFilaCount);
+                  return (
+                    <div className="w-full space-y-3">
+                      {/* Status summary */}
+                      <div className="bg-card rounded-xl border p-4 text-center space-y-1">
+                        {cap.state === 'below' && (
+                          <p className="text-base font-semibold text-green-600 dark:text-green-400">
+                            {cap.vagasAbertas} {cap.vagasAbertas === 1 ? 'vaga aberta' : 'vagas abertas'}
+                          </p>
+                        )}
+                        {cap.state === 'full' && (
+                          <p className="text-base font-semibold text-orange-500 dark:text-orange-400">Lotado</p>
+                        )}
+                        {cap.state === 'over' && (
+                          <p className="text-base font-semibold text-destructive">
+                            Lotado (admin adicionou {cap.extras} {cap.extras === 1 ? 'extra' : 'extras'})
+                          </p>
+                        )}
+                        {cap.filaCount > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {cap.filaCount} {cap.filaCount === 1 ? 'pessoa' : 'pessoas'} em espera
+                          </p>
+                        )}
+                      </div>
 
-                {isInWindow && checkinState === 'none' && !hasVagas && (
-                  <button
-                    className="w-full h-14 rounded-xl border-2 border-orange-500 text-orange-600 font-bold text-lg uppercase tracking-wide hover:bg-orange-50 transition-colors disabled:opacity-60"
-                    disabled={actionLoading}
-                    onClick={handleAttemptCheckin}
-                  >
-                    {actionLoading ? 'Processando...' : 'ENTRAR NA FILA DE ESPERA'}
-                  </button>
-                )}
+                      {hasVagas ? (
+                        <button
+                          className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
+                          disabled={actionLoading}
+                          onClick={handleAttemptCheckin}
+                        >
+                          {actionLoading ? 'Processando...' : 'FAZER CHECK-IN HOJE'}
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className="w-full h-14 rounded-xl border-2 border-orange-500 text-orange-600 font-bold text-lg uppercase tracking-wide hover:bg-orange-50 transition-colors disabled:opacity-60"
+                            disabled={actionLoading}
+                            onClick={handleAttemptCheckin}
+                          >
+                            {actionLoading ? 'Processando...' : 'ENTRAR NA FILA DE ESPERA'}
+                          </button>
+                          <p className="text-xs text-muted-foreground text-center">
+                            A fila avança quando o turno volta abaixo de {shiftVagas}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {isInWindow && checkinState === 'confirmed' && (
                   <div className="w-full space-y-4">
@@ -609,23 +655,38 @@ export default function EntregadorPortal() {
                   </div>
                 )}
 
-                {isInWindow && checkinState === 'waitlist' && (
-                  <div className="w-full space-y-4">
-                    <div className="bg-card rounded-xl border p-6 text-center space-y-3">
-                      <p className="text-base font-semibold text-foreground">Você está na fila de espera</p>
-                      <p className="text-3xl font-bold text-foreground">Posição: {waitlistPosition}</p>
-                      <p className="text-sm text-muted-foreground">Vagas disponíveis apenas em caso de cancelamento</p>
-                      <p className="text-xs text-muted-foreground">Alterações permitidas até 17:59</p>
+                {isInWindow && checkinState === 'waitlist' && (() => {
+                  const cap = computeShiftCapacity(shiftVagas, shiftConfirmados, shiftFilaCount);
+                  // pessoas que precisam cancelar antes da minha vez:
+                  // (extras já acima do limite) + (minha posição na fila) — pelo menos 1
+                  const cancelsNeeded = cap.extras + waitlistPosition;
+                  return (
+                    <div className="w-full space-y-4">
+                      <div className="bg-card rounded-xl border p-6 text-center space-y-3">
+                        <p className="text-base font-semibold text-foreground">
+                          Você é o {waitlistPosition}º na fila de espera
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          A fila vai avançar quando o turno tiver menos de {shiftVagas} confirmados
+                        </p>
+                        {cap.state === 'over' && cap.extras > 0 && (
+                          <p className="text-xs text-destructive font-medium">
+                            Atualmente o turno tem {cap.extras} {cap.extras === 1 ? 'extra' : 'extras'} acima do limite —
+                            precisam cancelar pelo menos {cancelsNeeded} antes da sua vez
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">Alterações permitidas até 17:59</p>
+                      </div>
+                      <button
+                        className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
+                        disabled={actionLoading}
+                        onClick={handleLeaveWaitlist}
+                      >
+                        Sair da Fila
+                      </button>
                     </div>
-                    <button
-                      className="w-full h-14 rounded-xl bg-destructive hover:bg-destructive/90 text-white font-bold text-lg uppercase tracking-wide transition-colors disabled:opacity-60"
-                      disabled={actionLoading}
-                      onClick={handleLeaveWaitlist}
-                    >
-                      Sair da Fila
-                    </button>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* After 18h */}
                 {isAfterWindow && (
