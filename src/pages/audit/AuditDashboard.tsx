@@ -614,6 +614,16 @@ export default function AuditDashboard() {
               )}
               {period && exportBtn}
               {period && contabilBtn}
+              {period && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!isConciliated && !isClosed}
+                  onClick={() => navigate(`/admin/auditoria/match?period=${period.id}`)}
+                >
+                  <Search className="h-4 w-4" /> Auditar Match
+                </Button>
+              )}
               {period && isConciliated && !isClosed && (
                 <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
                   <Lock className="h-4 w-4" /> Fechar Período
