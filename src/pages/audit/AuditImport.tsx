@@ -148,7 +148,6 @@ export default function AuditImport() {
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [confirmReimportMaquinona, setConfirmReimportMaquinona] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   const backUrl = useMemo(() => {
