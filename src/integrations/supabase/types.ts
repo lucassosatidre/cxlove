@@ -736,6 +736,8 @@ export type Database = {
           driver_id: string
           id: string
           origin: string
+          promoted_at: string | null
+          promoted_from_freed_by: string | null
           shift_id: string
           status: string
           substituto_pos_18h: boolean
@@ -755,6 +757,8 @@ export type Database = {
           driver_id: string
           id?: string
           origin?: string
+          promoted_at?: string | null
+          promoted_from_freed_by?: string | null
           shift_id: string
           status?: string
           substituto_pos_18h?: boolean
@@ -774,6 +778,8 @@ export type Database = {
           driver_id?: string
           id?: string
           origin?: string
+          promoted_at?: string | null
+          promoted_from_freed_by?: string | null
           shift_id?: string
           status?: string
           substituto_pos_18h?: boolean
@@ -1757,6 +1763,15 @@ export type Database = {
         Returns: boolean
       }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
+      promote_from_waitlist: {
+        Args: {
+          p_freed_by: string
+          p_is_after_18h?: boolean
+          p_max_promotions?: number
+          p_shift_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       app_role:
