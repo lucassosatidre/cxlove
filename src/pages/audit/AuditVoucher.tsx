@@ -199,8 +199,11 @@ export default function AuditVoucher() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Vendido:</span><span className="font-medium">{fmt(Number(m.sold_amount))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Recebido:</span><span className="font-medium">{fmt(Number(m.deposited_amount))}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Vendido (competência):</span><span className="font-medium">{fmt(Number(m.sold_amount))}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Recebido competência:</span><span className="font-medium">{fmt(Number(m.deposited_amount))}</span></div>
+                  {adjByCompany[m.company] > 0 && (
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">ℹ Recebido outras comp.:</span><span className="text-muted-foreground">{fmt(adjByCompany[m.company])}</span></div>
+                  )}
                   <div className="flex justify-between"><span className="text-muted-foreground">Diferença:</span><span className={`font-semibold ${Number(m.difference) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(m.difference))}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Taxa efetiva:</span><span className={`font-semibold ${Number(m.effective_tax_rate) > 5 ? 'text-red-600 dark:text-red-400' : ''}`}>{Number(m.effective_tax_rate).toFixed(2).replace('.', ',')}%</span></div>
                   <div className="text-xs text-muted-foreground pt-1">{m.sold_count} vendas / {m.deposit_count} depósitos</div>
