@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
   // DELETE USER
   if (action === 'delete') {
     const { userId } = body;
-    if (userId === caller.id) {
+    if (userId === callerId) {
       return new Response(JSON.stringify({ error: 'Você não pode excluir a si mesmo' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -125,15 +125,16 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("[auto-open] Fatal error:", err.message);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[auto-open] Fatal error:", msg);
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, serviceKey);
-      await logOpen(supabase, "error", { fatal: true }, err.message);
+      await logOpen(supabase, "error", { fatal: true }, msg);
     } catch (_) { /* ignore */ }
 
-    return new Response(JSON.stringify({ error: err.message }), {
+    return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
@@ -154,6 +155,6 @@ async function logOpen(
       error_message: errorMessage,
     });
   } catch (e) {
-    console.error("[auto-open] Failed to write sync log:", e.message);
+    console.error("[auto-open] Failed to write sync log:", e instanceof Error ? e.message : String(e));
   }
 }

@@ -1,48 +1,42 @@
+# Fix TS errors em Edge Functions + Deploy
 
+## Mudanças exatas
 
-## Bug: Vínculo SN → Entregador não funciona (prefixo `S1F2-000`)
+### 1. `supabase/functions/auto-open-closings/index.ts`
+- Linhas 127-136: extrair `const msg = err instanceof Error ? err.message : String(err)` e usar nos 3 sites (`console.error`, `logOpen`, `JSON.stringify`).
+- Linhas 156-158: trocar `e.message` por `e instanceof Error ? e.message : String(e)`.
 
-### Diagnóstico confirmado via DB
+### 2. `supabase/functions/auto-sync-saipos/index.ts`
+- Linhas 111-114: catch tele — extrair `msg` e usar.
+- Linhas 179-182: catch salon — idem.
+- Linhas 199-213: catch fatal — idem (3 usos: console, logSync, JSON).
+- Linhas 229-231: `e.message` → guard.
 
-Para o fechamento atual `39af9d02-...`:
+### 3. `supabase/functions/create-user/index.ts`
+- Linha 109: `caller.id` → `callerId`.
 
-| Fonte | Formato do serial |
-|-------|-------------------|
-| `card_transactions.machine_serial` | `S1F2-000158242606488` (com prefixo) |
-| `machine_readings.machine_serial` | `158242606488` (sem prefixo) |
-| `machine_registry.serial_number` | `158242606488` (sem prefixo) |
+### 4. `supabase/functions/fetch-saipos-labels/index.ts`
+- Linhas 273-279: catch — extrair `msg` e usar.
 
-O map `serialToDeliveryPerson` é montado com chaves **sem prefixo** (vindas de `machine_readings` e `registry`), mas todas as buscas usam `serialToDeliveryPerson.get(tx.machine_serial)` passando o serial **com prefixo** direto da `card_transactions`. Resultado: lookup sempre `undefined` → exibe "Pickngo".
+### 5. `supabase/functions/saipos-data-proxy/index.ts`
+- Linhas 54-60: catch — extrair `msg` e usar.
 
-### Correção
+### 6. `supabase/functions/sync-saipos-sales/index.ts`
+- Linhas 484-492: catch — extrair `msg` e usar.
 
-Normalizar o serial em **toda** leitura/escrita do map, removendo o prefixo `S1F2-000`.
+### 7. `supabase/functions/sync-saipos-salon/index.ts`
+- Linhas 346-353: catch — extrair `msg` e usar.
 
-**Arquivo:** `src/pages/DeliveryReconciliation.tsx`
+## Deploy
+Após editar, deployar as 8 funções afetadas:
+- auto-open-closings
+- auto-sync-saipos
+- create-user
+- fetch-saipos-labels
+- saipos-data-proxy
+- sync-saipos-sales
+- sync-saipos-salon
+- (a 8ª listada nos build errors era genérica — só essas 7 têm mudança de código; outras citadas na lista de "Check" não tinham erros)
 
-1. Criar helper local no topo do componente:
-   ```ts
-   const normalizeSerial = (s: string | null | undefined) => 
-     s ? s.replace(/^S1F2-000/, '') : '';
-   ```
-
-2. No `useMemo` do `serialToDeliveryPerson` (~L234-280):
-   - Normalizar `tx.machine_serial` antes de checar `result.has(...)` e antes de inserir/buscar no `registry`.
-   - Normalizar a chave do `serialCounts` no fallback.
-
-3. Nos 3 lugares que fazem lookup no map:
-   - **L1228** (header da comanda — entregador inferido):  
-     `serialToDeliveryPerson.get(normalizeSerial(t.machine_serial))`
-   - **L1263** (tag inline ao lado da transação matchada): idem
-   - **L1407 e L1410** (transações sem vínculo — badge do entregador): idem
-
-Sem mudanças de banco. Sem mudanças no algoritmo de matching. Apenas normalização do serial nos lookups visuais e na construção do map.
-
-### Validação
-
-Após o fix, no fechamento atual:
-- Comanda `#6` → "Tele 2 — Elisson" (em vez de "Pickngo") quando vinculada ao SN `158242606488`
-- Frota sem entregador → exibe "Frota 2"
-- Coluna **TRANSAÇÕES SEM VÍNCULO** mostra o nome do motoboy abaixo do valor quando o SN tem leitura cadastrada
-- Pedidos online (sem `card_transaction` vinculada) continuam exibindo "Pickngo" (regra mantida)
-
+## Risco
+Zero — apenas type guards. Comportamento de runtime idêntico.
