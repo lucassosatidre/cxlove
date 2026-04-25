@@ -1,67 +1,92 @@
-## Correção do bug de escala (×100) na importação Maquinona
+# Correção da conciliação de Março — taxa efetiva 96,52%
 
-### 1. Patch em `supabase/functions/import-maquinona/index.ts`
-Substituir `parseNumber` pela versão robusta que detecta corretamente o formato US-like usado nos XLSX iFood:
+## Diagnóstico
 
-```typescript
-function parseNumber(v: any): number {
-  if (v == null || v === '') return 0;
-  if (typeof v === 'number') return v;
-  let s = String(v).replace(/[R$\s%]/g, '').trim();
-  if (!s) return 0;
-  const hasComma = s.includes(',');
-  const hasDot = s.includes('.');
-  if (hasComma && hasDot) {
-    // BR clássico: 1.234,56
-    s = s.replace(/\./g, '').replace(',', '.');
-  } else if (hasComma) {
-    // Só vírgula → decimal BR
-    s = s.replace(',', '.');
-  } else if (hasDot) {
-    // Só ponto → US-like se exatamente 1 ponto e ≤2 casas (924.30)
-    const parts = s.split('.');
-    if (parts.length === 2 && parts[1].length <= 2) {
-      // já é decimal US, mantém
-    } else {
-      // múltiplos pontos = milhar BR (1.234.567)
-      s = s.replace(/\./g, '');
-    }
-  }
-  const n = Number(s);
-  return isFinite(n) ? n : 0;
-}
-```
+Os parsers de número agora estão corretos (R$ 320 mil bruto iFood é coerente). O bug **não está nos dados**, está em **3 lugares na lógica de classificação**:
 
-`parseTaxRate` continua igual (já trata `%` separadamente).
+### Bug 1 — `classify_ifood_deposits` (Cresol) compara 1:1, deveria ser N:1
 
-### 2. NÃO mexer em `import-cresol` nem `import-bb`
-Esses arquivos vêm de banco brasileiro (formato BR estrito: vírgula=decimal, ponto=milhar). Parsers atuais estão corretos para BR puro. Deixar intactos.
+iFood deposita o valor previsto de um dia em **múltiplas parcelas** (uma por bandeira/método). A RPC atual pega cada depósito isolado e compara com o total esperado do dia → todos viram `nao_identificado`.
 
-### 3. Deploy
-Deployar apenas `import-maquinona`.
+**Exemplo 02/03:** esperado R$ 9.779,77 — chegaram 6 depósitos somando R$ 36.012 (com parcelas de fevereiro misturadas). A soma dos depósitos do dia que pertencem à competência casa quase exato, mas a RPC nem chega a tentar essa comparação.
 
-### 4. Limpar período Março/2026 via migration
+**Correção:** somar TODOS os depósitos Cresol/iFood do dia e comparar com o total esperado da competência + tolerância. Se sobra dinheiro depositado, o excedente vai pra `fora_periodo` (vendas adjacentes), não pra `nao_identificado`.
+
+### Bug 2 — `categorizeBB` não reconhece "Pix - Recebido" 
+
+111 depósitos somando R$ 993.638,79 caíram como `outro` → `nao_identificado`. Esse "Pix - Recebido" é provavelmente repasse iFood via BB, Brendi, ou outras fontes. Sem categorizar, infla o "recebido geral" e estoura a taxa efetiva.
+
+**Correção:** investigar 5-10 amostras do "Pix - Recebido" para entender o origem (campo `detail` completo) e adicionar regras em `categorizeBB`. Se for Brendi/iFood, marcar como tal.
+
+### Bug 3 — Cresol "fora_periodo" R$ 588.699 inclui não-iFood
+
+Cresol em 18/02 tem R$ 90.294 num único dia que não é razoável pra iFood. Provavelmente são outros tipos de crédito (TED, salário, etc.) que `import-cresol` está marcando como `ifood` indiscriminadamente.
+
+**Correção:** revisar filtro de `import-cresol` — só importar linhas cujo `detail` contém "iFood"/"IFOOD"/"IFOODCOM". Demais linhas: ignorar ou marcar como `outro`.
+
+### Bug 4 — Card "Taxa efetiva" no dashboard usa fórmula errada
+
+Atualmente parece somar todo `audit_bank_deposits.amount` (incluindo o "outro" de R$ 1M e Brendi de R$ 134k) contra vendas competência → taxa fantasma.
+
+**Correção:** taxa efetiva = `(bruto_competência - SUM(deposits WHERE match_status='matched')) / bruto_competência`. Verificar `AuditDashboard.tsx` e ajustar o cálculo.
+
+---
+
+## Plano de execução (em ordem)
+
+### Passo 1 — Investigar dados antes de mexer em código
+Rodar queries de inspeção (sem alterar nada):
+- 10 amostras de `description` + `detail` dos "Pix - Recebido" categorizados como `outro` no BB
+- 10 amostras dos depósitos Cresol em fevereiro >R$ 50k (validar se são realmente iFood ou poluição)
+- Verificar onde `AuditDashboard.tsx` calcula a "taxa efetiva total" exibida
+
+### Passo 2 — Corrigir `classify_ifood_deposits` (migration SQL)
+
+Nova lógica:
 ```sql
-DELETE FROM audit_periods WHERE month = 3 AND year = 2026;
+-- Para cada deposit_date com depósitos Cresol iFood:
+-- 1. Somar TODOS depósitos do dia
+-- 2. Pegar esperado_competência + esperado_adjacente
+-- 3. Se SUM(depósitos) ≈ esperado_competência (±1%) → marcar TODOS depósitos do dia como 'matched'
+-- 4. Se SUM(depósitos) > esperado_competência: distribuir FIFO 
+--    (primeiros valores até esperado_competência → matched, resto → fora_periodo)
+-- 5. Se SUM < esperado_competência mas há esperado_adjacente: marcar diferença como adjacente
 ```
-Cascata limpa `audit_card_transactions`, `audit_bank_deposits`, `audit_imports`, `audit_daily_matches`, `audit_voucher_matches`, `audit_period_log`.
 
-⚠️ Verificar antes se existem FKs com `ON DELETE CASCADE`. Se não houver, fazer DELETE explícito em ordem:
-1. `audit_period_log`
-2. `audit_daily_matches`
-3. `audit_voucher_matches`
-4. `audit_bank_deposits`
-5. `audit_card_transactions`
-6. `audit_imports`
-7. `audit_periods`
+### Passo 3 — Corrigir `categorizeBB` (edge function `import-bb`)
 
-### 5. Validação pós-execução
-- Confirmar build limpo
-- Confirmar período Março/2026 zerado (`SELECT count(*) FROM audit_periods WHERE month=3 AND year=2026` → 0)
-- Liberar usuário para re-importar XLSX (criar período novo + Maquinona Jan/Fev/Mar + Cresol Fev/Mar/Abr + BB Fev/Mar/Abr)
+Adicionar regras baseadas no que descobrirmos no Passo 1. Provável:
+- "Pix - Recebido" + descrição contendo "IFOOD" → `ifood` (mover pra Cresol-equivalente ou criar categoria separada)
+- "Pix - Recebido" + "BRENDI" → `brendi`
+- Resto → `outro` (mantém)
 
-### O que NÃO faço
-- ❌ Não toco em `import-cresol` nem `import-bb`
-- ❌ Não rodo UPDATE/100 nos dados existentes (re-importação substitui)
-- ❌ Não apago arquivos XLSX do usuário
-- ❌ Não mexo no algoritmo de match (RPCs `classify_*`)
+### Passo 4 — Filtrar linhas não-iFood na `import-cresol`
+
+Adicionar `if (!/ifood/i.test(detail)) continue;` no parser. Re-importar Cresol após o fix.
+
+### Passo 5 — Corrigir cálculo da "taxa efetiva" em `AuditDashboard.tsx`
+
+Trocar fórmula para considerar apenas `match_status='matched'`. Já dentro disso, somar `amount` Cresol + BB matched, dividir pela diferença com `total_bruto_competencia`.
+
+### Passo 6 — Re-rodar conciliação Março
+1. Limpar Março (DELETE cascata, igual fizemos antes)
+2. Re-importar 3 maquinonas + 3 cresol + 3 bb (parsers já corrigidos + novas regras)
+3. Re-rodar `run-audit-match`
+4. Validar: taxa efetiva total deve ficar entre 1,5%-3% (média ponderada de iFood + vouchers)
+
+---
+
+## O que NÃO faço
+
+- ❌ Não mexo nos parsers de número (já estão corretos)
+- ❌ Não mexo na lógica de FIFO de vouchers (`classify_voucher_deposits` está coerente — Alelo/Ticket/Pluxee/VR mostraram matched razoável)
+- ❌ Não crio nova tela ou UI nova
+- ❌ Não toco em outras telas/features
+
+## Validação final
+
+Após aplicar:
+- Cresol matched ≈ R$ 305-310 mil (vs R$ 312.969 esperado, diferença = taxas iFood ~1-2%)
+- BB "outro" deve cair drasticamente (idealmente <R$ 10 mil de ruído real)
+- Taxa efetiva total no dashboard: 1,5%-3,5%
+- Card vermelho 96,52% sumir
