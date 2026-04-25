@@ -8,7 +8,12 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!;
-const MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const ALLOWED_MODELS = new Set([
+  'claude-haiku-4-5',
+  'claude-sonnet-4-6',
+  'claude-opus-4-7',
+]);
 
 const SYSTEM_PROMPT_TEMPLATE = `Você é a Clau, assistente IA da Pizzaria Estrela da Ilha, integrada ao CX Love (sistema de gestão operacional do Lucas).
 
@@ -88,21 +93,34 @@ Deno.serve(async (req) => {
     if (!roleData) return errResponse('Acesso restrito a admin', 403);
 
     const body = await req.json();
-    const { conversation_id, user_message, current_page, screen_context } = body;
+    const { conversation_id, user_message, current_page, screen_context, model: requestedModel } = body;
 
     if (!user_message || typeof user_message !== 'string') {
       return errResponse('Mensagem obrigatória', 400);
     }
 
+    // Pick model: explicit request > conversation stored > default
+    const validatedRequested = requestedModel && ALLOWED_MODELS.has(requestedModel) ? requestedModel : null;
+
     // 1. Get or create conversation
     let convId = conversation_id;
+    let convModel: string = validatedRequested ?? DEFAULT_MODEL;
     if (!convId) {
       const { data: newConv, error: convErr } = await supabase
         .from('clau_conversations')
-        .insert({ user_id: userId, app_origin: 'cx-love' })
-        .select('id').single();
+        .insert({ user_id: userId, app_origin: 'cx-love', model: convModel })
+        .select('id, model').single();
       if (convErr) return errResponse(`Erro ao criar conversa: ${convErr.message}`, 500);
       convId = newConv.id;
+      convModel = newConv.model ?? convModel;
+    } else if (validatedRequested) {
+      // Update model if user changed it for an existing conversation
+      await supabase.from('clau_conversations').update({ model: validatedRequested }).eq('id', convId);
+      convModel = validatedRequested;
+    } else {
+      const { data: existing } = await supabase
+        .from('clau_conversations').select('model').eq('id', convId).single();
+      convModel = (existing?.model && ALLOWED_MODELS.has(existing.model)) ? existing.model : DEFAULT_MODEL;
     }
 
     // 2. Project memory
@@ -184,7 +202,7 @@ Deno.serve(async (req) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: convModel,
         max_tokens: 2000,
         system: systemPrompt,
         messages: messages,
@@ -239,6 +257,7 @@ Deno.serve(async (req) => {
       assistant_message: finalText,
       tokens_used: tokensUsed,
       memory_updated: !!memoryMatch,
+      model: convModel,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (e) {

@@ -5,9 +5,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageCircle, Send, Plus, Pin, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
+
+const MODEL_OPTIONS = [
+  { value: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: 'Rápido/barato' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', hint: 'Equilibrado' },
+  { value: 'claude-opus-4-7', label: 'Opus 4.7', hint: 'Mais capaz' },
+];
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 type Message = {
   id?: string;
@@ -33,6 +41,7 @@ export default function ClauChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,9 +52,20 @@ export default function ClauChat() {
   useEffect(() => {
     if (!activeConv) {
       setMessages([]);
+      setModel(DEFAULT_MODEL);
       return;
     }
     loadMessages(activeConv);
+    // sync model from selected conversation
+    supabase
+      .from('clau_conversations')
+      .select('model')
+      .eq('id', activeConv)
+      .maybeSingle()
+      .then(({ data }) => {
+        const m = data?.model;
+        if (m && MODEL_OPTIONS.some((o) => o.value === m)) setModel(m);
+      });
   }, [activeConv]);
 
   useEffect(() => {
@@ -87,6 +107,7 @@ export default function ClauChat() {
           user_message: userMsg,
           current_page: screenContext.page,
           screen_context: screenContext,
+          model,
         },
       });
 
@@ -141,6 +162,19 @@ export default function ClauChat() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Select value={model} onValueChange={setModel} disabled={loading}>
+              <SelectTrigger className="h-8 w-[130px] text-xs" title="Modelo da Clau">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODEL_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    <span className="font-medium">{o.label}</span>
+                    <span className="text-muted-foreground ml-1">· {o.hint}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button variant="ghost" size="icon" onClick={() => setShowHistory(!showHistory)} title="Histórico">
               <History className="w-4 h-4" />
             </Button>

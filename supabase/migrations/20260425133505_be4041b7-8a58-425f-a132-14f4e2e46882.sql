@@ -1,0 +1,1 @@
+ALTER TABLE clau_conversations ADD COLUMN IF NOT EXISTS model text DEFAULT 'claude-sonnet-4-6';
