@@ -476,7 +476,6 @@ export default function AuditDashboard() {
   const ifoodFora = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'fora_periodo');
   const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
 
-  const voucherCategoriesSet = new Set(['alelo', 'ticket', 'pluxee', 'vr']);
   const voucherDepBy = (company: string, status: string) =>
     sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
 
