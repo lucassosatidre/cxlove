@@ -72,7 +72,7 @@ export default function AuditVoucher() {
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
         supabase.from('audit_voucher_matches').select('*').eq('audit_period_id', periodId),
         supabase.from('audit_card_transactions').select('deposit_group,sale_date,gross_amount,brand').eq('audit_period_id', periodId).in('deposit_group', companies).order('sale_date'),
-        supabase.from('audit_bank_deposits').select('category,deposit_date,amount,detail').eq('audit_period_id', periodId).eq('bank', 'bb').in('category', companies).order('deposit_date'),
+        supabase.from('audit_bank_deposits').select('category,deposit_date,amount,detail,match_status,matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'bb').in('category', companies).order('deposit_date'),
       ]);
 
       if (period) {
