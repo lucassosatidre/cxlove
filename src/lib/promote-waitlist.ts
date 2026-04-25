@@ -1,95 +1,61 @@
 import { supabase } from '@/integrations/supabase/client';
-import { logCheckinAction } from '@/lib/checkin-logger';
 
 /**
  * Promote the next driver(s) from the waitlist for a given shift.
- * Strictly orders by waitlist_entered_at ASC.
+ *
+ * Calls the SECURITY DEFINER RPC `promote_from_waitlist`, which:
+ *  - Locks the shift row and counts confirmados atomically
+ *  - Only promotes if vagas_abertas = vagas_configuradas - confirmados > 0
+ *    (impede promoção indevida quando admin inseriu extras acima do limite)
+ *  - Strictly orders waitlist by waitlist_entered_at ASC
+ *  - Marks substituto_pos_18h when applicable
+ *  - Logs `fila_promovido` with the cancelling user as performed_by
+ *  - Notifies the promoted driver and all admins
+ *
+ * Bypasses the RLS conflict that previously caused silent failures when a
+ * regular driver cancelled and the next-in-line was someone else.
  */
 export async function promoteFromWaitlist(
   shiftId: string,
   isAfter18h: boolean,
   maxPromotions: number = 1
 ): Promise<{ id: string; driver_id: string; nome: string }[]> {
-  const { data: waitlist } = await supabase
-    .from('delivery_checkins')
-    .select('id, driver_id, waitlist_entered_at')
-    .eq('shift_id', shiftId)
-    .eq('status', 'fila_espera')
-    .not('waitlist_entered_at', 'is', null)
-    .order('waitlist_entered_at', { ascending: true })
-    .limit(maxPromotions);
+  const { data: { user } } = await supabase.auth.getUser();
+  const freedBy = user?.id;
 
-  if (!waitlist?.length) return [];
-
-  const promoted: { id: string; driver_id: string; nome: string }[] = [];
-
-  for (const next of waitlist) {
-    const nowIso = new Date().toISOString();
-    const updatePayload: any = {
-      status: 'confirmado',
-      confirmed_at: nowIso,
-    };
-    if (isAfter18h) {
-      updatePayload.substituto_pos_18h = true;
-    }
-    await supabase.from('delivery_checkins').update(updatePayload).eq('id', next.id);
-
-    const { data: driverData } = await supabase
-      .from('delivery_drivers')
-      .select('nome, auth_user_id')
-      .eq('id', next.driver_id)
-      .single();
-
-    const driverName = driverData?.nome || 'Entregador';
-    const driverAuthId = driverData?.auth_user_id;
-    promoted.push({ id: next.id, driver_id: next.driver_id, nome: driverName });
-
-    // Log the promotion
-    if (driverAuthId) {
-      await logCheckinAction({
-        checkinId: next.id,
-        driverId: next.driver_id,
-        action: 'fila_promovido',
-        performedBy: 'system' as any,
-      });
-    }
-
-    // Notify promoted driver
-    if (driverAuthId) {
-      const driverMessage = isAfter18h
-        ? 'Você foi chamado da fila de espera para o turno de hoje. Entre em contato com a pizzaria'
-        : 'Você foi promovido da fila de espera! Seu check-in está confirmado para hoje.';
-
-      await supabase.from('notifications').insert({
-        user_id: driverAuthId,
-        title: 'Fila de espera',
-        message: driverMessage,
-        type: 'fila_promovido',
-      } as any);
-    }
-
-    // Notify all admins
-    const { data: adminRoles } = await supabase
-      .from('user_roles')
-      .select('user_id')
-      .eq('role', 'admin');
-
-    if (adminRoles?.length) {
-      const waitlistPos = waitlist.indexOf(next) + 1;
-      const adminMessage = isAfter18h
-        ? `O entregador ${driverName} (posição ${waitlistPos} da fila) foi adicionado da fila de espera. Avise-o pois o horário já passou das 18h`
-        : `O entregador ${driverName} (posição ${waitlistPos} da fila) foi promovido automaticamente da fila de espera`;
-
-      for (const admin of adminRoles) {
-        await supabase.from('notifications').insert({
-          user_id: admin.user_id,
-          title: 'Fila de espera — promoção',
-          message: adminMessage,
-          type: 'fila_promovido_admin',
-        } as any);
-      }
-    }
+  if (!freedBy) {
+    console.error('promoteFromWaitlist: usuário não autenticado');
+    return [];
   }
 
-  return promoted;
+  const { data, error } = await supabase.rpc('promote_from_waitlist', {
+    p_shift_id: shiftId,
+    p_freed_by: freedBy,
+    p_is_after_18h: isAfter18h,
+    p_max_promotions: maxPromotions,
+  });
+
+  if (error) {
+    console.error('Erro ao promover da fila:', error);
+    return [];
+  }
+
+  const result = data as {
+    promoted_count: number;
+    reason: string;
+    promoted: { checkin_id: string; driver_id: string; nome: string }[];
+  } | null;
+
+  if (!result || !result.promoted?.length) {
+    if (result?.reason && result.reason !== 'fila_vazia' && result.reason !== 'ok') {
+      console.log(`promoteFromWaitlist: nenhuma promoção (${result.reason})`);
+    }
+    return [];
+  }
+
+  return result.promoted.map(p => ({
+    id: p.checkin_id,
+    driver_id: p.driver_id,
+    nome: p.nome,
+  }));
 }
