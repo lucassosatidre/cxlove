@@ -1678,6 +1678,18 @@ export type Database = {
           taxa: number
         }[]
       }
+      get_audit_ifood_daily_detail: {
+        Args: { p_period_id: string }
+        Returns: {
+          bruto: number
+          deposito: number
+          diferenca: number
+          liquido: number
+          match_date: string
+          status: string
+          vendas_count: number
+        }[]
+      }
       get_audit_match_breakdown: {
         Args: { p_period_id: string }
         Returns: {
