@@ -84,7 +84,8 @@ export default function AuditVoucher() {
       setMatches((m as any[]) ?? []);
 
       const det: Record<string, Detail> = {};
-      for (const c of companies) det[c] = { sales: [], deposits: [] };
+      const adj: Record<string, number> = {};
+      for (const c of companies) { det[c] = { sales: [], deposits: [] }; adj[c] = 0; }
       for (const s of sales ?? []) {
         const k = (s as any).deposit_group;
         if (det[k]) det[k].sales.push({ sale_date: (s as any).sale_date, gross_amount: Number((s as any).gross_amount), brand: (s as any).brand });
@@ -92,8 +93,15 @@ export default function AuditVoucher() {
       for (const d of deps ?? []) {
         const k = (d as any).category;
         if (det[k]) det[k].deposits.push({ deposit_date: (d as any).deposit_date, amount: Number((d as any).amount), detail: (d as any).detail });
+        // Adjacente = matched_adjacente_amount + (todo amount de fora_periodo)
+        const dd: any = d;
+        if (adj[k] !== undefined) {
+          adj[k] += Number(dd.matched_adjacente_amount || 0);
+          if (dd.match_status === 'fora_periodo') adj[k] += Number(dd.amount || 0) - Number(dd.matched_adjacente_amount || 0);
+        }
       }
       setDetails(det);
+      setAdjByCompany(adj);
       setLoading(false);
     })();
   }, [periodId, isAdmin]);
