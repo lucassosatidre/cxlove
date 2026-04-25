@@ -288,6 +288,7 @@ export default function AuditImport() {
             onCancelReimportMaquinona={() => setConfirmReimportMaquinona(false)}
             onRemove={removeImport}
             removingId={removingId}
+            onAfterImport={async () => { if (period) await refresh(period.id); }}
           />
         ))}
 
