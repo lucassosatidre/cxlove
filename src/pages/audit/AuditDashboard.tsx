@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History } from 'lucide-react';
+import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History, Search } from 'lucide-react';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
 import {
   generateContabilPdf,
@@ -614,6 +614,16 @@ export default function AuditDashboard() {
               )}
               {period && exportBtn}
               {period && contabilBtn}
+              {period && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!isConciliated && !isClosed}
+                  onClick={() => navigate(`/admin/auditoria/match?period=${period.id}`)}
+                >
+                  <Search className="h-4 w-4" /> Auditar Match
+                </Button>
+              )}
               {period && isConciliated && !isClosed && (
                 <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
                   <Lock className="h-4 w-4" /> Fechar Período

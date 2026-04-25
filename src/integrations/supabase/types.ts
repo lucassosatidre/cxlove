@@ -1574,6 +1574,37 @@ export type Database = {
           taxa: number
         }[]
       }
+      get_audit_match_breakdown: {
+        Args: { p_period_id: string }
+        Returns: {
+          bruto_vendido: number
+          categoria: string
+          lag_medio_dias: number
+          liquido_vendido: number
+          primeira_data_dep: string
+          sale_date: string
+          status: string
+          taxa_declarada: number
+          taxa_efetiva: number
+          total_depositos: number
+          total_recebido: number
+          total_vendas: number
+          ultima_data_dep: string
+        }[]
+      }
+      get_audit_match_detail: {
+        Args: { p_categoria: string; p_period_id: string; p_sale_date: string }
+        Returns: {
+          data: string
+          descricao: string
+          doc: string
+          hora: string
+          match_reason: string
+          match_status: string
+          source: string
+          valor: number
+        }[]
+      }
       get_audit_period_deposits: {
         Args: { p_period_id: string }
         Returns: {
