@@ -32,6 +32,8 @@ export type Database = {
           match_reason: string | null
           match_status: string
           matched: boolean
+          matched_adjacente_amount: number | null
+          matched_competencia_amount: number | null
         }
         Insert: {
           amount: number
@@ -50,6 +52,8 @@ export type Database = {
           match_reason?: string | null
           match_status?: string
           matched?: boolean
+          matched_adjacente_amount?: number | null
+          matched_competencia_amount?: number | null
         }
         Update: {
           amount?: number
@@ -68,6 +72,8 @@ export type Database = {
           match_reason?: string | null
           match_status?: string
           matched?: boolean
+          matched_adjacente_amount?: number | null
+          matched_competencia_amount?: number | null
         }
         Relationships: [
           {
