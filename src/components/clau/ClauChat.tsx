@@ -175,7 +175,6 @@ export default function ClauChat() {
                 ))}
               </SelectContent>
             </Select>
-          <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={() => setShowHistory(!showHistory)} title="Histórico">
               <History className="w-4 h-4" />
             </Button>
