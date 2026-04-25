@@ -538,6 +538,7 @@ export type Database = {
           id: string
           is_pinned: boolean | null
           message_count: number | null
+          model: string | null
           summary: string | null
           title: string | null
           total_tokens_used: number | null
@@ -550,6 +551,7 @@ export type Database = {
           id?: string
           is_pinned?: boolean | null
           message_count?: number | null
+          model?: string | null
           summary?: string | null
           title?: string | null
           total_tokens_used?: number | null
@@ -562,6 +564,7 @@ export type Database = {
           id?: string
           is_pinned?: boolean | null
           message_count?: number | null
+          model?: string | null
           summary?: string | null
           title?: string | null
           total_tokens_used?: number | null
