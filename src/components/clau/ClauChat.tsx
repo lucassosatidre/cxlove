@@ -162,6 +162,20 @@ export default function ClauChat() {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Select value={model} onValueChange={setModel} disabled={loading}>
+              <SelectTrigger className="h-8 w-[130px] text-xs" title="Modelo da Clau">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODEL_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    <span className="font-medium">{o.label}</span>
+                    <span className="text-muted-foreground ml-1">· {o.hint}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          <div className="flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={() => setShowHistory(!showHistory)} title="Histórico">
               <History className="w-4 h-4" />
             </Button>
