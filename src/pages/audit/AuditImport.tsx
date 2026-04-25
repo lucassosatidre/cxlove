@@ -305,7 +305,6 @@ export default function AuditImport() {
 
 function ImportCard({
   type, highlight, disabled, existingImports, onImport,
-  onAskReimportMaquinona, confirmingReimportMaquinona, onCancelReimportMaquinona,
   onRemove, removingId, onAfterImport,
 }: {
   type: FileType;
@@ -313,9 +312,6 @@ function ImportCard({
   disabled: boolean;
   existingImports: AuditImport[];
   onImport: (file: File) => Promise<{ description: string }>;
-  onAskReimportMaquinona: () => void;
-  confirmingReimportMaquinona: boolean;
-  onCancelReimportMaquinona: () => void;
   onRemove: (importId: string) => Promise<void>;
   removingId: string | null;
   onAfterImport: () => Promise<void>;
