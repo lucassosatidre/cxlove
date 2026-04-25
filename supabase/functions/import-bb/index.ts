@@ -108,8 +108,45 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Frontend sends the raw matrix (header=1). Drop the header row.
-    const dataRows = rows.slice(1).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
+    // Detect format: legacy (6 cols: Data | Lançamento | Detalhes | Doc | Valor C/D | Tipo)
+    // vs new (11 cols: Data | observacao | Data balancete | Ag.Origem | Lote | NumDoc | CodHist | Historico | Valor | Inf C/D | Detalhamento)
+    // Find header row by looking for cells containing 'data' AND 'histor' (new format)
+    // or 'data' AND 'lan' (legacy format)
+    let headerIndex = -1;
+    let isNewFormat = false;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const r = rows[i];
+      if (!r || !Array.isArray(r)) continue;
+      const cells = r.map((c: any) => String(c ?? '').toLowerCase().trim());
+      const hasData = cells.some((c) => c === 'data' || c.startsWith('data '));
+      if (!hasData) continue;
+      const hasHistorico = cells.some((c) => c.includes('histor'));
+      const hasLancamento = cells.some((c) => c.includes('lanca') || c.includes('lança'));
+      if (hasHistorico) {
+        headerIndex = i;
+        isNewFormat = true;
+        break;
+      }
+      if (hasLancamento) {
+        headerIndex = i;
+        isNewFormat = false;
+        break;
+      }
+    }
+    // Fallback: legacy format starts at row 1 (skip header at row 0)
+    if (headerIndex < 0) {
+      headerIndex = 0;
+      isNewFormat = false;
+    }
+
+    // Column mapping
+    const COL = isNewFormat
+      ? { date: 0, desc: 7, detail: 10, doc: 5, value: 8, cd: 9, tipo: -1 }
+      : { date: 0, desc: 1, detail: 2, doc: 3, value: 4, cd: -1, tipo: 5 };
+
+    const dataRows = rows
+      .slice(headerIndex + 1)
+      .filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
     const totalRows = dataRows.length;
 
     const { data: importRec, error: importErr } = await supabase
@@ -132,25 +169,47 @@ Deno.serve(async (req) => {
     const breakdown: Record<string, number> = { alelo: 0, ticket: 0, pluxee: 0, vr: 0, brendi: 0, outro: 0 };
 
     for (const r of dataRows) {
-      const depositDate = parseDateBR(r[0]);
-      const description = r[1] != null ? String(r[1]).trim() : '';
-      const detail = r[2] != null ? String(r[2]).trim() : '';
-      const docNumber = r[3] != null ? String(r[3]).trim() : '';
-      const valueParsed = parseBBValue(r[4]);
-      const tipo = r[5] != null ? String(r[5]).trim() : '';
+      const depositDate = parseDateBR(r[COL.date]);
+      const description = r[COL.desc] != null ? String(r[COL.desc]).trim() : '';
+      const detail = COL.detail >= 0 && r[COL.detail] != null ? String(r[COL.detail]).trim() : '';
+      const docNumber = COL.doc >= 0 && r[COL.doc] != null ? String(r[COL.doc]).trim() : '';
+      const tipo = COL.tipo >= 0 && r[COL.tipo] != null ? String(r[COL.tipo]).trim() : '';
+      const cdInf = COL.cd >= 0 && r[COL.cd] != null ? String(r[COL.cd]).trim().toUpperCase() : '';
+
+      let valueParsed: { amount: number; isCredit: boolean } | null;
+      if (isNewFormat) {
+        const raw = r[COL.value];
+        if (raw == null || raw === '') {
+          valueParsed = null;
+        } else {
+          const n = typeof raw === 'number'
+            ? raw
+            : Number(String(raw).replace(/\./g, '').replace(',', '.'));
+          if (!isFinite(n)) {
+            valueParsed = null;
+          } else {
+            valueParsed = { amount: Math.abs(n), isCredit: cdInf === 'C' || (cdInf === '' && n >= 0) };
+          }
+        }
+      } else {
+        valueParsed = parseBBValue(r[COL.value]);
+      }
 
       if (!depositDate || !description) continue;
-      if (/saldo anterior|saldo do dia|saldo/i.test(description)) continue;
+      if (/saldo anterior|saldo do dia|^saldo$/i.test(description)) continue;
       if (!valueParsed) continue;
 
       const isEntrada = /entrada/i.test(tipo);
-      if (!isEntrada && !valueParsed.isCredit) {
-        skippedDebits++;
-        continue;
+      if (isNewFormat) {
+        if (!valueParsed.isCredit) { skippedDebits++; continue; }
+      } else {
+        if (!isEntrada && !valueParsed.isCredit) { skippedDebits++; continue; }
       }
       if (valueParsed.amount <= 0) continue;
 
-      const category = categorizeBB(detail);
+      // Categorization: new format uses Detalhamento Hist. (detail); legacy uses detail too
+      const categorizationSource = detail || description;
+      const category = categorizeBB(categorizationSource);
       breakdown[category] = (breakdown[category] ?? 0) + 1;
 
       deposits.push({
