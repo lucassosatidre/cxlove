@@ -102,11 +102,12 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (!['aberto', 'importado'].includes(period.status)) {
-      return new Response(JSON.stringify({ error: `Período está '${period.status}' e não permite importação` }), {
+    if (period.status === 'fechado') {
+      return new Response(JSON.stringify({ error: 'Período fechado. Reabra antes de adicionar extratos.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const wasConciliado = period.status === 'conciliado';
 
     // Detect format: legacy (6 cols: Data | Lançamento | Detalhes | Doc | Valor C/D | Tipo)
     // vs new (11 cols: Data | observacao | Data balancete | Ag.Origem | Lote | NumDoc | CodHist | Historico | Valor | Inf C/D | Detalhamento)
