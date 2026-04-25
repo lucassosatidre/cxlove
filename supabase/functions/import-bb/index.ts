@@ -275,6 +275,13 @@ Deno.serve(async (req) => {
 
     if (period.status === 'aberto') {
       await supabase.from('audit_periods').update({ status: 'importado' }).eq('id', audit_period_id);
+    } else if (wasConciliado) {
+      // Reset status: novos depósitos exigem reconciliação
+      await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
+      await supabase.from('audit_voucher_matches').delete().eq('audit_period_id', audit_period_id);
+      await supabase.from('audit_periods')
+        .update({ status: 'importado', updated_at: new Date().toISOString() })
+        .eq('id', audit_period_id);
     }
 
     return new Response(JSON.stringify({
