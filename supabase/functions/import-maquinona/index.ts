@@ -120,16 +120,22 @@ Deno.serve(async (req) => {
     }
 
     const { data: period, error: periodErr } = await supabase
-      .from('audit_periods').select('id,status').eq('id', audit_period_id).maybeSingle();
+      .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
     if (periodErr || !period) {
       return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (!['aberto', 'importado'].includes(period.status)) {
-      return new Response(JSON.stringify({ error: `Período está '${period.status}' e não permite importação` }), {
+    if (period.status === 'fechado') {
+      return new Response(JSON.stringify({ error: `Período está 'fechado' e não permite importação. Reabra antes.` }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+    // Se o período já foi conciliado, limpar matches anteriores e voltar para 'importado'
+    if (period.status === 'conciliado') {
+      await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
+      await supabase.from('audit_voucher_matches').delete().eq('audit_period_id', audit_period_id);
+      await supabase.from('audit_periods').update({ status: 'importado' }).eq('id', audit_period_id);
     }
 
     const totalRows = rows.length;
@@ -161,9 +167,14 @@ Deno.serve(async (req) => {
       const payment = String(pick(r, 'Metodo de pagamento', 'Método de pagamento') ?? '').trim();
       const brand = String(pick(r, 'Bandeira') ?? '').trim().toUpperCase();
 
+      const saleDateStr = parseDateBR(pick(r, 'Data da venda')) ?? new Date().toISOString().slice(0, 10);
+      // Calcula se a venda pertence ao mês de competência do período
+      const [yStr, mStr] = saleDateStr.split('-');
+      const isCompetencia = Number(mStr) === period.month && Number(yStr) === period.year;
+
       txs.push({
         audit_period_id,
-        sale_date: parseDateBR(pick(r, 'Data da venda')) ?? new Date().toISOString().slice(0, 10),
+        sale_date: saleDateStr,
         sale_time: parseTime(pick(r, 'Hora da venda')),
         payment_method: payment,
         brand: brand || null,
@@ -177,6 +188,7 @@ Deno.serve(async (req) => {
         expected_deposit_date: parseDateBR(pick(r, 'Previsao de recebimento', 'Previsão de recebimento')),
         nsu: pick(r, 'NSU') ? String(pick(r, 'NSU')).trim() : null,
         deposit_group: calcDepositGroup(payment, brand),
+        is_competencia: isCompetencia,
       });
     }
 

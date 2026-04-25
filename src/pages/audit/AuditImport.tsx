@@ -43,14 +43,21 @@ const CARD_META: Record<FileType, { title: string; functionName: string; tip: Re
     functionName: 'import-maquinona',
     tip: (
       <>
-        💡 <strong>Importe APENAS o extrato do mês de competência</strong> (ex: para auditar Março, importe só Março).
-        Vendas de outros meses não devem ser misturadas aqui. Re-importar substitui os dados anteriores.
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        <span className="text-muted-foreground/80">
+          Apenas as vendas do mês de competência entram no <strong>Vendido</strong> do dashboard.
+          As vendas adjacentes servem apenas para o sistema casar corretamente os depósitos bancários
+          (vendas de fim de mês que recebem no mês seguinte).
+        </span>
         <br />
         <span className="text-muted-foreground/80">Como exportar: Portal iFood → Financeiro → Relatório de Transações → Exportar em xlsx.</span>
       </>
     ),
     icon: FileSpreadsheet,
-    multi: false,
+    multi: true,
   },
   cresol: {
     title: 'Cresol (Extrato iFood)',
@@ -141,7 +148,6 @@ export default function AuditImport() {
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [loading, setLoading] = useState(true);
-  const [confirmReimportMaquinona, setConfirmReimportMaquinona] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   const backUrl = useMemo(() => {
@@ -283,9 +289,6 @@ export default function AuditImport() {
             disabled={!period}
             existingImports={importsByType[t]}
             onImport={(file) => doImport(t, file)}
-            onAskReimportMaquinona={() => setConfirmReimportMaquinona(true)}
-            confirmingReimportMaquinona={t === 'maquinona' && confirmReimportMaquinona}
-            onCancelReimportMaquinona={() => setConfirmReimportMaquinona(false)}
             onRemove={removeImport}
             removingId={removingId}
             onAfterImport={async () => { if (period) await refresh(period.id); }}
@@ -302,7 +305,6 @@ export default function AuditImport() {
 
 function ImportCard({
   type, highlight, disabled, existingImports, onImport,
-  onAskReimportMaquinona, confirmingReimportMaquinona, onCancelReimportMaquinona,
   onRemove, removingId, onAfterImport,
 }: {
   type: FileType;
@@ -310,9 +312,6 @@ function ImportCard({
   disabled: boolean;
   existingImports: AuditImport[];
   onImport: (file: File) => Promise<{ description: string }>;
-  onAskReimportMaquinona: () => void;
-  confirmingReimportMaquinona: boolean;
-  onCancelReimportMaquinona: () => void;
   onRemove: (importId: string) => Promise<void>;
   removingId: string | null;
   onAfterImport: () => Promise<void>;
@@ -392,20 +391,13 @@ function ImportCard({
       toast.error('Selecione ao menos um arquivo .xlsx');
       return;
     }
-    if (type === 'maquinona' && existingImports.length > 0) {
-      onAskReimportMaquinona();
-    } else {
-      runImport();
-    }
+    runImport();
   };
 
   const buttonLabel = (() => {
     if (uploading) return 'Processando...';
-    if (type === 'maquinona') {
-      return existingImports.length > 0 ? 'Re-importar Maquinona' : 'Importar Maquinona';
-    }
     const n = files.length;
-    const base = type === 'cresol' ? 'Cresol' : 'BB';
+    const base = type === 'cresol' ? 'Cresol' : type === 'bb' ? 'BB' : 'Maquinona';
     if (existingImports.length > 0) {
       return n > 1 ? `Adicionar ${n} extratos ${base}` : `Adicionar extrato ${base}`;
     }
@@ -531,23 +523,6 @@ function ImportCard({
         </CardContent>
       </Card>
 
-      {/* Maquinona re-import confirmation */}
-      <AlertDialog open={confirmingReimportMaquinona} onOpenChange={(o) => !o && onCancelReimportMaquinona()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Re-importar Maquinona?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Já existe uma importação Maquinona para este período. Re-importar vai preservar os registros existentes (deduplicação automática) e adicionar apenas os novos. Deseja continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { onCancelReimportMaquinona(); runImport(); }}>
-              Continuar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Remove file confirmation */}
       <AlertDialog open={!!confirmRemove} onOpenChange={(o) => !o && setConfirmRemove(null)}>
