@@ -302,24 +302,25 @@ export default function AuditImport() {
 function ImportCard({
   type, highlight, disabled, existingImports, onImport,
   onAskReimportMaquinona, confirmingReimportMaquinona, onCancelReimportMaquinona,
-  onRemove, removingId,
+  onRemove, removingId, onAfterImport,
 }: {
   type: FileType;
   highlight: boolean;
   disabled: boolean;
   existingImports: AuditImport[];
-  onImport: (file: File) => Promise<void>;
+  onImport: (file: File) => Promise<{ description: string }>;
   onAskReimportMaquinona: () => void;
   confirmingReimportMaquinona: boolean;
   onCancelReimportMaquinona: () => void;
   onRemove: (importId: string) => Promise<void>;
   removingId: string | null;
+  onAfterImport: () => Promise<void>;
 }) {
   const meta = CARD_META[type];
   const Icon = meta.icon;
   const cardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -330,35 +331,66 @@ function ImportCard({
     }
   }, [highlight]);
 
-  const handleFile = (f: File | null) => {
-    if (!f) return;
-    if (!f.name.toLowerCase().endsWith('.xlsx')) {
-      toast.error('Arquivo inválido. Selecione um arquivo .xlsx');
-      return;
+  const handleSelect = (selected: File[]) => {
+    const xlsx = selected.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = selected.length - xlsx.length;
+    if (invalid > 0) {
+      toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
     }
-    setFile(f);
+    if (xlsx.length === 0) return;
+    if (meta.multi) {
+      setFiles(prev => [...prev, ...xlsx]);
+    } else {
+      setFiles([xlsx[0]]);
+    }
+  };
+
+  const removeStaged = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
   const runImport = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setUploading(true);
+    let success = 0;
+    const errors: string[] = [];
+    let lastDescription = '';
     try {
-      await onImport(file);
-      setFile(null);
+      for (const f of files) {
+        try {
+          const res = await onImport(f);
+          success++;
+          lastDescription = res.description;
+        } catch (e: any) {
+          errors.push(`${f.name}: ${e?.message ?? 'erro inesperado'}`);
+        }
+      }
+      if (success > 0) {
+        toast.success(`✓ ${success} arquivo(s) importado(s)`, {
+          description: errors.length > 0
+            ? `${errors.length} falharam — verifique o console`
+            : (files.length === 1 ? lastDescription : undefined),
+        });
+      }
+      if (errors.length > 0) {
+        console.error('[AuditImport] Erros:', errors);
+        if (success === 0) {
+          toast.error('Falha na importação', { description: errors[0] });
+        }
+      }
+      setFiles([]);
       if (inputRef.current) inputRef.current.value = '';
-    } catch {
-      // toast already shown
+      await onAfterImport();
     } finally {
       setUploading(false);
     }
   };
 
   const onClickImport = () => {
-    if (!file) {
-      toast.error('Selecione um arquivo .xlsx');
+    if (files.length === 0) {
+      toast.error('Selecione ao menos um arquivo .xlsx');
       return;
     }
-    // Maquinona: confirm re-import (replaces). Cresol/BB: just add.
     if (type === 'maquinona' && existingImports.length > 0) {
       onAskReimportMaquinona();
     } else {
@@ -371,9 +403,12 @@ function ImportCard({
     if (type === 'maquinona') {
       return existingImports.length > 0 ? 'Re-importar Maquinona' : 'Importar Maquinona';
     }
-    return existingImports.length > 0
-      ? `Adicionar outro extrato ${type === 'cresol' ? 'Cresol' : 'BB'}`
-      : `Importar ${type === 'cresol' ? 'Cresol' : 'BB'}`;
+    const n = files.length;
+    const base = type === 'cresol' ? 'Cresol' : 'BB';
+    if (existingImports.length > 0) {
+      return n > 1 ? `Adicionar ${n} extratos ${base}` : `Adicionar extrato ${base}`;
+    }
+    return n > 1 ? `Importar ${n} extratos ${base}` : `Importar ${base}`;
   })();
 
   return (
