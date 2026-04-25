@@ -287,8 +287,34 @@ export default function AuditDashboard() {
     }
   };
 
-  const buildPdfData = (): AuditPdfData => {
-    const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
+  const buildPdfData = async (): Promise<AuditPdfData> => {
+    // Detalhamento diário iFood: vendas competência + somente depósitos matched
+    const { data: dailyDetail } = await supabase
+      .rpc('get_audit_ifood_daily_detail' as any, { p_period_id: period!.id });
+
+    const dailyRows = ((dailyDetail as Array<{
+      match_date: string;
+      vendas_count: number;
+      bruto: number;
+      liquido: number;
+      deposito: number;
+      diferenca: number;
+      status: string;
+    }>) ?? []).map(r => ({
+      match_date: r.match_date,
+      transaction_count: Number(r.vendas_count || 0),
+      gross: Number(r.bruto || 0),
+      expected_amount: Number(r.liquido || 0),
+      deposited_amount: Number(r.deposito || 0),
+      difference: Number(r.diferenca || 0),
+      status: r.status,
+    }));
+
+    // Recebido iFood matched (Cresol)
+    const recebidoCresol = depositRows
+      .filter(d => d.bank === 'cresol' && d.match_status === 'matched')
+      .reduce((s, d) => s + Number(d.total_amount || 0), 0);
+
     return {
       periodLabel: makePeriodLabel(month, year),
       periodFileTag: periodFileTag(month, year),
@@ -301,13 +327,13 @@ export default function AuditDashboard() {
       },
       criticalVouchers: voucherMatches.filter(v => v.status === 'critico'),
       ifoodSummary: {
-        bruto: totals.bruto,
-        taxaDeclarada: totals.taxa,
-        liquidoEsperado: dailyMatches.reduce((s, m) => s + Number(m.expected_amount), 0),
-        depositoCresol: dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0),
-        diferenca: ifoodGap,
+        bruto: totals.brutoIfood,
+        taxaDeclarada: Math.max(totals.brutoIfood - totals.liquidoIfood, 0),
+        liquidoEsperado: totals.liquidoIfood,
+        depositoCresol: recebidoCresol,
+        diferenca: recebidoCresol - totals.liquidoIfood,
       },
-      dailyRows: dailyMatches,
+      dailyRows,
       voucherRows: voucherMatches,
     };
   };
@@ -316,7 +342,8 @@ export default function AuditDashboard() {
     if (!canExport) return;
     setExportingPdf(true);
     try {
-      generateAuditPdf('completo', buildPdfData());
+      const pdfData = await buildPdfData();
+      generateAuditPdf('completo', pdfData);
       toast({ title: '✓ Relatório exportado' });
     } catch (e: any) {
       toast({ title: 'Erro ao gerar PDF', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
