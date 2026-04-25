@@ -513,11 +513,9 @@ export default function AuditDashboard() {
   const sumDeposits = (filterFn: (d: typeof depositRows[number]) => boolean) =>
     depositRows.filter(filterFn).reduce((s, d) => s + Number(d.total_amount || 0), 0);
 
-  // iFood: matched usa SOMENTE valor de competência; fora_periodo inclui sobras adjacentes
-  const ifoodTotalDeposits = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood');
+  // iFood: matched usa SOMENTE valor de competência; adjacente vem do state ifoodAdjacente
   const ifoodMatched = ifoodCompetencia;
   const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
-  // (ifoodAdjacente já vem do state, não derivamos de depositRows aqui)
 
   const voucherDepBy = (company: string, status: string) =>
     sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
