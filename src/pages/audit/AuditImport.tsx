@@ -43,14 +43,21 @@ const CARD_META: Record<FileType, { title: string; functionName: string; tip: Re
     functionName: 'import-maquinona',
     tip: (
       <>
-        💡 <strong>Importe APENAS o extrato do mês de competência</strong> (ex: para auditar Março, importe só Março).
-        Vendas de outros meses não devem ser misturadas aqui. Re-importar substitui os dados anteriores.
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        <span className="text-muted-foreground/80">
+          Apenas as vendas do mês de competência entram no <strong>Vendido</strong> do dashboard.
+          As vendas adjacentes servem apenas para o sistema casar corretamente os depósitos bancários
+          (vendas de fim de mês que recebem no mês seguinte).
+        </span>
         <br />
         <span className="text-muted-foreground/80">Como exportar: Portal iFood → Financeiro → Relatório de Transações → Exportar em xlsx.</span>
       </>
     ),
     icon: FileSpreadsheet,
-    multi: false,
+    multi: true,
   },
   cresol: {
     title: 'Cresol (Extrato iFood)',
