@@ -531,6 +531,107 @@ export type Database = {
           },
         ]
       }
+      clau_conversations: {
+        Row: {
+          app_origin: string
+          created_at: string | null
+          id: string
+          is_pinned: boolean | null
+          message_count: number | null
+          summary: string | null
+          title: string | null
+          total_tokens_used: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          app_origin?: string
+          created_at?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          message_count?: number | null
+          summary?: string | null
+          title?: string | null
+          total_tokens_used?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          app_origin?: string
+          created_at?: string | null
+          id?: string
+          is_pinned?: boolean | null
+          message_count?: number | null
+          summary?: string | null
+          title?: string | null
+          total_tokens_used?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      clau_messages: {
+        Row: {
+          content: string
+          context_snapshot: Json | null
+          conversation_id: string
+          created_at: string | null
+          id: string
+          role: string
+          tokens_used: number | null
+        }
+        Insert: {
+          content: string
+          context_snapshot?: Json | null
+          conversation_id: string
+          created_at?: string | null
+          id?: string
+          role: string
+          tokens_used?: number | null
+        }
+        Update: {
+          content?: string
+          context_snapshot?: Json | null
+          conversation_id?: string
+          created_at?: string | null
+          id?: string
+          role?: string
+          tokens_used?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clau_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "clau_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clau_project_memory: {
+        Row: {
+          app_origin: string
+          content: string
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          app_origin?: string
+          content?: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          app_origin?: string
+          content?: string
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       daily_closings: {
         Row: {
           closing_date: string
