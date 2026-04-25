@@ -166,7 +166,7 @@ export default function AuditDashboard() {
       supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
-      supabase.from('audit_bank_deposits').select('matched_competencia_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood').eq('match_status', 'matched'),
+      supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
     ]);
     setImports((imps as AuditImport[]) ?? []);
 
