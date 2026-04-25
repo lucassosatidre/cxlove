@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: convModel,
         max_tokens: 2000,
         system: systemPrompt,
         messages: messages,
