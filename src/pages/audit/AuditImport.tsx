@@ -211,32 +211,26 @@ export default function AuditImport() {
   }
 
   const doImport = async (type: FileType, file: File) => {
-    if (!period) return;
-    try {
-      const { rows, error: parseErr } = await parseXlsxFile(file, type);
-      if (parseErr) throw new Error(parseErr);
+    if (!period) throw new Error('Sem período ativo');
+    const { rows, error: parseErr } = await parseXlsxFile(file, type);
+    if (parseErr) throw new Error(parseErr);
 
-      const { data, error } = await supabase.functions.invoke(CARD_META[type].functionName, {
-        body: { audit_period_id: period.id, rows, file_name: file.name },
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha na importação');
+    const { data, error } = await supabase.functions.invoke(CARD_META[type].functionName, {
+      body: { audit_period_id: period.id, rows, file_name: file.name },
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.success) throw new Error(data?.error || 'Falha na importação');
 
-      let description = '';
-      if (type === 'maquinona') {
-        description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
-      } else if (type === 'cresol') {
-        description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
-      } else if (type === 'bb') {
-        const b = data.breakdown_by_category ?? {};
-        description = `${data.imported_rows} créditos: ${b.alelo ?? 0} Alelo, ${b.ticket ?? 0} Ticket, ${b.pluxee ?? 0} Pluxee, ${b.vr ?? 0} VR, ${b.brendi ?? 0} Brendi, ${b.outro ?? 0} outros.`;
-      }
-      toast.success('✓ Importação concluída', { description });
-      await refresh(period.id);
-    } catch (e: any) {
-      toast.error('Erro na importação', { description: e?.message ?? 'Erro inesperado' });
-      throw e;
+    let description = '';
+    if (type === 'maquinona') {
+      description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
+    } else if (type === 'cresol') {
+      description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
+    } else if (type === 'bb') {
+      const b = data.breakdown_by_category ?? {};
+      description = `${data.imported_rows} créditos: ${b.alelo ?? 0} Alelo, ${b.ticket ?? 0} Ticket, ${b.pluxee ?? 0} Pluxee, ${b.vr ?? 0} VR, ${b.brendi ?? 0} Brendi, ${b.outro ?? 0} outros.`;
     }
+    return { description };
   };
 
   const removeImport = async (importId: string) => {
