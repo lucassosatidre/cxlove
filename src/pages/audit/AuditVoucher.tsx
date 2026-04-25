@@ -58,6 +58,7 @@ export default function AuditVoucher() {
   const periodId = params.get('period');
   const [matches, setMatches] = useState<VoucherMatch[]>([]);
   const [details, setDetails] = useState<Record<string, Detail>>({});
+  const [adjByCompany, setAdjByCompany] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [periodLabel, setPeriodLabel] = useState('');
   const [periodMY, setPeriodMY] = useState<{ month: number; year: number } | null>(null);
@@ -71,7 +72,7 @@ export default function AuditVoucher() {
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
         supabase.from('audit_voucher_matches').select('*').eq('audit_period_id', periodId),
         supabase.from('audit_card_transactions').select('deposit_group,sale_date,gross_amount,brand').eq('audit_period_id', periodId).in('deposit_group', companies).order('sale_date'),
-        supabase.from('audit_bank_deposits').select('category,deposit_date,amount,detail').eq('audit_period_id', periodId).eq('bank', 'bb').in('category', companies).order('deposit_date'),
+        supabase.from('audit_bank_deposits').select('category,deposit_date,amount,detail,match_status,matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'bb').in('category', companies).order('deposit_date'),
       ]);
 
       if (period) {
@@ -83,7 +84,8 @@ export default function AuditVoucher() {
       setMatches((m as any[]) ?? []);
 
       const det: Record<string, Detail> = {};
-      for (const c of companies) det[c] = { sales: [], deposits: [] };
+      const adj: Record<string, number> = {};
+      for (const c of companies) { det[c] = { sales: [], deposits: [] }; adj[c] = 0; }
       for (const s of sales ?? []) {
         const k = (s as any).deposit_group;
         if (det[k]) det[k].sales.push({ sale_date: (s as any).sale_date, gross_amount: Number((s as any).gross_amount), brand: (s as any).brand });
@@ -91,8 +93,15 @@ export default function AuditVoucher() {
       for (const d of deps ?? []) {
         const k = (d as any).category;
         if (det[k]) det[k].deposits.push({ deposit_date: (d as any).deposit_date, amount: Number((d as any).amount), detail: (d as any).detail });
+        // Adjacente = matched_adjacente_amount + (todo amount de fora_periodo)
+        const dd: any = d;
+        if (adj[k] !== undefined) {
+          adj[k] += Number(dd.matched_adjacente_amount || 0);
+          if (dd.match_status === 'fora_periodo') adj[k] += Number(dd.amount || 0) - Number(dd.matched_adjacente_amount || 0);
+        }
       }
       setDetails(det);
+      setAdjByCompany(adj);
       setLoading(false);
     })();
   }, [periodId, isAdmin]);
@@ -190,8 +199,11 @@ export default function AuditVoucher() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Vendido:</span><span className="font-medium">{fmt(Number(m.sold_amount))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Recebido:</span><span className="font-medium">{fmt(Number(m.deposited_amount))}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Vendido (competência):</span><span className="font-medium">{fmt(Number(m.sold_amount))}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Recebido competência:</span><span className="font-medium">{fmt(Number(m.deposited_amount))}</span></div>
+                  {adjByCompany[m.company] > 0 && (
+                    <div className="flex justify-between text-xs"><span className="text-muted-foreground">ℹ Recebido outras comp.:</span><span className="text-muted-foreground">{fmt(adjByCompany[m.company])}</span></div>
+                  )}
                   <div className="flex justify-between"><span className="text-muted-foreground">Diferença:</span><span className={`font-semibold ${Number(m.difference) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(m.difference))}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Taxa efetiva:</span><span className={`font-semibold ${Number(m.effective_tax_rate) > 5 ? 'text-red-600 dark:text-red-400' : ''}`}>{Number(m.effective_tax_rate).toFixed(2).replace('.', ',')}%</span></div>
                   <div className="text-xs text-muted-foreground pt-1">{m.sold_count} vendas / {m.deposit_count} depósitos</div>
