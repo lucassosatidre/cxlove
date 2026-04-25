@@ -5,9 +5,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageCircle, Send, Plus, Pin, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
+
+const MODEL_OPTIONS = [
+  { value: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: 'Rápido/barato' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', hint: 'Equilibrado' },
+  { value: 'claude-opus-4-7', label: 'Opus 4.7', hint: 'Mais capaz' },
+];
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 type Message = {
   id?: string;
