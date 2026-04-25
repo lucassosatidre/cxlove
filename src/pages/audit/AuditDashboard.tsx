@@ -177,9 +177,10 @@ export default function AuditDashboard() {
     const txCount = Number(t.total_count ?? 0);
     const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0);
 
-    const depRows = (depsRpc as { category: string | null; total_amount: number; match_status?: string }[]) ?? [];
+    const depRows = (depsRpc as { category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]) ?? [];
+    // "Recebido" agora considera SÓ depósitos matched (competência do período)
     const recebido = depRows
-      .filter(d => ['ifood', 'alelo', 'ticket', 'pluxee', 'vr'].includes(d.category ?? ''))
+      .filter(d => d.match_status === 'matched')
       .reduce((s, d) => s + Number(d.total_amount || 0), 0);
     const custoReal = Math.max(bruto - recebido, 0);
     const taxaEfetiva = bruto > 0 ? (custoReal / bruto) * 100 : 0;
@@ -189,6 +190,7 @@ export default function AuditDashboard() {
       txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
       liquidoIfood, brutoIfood,
     });
+    setDepositRows(depRows);
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
