@@ -289,9 +289,6 @@ export default function AuditImport() {
             disabled={!period}
             existingImports={importsByType[t]}
             onImport={(file) => doImport(t, file)}
-            onAskReimportMaquinona={() => setConfirmReimportMaquinona(true)}
-            confirmingReimportMaquinona={t === 'maquinona' && confirmReimportMaquinona}
-            onCancelReimportMaquinona={() => setConfirmReimportMaquinona(false)}
             onRemove={removeImport}
             removingId={removingId}
             onAfterImport={async () => { if (period) await refresh(period.id); }}
