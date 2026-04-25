@@ -726,17 +726,17 @@ export default function AuditDashboard() {
                 return (
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido (matched):</span><span className="font-medium">{formatCurrency(recebidoMatched)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido competência:</span><span className="font-medium">{formatCurrency(recebidoMatched)}</span></div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Gap real:</span>
                       <span className={`font-semibold ${gap < -0.5 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span>
                     </div>
-                    {(ifoodFora > 0 || ifoodNaoId > 0) && (
+                    {(ifoodAdjacente > 0 || ifoodNaoId > 0) && (
                       <div className="pt-2 mt-1 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">
-                        {ifoodFora > 0 && (
+                        {ifoodAdjacente > 0 && (
                           <div className="flex justify-between">
-                            <span>ℹ Fora do período:</span>
-                            <span>{formatCurrency(ifoodFora)}</span>
+                            <span>ℹ Recebido outras comp.:</span>
+                            <span>{formatCurrency(ifoodAdjacente)}</span>
                           </div>
                         )}
                         {ifoodNaoId > 0 && (
@@ -744,6 +744,9 @@ export default function AuditDashboard() {
                             <span>⚠ Não identificado:</span>
                             <span className="text-red-600 dark:text-red-400">{formatCurrency(ifoodNaoId)}</span>
                           </div>
+                        )}
+                        {ifoodAdjacente > 0 && (
+                          <p className="italic pt-1">Parcelas de meses adjacentes (fev/abr) recebidas neste mês.</p>
                         )}
                       </div>
                     )}
