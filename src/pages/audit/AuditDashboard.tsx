@@ -665,19 +665,36 @@ export default function AuditDashboard() {
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">iFood (Cresol)</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              {totals.liquidoIfood === 0 && dailyMatches.length === 0 ? (
+              {totals.liquidoIfood === 0 && depositRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
               ) : (() => {
                 const liquidoEsperado = totals.liquidoIfood;
-                const recebidoCresol = dailyMatches.length > 0
-                  ? dailyMatches.reduce((s, m) => s + Number(m.deposited_amount), 0)
-                  : 0;
-                const gap = recebidoCresol - liquidoEsperado;
+                const recebidoMatched = ifoodMatched;
+                const gap = recebidoMatched - liquidoEsperado;
                 return (
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol:</span><span className="font-medium">{formatCurrency(recebidoCresol)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Gap:</span><span className={`font-semibold ${gap < 0 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido (matched):</span><span className="font-medium">{formatCurrency(recebidoMatched)}</span></div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Gap real:</span>
+                      <span className={`font-semibold ${gap < -0.5 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span>
+                    </div>
+                    {(ifoodFora > 0 || ifoodNaoId > 0) && (
+                      <div className="pt-2 mt-1 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">
+                        {ifoodFora > 0 && (
+                          <div className="flex justify-between">
+                            <span>ℹ Fora do período:</span>
+                            <span>{formatCurrency(ifoodFora)}</span>
+                          </div>
+                        )}
+                        {ifoodNaoId > 0 && (
+                          <div className="flex justify-between">
+                            <span>⚠ Não identificado:</span>
+                            <span className="text-red-600 dark:text-red-400">{formatCurrency(ifoodNaoId)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {gap < -0.5 && (
                       <p className="text-xs text-muted-foreground italic pt-1">⚠ Gap negativo indica custo oculto (ex: taxa de antecipação iFood).</p>
                     )}
@@ -701,10 +718,13 @@ export default function AuditDashboard() {
                     const v = voucherMatches.find(m => m.company === c);
                     if (!v) return <div key={c} className="rounded border p-2 opacity-50"><div className="font-semibold">{COMPANY_LABELS[c]}</div><div className="text-muted-foreground">—</div></div>;
                     const cls = v.status === 'critico' ? 'border-red-500 bg-red-500/5' : v.status === 'alerta' ? 'border-yellow-500/50 bg-yellow-500/5' : v.status === 'divergente' ? 'border-blue-500/50 bg-blue-500/5' : 'border-green-500/50 bg-green-500/5';
+                    const matched = voucherDepBy(c, 'matched');
+                    const fora = voucherDepBy(c, 'fora_periodo');
                     return (
-                      <div key={c} className={`rounded border p-2 ${cls}`}>
+                      <div key={c} className={`rounded border p-2 ${cls} space-y-0.5`}>
                         <div className="font-semibold">{COMPANY_LABELS[c]}</div>
-                        <div>Taxa: <strong>{Number(v.effective_tax_rate).toFixed(1)}%</strong></div>
+                        <div>Matched: <strong>{formatCurrency(matched)}</strong></div>
+                        {fora > 0 && <div className="text-muted-foreground">Fora: {formatCurrency(fora)}</div>}
                         <div className="text-muted-foreground uppercase">{v.status}</div>
                       </div>
                     );
