@@ -169,25 +169,47 @@ Deno.serve(async (req) => {
     const breakdown: Record<string, number> = { alelo: 0, ticket: 0, pluxee: 0, vr: 0, brendi: 0, outro: 0 };
 
     for (const r of dataRows) {
-      const depositDate = parseDateBR(r[0]);
-      const description = r[1] != null ? String(r[1]).trim() : '';
-      const detail = r[2] != null ? String(r[2]).trim() : '';
-      const docNumber = r[3] != null ? String(r[3]).trim() : '';
-      const valueParsed = parseBBValue(r[4]);
-      const tipo = r[5] != null ? String(r[5]).trim() : '';
+      const depositDate = parseDateBR(r[COL.date]);
+      const description = r[COL.desc] != null ? String(r[COL.desc]).trim() : '';
+      const detail = COL.detail >= 0 && r[COL.detail] != null ? String(r[COL.detail]).trim() : '';
+      const docNumber = COL.doc >= 0 && r[COL.doc] != null ? String(r[COL.doc]).trim() : '';
+      const tipo = COL.tipo >= 0 && r[COL.tipo] != null ? String(r[COL.tipo]).trim() : '';
+      const cdInf = COL.cd >= 0 && r[COL.cd] != null ? String(r[COL.cd]).trim().toUpperCase() : '';
+
+      let valueParsed: { amount: number; isCredit: boolean } | null;
+      if (isNewFormat) {
+        const raw = r[COL.value];
+        if (raw == null || raw === '') {
+          valueParsed = null;
+        } else {
+          const n = typeof raw === 'number'
+            ? raw
+            : Number(String(raw).replace(/\./g, '').replace(',', '.'));
+          if (!isFinite(n)) {
+            valueParsed = null;
+          } else {
+            valueParsed = { amount: Math.abs(n), isCredit: cdInf === 'C' || (cdInf === '' && n >= 0) };
+          }
+        }
+      } else {
+        valueParsed = parseBBValue(r[COL.value]);
+      }
 
       if (!depositDate || !description) continue;
-      if (/saldo anterior|saldo do dia|saldo/i.test(description)) continue;
+      if (/saldo anterior|saldo do dia|^saldo$/i.test(description)) continue;
       if (!valueParsed) continue;
 
       const isEntrada = /entrada/i.test(tipo);
-      if (!isEntrada && !valueParsed.isCredit) {
-        skippedDebits++;
-        continue;
+      if (isNewFormat) {
+        if (!valueParsed.isCredit) { skippedDebits++; continue; }
+      } else {
+        if (!isEntrada && !valueParsed.isCredit) { skippedDebits++; continue; }
       }
       if (valueParsed.amount <= 0) continue;
 
-      const category = categorizeBB(detail);
+      // Categorization: new format uses Detalhamento Hist. (detail); legacy uses detail too
+      const categorizationSource = detail || description;
+      const category = categorizeBB(categorizationSource);
       breakdown[category] = (breakdown[category] ?? 0) + 1;
 
       deposits.push({
