@@ -136,6 +136,7 @@ export default function AuditDashboard() {
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
   const [depositRows, setDepositRows] = useState<{ category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]>([]);
   const [ifoodCompetencia, setIfoodCompetencia] = useState(0);
+  const [ifoodAdjacente, setIfoodAdjacente] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
