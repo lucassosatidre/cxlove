@@ -108,8 +108,45 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Frontend sends the raw matrix (header=1). Drop the header row.
-    const dataRows = rows.slice(1).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
+    // Detect format: legacy (6 cols: Data | Lançamento | Detalhes | Doc | Valor C/D | Tipo)
+    // vs new (11 cols: Data | observacao | Data balancete | Ag.Origem | Lote | NumDoc | CodHist | Historico | Valor | Inf C/D | Detalhamento)
+    // Find header row by looking for cells containing 'data' AND 'histor' (new format)
+    // or 'data' AND 'lan' (legacy format)
+    let headerIndex = -1;
+    let isNewFormat = false;
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const r = rows[i];
+      if (!r || !Array.isArray(r)) continue;
+      const cells = r.map((c: any) => String(c ?? '').toLowerCase().trim());
+      const hasData = cells.some((c) => c === 'data' || c.startsWith('data '));
+      if (!hasData) continue;
+      const hasHistorico = cells.some((c) => c.includes('histor'));
+      const hasLancamento = cells.some((c) => c.includes('lanca') || c.includes('lança'));
+      if (hasHistorico) {
+        headerIndex = i;
+        isNewFormat = true;
+        break;
+      }
+      if (hasLancamento) {
+        headerIndex = i;
+        isNewFormat = false;
+        break;
+      }
+    }
+    // Fallback: legacy format starts at row 1 (skip header at row 0)
+    if (headerIndex < 0) {
+      headerIndex = 0;
+      isNewFormat = false;
+    }
+
+    // Column mapping
+    const COL = isNewFormat
+      ? { date: 0, desc: 7, detail: 10, doc: 5, value: 8, cd: 9, tipo: -1 }
+      : { date: 0, desc: 1, detail: 2, doc: 3, value: 4, cd: -1, tipo: 5 };
+
+    const dataRows = rows
+      .slice(headerIndex + 1)
+      .filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
     const totalRows = dataRows.length;
 
     const { data: importRec, error: importErr } = await supabase
