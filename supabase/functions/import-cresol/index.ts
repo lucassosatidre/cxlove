@@ -80,11 +80,12 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (!['aberto', 'importado'].includes(period.status)) {
-      return new Response(JSON.stringify({ error: `Período está '${period.status}' e não permite importação` }), {
+    if (period.status === 'fechado') {
+      return new Response(JSON.stringify({ error: 'Período fechado. Reabra antes de adicionar extratos.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const wasConciliado = period.status === 'conciliado';
 
     // Cresol export: header on row 9 (index 9), data starts row 10.
     // Frontend sends the raw matrix (header=1). Skip until row 10 if needed,
