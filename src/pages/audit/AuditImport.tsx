@@ -37,25 +37,55 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const CARD_META: Record<FileType, { title: string; functionName: string; tip: string; icon: any; multi: boolean }> = {
+const CARD_META: Record<FileType, { title: string; functionName: string; tip: React.ReactNode; icon: any; multi: boolean }> = {
   maquinona: {
     title: 'Maquinona (iFood Portal)',
     functionName: 'import-maquinona',
-    tip: '💡 Como exportar do Portal iFood: Financeiro > Relatório de Transações > Exportar em xlsx. Re-importar substitui os dados anteriores.',
+    tip: (
+      <>
+        💡 <strong>Importe APENAS o extrato do mês de competência</strong> (ex: para auditar Março, importe só Março).
+        Vendas de outros meses não devem ser misturadas aqui. Re-importar substitui os dados anteriores.
+        <br />
+        <span className="text-muted-foreground/80">Como exportar: Portal iFood → Financeiro → Relatório de Transações → Exportar em xlsx.</span>
+      </>
+    ),
     icon: FileSpreadsheet,
     multi: false,
   },
   cresol: {
     title: 'Cresol (Extrato iFood)',
     functionName: 'import-cresol',
-    tip: '💡 Importe o extrato do mês de competência + 1 mês após (ex: para Março, importe Março + Abril) para capturar recebimentos atrasados que correspondem a vendas do final do mês.',
+    tip: (
+      <>
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        Isso captura vendas que atravessam o mês:
+        <ul className="list-disc list-inside mt-1 space-y-0.5">
+          <li>Vendas de fim de Fev → caem em Mar (não contam para Março)</li>
+          <li>Vendas de fim de Mar → caem em Abr (contam para Março)</li>
+        </ul>
+        <span className="text-muted-foreground/80">O sistema classifica automaticamente cada depósito por competência.</span>
+      </>
+    ),
     icon: Landmark,
     multi: true,
   },
   bb: {
     title: 'Banco do Brasil (Vouchers)',
     functionName: 'import-bb',
-    tip: '💡 Vouchers (Pluxee, Ticket etc.) podem demorar até 10 dias para depositar. Importe o BB do mês + 1 mês para capturar recebimentos atrasados. Categorização Alelo/Ticket/Pluxee/VR/Brendi é automática.',
+    tip: (
+      <>
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        Vouchers (Pluxee, Ticket etc.) podem demorar até 10 dias para depositar; importar a janela completa evita falsos matches.
+        <br />
+        <span className="text-muted-foreground/80">Categorização Alelo/Ticket/Pluxee/VR/Brendi é automática e a classificação por competência também.</span>
+      </>
+    ),
     icon: Landmark,
     multi: true,
   },
@@ -181,32 +211,26 @@ export default function AuditImport() {
   }
 
   const doImport = async (type: FileType, file: File) => {
-    if (!period) return;
-    try {
-      const { rows, error: parseErr } = await parseXlsxFile(file, type);
-      if (parseErr) throw new Error(parseErr);
+    if (!period) throw new Error('Sem período ativo');
+    const { rows, error: parseErr } = await parseXlsxFile(file, type);
+    if (parseErr) throw new Error(parseErr);
 
-      const { data, error } = await supabase.functions.invoke(CARD_META[type].functionName, {
-        body: { audit_period_id: period.id, rows, file_name: file.name },
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha na importação');
+    const { data, error } = await supabase.functions.invoke(CARD_META[type].functionName, {
+      body: { audit_period_id: period.id, rows, file_name: file.name },
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.success) throw new Error(data?.error || 'Falha na importação');
 
-      let description = '';
-      if (type === 'maquinona') {
-        description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
-      } else if (type === 'cresol') {
-        description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
-      } else if (type === 'bb') {
-        const b = data.breakdown_by_category ?? {};
-        description = `${data.imported_rows} créditos: ${b.alelo ?? 0} Alelo, ${b.ticket ?? 0} Ticket, ${b.pluxee ?? 0} Pluxee, ${b.vr ?? 0} VR, ${b.brendi ?? 0} Brendi, ${b.outro ?? 0} outros.`;
-      }
-      toast.success('✓ Importação concluída', { description });
-      await refresh(period.id);
-    } catch (e: any) {
-      toast.error('Erro na importação', { description: e?.message ?? 'Erro inesperado' });
-      throw e;
+    let description = '';
+    if (type === 'maquinona') {
+      description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
+    } else if (type === 'cresol') {
+      description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
+    } else if (type === 'bb') {
+      const b = data.breakdown_by_category ?? {};
+      description = `${data.imported_rows} créditos: ${b.alelo ?? 0} Alelo, ${b.ticket ?? 0} Ticket, ${b.pluxee ?? 0} Pluxee, ${b.vr ?? 0} VR, ${b.brendi ?? 0} Brendi, ${b.outro ?? 0} outros.`;
     }
+    return { description };
   };
 
   const removeImport = async (importId: string) => {
@@ -264,6 +288,7 @@ export default function AuditImport() {
             onCancelReimportMaquinona={() => setConfirmReimportMaquinona(false)}
             onRemove={removeImport}
             removingId={removingId}
+            onAfterImport={async () => { if (period) await refresh(period.id); }}
           />
         ))}
 
@@ -278,24 +303,25 @@ export default function AuditImport() {
 function ImportCard({
   type, highlight, disabled, existingImports, onImport,
   onAskReimportMaquinona, confirmingReimportMaquinona, onCancelReimportMaquinona,
-  onRemove, removingId,
+  onRemove, removingId, onAfterImport,
 }: {
   type: FileType;
   highlight: boolean;
   disabled: boolean;
   existingImports: AuditImport[];
-  onImport: (file: File) => Promise<void>;
+  onImport: (file: File) => Promise<{ description: string }>;
   onAskReimportMaquinona: () => void;
   confirmingReimportMaquinona: boolean;
   onCancelReimportMaquinona: () => void;
   onRemove: (importId: string) => Promise<void>;
   removingId: string | null;
+  onAfterImport: () => Promise<void>;
 }) {
   const meta = CARD_META[type];
   const Icon = meta.icon;
   const cardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
@@ -306,35 +332,66 @@ function ImportCard({
     }
   }, [highlight]);
 
-  const handleFile = (f: File | null) => {
-    if (!f) return;
-    if (!f.name.toLowerCase().endsWith('.xlsx')) {
-      toast.error('Arquivo inválido. Selecione um arquivo .xlsx');
-      return;
+  const handleSelect = (selected: File[]) => {
+    const xlsx = selected.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = selected.length - xlsx.length;
+    if (invalid > 0) {
+      toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
     }
-    setFile(f);
+    if (xlsx.length === 0) return;
+    if (meta.multi) {
+      setFiles(prev => [...prev, ...xlsx]);
+    } else {
+      setFiles([xlsx[0]]);
+    }
+  };
+
+  const removeStaged = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
   const runImport = async () => {
-    if (!file) return;
+    if (files.length === 0) return;
     setUploading(true);
+    let success = 0;
+    const errors: string[] = [];
+    let lastDescription = '';
     try {
-      await onImport(file);
-      setFile(null);
+      for (const f of files) {
+        try {
+          const res = await onImport(f);
+          success++;
+          lastDescription = res.description;
+        } catch (e: any) {
+          errors.push(`${f.name}: ${e?.message ?? 'erro inesperado'}`);
+        }
+      }
+      if (success > 0) {
+        toast.success(`✓ ${success} arquivo(s) importado(s)`, {
+          description: errors.length > 0
+            ? `${errors.length} falharam — verifique o console`
+            : (files.length === 1 ? lastDescription : undefined),
+        });
+      }
+      if (errors.length > 0) {
+        console.error('[AuditImport] Erros:', errors);
+        if (success === 0) {
+          toast.error('Falha na importação', { description: errors[0] });
+        }
+      }
+      setFiles([]);
       if (inputRef.current) inputRef.current.value = '';
-    } catch {
-      // toast already shown
+      await onAfterImport();
     } finally {
       setUploading(false);
     }
   };
 
   const onClickImport = () => {
-    if (!file) {
-      toast.error('Selecione um arquivo .xlsx');
+    if (files.length === 0) {
+      toast.error('Selecione ao menos um arquivo .xlsx');
       return;
     }
-    // Maquinona: confirm re-import (replaces). Cresol/BB: just add.
     if (type === 'maquinona' && existingImports.length > 0) {
       onAskReimportMaquinona();
     } else {
@@ -347,9 +404,12 @@ function ImportCard({
     if (type === 'maquinona') {
       return existingImports.length > 0 ? 'Re-importar Maquinona' : 'Importar Maquinona';
     }
-    return existingImports.length > 0
-      ? `Adicionar outro extrato ${type === 'cresol' ? 'Cresol' : 'BB'}`
-      : `Importar ${type === 'cresol' ? 'Cresol' : 'BB'}`;
+    const n = files.length;
+    const base = type === 'cresol' ? 'Cresol' : 'BB';
+    if (existingImports.length > 0) {
+      return n > 1 ? `Adicionar ${n} extratos ${base}` : `Adicionar extrato ${base}`;
+    }
+    return n > 1 ? `Importar ${n} extratos ${base}` : `Importar ${base}`;
   })();
 
   return (
@@ -405,7 +465,8 @@ function ImportCard({
             onDrop={(e) => {
               e.preventDefault();
               setDragOver(false);
-              handleFile(e.dataTransfer.files?.[0] ?? null);
+              const dropped = Array.from(e.dataTransfer.files ?? []);
+              handleSelect(dropped);
             }}
             onClick={() => inputRef.current?.click()}
             className={`rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
@@ -413,27 +474,51 @@ function ImportCard({
             }`}
           >
             <UploadCloud className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            {file ? (
-              <div className="text-sm">
-                <p className="font-medium text-foreground">{file.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            {files.length > 0 ? (
+              <div className="text-sm space-y-1">
+                {files.map((f, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1">
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="font-medium text-foreground truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); removeStaged(idx); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                {meta.multi && (
+                  <p className="text-xs text-muted-foreground pt-1">Clique para adicionar mais arquivos</p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-foreground">
-                {meta.multi && existingImports.length > 0
-                  ? 'Arraste outro extrato .xlsx ou clique para selecionar'
+                {meta.multi
+                  ? (existingImports.length > 0
+                      ? 'Arraste outros extratos .xlsx ou clique para selecionar (vários arquivos aceitos)'
+                      : 'Arraste ou clique para selecionar arquivos .xlsx (vários aceitos)')
                   : 'Arraste ou clique para selecionar o arquivo .xlsx'}
               </p>
             )}
             <input
-              ref={inputRef} type="file" accept=".xlsx" className="hidden"
-              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              ref={inputRef}
+              type="file"
+              accept=".xlsx"
+              multiple={meta.multi}
+              className="hidden"
+              onChange={(e) => handleSelect(Array.from(e.target.files ?? []))}
             />
           </div>
 
           <Button
             onClick={onClickImport}
-            disabled={!file || disabled || uploading}
+            disabled={files.length === 0 || disabled || uploading}
             className="w-full sm:w-auto gap-2"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
