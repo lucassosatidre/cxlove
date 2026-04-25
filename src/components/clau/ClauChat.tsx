@@ -41,6 +41,7 @@ export default function ClauChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [model, setModel] = useState<string>(DEFAULT_MODEL);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
