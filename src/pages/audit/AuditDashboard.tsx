@@ -321,10 +321,8 @@ export default function AuditDashboard() {
       status: r.status,
     }));
 
-    // Recebido iFood matched (Cresol)
-    const recebidoCresol = depositRows
-      .filter(d => d.bank === 'cresol' && d.match_status === 'matched')
-      .reduce((s, d) => s + Number(d.total_amount || 0), 0);
+    // Recebido iFood matched (Cresol) — somente valor de competência
+    const recebidoCresol = ifoodCompetencia;
 
     return {
       periodLabel: makePeriodLabel(month, year),
@@ -510,9 +508,11 @@ export default function AuditDashboard() {
   const sumDeposits = (filterFn: (d: typeof depositRows[number]) => boolean) =>
     depositRows.filter(filterFn).reduce((s, d) => s + Number(d.total_amount || 0), 0);
 
-  const ifoodMatched = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'matched');
-  const ifoodFora = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'fora_periodo');
+  // iFood: matched usa SOMENTE valor de competência; fora_periodo inclui sobras adjacentes
+  const ifoodTotalDeposits = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood');
+  const ifoodMatched = ifoodCompetencia;
   const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
+  const ifoodFora = ifoodTotalDeposits - ifoodMatched - ifoodNaoId;
 
   const voucherDepBy = (company: string, status: string) =>
     sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
