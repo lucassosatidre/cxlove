@@ -29,6 +29,7 @@ export type Database = {
           id: string
           import_id: string | null
           match_confidence: number | null
+          match_reason: string | null
           match_status: string
           matched: boolean
         }
@@ -46,6 +47,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           match_confidence?: number | null
+          match_reason?: string | null
           match_status?: string
           matched?: boolean
         }
@@ -63,6 +65,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           match_confidence?: number | null
+          match_reason?: string | null
           match_status?: string
           matched?: boolean
         }
@@ -1574,6 +1577,7 @@ export type Database = {
           bank: string
           category: string
           deposit_count: number
+          match_status: string
           total_amount: number
         }[]
       }
