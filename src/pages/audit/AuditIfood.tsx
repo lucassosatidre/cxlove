@@ -93,7 +93,7 @@ export default function AuditIfood() {
         supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
         supabase
           .from('audit_bank_deposits')
-          .select('amount')
+          .select('matched_competencia_amount')
           .eq('audit_period_id', periodId)
           .eq('bank', 'cresol')
           .eq('category', 'ifood')
@@ -110,7 +110,7 @@ export default function AuditIfood() {
       // Header totals: usar a mesma lógica do dashboard
       const liquidoEsperado = Number((periodTotals as any[])?.[0]?.total_liquido_ifood ?? 0);
       const depositadoMatched = (matchedDeps ?? []).reduce(
-        (s: number, d: any) => s + Number(d.amount || 0),
+        (s: number, d: any) => s + Number(d.matched_competencia_amount || 0),
         0
       );
       setHeaderTotals({ expected: liquidoEsperado, deposited: depositadoMatched });
