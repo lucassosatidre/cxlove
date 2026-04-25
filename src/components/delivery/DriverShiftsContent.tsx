@@ -690,14 +690,21 @@ export default function DriverShiftsContent() {
               <p className="text-sm text-muted-foreground">Nenhum turno configurado para hoje</p>
             ) : (
               <div className="space-y-3">
-                {todayData.shifts.map((shift, i) => (
+                {todayData.shifts.map((shift, i) => {
+                  const cap = computeShiftCapacity(shift.vagas, shift.checkins, shift.waitlistDrivers.length);
+                  return (
                   <div key={i} className="space-y-1.5">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Clock className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm font-semibold text-foreground">{shift.horario_inicio} — {shift.horario_fim}</span>
-                      <Badge variant={shift.checkins >= shift.vagas ? 'default' : 'secondary'} className="text-[10px]">
+                      <span className={`text-sm font-bold ${cap.colorClass}`}>
                         {shift.checkins}/{shift.vagas} confirmados
-                      </Badge>
+                      </span>
+                      {cap.auxiliaryText && (
+                        <span className={`text-xs ${cap.state === 'over' ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                          {cap.auxiliaryText}
+                        </span>
+                      )}
                     </div>
                     {shift.confirmedDrivers.length > 0 ? (
                       <div className="ml-6 space-y-0.5">
