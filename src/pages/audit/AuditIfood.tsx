@@ -54,6 +54,8 @@ export default function AuditIfood() {
   const [periodLabel, setPeriodLabel] = useState('');
   const [periodMY, setPeriodMY] = useState<{ month: number; year: number } | null>(null);
 
+  const [headerTotals, setHeaderTotals] = useState({ expected: 0, deposited: 0 });
+
   useEffect(() => {
     if (!isAdmin || !periodId) return;
     (async () => {
@@ -79,9 +81,23 @@ export default function AuditIfood() {
         return all;
       }
 
-      const [{ data: period }, { data: matches }, txs] = await Promise.all([
+      const [
+        { data: period },
+        { data: dailyDetail },
+        { data: periodTotals },
+        { data: matchedDeps },
+        txs,
+      ] = await Promise.all([
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
-        supabase.from('audit_daily_matches').select('*').eq('audit_period_id', periodId).order('match_date', { ascending: true }),
+        supabase.rpc('get_audit_ifood_daily_detail', { p_period_id: periodId }),
+        supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
+        supabase
+          .from('audit_bank_deposits')
+          .select('amount')
+          .eq('audit_period_id', periodId)
+          .eq('bank', 'cresol')
+          .eq('category', 'ifood')
+          .eq('match_status', 'matched'),
         fetchAllIfoodTxs(),
       ]);
 
@@ -91,20 +107,33 @@ export default function AuditIfood() {
         setPeriodMY({ month: (period as any).month, year: (period as any).year });
       }
 
-      const grossByDate = new Map<string, { gross: number; tax: number }>();
+      // Header totals: usar a mesma lógica do dashboard
+      const liquidoEsperado = Number((periodTotals as any[])?.[0]?.total_liquido_ifood ?? 0);
+      const depositadoMatched = (matchedDeps ?? []).reduce(
+        (s: number, d: any) => s + Number(d.amount || 0),
+        0
+      );
+      setHeaderTotals({ expected: liquidoEsperado, deposited: depositadoMatched });
+
+      // Tax por dia (a RPC não retorna tax — derivar de audit_card_transactions)
+      const taxByDate = new Map<string, number>();
       for (const t of (txs as any[]) ?? []) {
         const d = (t as any).expected_deposit_date;
         if (!d) continue;
-        const cur = grossByDate.get(d) ?? { gross: 0, tax: 0 };
-        cur.gross += Number((t as any).gross_amount || 0);
-        cur.tax += Number((t as any).tax_amount || 0);
-        grossByDate.set(d, cur);
+        taxByDate.set(d, (taxByDate.get(d) ?? 0) + Number((t as any).tax_amount || 0));
       }
 
-      const enriched = ((matches as any[]) ?? []).map(m => ({
-        ...m,
-        gross: grossByDate.get(m.match_date)?.gross ?? 0,
-        tax: grossByDate.get(m.match_date)?.tax ?? 0,
+      // Rows da tabela: usar RPC (já filtra is_competencia + matched, sem fora_periodo)
+      const enriched: MatchRow[] = ((dailyDetail as any[]) ?? []).map(d => ({
+        match_date: d.match_date,
+        expected_amount: Number(d.liquido || 0),
+        deposited_amount: Number(d.deposito || 0),
+        difference: Number(d.diferenca || 0),
+        transaction_count: Number(d.vendas_count || 0),
+        deposit_count: 0,
+        status: d.status,
+        gross: Number(d.bruto || 0),
+        tax: taxByDate.get(d.match_date) ?? 0,
       }));
       setRows(enriched);
       setLoading(false);
@@ -112,12 +141,12 @@ export default function AuditIfood() {
   }, [periodId, isAdmin]);
 
   const totals = useMemo(() => {
-    const expected = rows.reduce((s, r) => s + Number(r.expected_amount || 0), 0);
-    const deposited = rows.reduce((s, r) => s + Number(r.deposited_amount || 0), 0);
+    const expected = headerTotals.expected;
+    const deposited = headerTotals.deposited;
     const diff = deposited - expected;
     const antecRate = expected > 0 && diff < 0 ? Math.abs(diff) / expected * 100 : 0;
     return { expected, deposited, diff, antecRate };
-  }, [rows]);
+  }, [headerTotals]);
 
   const exportCSV = () => {
     const header = ['Data','Vendas','Bruto','Taxa iFood','Liq Esperado','Depositado','Diferença','Status'].join(';');
