@@ -468,6 +468,18 @@ export default function AuditDashboard() {
     ? Math.abs(Math.min(ifoodGap, 0)) + Math.max(voucherGap, 0) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido - Math.max(voucherGap, 0)) : 0)
     : totals.custo;
 
+  // Breakdown of bank deposits by match_status (for iFood and Voucher cards)
+  const sumDeposits = (filterFn: (d: typeof depositRows[number]) => boolean) =>
+    depositRows.filter(filterFn).reduce((s, d) => s + Number(d.total_amount || 0), 0);
+
+  const ifoodMatched = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'matched');
+  const ifoodFora = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'fora_periodo');
+  const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
+
+  const voucherCategoriesSet = new Set(['alelo', 'ticket', 'pluxee', 'vr']);
+  const voucherDepBy = (company: string, status: string) =>
+    sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
+
   const periodLabelStr = makePeriodLabel(month, year);
 
   const exportBtn = (
