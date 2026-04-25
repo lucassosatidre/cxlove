@@ -52,9 +52,20 @@ export default function ClauChat() {
   useEffect(() => {
     if (!activeConv) {
       setMessages([]);
+      setModel(DEFAULT_MODEL);
       return;
     }
     loadMessages(activeConv);
+    // sync model from selected conversation
+    supabase
+      .from('clau_conversations')
+      .select('model')
+      .eq('id', activeConv)
+      .maybeSingle()
+      .then(({ data }) => {
+        const m = data?.model;
+        if (m && MODEL_OPTIONS.some((o) => o.value === m)) setModel(m);
+      });
   }, [activeConv]);
 
   useEffect(() => {
