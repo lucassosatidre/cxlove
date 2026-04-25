@@ -107,6 +107,7 @@ export default function ClauChat() {
           user_message: userMsg,
           current_page: screenContext.page,
           screen_context: screenContext,
+          model,
         },
       });
 
