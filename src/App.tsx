@@ -30,6 +30,7 @@ import AuditDashboard from "./pages/audit/AuditDashboard";
 import AuditImport from "./pages/audit/AuditImport";
 import AuditIfood from "./pages/audit/AuditIfood";
 import AuditVoucher from "./pages/audit/AuditVoucher";
+import AuditMatch from "./pages/audit/AuditMatch";
 
 const queryClient = new QueryClient();
 
