@@ -187,7 +187,11 @@ export default function AuditDashboard() {
     const ifoodComp = ((ifoodCompRows as any[]) ?? []).reduce(
       (s, d) => s + Number(d.matched_competencia_amount || 0), 0
     );
+    const ifoodAdj = ((ifoodCompRows as any[]) ?? []).reduce(
+      (s, d) => s + Number(d.matched_adjacente_amount || 0), 0
+    );
     setIfoodCompetencia(ifoodComp);
+    setIfoodAdjacente(ifoodAdj);
 
     // Voucher matched (BB) — usa valor cheio do depósito (sem split adjacente)
     const voucherMatched = depRows
