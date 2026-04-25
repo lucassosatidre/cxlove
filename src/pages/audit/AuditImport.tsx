@@ -37,25 +37,55 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const CARD_META: Record<FileType, { title: string; functionName: string; tip: string; icon: any; multi: boolean }> = {
+const CARD_META: Record<FileType, { title: string; functionName: string; tip: React.ReactNode; icon: any; multi: boolean }> = {
   maquinona: {
     title: 'Maquinona (iFood Portal)',
     functionName: 'import-maquinona',
-    tip: '💡 Como exportar do Portal iFood: Financeiro > Relatório de Transações > Exportar em xlsx. Re-importar substitui os dados anteriores.',
+    tip: (
+      <>
+        💡 <strong>Importe APENAS o extrato do mês de competência</strong> (ex: para auditar Março, importe só Março).
+        Vendas de outros meses não devem ser misturadas aqui. Re-importar substitui os dados anteriores.
+        <br />
+        <span className="text-muted-foreground/80">Como exportar: Portal iFood → Financeiro → Relatório de Transações → Exportar em xlsx.</span>
+      </>
+    ),
     icon: FileSpreadsheet,
     multi: false,
   },
   cresol: {
     title: 'Cresol (Extrato iFood)',
     functionName: 'import-cresol',
-    tip: '💡 Importe o extrato do mês de competência + 1 mês após (ex: para Março, importe Março + Abril) para capturar recebimentos atrasados que correspondem a vendas do final do mês.',
+    tip: (
+      <>
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        Isso captura vendas que atravessam o mês:
+        <ul className="list-disc list-inside mt-1 space-y-0.5">
+          <li>Vendas de fim de Fev → caem em Mar (não contam para Março)</li>
+          <li>Vendas de fim de Mar → caem em Abr (contam para Março)</li>
+        </ul>
+        <span className="text-muted-foreground/80">O sistema classifica automaticamente cada depósito por competência.</span>
+      </>
+    ),
     icon: Landmark,
     multi: true,
   },
   bb: {
     title: 'Banco do Brasil (Vouchers)',
     functionName: 'import-bb',
-    tip: '💡 Vouchers (Pluxee, Ticket etc.) podem demorar até 10 dias para depositar. Importe o BB do mês + 1 mês para capturar recebimentos atrasados. Categorização Alelo/Ticket/Pluxee/VR/Brendi é automática.',
+    tip: (
+      <>
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        Vouchers (Pluxee, Ticket etc.) podem demorar até 10 dias para depositar; importar a janela completa evita falsos matches.
+        <br />
+        <span className="text-muted-foreground/80">Categorização Alelo/Ticket/Pluxee/VR/Brendi é automática e a classificação por competência também.</span>
+      </>
+    ),
     icon: Landmark,
     multi: true,
   },
