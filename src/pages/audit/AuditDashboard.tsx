@@ -793,16 +793,19 @@ export default function AuditDashboard() {
               <p className="text-xs text-muted-foreground italic">Este período está fechado. Para importar novos arquivos, reabra o período.</p>
             )}
             {(['maquinona', 'cresol', 'bb'] as const).map(t => {
-              const imp = importByType(t);
-              const isCompleted = imp?.status === 'completed';
+              const allOfType = imports.filter(i => i.file_type === t && i.status === 'completed');
+              const latest = allOfType[0]; // imports já vem ordenado por created_at DESC
+              const totalRows = allOfType.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
+              const isCompleted = allOfType.length > 0;
+              const fileCount = allOfType.length;
               return (
                 <div key={t} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
                   <div className="flex items-center gap-3">
                     <FileSpreadsheet className="h-4 w-4 text-primary" />
                     <span className="font-medium">{FILE_LABELS[t]}</span>
-                    {isCompleted && imp ? (
+                    {isCompleted && latest ? (
                       <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400">
-                        ✓ importado em {formatDateTime(imp.created_at)} ({imp.imported_rows} transações)
+                        ✓ {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · último em {formatDateTime(latest.created_at)} ({totalRows} transações no total)
                       </Badge>
                     ) : (
                       <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
