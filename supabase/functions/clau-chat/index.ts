@@ -257,6 +257,7 @@ Deno.serve(async (req) => {
       assistant_message: finalText,
       tokens_used: tokensUsed,
       memory_updated: !!memoryMatch,
+      model: convModel,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (e) {
