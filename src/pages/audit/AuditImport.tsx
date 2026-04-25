@@ -464,7 +464,8 @@ function ImportCard({
             onDrop={(e) => {
               e.preventDefault();
               setDragOver(false);
-              handleFile(e.dataTransfer.files?.[0] ?? null);
+              const dropped = Array.from(e.dataTransfer.files ?? []);
+              handleSelect(dropped);
             }}
             onClick={() => inputRef.current?.click()}
             className={`rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
@@ -472,27 +473,51 @@ function ImportCard({
             }`}
           >
             <UploadCloud className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-            {file ? (
-              <div className="text-sm">
-                <p className="font-medium text-foreground">{file.name}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            {files.length > 0 ? (
+              <div className="text-sm space-y-1">
+                {files.map((f, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1">
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="font-medium text-foreground truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); removeStaged(idx); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                {meta.multi && (
+                  <p className="text-xs text-muted-foreground pt-1">Clique para adicionar mais arquivos</p>
+                )}
               </div>
             ) : (
               <p className="text-sm text-foreground">
-                {meta.multi && existingImports.length > 0
-                  ? 'Arraste outro extrato .xlsx ou clique para selecionar'
+                {meta.multi
+                  ? (existingImports.length > 0
+                      ? 'Arraste outros extratos .xlsx ou clique para selecionar (vários arquivos aceitos)'
+                      : 'Arraste ou clique para selecionar arquivos .xlsx (vários aceitos)')
                   : 'Arraste ou clique para selecionar o arquivo .xlsx'}
               </p>
             )}
             <input
-              ref={inputRef} type="file" accept=".xlsx" className="hidden"
-              onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
+              ref={inputRef}
+              type="file"
+              accept=".xlsx"
+              multiple={meta.multi}
+              className="hidden"
+              onChange={(e) => handleSelect(Array.from(e.target.files ?? []))}
             />
           </div>
 
           <Button
             onClick={onClickImport}
-            disabled={!file || disabled || uploading}
+            disabled={files.length === 0 || disabled || uploading}
             className="w-full sm:w-auto gap-2"
           >
             {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
