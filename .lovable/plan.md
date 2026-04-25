@@ -1,42 +1,67 @@
-# Fix TS errors em Edge Functions + Deploy
+## Correção do bug de escala (×100) na importação Maquinona
 
-## Mudanças exatas
+### 1. Patch em `supabase/functions/import-maquinona/index.ts`
+Substituir `parseNumber` pela versão robusta que detecta corretamente o formato US-like usado nos XLSX iFood:
 
-### 1. `supabase/functions/auto-open-closings/index.ts`
-- Linhas 127-136: extrair `const msg = err instanceof Error ? err.message : String(err)` e usar nos 3 sites (`console.error`, `logOpen`, `JSON.stringify`).
-- Linhas 156-158: trocar `e.message` por `e instanceof Error ? e.message : String(e)`.
+```typescript
+function parseNumber(v: any): number {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).replace(/[R$\s%]/g, '').trim();
+  if (!s) return 0;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    // BR clássico: 1.234,56
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma) {
+    // Só vírgula → decimal BR
+    s = s.replace(',', '.');
+  } else if (hasDot) {
+    // Só ponto → US-like se exatamente 1 ponto e ≤2 casas (924.30)
+    const parts = s.split('.');
+    if (parts.length === 2 && parts[1].length <= 2) {
+      // já é decimal US, mantém
+    } else {
+      // múltiplos pontos = milhar BR (1.234.567)
+      s = s.replace(/\./g, '');
+    }
+  }
+  const n = Number(s);
+  return isFinite(n) ? n : 0;
+}
+```
 
-### 2. `supabase/functions/auto-sync-saipos/index.ts`
-- Linhas 111-114: catch tele — extrair `msg` e usar.
-- Linhas 179-182: catch salon — idem.
-- Linhas 199-213: catch fatal — idem (3 usos: console, logSync, JSON).
-- Linhas 229-231: `e.message` → guard.
+`parseTaxRate` continua igual (já trata `%` separadamente).
 
-### 3. `supabase/functions/create-user/index.ts`
-- Linha 109: `caller.id` → `callerId`.
+### 2. NÃO mexer em `import-cresol` nem `import-bb`
+Esses arquivos vêm de banco brasileiro (formato BR estrito: vírgula=decimal, ponto=milhar). Parsers atuais estão corretos para BR puro. Deixar intactos.
 
-### 4. `supabase/functions/fetch-saipos-labels/index.ts`
-- Linhas 273-279: catch — extrair `msg` e usar.
+### 3. Deploy
+Deployar apenas `import-maquinona`.
 
-### 5. `supabase/functions/saipos-data-proxy/index.ts`
-- Linhas 54-60: catch — extrair `msg` e usar.
+### 4. Limpar período Março/2026 via migration
+```sql
+DELETE FROM audit_periods WHERE month = 3 AND year = 2026;
+```
+Cascata limpa `audit_card_transactions`, `audit_bank_deposits`, `audit_imports`, `audit_daily_matches`, `audit_voucher_matches`, `audit_period_log`.
 
-### 6. `supabase/functions/sync-saipos-sales/index.ts`
-- Linhas 484-492: catch — extrair `msg` e usar.
+⚠️ Verificar antes se existem FKs com `ON DELETE CASCADE`. Se não houver, fazer DELETE explícito em ordem:
+1. `audit_period_log`
+2. `audit_daily_matches`
+3. `audit_voucher_matches`
+4. `audit_bank_deposits`
+5. `audit_card_transactions`
+6. `audit_imports`
+7. `audit_periods`
 
-### 7. `supabase/functions/sync-saipos-salon/index.ts`
-- Linhas 346-353: catch — extrair `msg` e usar.
+### 5. Validação pós-execução
+- Confirmar build limpo
+- Confirmar período Março/2026 zerado (`SELECT count(*) FROM audit_periods WHERE month=3 AND year=2026` → 0)
+- Liberar usuário para re-importar XLSX (criar período novo + Maquinona Jan/Fev/Mar + Cresol Fev/Mar/Abr + BB Fev/Mar/Abr)
 
-## Deploy
-Após editar, deployar as 8 funções afetadas:
-- auto-open-closings
-- auto-sync-saipos
-- create-user
-- fetch-saipos-labels
-- saipos-data-proxy
-- sync-saipos-sales
-- sync-saipos-salon
-- (a 8ª listada nos build errors era genérica — só essas 7 têm mudança de código; outras citadas na lista de "Check" não tinham erros)
-
-## Risco
-Zero — apenas type guards. Comportamento de runtime idêntico.
+### O que NÃO faço
+- ❌ Não toco em `import-cresol` nem `import-bb`
+- ❌ Não rodo UPDATE/100 nos dados existentes (re-importação substitui)
+- ❌ Não apago arquivos XLSX do usuário
+- ❌ Não mexo no algoritmo de match (RPCs `classify_*`)

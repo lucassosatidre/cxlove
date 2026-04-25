@@ -45,7 +45,26 @@ function parseTime(v: any): string | null {
 function parseNumber(v: any): number {
   if (v == null || v === '') return 0;
   if (typeof v === 'number') return v;
-  const s = String(v).replace(/[R$\s%]/g, '').replace(/\./g, '').replace(',', '.');
+  let s = String(v).replace(/[R$\s%]/g, '').trim();
+  if (!s) return 0;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    // BR clássico: 1.234,56
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma) {
+    // Só vírgula → decimal BR
+    s = s.replace(',', '.');
+  } else if (hasDot) {
+    // Só ponto → US-like se exatamente 1 ponto e ≤2 casas (924.30)
+    const parts = s.split('.');
+    if (parts.length === 2 && parts[1].length <= 2) {
+      // já é decimal US, mantém
+    } else {
+      // múltiplos pontos = milhar BR (1.234.567)
+      s = s.replace(/\./g, '');
+    }
+  }
   const n = Number(s);
   return isFinite(n) ? n : 0;
 }
