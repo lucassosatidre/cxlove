@@ -523,23 +523,6 @@ function ImportCard({
         </CardContent>
       </Card>
 
-      {/* Maquinona re-import confirmation */}
-      <AlertDialog open={confirmingReimportMaquinona} onOpenChange={(o) => !o && onCancelReimportMaquinona()}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Re-importar Maquinona?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Já existe uma importação Maquinona para este período. Re-importar vai preservar os registros existentes (deduplicação automática) e adicionar apenas os novos. Deseja continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { onCancelReimportMaquinona(); runImport(); }}>
-              Continuar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Remove file confirmation */}
       <AlertDialog open={!!confirmRemove} onOpenChange={(o) => !o && setConfirmRemove(null)}>
