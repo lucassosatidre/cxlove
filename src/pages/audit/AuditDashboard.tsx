@@ -136,6 +136,7 @@ export default function AuditDashboard() {
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
   const [depositRows, setDepositRows] = useState<{ category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]>([]);
   const [ifoodCompetencia, setIfoodCompetencia] = useState(0);
+  const [ifoodAdjacente, setIfoodAdjacente] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -166,7 +167,7 @@ export default function AuditDashboard() {
       supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
-      supabase.from('audit_bank_deposits').select('matched_competencia_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood').eq('match_status', 'matched'),
+      supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
     ]);
     setImports((imps as AuditImport[]) ?? []);
 
@@ -186,7 +187,11 @@ export default function AuditDashboard() {
     const ifoodComp = ((ifoodCompRows as any[]) ?? []).reduce(
       (s, d) => s + Number(d.matched_competencia_amount || 0), 0
     );
+    const ifoodAdj = ((ifoodCompRows as any[]) ?? []).reduce(
+      (s, d) => s + Number(d.matched_adjacente_amount || 0), 0
+    );
     setIfoodCompetencia(ifoodComp);
+    setIfoodAdjacente(ifoodAdj);
 
     // Voucher matched (BB) — usa valor cheio do depósito (sem split adjacente)
     const voucherMatched = depRows
@@ -508,11 +513,9 @@ export default function AuditDashboard() {
   const sumDeposits = (filterFn: (d: typeof depositRows[number]) => boolean) =>
     depositRows.filter(filterFn).reduce((s, d) => s + Number(d.total_amount || 0), 0);
 
-  // iFood: matched usa SOMENTE valor de competência; fora_periodo inclui sobras adjacentes
-  const ifoodTotalDeposits = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood');
+  // iFood: matched usa SOMENTE valor de competência; adjacente vem do state ifoodAdjacente
   const ifoodMatched = ifoodCompetencia;
   const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
-  const ifoodFora = ifoodTotalDeposits - ifoodMatched - ifoodNaoId;
 
   const voucherDepBy = (company: string, status: string) =>
     sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
@@ -721,17 +724,17 @@ export default function AuditDashboard() {
                 return (
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido (matched):</span><span className="font-medium">{formatCurrency(recebidoMatched)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido competência:</span><span className="font-medium">{formatCurrency(recebidoMatched)}</span></div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Gap real:</span>
                       <span className={`font-semibold ${gap < -0.5 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span>
                     </div>
-                    {(ifoodFora > 0 || ifoodNaoId > 0) && (
+                    {(ifoodAdjacente > 0 || ifoodNaoId > 0) && (
                       <div className="pt-2 mt-1 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">
-                        {ifoodFora > 0 && (
+                        {ifoodAdjacente > 0 && (
                           <div className="flex justify-between">
-                            <span>ℹ Fora do período:</span>
-                            <span>{formatCurrency(ifoodFora)}</span>
+                            <span>ℹ Recebido outras comp.:</span>
+                            <span>{formatCurrency(ifoodAdjacente)}</span>
                           </div>
                         )}
                         {ifoodNaoId > 0 && (
@@ -739,6 +742,9 @@ export default function AuditDashboard() {
                             <span>⚠ Não identificado:</span>
                             <span className="text-red-600 dark:text-red-400">{formatCurrency(ifoodNaoId)}</span>
                           </div>
+                        )}
+                        {ifoodAdjacente > 0 && (
+                          <p className="italic pt-1">Parcelas de meses adjacentes (fev/abr) recebidas neste mês.</p>
                         )}
                       </div>
                     )}
