@@ -517,7 +517,7 @@ export default function AuditDashboard() {
   const ifoodTotalDeposits = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood');
   const ifoodMatched = ifoodCompetencia;
   const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
-  const ifoodFora = ifoodTotalDeposits - ifoodMatched - ifoodNaoId;
+  // (ifoodAdjacente já vem do state, não derivamos de depositRows aqui)
 
   const voucherDepBy = (company: string, status: string) =>
     sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
