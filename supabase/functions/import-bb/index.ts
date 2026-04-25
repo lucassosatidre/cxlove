@@ -200,6 +200,12 @@ Deno.serve(async (req) => {
       if (/saldo anterior|saldo do dia|^saldo$/i.test(description)) continue;
       if (!valueParsed) continue;
 
+      // Ignorar transferências internas (Pix recebido da própria empresa)
+      // Essas movimentações não são depósitos de cartão/voucher e poluem a auditoria
+      if (/pix.*recebido/i.test(description) && /pizzaria/i.test(detail || '')) {
+        continue;
+      }
+
       const isEntrada = /entrada/i.test(tipo);
       if (isNewFormat) {
         if (!valueParsed.isCredit) { skippedDebits++; continue; }
