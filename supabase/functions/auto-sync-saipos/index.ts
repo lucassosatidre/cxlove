@@ -109,8 +109,9 @@ Deno.serve(async (req) => {
         console.log(`[auto-sync] Tele result for ${closing.id}:`, JSON.stringify(syncData));
         results.push({ type: "tele", closing_id: closing.id, date: closing.closing_date, ...syncData });
       } catch (err) {
-        console.error(`[auto-sync] Error syncing tele ${closing.id}:`, err.message);
-        results.push({ type: "tele", closing_id: closing.id, error: err.message });
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[auto-sync] Error syncing tele ${closing.id}:`, msg);
+        results.push({ type: "tele", closing_id: closing.id, error: msg });
       }
     }
 
@@ -177,8 +178,9 @@ Deno.serve(async (req) => {
           console.log(`[auto-sync] Salon result for ${salonClosing.id}:`, JSON.stringify(salonSyncData));
           results.push({ type: "salon", closing_id: salonClosing.id, date: salonClosing.closing_date, ...salonSyncData });
         } catch (err) {
-          console.error(`[auto-sync] Error syncing salon ${salonClosing.id}:`, err.message);
-          results.push({ type: "salon", closing_id: salonClosing.id, error: err.message });
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`[auto-sync] Error syncing salon ${salonClosing.id}:`, msg);
+          results.push({ type: "salon", closing_id: salonClosing.id, error: msg });
         }
       }
     }
@@ -197,17 +199,18 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    console.error("[auto-sync] Fatal error:", err.message);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[auto-sync] Fatal error:", msg);
 
     try {
       const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
       const supabase = createClient(supabaseUrl, serviceKey);
-      await logSync(supabase, "error", { fatal: true }, err.message);
+      await logSync(supabase, "error", { fatal: true }, msg);
     } catch (_) { /* ignore logging errors */ }
 
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -227,6 +230,6 @@ async function logSync(
       error_message: errorMessage,
     });
   } catch (e) {
-    console.error("[auto-sync] Failed to write sync log:", e.message);
+    console.error("[auto-sync] Failed to write sync log:", e instanceof Error ? e.message : String(e));
   }
 }
