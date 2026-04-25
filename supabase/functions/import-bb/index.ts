@@ -102,11 +102,12 @@ Deno.serve(async (req) => {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    if (!['aberto', 'importado'].includes(period.status)) {
-      return new Response(JSON.stringify({ error: `Período está '${period.status}' e não permite importação` }), {
+    if (period.status === 'fechado') {
+      return new Response(JSON.stringify({ error: 'Período fechado. Reabra antes de adicionar extratos.' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const wasConciliado = period.status === 'conciliado';
 
     // Detect format: legacy (6 cols: Data | Lançamento | Detalhes | Doc | Valor C/D | Tipo)
     // vs new (11 cols: Data | observacao | Data balancete | Ag.Origem | Lote | NumDoc | CodHist | Historico | Valor | Inf C/D | Detalhamento)
@@ -274,6 +275,13 @@ Deno.serve(async (req) => {
 
     if (period.status === 'aberto') {
       await supabase.from('audit_periods').update({ status: 'importado' }).eq('id', audit_period_id);
+    } else if (wasConciliado) {
+      // Reset status: novos depósitos exigem reconciliação
+      await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
+      await supabase.from('audit_voucher_matches').delete().eq('audit_period_id', audit_period_id);
+      await supabase.from('audit_periods')
+        .update({ status: 'importado', updated_at: new Date().toISOString() })
+        .eq('id', audit_period_id);
     }
 
     return new Response(JSON.stringify({
