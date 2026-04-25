@@ -399,20 +399,13 @@ function ImportCard({
       toast.error('Selecione ao menos um arquivo .xlsx');
       return;
     }
-    if (type === 'maquinona' && existingImports.length > 0) {
-      onAskReimportMaquinona();
-    } else {
-      runImport();
-    }
+    runImport();
   };
 
   const buttonLabel = (() => {
     if (uploading) return 'Processando...';
-    if (type === 'maquinona') {
-      return existingImports.length > 0 ? 'Re-importar Maquinona' : 'Importar Maquinona';
-    }
     const n = files.length;
-    const base = type === 'cresol' ? 'Cresol' : 'BB';
+    const base = type === 'cresol' ? 'Cresol' : type === 'bb' ? 'BB' : 'Maquinona';
     if (existingImports.length > 0) {
       return n > 1 ? `Adicionar ${n} extratos ${base}` : `Adicionar extrato ${base}`;
     }
