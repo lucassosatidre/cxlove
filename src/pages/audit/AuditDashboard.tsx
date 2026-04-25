@@ -135,6 +135,7 @@ export default function AuditDashboard() {
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
   const [depositRows, setDepositRows] = useState<{ category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]>([]);
+  const [ifoodCompetencia, setIfoodCompetencia] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -158,13 +159,14 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }] = await Promise.all([
+    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
+      supabase.from('audit_bank_deposits').select('matched_competencia_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood').eq('match_status', 'matched'),
     ]);
     setImports((imps as AuditImport[]) ?? []);
 
@@ -179,10 +181,19 @@ export default function AuditDashboard() {
     const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0);
 
     const depRows = (depsRpc as { category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]) ?? [];
-    // "Recebido" agora considera SÓ depósitos matched (competência do período)
-    const recebido = depRows
-      .filter(d => d.match_status === 'matched')
+
+    // iFood matched de COMPETÊNCIA (sem overshoot de meses adjacentes)
+    const ifoodComp = ((ifoodCompRows as any[]) ?? []).reduce(
+      (s, d) => s + Number(d.matched_competencia_amount || 0), 0
+    );
+    setIfoodCompetencia(ifoodComp);
+
+    // Voucher matched (BB) — usa valor cheio do depósito (sem split adjacente)
+    const voucherMatched = depRows
+      .filter(d => d.bank === 'bb' && d.match_status === 'matched')
       .reduce((s, d) => s + Number(d.total_amount || 0), 0);
+
+    const recebido = ifoodComp + voucherMatched;
     const custoReal = Math.max(bruto - recebido, 0);
     const taxaEfetiva = bruto > 0 ? (custoReal / bruto) * 100 : 0;
 
