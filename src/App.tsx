@@ -115,6 +115,7 @@ const App = () => (
             <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfood /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/voucher" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVoucher /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/match" element={<ProtectedRoute><SectorGuard sector="tele"><AuditMatch /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
             <Route path="/tele-teste/import" element={<Navigate to="/tele/import" replace />} />
