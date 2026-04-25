@@ -730,7 +730,8 @@ export default function DriverShiftsContent() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
