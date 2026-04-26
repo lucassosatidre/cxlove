@@ -30,6 +30,7 @@ import AuditDashboard from "./pages/audit/AuditDashboard";
 import AuditImport from "./pages/audit/AuditImport";
 import AuditIfood from "./pages/audit/AuditIfood";
 import AuditVoucher from "./pages/audit/AuditVoucher";
+import AuditVoucherSettlements from "./pages/audit/AuditVoucherSettlements";
 import AuditMatch from "./pages/audit/AuditMatch";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
@@ -117,6 +118,7 @@ const App = () => (
             <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfood /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/voucher" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVoucher /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/voucher-settlements" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVoucherSettlements /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/match" element={<ProtectedRoute><SectorGuard sector="tele"><AuditMatch /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/clau/memoria" element={<ProtectedRoute><SectorGuard sector="tele"><ClauMemory /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}
