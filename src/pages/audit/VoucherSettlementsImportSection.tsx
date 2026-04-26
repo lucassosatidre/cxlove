@@ -92,8 +92,8 @@ export default function VoucherSettlementsImportSection({
       const { data, error } = await supabase.rpc('match_voucher_lots', { p_period_id: periodId });
       if (error) throw error;
       setLastMatch(data);
-      toast.success('✓ Conciliação de extratos concluída', {
-        description: `${(data as any)?.matched_items ?? 0} itens casados, ${(data as any)?.matched_lots ?? 0} lotes pagos casados`,
+      toast.success('✓ Conciliação concluída', {
+        description: `${(data as any)?.matched_items ?? 0} itens casados, ${(data as any)?.matched_lots ?? 0} lotes ↔ BB. Confira o relatório abaixo ↓`,
       });
     } catch (e: any) {
       toast.error('Erro ao conciliar extratos', { description: e?.message });
@@ -199,20 +199,20 @@ function OperadoraDropzone({
         const wb = XLSX.read(buf, { type: 'array', cellDates: true });
         const recebimentosSheet = wb.SheetNames.find(n => /recebimentos/i.test(n)) ?? wb.SheetNames[1];
         const outrasSheet = wb.SheetNames.find(n => /outras/i.test(n));
-        const recebimentos = recebimentosSheet ? XLSX.utils.sheet_to_json(wb.Sheets[recebimentosSheet], { defval: null, raw: false }) : [];
-        const outras = outrasSheet ? XLSX.utils.sheet_to_json(wb.Sheets[outrasSheet], { defval: null, raw: false }) : [];
+        const recebimentos = recebimentosSheet ? XLSX.utils.sheet_to_json(wb.Sheets[recebimentosSheet], { defval: null, raw: true }) : [];
+        const outras = outrasSheet ? XLSX.utils.sheet_to_json(wb.Sheets[outrasSheet], { defval: null, raw: true }) : [];
         body.recebimentos = recebimentos;
         body.outras = outras;
       } else if (op === 'vr') {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: 'array', cellDates: true });
         const sheet = wb.Sheets[wb.SheetNames[0]];
-        body.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false });
+        body.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
       } else if (op === 'ticket') {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: 'array', cellDates: true });
         const sheet = wb.Sheets[wb.SheetNames[0]];
-        body.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false });
+        body.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
       }
 
       const { data, error } = await supabase.functions.invoke(meta.functionName, { body });
