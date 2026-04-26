@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
     // 6:NºAutorização 7:NºTransação 8:TipoCartão 9:NºCartão 10:Adquirente
     // 11:ValorBruto 12:ValorLíquido 13:Status 14:DataPagamento
     const POS = {
-      dataVenda: 4, numAutorizacao: 6, numTrans: 7, tipoCartao: 8,
+      dataVenda: 4, numTrans: 6, numAutorizacao: 7, tipoCartao: 8,
       numCartao: 9, bruto: 11, liquido: 12, status: 13, dataPag: 14,
     };
 
