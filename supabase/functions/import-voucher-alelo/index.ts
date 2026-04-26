@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
     for (const row of outras) {
       const data = parseDateBR(row['Data do Débito'] ?? row['Data do Debito'] ?? row['Data de Pagamento']);
       if (!data) continue;
+      if (!isInPeriod(data)) continue;
       const desc = String(row['Descrição'] || row['Descricao'] || '').trim();
       const valor = parseMoney(row['Valor']);
       const ec = String(row['EC da Transação'] || row['EC da Transacao'] || row['N° Do EC'] || row['No Do EC'] || '').trim();
