@@ -2,16 +2,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { corsHeaders, parseMoney, parseDateBR, jsonResponse } from '../_shared/voucher-utils.ts';
 
-// Recebe { audit_period_id, file_name, recebimentos: [{...obj}], outras: [{...obj}] }
+// Recebe { audit_period_id, file_name, recebimentos_rows: any[][], outras_rows: any[][] }
+// Faz busca dinâmica do header em cada aba (linhas de título/branding antes do header real).
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { audit_period_id, file_name, recebimentos = [], outras = [] } = await req.json();
-    console.log('[ALELO] recebimentos.length =', recebimentos.length);
-    console.log('[ALELO] outras.length =', outras.length);
-    console.log('[ALELO] primeiro recebimento =', JSON.stringify(recebimentos[0]));
-    console.log('[ALELO] keys do primeiro =', recebimentos[0] ? Object.keys(recebimentos[0]) : 'vazio');
+    const body = await req.json();
+    const { audit_period_id, file_name } = body;
+    const recebimentosRows: any[][] = body.recebimentos_rows ?? [];
+    const outrasRows: any[][] = body.outras_rows ?? [];
+
+    console.log('[ALELO] recebimentos_rows.length =', recebimentosRows.length);
+    console.log('[ALELO] outras_rows.length =', outrasRows.length);
+    console.log('[ALELO] primeiras 3 linhas recebimentos =', JSON.stringify(recebimentosRows.slice(0, 3)));
+
     if (!audit_period_id) return jsonResponse({ error: 'audit_period_id obrigatório' }, 400);
 
     const supabase = createClient(
@@ -26,6 +31,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
     console.log('[ALELO] period =', JSON.stringify(period));
+
     const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
     const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
     const isInPeriod = (d: string | null): boolean => {
@@ -34,72 +40,149 @@ Deno.serve(async (req) => {
       return dt >= periodStart && dt < periodEnd;
     };
 
-    // Limpar dados anteriores
-    await supabase.from('voucher_lots').delete()
-      .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
-    await supabase.from('voucher_adjustments').delete()
-      .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
+    // ---- Localiza header dinamicamente ----
+    const norm = (s: any) =>
+      String(s ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+
+    const findHeader = (rows: any[][], required: string[]): { headerIdx: number; idx: Record<string, number> } | null => {
+      for (let i = 0; i < Math.min(rows.length, 30); i++) {
+        const r = rows[i] ?? [];
+        const cells = r.map(norm);
+        const hasAll = required.every(req => cells.some(c => c.includes(req)));
+        if (hasAll) {
+          const idx: Record<string, number> = {};
+          cells.forEach((c, j) => { if (c) idx[c] = j; });
+          return { headerIdx: i, idx };
+        }
+      }
+      return null;
+    };
+
+    const findCol = (idx: Record<string, number>, ...needles: string[]): number => {
+      for (const n of needles) {
+        const nn = norm(n);
+        for (const k of Object.keys(idx)) {
+          if (k.includes(nn)) return idx[k];
+        }
+      }
+      return -1;
+    };
+
+    // ---- Recebimentos ----
+    const recHeader = findHeader(recebimentosRows, ['status', 'valor bruto', 'transacao']);
+    if (recebimentosRows.length > 0 && !recHeader) {
+      console.error('[ALELO] header de Recebimentos não encontrado nas primeiras 30 linhas');
+      return jsonResponse({
+        error: 'Não encontrei o cabeçalho esperado na aba Recebimentos (Status, Valor Bruto, Nº da Transação). Verifique o formato do arquivo.',
+      }, 422);
+    }
 
     let importedLots = 0;
     let importedItems = 0;
-
     let skipStatus = 0, skipNumTrans = 0, skipDataPag = 0, skipPeriodo = 0;
 
-    for (const row of recebimentos) {
-      if (String(row['Status'] || '').trim() !== 'Aprovada') { skipStatus++; continue; }
-      const numTrans = String(row['Nº da Transação'] || row['N° da Transação'] || row['No da Transação'] || '').trim();
-      if (!numTrans) { skipNumTrans++; continue; }
-      const bruto = parseMoney(row['Valor Bruto']);
-      const liquido = parseMoney(row['Valor Líquido'] ?? row['Valor Liquido']);
-      const dataVenda = parseDateBR(row['Data da Venda']);
-      const dataPag = parseDateBR(row['Data de Pagamento']);
-      if (!dataPag) { skipDataPag++; continue; }
-      if (!isInPeriod(dataPag)) { skipPeriodo++; continue; }
+    if (recHeader) {
+      console.log('[ALELO] header recebimentos linha =', recHeader.headerIdx, 'colunas =', JSON.stringify(recHeader.idx));
 
-      const externalId = `alelo_${numTrans}`;
-      const modalidade = String(row['Tipo Cartão'] || row['Tipo Cartao'] || '').trim() || null;
+      const cStatus = findCol(recHeader.idx, 'status');
+      const cNumTrans = findCol(recHeader.idx, 'no da transacao', 'n da transacao', 'numero da transacao');
+      const cBruto = findCol(recHeader.idx, 'valor bruto');
+      const cLiquido = findCol(recHeader.idx, 'valor liquido');
+      const cDataVenda = findCol(recHeader.idx, 'data da venda');
+      const cDataPag = findCol(recHeader.idx, 'data de pagamento', 'data do pagamento');
+      const cTipoCartao = findCol(recHeader.idx, 'tipo cartao', 'tipo do cartao');
+      const cAuth = findCol(recHeader.idx, 'no da autorizacao', 'autorizacao');
+      const cCard = findCol(recHeader.idx, 'no cartao', 'numero cartao', 'cartao');
 
-      const { data: insertedLot, error: lotErr } = await supabase.from('voucher_lots').insert({
-        audit_period_id,
-        operadora: 'alelo',
-        external_id: externalId,
-        data_corte: dataVenda,
-        data_pagamento: dataPag,
-        gross_amount: bruto,
-        net_amount: liquido,
-        fee_admin: Math.max(bruto - liquido, 0),
-        fee_anticipation: 0,
-        fee_management: 0,
-        fee_other: 0,
-        modalidade,
-        status: 'imported',
-        raw_data: { status: row['Status'] ?? null, autorizacao: row['Nº da Autorização'] ?? null },
-      }).select('id').single();
+      console.log('[ALELO] cols mapeadas =', { cStatus, cNumTrans, cBruto, cLiquido, cDataVenda, cDataPag, cTipoCartao });
 
-      if (lotErr) {
-        console.error('Erro inserindo lote alelo', externalId, lotErr);
-        continue;
-      }
-      importedLots++;
+      // Limpar dados anteriores
+      await supabase.from('voucher_lots').delete()
+        .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
 
-      const dataTrans = parseDateBR(row['Data da Venda']);
-      if (dataTrans && bruto > 0) {
-        const { error: itemErr } = await supabase.from('voucher_lot_items').insert({
-          lot_id: insertedLot.id,
-          data_transacao: dataTrans,
+      for (let i = recHeader.headerIdx + 1; i < recebimentosRows.length; i++) {
+        const row = recebimentosRows[i] ?? [];
+        if (row.every(c => c == null || String(c).trim() === '')) continue;
+
+        const status = cStatus >= 0 ? String(row[cStatus] ?? '').trim() : '';
+        if (status !== 'Aprovada') { skipStatus++; continue; }
+
+        const numTrans = cNumTrans >= 0 ? String(row[cNumTrans] ?? '').trim() : '';
+        if (!numTrans) { skipNumTrans++; continue; }
+
+        const bruto = cBruto >= 0 ? parseMoney(row[cBruto]) : 0;
+        const liquido = cLiquido >= 0 ? parseMoney(row[cLiquido]) : 0;
+        const dataVenda = cDataVenda >= 0 ? parseDateBR(row[cDataVenda]) : null;
+        const dataPag = cDataPag >= 0 ? parseDateBR(row[cDataPag]) : null;
+        if (!dataPag) { skipDataPag++; continue; }
+        if (!isInPeriod(dataPag)) { skipPeriodo++; continue; }
+
+        const externalId = `alelo_${numTrans}`;
+        const modalidade = cTipoCartao >= 0 ? (String(row[cTipoCartao] ?? '').trim() || null) : null;
+
+        const { data: insertedLot, error: lotErr } = await supabase.from('voucher_lots').insert({
+          audit_period_id,
+          operadora: 'alelo',
+          external_id: externalId,
+          data_corte: dataVenda,
+          data_pagamento: dataPag,
           gross_amount: bruto,
           net_amount: liquido,
-          authorization_code: String(row['Nº da Autorização'] || '').trim() || null,
-          card_number: String(row['Nº Cartão'] || row['No Cartão'] || '').trim() || null,
+          fee_admin: Math.max(bruto - liquido, 0),
+          fee_anticipation: 0,
+          fee_management: 0,
+          fee_other: 0,
           modalidade,
-          match_status: 'pending',
-        });
-        if (itemErr) console.error('Erro inserindo item alelo', itemErr);
-        else importedItems++;
+          status: 'imported',
+          raw_data: { status, autorizacao: cAuth >= 0 ? row[cAuth] : null },
+        }).select('id').single();
+
+        if (lotErr) {
+          console.error('Erro inserindo lote alelo', externalId, lotErr);
+          continue;
+        }
+        importedLots++;
+
+        if (dataVenda && bruto > 0) {
+          const { error: itemErr } = await supabase.from('voucher_lot_items').insert({
+            lot_id: insertedLot.id,
+            data_transacao: dataVenda,
+            gross_amount: bruto,
+            net_amount: liquido,
+            authorization_code: cAuth >= 0 ? (String(row[cAuth] ?? '').trim() || null) : null,
+            card_number: cCard >= 0 ? (String(row[cCard] ?? '').trim() || null) : null,
+            modalidade,
+            match_status: 'pending',
+          });
+          if (itemErr) console.error('Erro inserindo item alelo', itemErr);
+          else importedItems++;
+        }
       }
     }
 
-    // ---- Adjustments com detecção de pares simétricos (compensacao_neutra) ----
+    console.log('[ALELO] descartados:', { skipStatus, skipNumTrans, skipDataPag, skipPeriodo, importedLots });
+
+    // ---- Validação anti-falso-sucesso ----
+    if (recebimentosRows.length > 5 && importedLots === 0) {
+      return jsonResponse({
+        error: `Arquivo tem ${recebimentosRows.length} linhas mas nenhum lote foi importado (descartados: status=${skipStatus}, semNumTrans=${skipNumTrans}, semDataPag=${skipDataPag}, foraPeriodo=${skipPeriodo}). Verifique o período selecionado e o conteúdo do arquivo.`,
+      }, 422);
+    }
+
+    // ---- Outras Transações (busca dinâmica também) ----
+    const outrasHeader = findHeader(outrasRows, ['descricao', 'valor', 'data do debito']);
+    if (outrasRows.length > 0 && !outrasHeader) {
+      console.warn('[ALELO] header de Outras Transações não encontrado — ignorando aba');
+    }
+
+    // Limpar adjustments anteriores
+    await supabase.from('voucher_adjustments').delete()
+      .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
+
     type AdjRaw = {
       data: string | null;
       ec: string;
@@ -109,22 +192,34 @@ Deno.serve(async (req) => {
       tipo: string;
     };
     const adjs: AdjRaw[] = [];
-    for (const row of outras) {
-      const data = parseDateBR(row['Data do Débito'] ?? row['Data do Debito'] ?? row['Data de Pagamento']);
-      if (!data) continue;
-      if (!isInPeriod(data)) continue;
-      const desc = String(row['Descrição'] || row['Descricao'] || '').trim();
-      const valor = parseMoney(row['Valor']);
-      const ec = String(row['EC da Transação'] || row['EC da Transacao'] || row['N° Do EC'] || row['No Do EC'] || '').trim();
-      const modalidade = String(row['Tipo Cartão'] || row['Tipo Cartao'] || '').trim();
-      const dl = desc.toLowerCase();
-      let tipo = 'outro';
-      if (dl.includes('anuidade')) tipo = 'anuidade';
-      else if (dl.includes('mensalidade')) tipo = 'mensalidade';
-      else if (dl.includes('tor')) tipo = 'tor';
-      else if (dl.includes('compensa')) tipo = 'compensacao';
-      else if (dl.includes('tarifa')) tipo = 'tarifa';
-      adjs.push({ data, ec, descricao: desc, valor, modalidade, tipo });
+
+    if (outrasHeader) {
+      console.log('[ALELO] header outras linha =', outrasHeader.headerIdx, 'colunas =', JSON.stringify(outrasHeader.idx));
+      const oData = findCol(outrasHeader.idx, 'data do debito', 'data de pagamento');
+      const oDesc = findCol(outrasHeader.idx, 'descricao');
+      const oValor = findCol(outrasHeader.idx, 'valor');
+      const oEc = findCol(outrasHeader.idx, 'ec da transacao', 'no do ec', 'numero do ec');
+      const oTipo = findCol(outrasHeader.idx, 'tipo cartao', 'tipo do cartao');
+
+      for (let i = outrasHeader.headerIdx + 1; i < outrasRows.length; i++) {
+        const row = outrasRows[i] ?? [];
+        if (row.every(c => c == null || String(c).trim() === '')) continue;
+        const data = oData >= 0 ? parseDateBR(row[oData]) : null;
+        if (!data) continue;
+        if (!isInPeriod(data)) continue;
+        const desc = oDesc >= 0 ? String(row[oDesc] ?? '').trim() : '';
+        const valor = oValor >= 0 ? parseMoney(row[oValor]) : 0;
+        const ec = oEc >= 0 ? String(row[oEc] ?? '').trim() : '';
+        const modalidade = oTipo >= 0 ? String(row[oTipo] ?? '').trim() : '';
+        const dl = desc.toLowerCase();
+        let tipo = 'outro';
+        if (dl.includes('anuidade')) tipo = 'anuidade';
+        else if (dl.includes('mensalidade')) tipo = 'mensalidade';
+        else if (dl.includes('tor')) tipo = 'tor';
+        else if (dl.includes('compensa')) tipo = 'compensacao';
+        else if (dl.includes('tarifa')) tipo = 'tarifa';
+        adjs.push({ data, ec, descricao: desc, valor, modalidade, tipo });
+      }
     }
 
     // Detectar pares simétricos para compensações
@@ -174,8 +269,6 @@ Deno.serve(async (req) => {
       imported_adjustments: importedAdjs,
       status: 'completed',
     });
-
-    console.log('[ALELO] descartados:', { skipStatus, skipNumTrans, skipDataPag, skipPeriodo, importedLots });
 
     return jsonResponse({
       success: true,
