@@ -1,0 +1,1 @@
+DELETE FROM voucher_adjustments WHERE audit_period_id IN (SELECT id FROM audit_periods WHERE month = 3 AND year = 2026) AND operadora = 'alelo';
