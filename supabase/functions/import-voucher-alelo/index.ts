@@ -16,6 +16,7 @@ Deno.serve(async (req) => {
     console.log('[ALELO] recebimentos_rows.length =', recebimentosRows.length);
     console.log('[ALELO] outras_rows.length =', outrasRows.length);
     console.log('[ALELO] primeiras 3 linhas recebimentos =', JSON.stringify(recebimentosRows.slice(0, 3)));
+    console.log('[ALELO] primeiras 3 linhas outras =', JSON.stringify(outrasRows.slice(0, 3)));
 
     if (!audit_period_id) return jsonResponse({ error: 'audit_period_id obrigatório' }, 400);
 
