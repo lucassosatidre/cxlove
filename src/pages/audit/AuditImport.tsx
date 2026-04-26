@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import { ArrowLeft, FileSpreadsheet, Loader2, UploadCloud, CheckCircle2, Landmark, Trash2 } from 'lucide-react';
+import VoucherSettlementsImportSection from './VoucherSettlementsImportSection';
 
 type AuditImport = {
   id: string;
@@ -294,6 +295,13 @@ export default function AuditImport() {
             onAfterImport={async () => { if (period) await refresh(period.id); }}
           />
         ))}
+
+        <VoucherSettlementsImportSection
+          periodId={period?.id ?? null}
+          periodMonth={period?.month ?? null}
+          periodYear={period?.year ?? null}
+          disabled={!period}
+        />
 
         <Button variant="outline" onClick={() => navigate(backUrl)} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Voltar ao Dashboard
