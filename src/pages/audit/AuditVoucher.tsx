@@ -59,6 +59,7 @@ export default function AuditVoucher() {
   const [matches, setMatches] = useState<VoucherMatch[]>([]);
   const [details, setDetails] = useState<Record<string, Detail>>({});
   const [adjByCompany, setAdjByCompany] = useState<Record<string, number>>({});
+  const [expectedRates, setExpectedRates] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [periodLabel, setPeriodLabel] = useState('');
   const [periodMY, setPeriodMY] = useState<{ month: number; year: number } | null>(null);
