@@ -73,11 +73,35 @@ Deno.serve(async (req) => {
     };
 
     // ---- Recebimentos ----
+    // O XLSX da Alelo pode vir SEM cabeçalho (dados puros desde a linha 0)
+    // OU com cabeçalho. Tentamos os dois caminhos.
     const recHeader = findHeader(recebimentosRows, ['status', 'valor bruto', 'transacao']);
-    if (recebimentosRows.length > 0 && !recHeader) {
-      console.error('[ALELO] header de Recebimentos não encontrado nas primeiras 30 linhas');
+
+    // Layout posicional fixo do Alelo (sem header):
+    // 0:CNPJ 1:NºEC 2:RazãoSocial 3:NºEC 4:DataVenda 5:HoraVenda
+    // 6:NºAutorização 7:NºTransação 8:TipoCartão 9:NºCartão 10:Adquirente
+    // 11:ValorBruto 12:ValorLíquido 13:Status 14:DataPagamento
+    const POS = {
+      dataVenda: 4, numAutorizacao: 6, numTrans: 7, tipoCartao: 8,
+      numCartao: 9, bruto: 11, liquido: 12, status: 13, dataPag: 14,
+    };
+
+    // Detecta se uma linha "parece" um registro Alelo posicional (status válido + datas).
+    const looksLikePositional = (row: any[]): boolean => {
+      if (!row || row.length < 15) return false;
+      const status = String(row[POS.status] ?? '').trim();
+      if (status !== 'Aprovada' && status !== 'Rejeitada' && status !== 'Cancelada') return false;
+      const dv = parseDateBR(row[POS.dataVenda]);
+      const dp = parseDateBR(row[POS.dataPag]);
+      return !!(dv && dp);
+    };
+
+    const usePositional = !recHeader && recebimentosRows.length > 0 && looksLikePositional(recebimentosRows[0]);
+
+    if (recebimentosRows.length > 0 && !recHeader && !usePositional) {
+      console.error('[ALELO] header não encontrado E layout posicional não reconhecido');
       return jsonResponse({
-        error: 'Não encontrei o cabeçalho esperado na aba Recebimentos (Status, Valor Bruto, Nº da Transação). Verifique o formato do arquivo.',
+        error: 'Não consegui identificar o formato da aba Recebimentos (nem header com "Status/Valor Bruto", nem layout posicional padrão da Alelo). Verifique o arquivo.',
       }, 422);
     }
 
@@ -85,28 +109,40 @@ Deno.serve(async (req) => {
     let importedItems = 0;
     let skipStatus = 0, skipNumTrans = 0, skipDataPag = 0, skipPeriodo = 0;
 
-    if (recHeader) {
-      console.log('[ALELO] header recebimentos linha =', recHeader.headerIdx, 'colunas =', JSON.stringify(recHeader.idx));
+    // Define mapeamento e linha de início conforme o modo
+    let cStatus: number, cNumTrans: number, cBruto: number, cLiquido: number;
+    let cDataVenda: number, cDataPag: number, cTipoCartao: number, cAuth: number, cCard: number;
+    let startRow: number;
 
-      const cStatus = findCol(recHeader.idx, 'status');
-      const cNumTrans = findCol(recHeader.idx, 'no da transacao', 'n da transacao', 'numero da transacao');
-      const cBruto = findCol(recHeader.idx, 'valor bruto');
-      const cLiquido = findCol(recHeader.idx, 'valor liquido');
-      const cDataVenda = findCol(recHeader.idx, 'data da venda');
-      const cDataPag = findCol(recHeader.idx, 'data de pagamento', 'data do pagamento');
-      const cTipoCartao = findCol(recHeader.idx, 'tipo cartao', 'tipo do cartao');
-      const cAuth = findCol(recHeader.idx, 'no da autorizacao', 'autorizacao');
-      const cCard = findCol(recHeader.idx, 'no cartao', 'numero cartao', 'cartao');
+    if (usePositional) {
+      console.log('[ALELO] usando layout POSICIONAL (sem header)');
+      cStatus = POS.status; cNumTrans = POS.numTrans; cBruto = POS.bruto; cLiquido = POS.liquido;
+      cDataVenda = POS.dataVenda; cDataPag = POS.dataPag; cTipoCartao = POS.tipoCartao;
+      cAuth = POS.numAutorizacao; cCard = POS.numCartao;
+      startRow = 0;
+    } else {
+      console.log('[ALELO] header recebimentos linha =', recHeader!.headerIdx, 'colunas =', JSON.stringify(recHeader!.idx));
+      cStatus = findCol(recHeader!.idx, 'status');
+      cNumTrans = findCol(recHeader!.idx, 'no da transacao', 'n da transacao', 'numero da transacao');
+      cBruto = findCol(recHeader!.idx, 'valor bruto');
+      cLiquido = findCol(recHeader!.idx, 'valor liquido');
+      cDataVenda = findCol(recHeader!.idx, 'data da venda');
+      cDataPag = findCol(recHeader!.idx, 'data de pagamento', 'data do pagamento');
+      cTipoCartao = findCol(recHeader!.idx, 'tipo cartao', 'tipo do cartao');
+      cAuth = findCol(recHeader!.idx, 'no da autorizacao', 'autorizacao');
+      cCard = findCol(recHeader!.idx, 'no cartao', 'numero cartao', 'cartao');
+      startRow = recHeader!.headerIdx + 1;
+    }
 
-      console.log('[ALELO] cols mapeadas =', { cStatus, cNumTrans, cBruto, cLiquido, cDataVenda, cDataPag, cTipoCartao });
+    console.log('[ALELO] cols mapeadas =', { cStatus, cNumTrans, cBruto, cLiquido, cDataVenda, cDataPag, cTipoCartao });
 
-      // Limpar dados anteriores
-      await supabase.from('voucher_lots').delete()
-        .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
+    // Limpar dados anteriores
+    await supabase.from('voucher_lots').delete()
+      .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
 
-      for (let i = recHeader.headerIdx + 1; i < recebimentosRows.length; i++) {
-        const row = recebimentosRows[i] ?? [];
-        if (row.every(c => c == null || String(c).trim() === '')) continue;
+    for (let i = startRow; i < recebimentosRows.length; i++) {
+      const row = recebimentosRows[i] ?? [];
+      if (row.every(c => c == null || String(c).trim() === '')) continue;
 
         const status = cStatus >= 0 ? String(row[cStatus] ?? '').trim() : '';
         if (status !== 'Aprovada') { skipStatus++; continue; }
