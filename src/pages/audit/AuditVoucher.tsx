@@ -104,6 +104,9 @@ export default function AuditVoucher() {
       }
       setDetails(det);
       setAdjByCompany(adj);
+      const er: Record<string, number> = {};
+      for (const r of (expRates ?? []) as any[]) er[r.company] = Number(r.expected_rate_pct);
+      setExpectedRates(er);
       setLoading(false);
     })();
   }, [periodId, isAdmin]);
