@@ -1656,6 +1656,30 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_expected_rates: {
+        Row: {
+          company: string
+          expected_rate_pct: number
+          has_anticipation: boolean
+          notes: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company: string
+          expected_rate_pct: number
+          has_anticipation?: boolean
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company?: string
+          expected_rate_pct?: number
+          has_anticipation?: boolean
+          notes?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
