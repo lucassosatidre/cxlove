@@ -8,10 +8,10 @@ Deno.serve(async (req) => {
 
   try {
     const { audit_period_id, file_name, recebimentos = [], outras = [] } = await req.json();
-    console.log('[ALELO backend] recebimentos.length =', recebimentos.length);
-    console.log('[ALELO backend] outras.length =', outras.length);
-    console.log('[ALELO backend] primeiro recebimento =', JSON.stringify(recebimentos[0]));
-    console.log('[ALELO backend] keys primeiro =', recebimentos[0] ? Object.keys(recebimentos[0]) : 'vazio');
+    console.log('[ALELO] recebimentos.length =', recebimentos.length);
+    console.log('[ALELO] outras.length =', outras.length);
+    console.log('[ALELO] primeiro recebimento =', JSON.stringify(recebimentos[0]));
+    console.log('[ALELO] keys do primeiro =', recebimentos[0] ? Object.keys(recebimentos[0]) : 'vazio');
     if (!audit_period_id) return jsonResponse({ error: 'audit_period_id obrigatório' }, 400);
 
     const supabase = createClient(
@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
       .eq('id', audit_period_id)
       .maybeSingle();
     if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
+    console.log('[ALELO] period =', JSON.stringify(period));
     const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
     const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
     const isInPeriod = (d: string | null): boolean => {
@@ -42,16 +43,18 @@ Deno.serve(async (req) => {
     let importedLots = 0;
     let importedItems = 0;
 
+    let skipStatus = 0, skipNumTrans = 0, skipDataPag = 0, skipPeriodo = 0;
+
     for (const row of recebimentos) {
-      if (String(row['Status'] || '').trim() !== 'Aprovada') continue;
+      if (String(row['Status'] || '').trim() !== 'Aprovada') { skipStatus++; continue; }
       const numTrans = String(row['Nº da Transação'] || row['N° da Transação'] || row['No da Transação'] || '').trim();
-      if (!numTrans) continue;
+      if (!numTrans) { skipNumTrans++; continue; }
       const bruto = parseMoney(row['Valor Bruto']);
       const liquido = parseMoney(row['Valor Líquido'] ?? row['Valor Liquido']);
       const dataVenda = parseDateBR(row['Data da Venda']);
       const dataPag = parseDateBR(row['Data de Pagamento']);
-      if (!dataPag) continue;
-      if (!isInPeriod(dataPag)) continue;
+      if (!dataPag) { skipDataPag++; continue; }
+      if (!isInPeriod(dataPag)) { skipPeriodo++; continue; }
 
       const externalId = `alelo_${numTrans}`;
       const modalidade = String(row['Tipo Cartão'] || row['Tipo Cartao'] || '').trim() || null;
@@ -171,6 +174,8 @@ Deno.serve(async (req) => {
       imported_adjustments: importedAdjs,
       status: 'completed',
     });
+
+    console.log('[ALELO] descartados:', { skipStatus, skipNumTrans, skipDataPag, skipPeriodo, importedLots });
 
     return jsonResponse({
       success: true,
