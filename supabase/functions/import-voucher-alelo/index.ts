@@ -8,6 +8,10 @@ Deno.serve(async (req) => {
 
   try {
     const { audit_period_id, file_name, recebimentos = [], outras = [] } = await req.json();
+    console.log('[ALELO backend] recebimentos.length =', recebimentos.length);
+    console.log('[ALELO backend] outras.length =', outras.length);
+    console.log('[ALELO backend] primeiro recebimento =', JSON.stringify(recebimentos[0]));
+    console.log('[ALELO backend] keys primeiro =', recebimentos[0] ? Object.keys(recebimentos[0]) : 'vazio');
     if (!audit_period_id) return jsonResponse({ error: 'audit_period_id obrigatório' }, 400);
 
     const supabase = createClient(

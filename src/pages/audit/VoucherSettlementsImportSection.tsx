@@ -201,6 +201,11 @@ function OperadoraDropzone({
         const outrasSheet = wb.SheetNames.find(n => /outras/i.test(n));
         const recebimentos = recebimentosSheet ? XLSX.utils.sheet_to_json(wb.Sheets[recebimentosSheet], { defval: null, raw: true }) : [];
         const outras = outrasSheet ? XLSX.utils.sheet_to_json(wb.Sheets[outrasSheet], { defval: null, raw: true }) : [];
+        console.log('[ALELO frontend] sheets disponíveis =', wb.SheetNames);
+        console.log('[ALELO frontend] sheet usada (recebimentos) =', recebimentosSheet);
+        console.log('[ALELO frontend] recebimentos.length =', recebimentos.length);
+        console.log('[ALELO frontend] primeiro registro =', JSON.stringify(recebimentos[0], null, 2));
+        console.log('[ALELO frontend] keys do primeiro =', recebimentos[0] ? Object.keys(recebimentos[0]) : 'vazio');
         body.recebimentos = recebimentos;
         body.outras = outras;
       } else if (op === 'vr') {
