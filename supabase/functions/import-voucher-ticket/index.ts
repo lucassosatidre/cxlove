@@ -138,6 +138,15 @@ Deno.serve(async (req) => {
     }
     if (current) lots.push(current);
 
+    console.log('[TICKET] lots parseados =', lots.length, 'rows totais =', rows.length);
+
+    // Validação anti-falso-sucesso: arquivo com conteúdo mas zero lotes parseados
+    if (rows.length > 5 && lots.length === 0) {
+      return jsonResponse({
+        error: `Arquivo tem ${rows.length} linhas mas nenhum lote foi identificado. Verifique o formato (Extrato de Reembolso DETALHADO da Ticket).`,
+      }, 422);
+    }
+
     // Limpar dados anteriores
     await supabase.from('voucher_lots').delete()
       .eq('audit_period_id', audit_period_id).eq('operadora', 'ticket');
