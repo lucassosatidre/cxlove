@@ -16,6 +16,20 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    const { data: period } = await supabase
+      .from('audit_periods')
+      .select('month, year')
+      .eq('id', audit_period_id)
+      .maybeSingle();
+    if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
+    const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
+    const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
+    const isInPeriod = (d: string | null): boolean => {
+      if (!d) return false;
+      const dt = new Date(d + 'T00:00:00Z');
+      return dt >= periodStart && dt < periodEnd;
+    };
+
     type Item = {
       data_transacao: string | null;
       gross_amount: number;
@@ -130,8 +144,8 @@ Deno.serve(async (req) => {
       idx++;
     }
 
-    // Filtrar lotes sem data de pagamento
-    const validLots = uniqueLots.filter(l => l.data_pagamento);
+    // Filtrar lotes sem data de pagamento ou fora do período de competência
+    const validLots = uniqueLots.filter(l => l.data_pagamento && isInPeriod(l.data_pagamento));
 
     // Limpar dados anteriores deste período + operadora
     await supabase.from('voucher_lots').delete()

@@ -173,6 +173,26 @@ export default function AuditVoucher() {
           </BreadcrumbList>
         </Breadcrumb>
 
+        {periodId && (
+          <Card className="border-blue-500/40 bg-blue-500/5">
+            <CardContent className="py-3 flex items-center justify-between gap-2 text-sm flex-wrap">
+              <div className="flex items-start gap-2">
+                <span className="text-blue-600 dark:text-blue-400 font-semibold">📊 Nova versão disponível</span>
+                <span className="text-muted-foreground">
+                  Importe os extratos das operadoras para análise precisa (sem chute de prazo).
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate(`/admin/auditoria/voucher-settlements?period=${periodId}`)}
+              >
+                Ir para Conciliação por Extratos →
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="border-yellow-500/40 bg-yellow-500/5">
           <CardContent className="py-3 flex items-start gap-2 text-sm">
             <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
