@@ -18,6 +18,20 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    const { data: period } = await supabase
+      .from('audit_periods')
+      .select('month, year')
+      .eq('id', audit_period_id)
+      .maybeSingle();
+    if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
+    const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
+    const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
+    const isInPeriod = (d: string | null): boolean => {
+      if (!d) return false;
+      const dt = new Date(d + 'T00:00:00Z');
+      return dt >= periodStart && dt < periodEnd;
+    };
+
     // Encontrar header
     let headerIdx = -1;
     for (let i = 0; i < Math.min(rows.length, 30); i++) {
@@ -49,6 +63,7 @@ Deno.serve(async (req) => {
       const bruto = parseMoney(row[6]);
       const liquido = parseMoney(row[7]);
       if (!dataPag || bruto <= 0) continue;
+      if (!isInPeriod(dataPag)) continue;
 
       const isAntecipado = status.includes('Antecipado');
       let feeAdmin = 0;

@@ -15,6 +15,20 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    const { data: period } = await supabase
+      .from('audit_periods')
+      .select('month, year')
+      .eq('id', audit_period_id)
+      .maybeSingle();
+    if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
+    const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
+    const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
+    const isInPeriod = (d: string | null): boolean => {
+      if (!d) return false;
+      const dt = new Date(d + 'T00:00:00Z');
+      return dt >= periodStart && dt < periodEnd;
+    };
+
     // Limpar dados anteriores
     await supabase.from('voucher_lots').delete()
       .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
@@ -33,6 +47,7 @@ Deno.serve(async (req) => {
       const dataVenda = parseDateBR(row['Data da Venda']);
       const dataPag = parseDateBR(row['Data de Pagamento']);
       if (!dataPag) continue;
+      if (!isInPeriod(dataPag)) continue;
 
       const externalId = `alelo_${numTrans}`;
       const modalidade = String(row['Tipo Cartão'] || row['Tipo Cartao'] || '').trim() || null;
