@@ -198,7 +198,6 @@ Deno.serve(async (req) => {
           else importedItems++;
         }
       }
-    }
 
     console.log('[ALELO] descartados:', { skipStatus, skipNumTrans, skipDataPag, skipPeriodo, importedLots });
 
