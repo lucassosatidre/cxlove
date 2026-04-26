@@ -209,10 +209,27 @@ Deno.serve(async (req) => {
       }, 422);
     }
 
-    // ---- Outras Transações (busca dinâmica também) ----
+    // ---- Outras Transações ----
+    // Mesmo padrão: tenta header dinâmico, fallback para layout posicional fixo.
+    // Layout posicional Alelo (sem header):
+    // 0:CNPJ 1:NºEC 2:NomeFantasia 3:ECTransacao 4:TipoCartao
+    // 5:Descricao 6:Valor 7:DataDebito 8:DataPagamento
+    const POS_OUT = {
+      tipoCartao: 4, descricao: 5, valor: 6, dataDebito: 7, dataPagamento: 8, ec: 3,
+    };
+
+    const looksLikeOutrasPositional = (row: any[]): boolean => {
+      if (!row || row.length < 8) return false;
+      const desc = String(row[POS_OUT.descricao] ?? '').trim();
+      const dt = parseDateBR(row[POS_OUT.dataDebito]);
+      return !!(desc && dt);
+    };
+
     const outrasHeader = findHeader(outrasRows, ['descricao', 'valor', 'data do debito']);
-    if (outrasRows.length > 0 && !outrasHeader) {
-      console.warn('[ALELO] header de Outras Transações não encontrado — ignorando aba');
+    const useOutrasPositional = !outrasHeader && outrasRows.length > 0 && looksLikeOutrasPositional(outrasRows[0]);
+
+    if (outrasRows.length > 0 && !outrasHeader && !useOutrasPositional) {
+      console.warn('[ALELO] Outras Transações: nem header nem layout posicional reconhecido — ignorando aba');
     }
 
     // Limpar adjustments anteriores
@@ -229,34 +246,47 @@ Deno.serve(async (req) => {
     };
     const adjs: AdjRaw[] = [];
 
-    if (outrasHeader) {
-      console.log('[ALELO] header outras linha =', outrasHeader.headerIdx, 'colunas =', JSON.stringify(outrasHeader.idx));
-      const oData = findCol(outrasHeader.idx, 'data do debito', 'data de pagamento');
-      const oDesc = findCol(outrasHeader.idx, 'descricao');
-      const oValor = findCol(outrasHeader.idx, 'valor');
-      const oEc = findCol(outrasHeader.idx, 'ec da transacao', 'no do ec', 'numero do ec');
-      const oTipo = findCol(outrasHeader.idx, 'tipo cartao', 'tipo do cartao');
+    let oData: number, oDesc: number, oValor: number, oEc: number, oTipo: number;
+    let outrasStart: number;
 
-      for (let i = outrasHeader.headerIdx + 1; i < outrasRows.length; i++) {
-        const row = outrasRows[i] ?? [];
-        if (row.every(c => c == null || String(c).trim() === '')) continue;
-        const data = oData >= 0 ? parseDateBR(row[oData]) : null;
-        if (!data) continue;
-        if (!isInPeriod(data)) continue;
-        const desc = oDesc >= 0 ? String(row[oDesc] ?? '').trim() : '';
-        const valor = oValor >= 0 ? parseMoney(row[oValor]) : 0;
-        const ec = oEc >= 0 ? String(row[oEc] ?? '').trim() : '';
-        const modalidade = oTipo >= 0 ? String(row[oTipo] ?? '').trim() : '';
-        const dl = desc.toLowerCase();
-        let tipo = 'outro';
-        if (dl.includes('anuidade')) tipo = 'anuidade';
-        else if (dl.includes('mensalidade')) tipo = 'mensalidade';
-        else if (dl.includes('tor')) tipo = 'tor';
-        else if (dl.includes('compensa')) tipo = 'compensacao';
-        else if (dl.includes('tarifa')) tipo = 'tarifa';
-        adjs.push({ data, ec, descricao: desc, valor, modalidade, tipo });
-      }
+    if (useOutrasPositional) {
+      console.log('[ALELO] outras: usando layout POSICIONAL');
+      oData = POS_OUT.dataDebito; oDesc = POS_OUT.descricao; oValor = POS_OUT.valor;
+      oEc = POS_OUT.ec; oTipo = POS_OUT.tipoCartao;
+      outrasStart = 0;
+    } else if (outrasHeader) {
+      console.log('[ALELO] outras: header linha =', outrasHeader.headerIdx, 'colunas =', JSON.stringify(outrasHeader.idx));
+      oData = findCol(outrasHeader.idx, 'data do debito', 'data de pagamento');
+      oDesc = findCol(outrasHeader.idx, 'descricao');
+      oValor = findCol(outrasHeader.idx, 'valor');
+      oEc = findCol(outrasHeader.idx, 'ec da transacao', 'no do ec', 'numero do ec');
+      oTipo = findCol(outrasHeader.idx, 'tipo cartao', 'tipo do cartao');
+      outrasStart = outrasHeader.headerIdx + 1;
+    } else {
+      oData = -1; oDesc = -1; oValor = -1; oEc = -1; oTipo = -1; outrasStart = outrasRows.length;
     }
+
+    let skipOutrasData = 0, skipOutrasPeriodo = 0;
+    for (let i = outrasStart; i < outrasRows.length; i++) {
+      const row = outrasRows[i] ?? [];
+      if (row.every(c => c == null || String(c).trim() === '')) continue;
+      const data = oData >= 0 ? parseDateBR(row[oData]) : null;
+      if (!data) { skipOutrasData++; continue; }
+      if (!isInPeriod(data)) { skipOutrasPeriodo++; continue; }
+      const desc = oDesc >= 0 ? String(row[oDesc] ?? '').trim() : '';
+      const valor = oValor >= 0 ? parseMoney(row[oValor]) : 0;
+      const ec = oEc >= 0 ? String(row[oEc] ?? '').trim() : '';
+      const modalidade = oTipo >= 0 ? String(row[oTipo] ?? '').trim() : '';
+      const dl = desc.toLowerCase();
+      let tipo = 'outro';
+      if (dl.includes('anuidade')) tipo = 'anuidade';
+      else if (dl.includes('mensalidade')) tipo = 'mensalidade';
+      else if (dl.includes('tor')) tipo = 'tor';
+      else if (dl.includes('compensa')) tipo = 'compensacao';
+      else if (dl.includes('tarifa')) tipo = 'tarifa';
+      adjs.push({ data, ec, descricao: desc, valor, modalidade, tipo });
+    }
+    console.log('[ALELO] outras descartados:', { skipOutrasData, skipOutrasPeriodo, total: adjs.length });
 
     // Detectar pares simétricos para compensações
     const used = new Set<number>();
