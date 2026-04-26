@@ -210,7 +210,21 @@ export default function AuditVoucher() {
                     <div className="flex justify-between text-xs"><span className="text-muted-foreground">ℹ Recebido outras comp.:</span><span className="text-muted-foreground">{fmt(adjByCompany[m.company])}</span></div>
                   )}
                   <div className="flex justify-between"><span className="text-muted-foreground">Diferença:</span><span className={`font-semibold ${Number(m.difference) > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(m.difference))}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Taxa efetiva:</span><span className={`font-semibold ${Number(m.effective_tax_rate) > 5 ? 'text-red-600 dark:text-red-400' : ''}`}>{Number(m.effective_tax_rate).toFixed(2).replace('.', ',')}%</span></div>
+                  {(() => {
+                    const exp = expectedRates[m.company] ?? 0;
+                    const gap = Number(m.effective_tax_rate) - exp;
+                    const rateColor = gap > 5 ? 'text-red-600 dark:text-red-400'
+                      : gap > 2 ? 'text-yellow-600 dark:text-yellow-400'
+                      : 'text-green-600 dark:text-green-400';
+                    const gapColor = rateColor;
+                    return (
+                      <>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Taxa efetiva:</span><span className={`font-semibold ${rateColor}`}>{Number(m.effective_tax_rate).toFixed(2).replace('.', ',')}%</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Taxa esperada:</span><span className="text-muted-foreground">{exp.toFixed(2).replace('.', ',')}%</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground">Gap (real - esperada):</span><span className={`font-medium ${gapColor}`}>{(gap >= 0 ? '+' : '') + gap.toFixed(2).replace('.', ',')} pp</span></div>
+                      </>
+                    );
+                  })()}
                   <div className="text-xs text-muted-foreground pt-1">{m.sold_count} vendas / {m.deposit_count} depósitos</div>
 
                   {(isCritico || m.status === 'alerta') && (
