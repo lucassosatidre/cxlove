@@ -1656,6 +1656,47 @@ export type Database = {
         }
         Relationships: []
       }
+      voucher_adjustments: {
+        Row: {
+          audit_period_id: string
+          created_at: string
+          data: string
+          descricao: string
+          id: string
+          operadora: string
+          tipo: string | null
+          valor: number
+        }
+        Insert: {
+          audit_period_id: string
+          created_at?: string
+          data: string
+          descricao: string
+          id?: string
+          operadora: string
+          tipo?: string | null
+          valor: number
+        }
+        Update: {
+          audit_period_id?: string
+          created_at?: string
+          data?: string
+          descricao?: string
+          id?: string
+          operadora?: string
+          tipo?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_adjustments_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voucher_expected_rates: {
         Row: {
           company: string
@@ -1679,6 +1720,185 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      voucher_imports: {
+        Row: {
+          audit_period_id: string
+          file_name: string
+          id: string
+          imported_adjustments: number
+          imported_at: string
+          imported_by: string | null
+          imported_items: number
+          imported_lots: number
+          operadora: string
+          status: string
+        }
+        Insert: {
+          audit_period_id: string
+          file_name: string
+          id?: string
+          imported_adjustments?: number
+          imported_at?: string
+          imported_by?: string | null
+          imported_items?: number
+          imported_lots?: number
+          operadora: string
+          status?: string
+        }
+        Update: {
+          audit_period_id?: string
+          file_name?: string
+          id?: string
+          imported_adjustments?: number
+          imported_at?: string
+          imported_by?: string | null
+          imported_items?: number
+          imported_lots?: number
+          operadora?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_imports_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voucher_lot_items: {
+        Row: {
+          authorization_code: string | null
+          card_number: string | null
+          data_transacao: string
+          gross_amount: number
+          id: string
+          lot_id: string
+          maquinona_match_id: string | null
+          match_status: string
+          modalidade: string | null
+          net_amount: number | null
+        }
+        Insert: {
+          authorization_code?: string | null
+          card_number?: string | null
+          data_transacao: string
+          gross_amount: number
+          id?: string
+          lot_id: string
+          maquinona_match_id?: string | null
+          match_status?: string
+          modalidade?: string | null
+          net_amount?: number | null
+        }
+        Update: {
+          authorization_code?: string | null
+          card_number?: string | null
+          data_transacao?: string
+          gross_amount?: number
+          id?: string
+          lot_id?: string
+          maquinona_match_id?: string | null
+          match_status?: string
+          modalidade?: string | null
+          net_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_lot_items_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "voucher_lots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_lot_items_maquinona_match_id_fkey"
+            columns: ["maquinona_match_id"]
+            isOneToOne: false
+            referencedRelation: "audit_card_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      voucher_lots: {
+        Row: {
+          audit_period_id: string
+          bb_deposit_id: string | null
+          created_at: string
+          data_corte: string | null
+          data_pagamento: string
+          external_id: string
+          fee_admin: number | null
+          fee_anticipation: number | null
+          fee_management: number | null
+          fee_other: number | null
+          fee_total: number | null
+          gross_amount: number
+          id: string
+          modalidade: string | null
+          net_amount: number
+          operadora: string
+          raw_data: Json | null
+          status: string
+        }
+        Insert: {
+          audit_period_id: string
+          bb_deposit_id?: string | null
+          created_at?: string
+          data_corte?: string | null
+          data_pagamento: string
+          external_id: string
+          fee_admin?: number | null
+          fee_anticipation?: number | null
+          fee_management?: number | null
+          fee_other?: number | null
+          fee_total?: number | null
+          gross_amount?: number
+          id?: string
+          modalidade?: string | null
+          net_amount?: number
+          operadora: string
+          raw_data?: Json | null
+          status?: string
+        }
+        Update: {
+          audit_period_id?: string
+          bb_deposit_id?: string | null
+          created_at?: string
+          data_corte?: string | null
+          data_pagamento?: string
+          external_id?: string
+          fee_admin?: number | null
+          fee_anticipation?: number | null
+          fee_management?: number | null
+          fee_other?: number | null
+          fee_total?: number | null
+          gross_amount?: number
+          id?: string
+          modalidade?: string | null
+          net_amount?: number
+          operadora?: string
+          raw_data?: Json | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_lots_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "voucher_lots_bb_deposit_id_fkey"
+            columns: ["bb_deposit_id"]
+            isOneToOne: false
+            referencedRelation: "audit_bank_deposits"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -1787,6 +2007,7 @@ export type Database = {
         Returns: boolean
       }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
+      match_voucher_lots: { Args: { p_period_id: string }; Returns: Json }
       promote_from_waitlist: {
         Args: {
           p_freed_by: string
