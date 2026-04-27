@@ -1087,6 +1087,68 @@ export type Database = {
         }
         Relationships: []
       }
+      ifood_ai_audits: {
+        Row: {
+          anomalies: Json | null
+          audit_period_id: string
+          cost_usd: number | null
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          input_hash: string
+          input_tokens: number | null
+          model_used: string
+          output_tokens: number | null
+          recommendations: Json | null
+          status: string
+          summary: string | null
+          triggered_by: string | null
+        }
+        Insert: {
+          anomalies?: Json | null
+          audit_period_id: string
+          cost_usd?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_hash: string
+          input_tokens?: number | null
+          model_used: string
+          output_tokens?: number | null
+          recommendations?: Json | null
+          status: string
+          summary?: string | null
+          triggered_by?: string | null
+        }
+        Update: {
+          anomalies?: Json | null
+          audit_period_id?: string
+          cost_usd?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_hash?: string
+          input_tokens?: number | null
+          model_used?: string
+          output_tokens?: number | null
+          recommendations?: Json | null
+          status?: string
+          summary?: string | null
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ifood_ai_audits_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       imported_orders: {
         Row: {
           confirmed_at: string | null
@@ -1901,6 +1963,80 @@ export type Database = {
           },
         ]
       }
+      voucher_ai_audits: {
+        Row: {
+          audit_period_id: string
+          cost_usd: number | null
+          created_at: string
+          duration_ms: number | null
+          error: string | null
+          id: string
+          input_hash: string
+          input_tokens: number | null
+          items_ambiguous: number | null
+          items_matched: number | null
+          items_orphan: number | null
+          lots_matched_bb: number | null
+          lots_unmatched_bb: number | null
+          model_used: string
+          output_tokens: number | null
+          result: Json
+          total_recebido_competencia: number | null
+          total_taxa_real: number | null
+          triggered_by: string | null
+        }
+        Insert: {
+          audit_period_id: string
+          cost_usd?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_hash: string
+          input_tokens?: number | null
+          items_ambiguous?: number | null
+          items_matched?: number | null
+          items_orphan?: number | null
+          lots_matched_bb?: number | null
+          lots_unmatched_bb?: number | null
+          model_used: string
+          output_tokens?: number | null
+          result: Json
+          total_recebido_competencia?: number | null
+          total_taxa_real?: number | null
+          triggered_by?: string | null
+        }
+        Update: {
+          audit_period_id?: string
+          cost_usd?: number | null
+          created_at?: string
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          input_hash?: string
+          input_tokens?: number | null
+          items_ambiguous?: number | null
+          items_matched?: number | null
+          items_orphan?: number | null
+          lots_matched_bb?: number | null
+          lots_unmatched_bb?: number | null
+          model_used?: string
+          output_tokens?: number | null
+          result?: Json
+          total_recebido_competencia?: number | null
+          total_taxa_real?: number | null
+          triggered_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voucher_ai_audits_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voucher_expected_rates: {
         Row: {
           company: string
@@ -1974,6 +2110,7 @@ export type Database = {
       }
       voucher_lot_items: {
         Row: {
+          ai_reasoning: string | null
           authorization_code: string | null
           card_number: string | null
           data_transacao: string
@@ -1986,6 +2123,7 @@ export type Database = {
           net_amount: number | null
         }
         Insert: {
+          ai_reasoning?: string | null
           authorization_code?: string | null
           card_number?: string | null
           data_transacao: string
@@ -1998,6 +2136,7 @@ export type Database = {
           net_amount?: number | null
         }
         Update: {
+          ai_reasoning?: string | null
           authorization_code?: string | null
           card_number?: string | null
           data_transacao?: string
@@ -2028,6 +2167,7 @@ export type Database = {
       }
       voucher_lots: {
         Row: {
+          ai_reasoning: string | null
           audit_period_id: string
           bb_deposit_id: string | null
           created_at: string
@@ -2048,6 +2188,7 @@ export type Database = {
           status: string
         }
         Insert: {
+          ai_reasoning?: string | null
           audit_period_id: string
           bb_deposit_id?: string | null
           created_at?: string
@@ -2068,6 +2209,7 @@ export type Database = {
           status?: string
         }
         Update: {
+          ai_reasoning?: string | null
           audit_period_id?: string
           bb_deposit_id?: string | null
           created_at?: string
@@ -2235,6 +2377,17 @@ export type Database = {
           total_liquido_ifood: number
           total_promocao: number
           total_taxa_declarada: number
+        }[]
+      }
+      get_daily_audit_summary: {
+        Args: { p_period_id: string }
+        Returns: {
+          deposito_cresol: number
+          deposito_qtd: number
+          dia: string
+          vendas_maquinona_bruto: number
+          vendas_maquinona_liquido: number
+          vendas_qtd: number
         }[]
       }
       has_role: {

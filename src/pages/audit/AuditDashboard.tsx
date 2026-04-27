@@ -22,6 +22,7 @@ import {
   type ContabilDetalhamento,
 } from '@/lib/audit-pdf-contabil';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import AiAuditPanel from '@/components/audit/AiAuditPanel';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FileText, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -280,6 +281,7 @@ export default function AuditDashboard() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [uploadingSource, setUploadingSource] = useState<ImportSource | null>(null);
+  const [aiAudits, setAiAudits] = useState<any>(null);
 
   // Persist month/year to sessionStorage + URL on every change
   useEffect(() => {
@@ -460,6 +462,7 @@ export default function AuditDashboard() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      if ((data as any)?.ai_audits) setAiAudits((data as any).ai_audits);
       toast({
         title: '✓ Conciliação concluída',
         description: `${(data as any).daily_matches_count} matches diários · ${(data as any).voucher_matches_count} matches voucher`,
@@ -871,6 +874,11 @@ export default function AuditDashboard() {
               </Button>
             </CardContent>
           </Card>
+        )}
+
+        {/* Camada IA: reconciliação voucher (Opus) + auditoria iFood (Sonnet) */}
+        {period && (
+          <AiAuditPanel periodId={period.id} initialResult={aiAudits} />
         )}
 
         {/* Summary cards */}
