@@ -185,7 +185,7 @@ export default function AuditDashboard() {
       supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
     ]);
     setImports((imps as AuditImport[]) ?? []);
-    setAllImports((allImps as PeriodImportRow[]) ?? []);
+    setAllImports(((allImps as unknown) as PeriodImportRow[]) ?? []);
 
     const t = (totalsRpc as any[])?.[0] ?? {};
     const bruto = Number(t.total_bruto ?? 0);
