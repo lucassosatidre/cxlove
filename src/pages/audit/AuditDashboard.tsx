@@ -279,6 +279,7 @@ export default function AuditDashboard() {
   const [exportingContabil, setExportingContabil] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [uploadingSource, setUploadingSource] = useState<ImportSource | null>(null);
 
   // Persist month/year to sessionStorage + URL on every change
   useEffect(() => {
