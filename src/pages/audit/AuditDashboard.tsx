@@ -144,6 +144,7 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(() => getInitial('year', now.getFullYear()));
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
+  const [allImports, setAllImports] = useState<PeriodImportRow[]>([]);
   const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
@@ -173,8 +174,9 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
+    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
+      supabase.from('vw_period_imports' as any).select('*').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
@@ -183,6 +185,7 @@ export default function AuditDashboard() {
       supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
     ]);
     setImports((imps as AuditImport[]) ?? []);
+    setAllImports((allImps as PeriodImportRow[]) ?? []);
 
     const t = (totalsRpc as any[])?.[0] ?? {};
     const bruto = Number(t.total_bruto ?? 0);
