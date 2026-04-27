@@ -875,6 +875,11 @@ export default function AuditDashboard() {
           </Card>
         )}
 
+        {/* Camada IA: reconciliação voucher (Opus) + auditoria iFood (Sonnet) */}
+        {period && (
+          <AiAuditPanel periodId={period.id} initialResult={aiAudits} />
+        )}
+
         {/* Summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <SummaryCard title="Vendido" value={formatCurrency(totals.vendido)} />
