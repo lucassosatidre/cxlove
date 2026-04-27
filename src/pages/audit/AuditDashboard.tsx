@@ -280,6 +280,7 @@ export default function AuditDashboard() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [uploadingSource, setUploadingSource] = useState<ImportSource | null>(null);
+  const [aiAudits, setAiAudits] = useState<any>(null);
 
   // Persist month/year to sessionStorage + URL on every change
   useEffect(() => {
@@ -460,6 +461,7 @@ export default function AuditDashboard() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
+      if ((data as any)?.ai_audits) setAiAudits((data as any).ai_audits);
       toast({
         title: '✓ Conciliação concluída',
         description: `${(data as any).daily_matches_count} matches diários · ${(data as any).voucher_matches_count} matches voucher`,
