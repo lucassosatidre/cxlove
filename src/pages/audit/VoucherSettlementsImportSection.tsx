@@ -215,13 +215,18 @@ function OperadoraDropzone({
       } else if (op === 'ticket') {
         // Envia o arquivo cru (base64) para o backend parsear.
         // Motivo: o XLSX da Ticket contém uma imagem PNG embutida que faz
-        // o SheetJS no browser falhar ("Bad uncompressed size"), descartando
-        // ~85% das linhas silenciosamente. No Deno o parse funciona normal.
-        const buf = await file.arrayBuffer();
-        const bytes = new Uint8Array(buf);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-        body.file_base64 = btoa(binary);
+        // o SheetJS no browser falhar ("Bad uncompressed size"). No Deno o parse funciona.
+        // Usamos FileReader (nativo) em vez de for+btoa que estoura memória no mobile.
+        body.file_base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const result = reader.result as string;
+            const base64 = result.substring(result.indexOf(',') + 1);
+            resolve(base64);
+          };
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
       }
 
       const { data, error } = await supabase.functions.invoke(meta.functionName, { body });
