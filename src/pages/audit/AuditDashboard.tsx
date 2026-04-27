@@ -24,6 +24,7 @@ import {
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FileText, ChevronDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 type AuditPeriod = {
   id: string;
