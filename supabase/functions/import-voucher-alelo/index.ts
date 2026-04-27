@@ -81,8 +81,8 @@ Deno.serve(async (req) => {
     // Detecta se uma linha "parece" um registro Alelo posicional (status válido + datas).
     const looksLikePositional = (row: any[]): boolean => {
       if (!row || row.length < 15) return false;
-      const status = String(row[POS.status] ?? '').trim();
-      if (status !== 'Aprovada' && status !== 'Rejeitada' && status !== 'Cancelada') return false;
+      const status = String(row[POS.status] ?? '').trim().toLowerCase();
+      if (status !== 'aprovada' && status !== 'rejeitada' && status !== 'cancelada') return false;
       const dv = parseDateBR(row[POS.dataVenda]);
       const dp = parseDateBR(row[POS.dataPag]);
       return !!(dv && dp);
@@ -115,14 +115,14 @@ Deno.serve(async (req) => {
     } else {
       console.log('[ALELO] header recebimentos linha =', recHeader!.headerIdx, 'colunas =', JSON.stringify(recHeader!.idx));
       cStatus = findCol(recHeader!.idx, 'status');
-      cNumTrans = findCol(recHeader!.idx, 'no da transacao', 'n da transacao', 'numero da transacao');
+      cNumTrans = findCol(recHeader!.idx, 'no da transacao', 'n da transacao', 'numero da transacao', 'numero da autorizacao', 'no da autorizacao');
       cBruto = findCol(recHeader!.idx, 'valor bruto');
       cLiquido = findCol(recHeader!.idx, 'valor liquido');
       cDataVenda = findCol(recHeader!.idx, 'data da venda');
       cDataPag = findCol(recHeader!.idx, 'data de pagamento', 'data do pagamento');
       cTipoCartao = findCol(recHeader!.idx, 'tipo cartao', 'tipo do cartao');
       cAuth = findCol(recHeader!.idx, 'no da autorizacao', 'autorizacao');
-      cCard = findCol(recHeader!.idx, 'no cartao', 'numero cartao', 'cartao');
+      cCard = findCol(recHeader!.idx, 'no cartao', 'n cartao', 'numero cartao', 'numero do cartao');
       startRow = recHeader!.headerIdx + 1;
     }
 
@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
       if (row.every(c => c == null || String(c).trim() === '')) continue;
 
         const status = cStatus >= 0 ? String(row[cStatus] ?? '').trim() : '';
-        if (status !== 'Aprovada') { skipStatus++; continue; }
+        if (status.toLowerCase() !== 'aprovada') { skipStatus++; continue; }
 
         const numTrans = cNumTrans >= 0 ? String(row[cNumTrans] ?? '').trim() : '';
         if (!numTrans) { skipNumTrans++; continue; }
