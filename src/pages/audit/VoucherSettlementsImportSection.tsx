@@ -213,10 +213,15 @@ function OperadoraDropzone({
         const sheet = wb.Sheets[wb.SheetNames[0]];
         body.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
       } else if (op === 'ticket') {
+        // Envia o arquivo cru (base64) para o backend parsear.
+        // Motivo: o XLSX da Ticket contém uma imagem PNG embutida que faz
+        // o SheetJS no browser falhar ("Bad uncompressed size"), descartando
+        // ~85% das linhas silenciosamente. No Deno o parse funciona normal.
         const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        body.rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        body.file_base64 = btoa(binary);
       }
 
       const { data, error } = await supabase.functions.invoke(meta.functionName, { body });

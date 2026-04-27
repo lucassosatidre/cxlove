@@ -9,9 +9,26 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
-    const { audit_period_id, file_name, rows } = await req.json();
-    if (!audit_period_id || !Array.isArray(rows)) {
-      return jsonResponse({ error: 'audit_period_id e rows são obrigatórios' }, 400);
+    const { audit_period_id, file_name, rows: rowsInput, file_base64 } = await req.json();
+    if (!audit_period_id) {
+      return jsonResponse({ error: 'audit_period_id é obrigatório' }, 400);
+    }
+
+    let rows: any[][] = [];
+    if (file_base64) {
+      const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+      const binaryString = atob(file_base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      const wb = XLSX.read(bytes, { type: 'array', cellDates: true });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true }) as any[][];
+      console.log('[TICKET] parseado no backend, rows =', rows.length);
+    } else if (Array.isArray(rowsInput)) {
+      rows = rowsInput;
+      console.log('[TICKET] rows recebido do frontend =', rows.length);
+    } else {
+      return jsonResponse({ error: 'É necessário enviar rows ou file_base64' }, 400);
     }
 
     const supabase = createClient(
