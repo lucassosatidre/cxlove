@@ -12,7 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { ArrowLeft, Loader2, Receipt, ListChecks } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, ListChecks, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 
 type Operadora = 'pluxee' | 'alelo' | 'vr' | 'ticket';
@@ -51,6 +52,23 @@ type Adjustment = {
 
 type Period = { id: string; month: number; year: number; status: string };
 
+type CompetenciaRow = {
+  operadora: string;
+  vendido_bruto: number;
+  vendido_count: number;
+  reconhecido_bruto: number;
+  reconhecido_count: number;
+  pago_bruto: number;
+  pago_liquido: number;
+  pago_lotes_count: number;
+  pendente_bruto: number;
+  pendente_count: number;
+  taxa_real_pct: number | null;
+  taxa_estimada_pct: number | null;
+  taxa_efetiva_consolidada_pct: number | null;
+  status: string;
+};
+
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 const OP_LABEL: Record<Operadora, string> = {
@@ -75,6 +93,7 @@ export default function AuditVoucherSettlements() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [competencia, setCompetencia] = useState<CompetenciaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNeutras, setShowNeutras] = useState(false);
   const [matching, setMatching] = useState(false);
