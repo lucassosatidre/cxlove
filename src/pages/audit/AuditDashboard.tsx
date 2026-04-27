@@ -969,6 +969,10 @@ export default function AuditDashboard() {
             <p className="text-xs text-muted-foreground">
               7 fontes: Maquinona + Cresol + Banco do Brasil + 4 extratos das operadoras de voucher.
             </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+              Selecione múltiplos arquivos no botão "Importar" — eles são processados em sequência.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {isClosed && (
@@ -983,10 +987,8 @@ export default function AuditDashboard() {
                   const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
                   const fileCount = rowsForSource.length;
                   const isCompleted = fileCount > 0;
-                  const isVoucher = ['pluxee', 'alelo', 'vr', 'ticket'].includes(src);
-                  const uploadHref = isVoucher
-                    ? `/admin/auditoria/importar?period=${period?.id}&month=${month}&year=${year}#vouchers`
-                    : `/admin/auditoria/importar?tipo=${src}&period=${period?.id}`;
+                  const isUploading = uploadingSource === src;
+                  const inputId = `upload-input-${src}`;
 
                   return (
                     <div key={src} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
@@ -1001,44 +1003,34 @@ export default function AuditDashboard() {
                           <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
                         )}
                       </div>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button size="sm" variant="outline" disabled={!period || isClosed} className="gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          id={inputId}
+                          type="file"
+                          multiple
+                          accept={ACCEPT_BY_SOURCE[src]}
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = e.target.files;
+                            handleUpload(src, files);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!period || isClosed || isUploading}
+                          className="gap-1.5"
+                          onClick={() => document.getElementById(inputId)?.click()}
+                        >
+                          {isUploading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
                             <UploadCloud className="h-3.5 w-3.5" />
-                            {isCompleted ? 'Re-importar' : 'Importar'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-80 space-y-3">
-                          <div>
-                            <p className="font-medium text-sm">{FILE_LABELS[src]}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {isVoucher
-                                ? 'Extrato detalhado da operadora — usado para calcular taxa real efetiva e cruzar pagamentos com vendas da Maquinona.'
-                                : src === 'maquinona'
-                                  ? 'Relatório bruto de vendas da Maquinona — fonte da competência.'
-                                  : src === 'cresol'
-                                    ? 'Extrato Cresol — depósitos do iFood.'
-                                    : 'Extrato BB — depósitos das operadoras de voucher.'}
-                            </p>
-                          </div>
-                          {isCompleted && latest && (
-                            <div className="rounded bg-muted/40 p-2 text-xs space-y-0.5">
-                              <p className="truncate" title={latest.file_name}><strong>Último arquivo:</strong> {latest.file_name}</p>
-                              <p><strong>Importado em:</strong> {formatDateTime(latest.created_at)}</p>
-                              <p><strong>Linhas:</strong> {totalRows}</p>
-                            </div>
                           )}
-                          <Button
-                            size="sm"
-                            className="w-full gap-2"
-                            disabled={!period || isClosed}
-                            onClick={() => navigate(uploadHref, { state: { month, year } })}
-                          >
-                            <UploadCloud className="h-4 w-4" />
-                            Abrir uploader
-                          </Button>
-                        </PopoverContent>
-                      </Popover>
+                          {isUploading ? 'Importando...' : (isCompleted ? 'Re-importar' : 'Importar')}
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
