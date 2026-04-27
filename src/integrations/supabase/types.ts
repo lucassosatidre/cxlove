@@ -608,6 +608,41 @@ export type Database = {
           },
         ]
       }
+      clau_conversation_summaries: {
+        Row: {
+          conversation_id: string
+          generated_at: string | null
+          message_count_when_generated: number | null
+          search_vector: unknown
+          summary: string
+          topics: string[] | null
+        }
+        Insert: {
+          conversation_id: string
+          generated_at?: string | null
+          message_count_when_generated?: number | null
+          search_vector?: unknown
+          summary: string
+          topics?: string[] | null
+        }
+        Update: {
+          conversation_id?: string
+          generated_at?: string | null
+          message_count_when_generated?: number | null
+          search_vector?: unknown
+          summary?: string
+          topics?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clau_conversation_summaries_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: true
+            referencedRelation: "clau_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clau_conversations: {
         Row: {
           app_origin: string
@@ -650,6 +685,57 @@ export type Database = {
         }
         Relationships: []
       }
+      clau_extracted_facts: {
+        Row: {
+          archived: boolean | null
+          category: string | null
+          confirmed_by_user: boolean | null
+          created_at: string | null
+          fact: string
+          id: string
+          search_vector: unknown
+          source_conversation_id: string | null
+          source_message_id: string | null
+        }
+        Insert: {
+          archived?: boolean | null
+          category?: string | null
+          confirmed_by_user?: boolean | null
+          created_at?: string | null
+          fact: string
+          id?: string
+          search_vector?: unknown
+          source_conversation_id?: string | null
+          source_message_id?: string | null
+        }
+        Update: {
+          archived?: boolean | null
+          category?: string | null
+          confirmed_by_user?: boolean | null
+          created_at?: string | null
+          fact?: string
+          id?: string
+          search_vector?: unknown
+          source_conversation_id?: string | null
+          source_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clau_extracted_facts_source_conversation_id_fkey"
+            columns: ["source_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "clau_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clau_extracted_facts_source_message_id_fkey"
+            columns: ["source_message_id"]
+            isOneToOne: false
+            referencedRelation: "clau_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clau_messages: {
         Row: {
           content: string
@@ -658,6 +744,7 @@ export type Database = {
           created_at: string | null
           id: string
           role: string
+          search_vector: unknown
           tokens_used: number | null
         }
         Insert: {
@@ -667,6 +754,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           role: string
+          search_vector?: unknown
           tokens_used?: number | null
         }
         Update: {
@@ -676,6 +764,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           role?: string
+          search_vector?: unknown
           tokens_used?: number | null
         }
         Relationships: [
@@ -711,6 +800,50 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      clau_tool_logs: {
+        Row: {
+          conversation_id: string | null
+          created_at: string | null
+          duration_ms: number | null
+          error: string | null
+          id: string
+          tool_input: Json
+          tool_name: string
+          tool_output_size: number | null
+          user_id: string
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          tool_input: Json
+          tool_name: string
+          tool_output_size?: number | null
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string | null
+          duration_ms?: number | null
+          error?: string | null
+          id?: string
+          tool_input?: Json
+          tool_name?: string
+          tool_output_size?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clau_tool_logs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "clau_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_closings: {
         Row: {
@@ -2004,6 +2137,29 @@ export type Database = {
       classify_voucher_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
+      }
+      clau_safe_query: { Args: { p_sql: string }; Returns: Json }
+      clau_search_messages: {
+        Args: { p_limit?: number; p_query: string; p_user_id: string }
+        Returns: {
+          content: string
+          conversation_id: string
+          conversation_title: string
+          created_at: string
+          rank: number
+          role: string
+        }[]
+      }
+      clau_search_summaries: {
+        Args: { p_limit?: number; p_query: string; p_user_id: string }
+        Returns: {
+          conversation_id: string
+          conversation_title: string
+          generated_at: string
+          rank: number
+          summary: string
+          topics: string[]
+        }[]
       }
       get_audit_contabil_breakdown: {
         Args: { p_period_id: string }
