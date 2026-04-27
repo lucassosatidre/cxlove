@@ -22,10 +22,13 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
   const [loadingVoucher, setLoadingVoucher] = useState(false);
   const [loadingIfood, setLoadingIfood] = useState(false);
 
-  // Load latest cached audits if no initial result passed
+  // Load latest cached audits + poll while results are missing
   useEffect(() => {
-    if (initialResult) return;
-    (async () => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const checkResults = async () => {
       const [{ data: v }, { data: i }] = await Promise.all([
         supabase.from('voucher_ai_audits')
           .select('result, cost_usd, total_recebido_competencia, total_taxa_real, items_matched, items_ambiguous, items_orphan, lots_matched_bb, created_at, error')
@@ -36,9 +39,24 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
           .eq('audit_period_id', periodId)
           .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
-      if (v) setVoucher({ cached: true, ...v });
-      if (i) setIfood({ cached: true, ...i });
-    })();
+      if (cancelled) return;
+      if (v) setVoucher((prev: any) => prev?.results ? prev : { cached: true, ...v });
+      if (i) setIfood((prev: any) => prev?.summary && !prev?.cached ? prev : { cached: true, ...i });
+      if (v && i && interval) { clearInterval(interval); interval = null; }
+    };
+
+    // Initial load (always) — even if initialResult exists, fetch latest persisted version
+    checkResults();
+
+    // Poll only if we don't have full results yet
+    interval = setInterval(checkResults, 15000);
+    stopTimeout = setTimeout(() => { if (interval) { clearInterval(interval); interval = null; } }, 300000);
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (stopTimeout) clearTimeout(stopTimeout);
+    };
   }, [periodId, initialResult]);
 
   const rerun = async (which: 'voucher' | 'ifood') => {
