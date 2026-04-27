@@ -16,14 +16,117 @@ Deno.serve(async (req) => {
 
     let rows: any[][] = [];
     if (file_base64) {
-      const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+      // Parser XML manual: SheetJS quebra com prefixo XML "x:" usado pelo portal Ticket.
+      // Lê o XLSX como ZIP via fflate, extrai sharedStrings.xml + sheet1.xml, parseia com regex
+      // que aceita tags com OU sem prefixo (x:row, x:c, x:v, x:t, x:si).
       const binaryString = atob(file_base64);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-      const wb = XLSX.read(bytes, { type: 'array', cellDates: true });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true }) as any[][];
-      console.log('[TICKET] parseado no backend, rows =', rows.length);
+
+      const fflate = await import('https://esm.sh/fflate@0.8.2');
+      const unzipped = fflate.unzipSync(bytes);
+
+      const decoder = new TextDecoder('utf-8');
+      const sharedStringsXml = unzipped['xl/sharedStrings.xml']
+        ? decoder.decode(unzipped['xl/sharedStrings.xml'])
+        : '';
+      const sheet1Xml = unzipped['xl/worksheets/sheet1.xml']
+        ? decoder.decode(unzipped['xl/worksheets/sheet1.xml'])
+        : '';
+
+      if (!sheet1Xml) {
+        return jsonResponse({ error: 'Ticket: arquivo XLSX inválido (sheet1.xml não encontrado)' }, 422);
+      }
+
+      // Shared strings (aceita prefixo x:)
+      const ssTable: string[] = [];
+      const siRegex = /<(?:x:)?si[^>]*>([\s\S]*?)<\/(?:x:)?si>/g;
+      const tRegex = /<(?:x:)?t[^>]*>([\s\S]*?)<\/(?:x:)?t>/g;
+      let siMatch: RegExpExecArray | null;
+      while ((siMatch = siRegex.exec(sharedStringsXml)) !== null) {
+        const inner = siMatch[1];
+        const texts: string[] = [];
+        let tMatch: RegExpExecArray | null;
+        tRegex.lastIndex = 0;
+        while ((tMatch = tRegex.exec(inner)) !== null) {
+          texts.push(tMatch[1]);
+        }
+        ssTable.push(texts.join(''));
+      }
+      console.log('[TICKET] shared strings carregadas:', ssTable.length);
+
+      const colToIdx = (col: string): number => {
+        let idx = 0;
+        for (const c of col) idx = idx * 26 + (c.charCodeAt(0) - 64);
+        return idx - 1;
+      };
+
+      const decodeXmlEntities = (s: string): string =>
+        s.replace(/&amp;/g, '&')
+         .replace(/&lt;/g, '<')
+         .replace(/&gt;/g, '>')
+         .replace(/&quot;/g, '"')
+         .replace(/&apos;/g, "'");
+
+      const rowsByNum: Map<number, any[]> = new Map();
+      let maxRow = 0;
+      let maxCol = 0;
+
+      const rowRegex = /<(?:x:)?row\s+r="(\d+)"[^>]*>([\s\S]*?)<\/(?:x:)?row>/g;
+      const cellRegex = /<(?:x:)?c\s+([^>]*?)\/?>(?:<(?:x:)?v[^>]*>([^<]*)<\/(?:x:)?v>)?/g;
+      const refAttrRegex = /r="([A-Z]+)(\d+)"/;
+      const typeAttrRegex = /t="([^"]+)"/;
+
+      let rowMatch: RegExpExecArray | null;
+      while ((rowMatch = rowRegex.exec(sheet1Xml)) !== null) {
+        const rowNum = parseInt(rowMatch[1], 10);
+        const rowContent = rowMatch[2];
+        const cellsByCol: Map<number, any> = new Map();
+
+        let cellMatch: RegExpExecArray | null;
+        cellRegex.lastIndex = 0;
+        while ((cellMatch = cellRegex.exec(rowContent)) !== null) {
+          const attrs = cellMatch[1];
+          const value = cellMatch[2];
+          if (value === undefined || value === '') continue;
+
+          const refMatch = refAttrRegex.exec(attrs);
+          if (!refMatch) continue;
+          const colIdx = colToIdx(refMatch[1]);
+
+          const typeMatch = typeAttrRegex.exec(attrs);
+          const cellType = typeMatch ? typeMatch[1] : null;
+
+          let finalValue: any;
+          if (cellType === 's') {
+            const ssIdx = parseInt(value, 10);
+            finalValue = ssTable[ssIdx] !== undefined ? decodeXmlEntities(ssTable[ssIdx]) : '';
+          } else {
+            finalValue = decodeXmlEntities(value);
+          }
+
+          cellsByCol.set(colIdx, finalValue);
+          if (colIdx > maxCol) maxCol = colIdx;
+        }
+
+        if (cellsByCol.size > 0) {
+          rowsByNum.set(rowNum, Array.from(cellsByCol.entries()) as any);
+          if (rowNum > maxRow) maxRow = rowNum;
+        }
+      }
+
+      // Montar array final na ordem (rowNum começa em 1)
+      rows = [];
+      for (let n = 1; n <= maxRow; n++) {
+        const entries = rowsByNum.get(n) as unknown as Array<[number, any]> | undefined;
+        const row: any[] = new Array(maxCol + 1).fill(null);
+        if (entries) {
+          for (const [idx, val] of entries) row[idx] = val;
+        }
+        rows.push(row);
+      }
+
+      console.log('[TICKET] parseado via XML manual, rows =', rows.length, 'maxCol =', maxCol);
     } else if (Array.isArray(rowsInput)) {
       rows = rowsInput;
       console.log('[TICKET] rows recebido do frontend =', rows.length);
