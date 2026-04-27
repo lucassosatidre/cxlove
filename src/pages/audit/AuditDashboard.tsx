@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History, Search } from 'lucide-react';
+import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
 import {
   generateContabilPdf,
@@ -109,11 +110,20 @@ const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   fechado: { label: 'Fechado', className: 'bg-green-500/15 text-green-700 dark:text-green-400' },
 };
 
-const FILE_LABELS: Record<string, string> = {
+const FILE_LABELS: Record<ImportSource, string> = {
   maquinona: 'Maquinona',
-  cresol: 'Cresol',
+  cresol: 'Cresol (iFood)',
   bb: 'Banco do Brasil',
+  pluxee: 'Pluxee',
+  alelo: 'Alelo',
+  vr: 'VR',
+  ticket: 'Ticket',
 };
+
+const SOURCE_GROUPS: { label: string; sources: ImportSource[] }[] = [
+  { label: 'Vendas & bancos', sources: ['maquinona', 'cresol', 'bb'] },
+  { label: 'Extratos das operadoras de voucher', sources: ['pluxee', 'alelo', 'vr', 'ticket'] },
+];
 
 const COMPANY_LABELS: Record<string, string> = {
   alelo: 'Alelo', ticket: 'Ticket', pluxee: 'Pluxee', vr: 'VR',
