@@ -16,132 +16,136 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
 
+    // Validação básica do período
     const { data: period } = await supabase
-      .from('audit_periods')
-      .select('id')
-      .eq('id', audit_period_id)
-      .maybeSingle();
+      .from('audit_periods').select('id').eq('id', audit_period_id).maybeSingle();
     if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
 
     type Item = {
-      data_transacao: string | null;
+      data_transacao: string;
       gross_amount: number;
       authorization_code?: string;
       card_number?: string;
-      modalidade?: string;
+      modalidade?: string | null;
     };
     type Lot = {
       external_id: string;
-      data_pagamento: string | null;
+      data_pagamento: string;
       gross_amount: number;
       net_amount: number;
       fee_admin: number;
       fee_anticipation: number;
       modalidade: string | null;
-      raw_status?: string;
+      raw_status?: string | null;
       items: Item[];
     };
 
-    const lots: Lot[] = [];
-    let current: Lot | null = null;
-    let headerSeen = false;
+    const TAXA_PLUXEE_ESTIMADA = 0.10; // 10% — usado pra estimar net_amount; BB corrige depois
 
-    for (const rawRow of rows) {
-      const row = (rawRow ?? []).map((c: any) => (c == null ? '' : String(c)));
-      const c0 = (row[0] || '').trim();
-      const c6 = (row[6] || '').trim();
-      const c7 = (row[7] || '').trim();
-      const c8 = (row[8] || '').trim();
+    // ---- Detectar header do formato NOVO (1 linha = 1 transação, com 'Data de Pagamento') ----
+    const norm = (s: any) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-      // Início de novo lote
-      if (c0.startsWith('Data de Pagamento:')) {
-        if (current) lots.push(current);
-        const dataPag = parseDateBR(c0.replace('Data de Pagamento:', '').trim());
-        const bruto = parseMoney(c8);
-        // Nem todo lote tem gross na linha de início; se vazio, vai aparecer abaixo
-        current = {
-          external_id: '', // gerado depois
-          data_pagamento: dataPag,
-          gross_amount: bruto,
+    let headerIdx = -1;
+    const cols: Record<string, number> = {};
+    for (let i = 0; i < Math.min(20, rows.length); i++) {
+      const r = rows[i] || [];
+      const lower = r.map(norm);
+      if (lower.includes('cnpj') && lower.some(c => c.includes('data de pagamento'))) {
+        headerIdx = i;
+        lower.forEach((c, j) => { if (c) cols[c] = j; });
+        break;
+      }
+    }
+
+    if (headerIdx < 0) {
+      return jsonResponse({
+        error: 'Pluxee: cabeçalho não encontrado. Esperado linha com "CNPJ" e "Data de Pagamento". Verifique o arquivo (formato esperado: CSV exportado do portal Pluxee em janeiro/2026 ou posterior).',
+      }, 400);
+    }
+
+    const findCol = (...needles: string[]): number => {
+      for (const n of needles) {
+        const nn = norm(n);
+        const k = Object.keys(cols).find(c => c.includes(nn));
+        if (k !== undefined) return cols[k];
+      }
+      return -1;
+    };
+
+    const cDataTrans = findCol('data da transacao');
+    const cBruto = findCol('valor bruto');
+    const cAuth = findCol('autorizacao', 'autorizaca');
+    const cCard = findCol('numero do cartao', 'cartao');
+    const cDataPag = findCol('data de pagamento');
+    const cOrigem = findCol('origem');
+
+    if (cDataTrans < 0 || cBruto < 0 || cDataPag < 0) {
+      return jsonResponse({
+        error: `Pluxee: colunas obrigatórias não encontradas (DataTransação=${cDataTrans}, ValorBruto=${cBruto}, DataPagamento=${cDataPag}).`,
+      }, 400);
+    }
+
+    // ---- Agrupar transações por Data de Pagamento (cada grupo vira 1 lote) ----
+    const lotsByPagto = new Map<string, Lot>();
+
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      if (!r) continue;
+      const cnpj = String(r[0] ?? '').trim();
+      // Filtra linhas de transação: CNPJ formatado XX.XXX.XXX/XXXX-XX
+      if (!cnpj.match(/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/)) continue;
+
+      const dtTrans = parseDateBR(r[cDataTrans]);
+      const dtPag = parseDateBR(r[cDataPag]);
+      const bruto = parseMoney(r[cBruto]);
+      if (!dtTrans || !dtPag || bruto <= 0) continue;
+
+      const auth = cAuth >= 0 ? String(r[cAuth] ?? '').trim() : '';
+      const card = cCard >= 0 ? String(r[cCard] ?? '').trim() : '';
+      const origem = cOrigem >= 0 ? String(r[cOrigem] ?? '').trim() : null;
+
+      if (!lotsByPagto.has(dtPag)) {
+        lotsByPagto.set(dtPag, {
+          external_id: `pluxee_${dtPag}`,
+          data_pagamento: dtPag,
+          gross_amount: 0,
           net_amount: 0,
           fee_admin: 0,
           fee_anticipation: 0,
           modalidade: null,
           items: [],
-        };
-        headerSeen = false;
-        continue;
+        });
       }
-      if (!current) continue;
-
-      if (c0.startsWith('Status:')) {
-        current.raw_status = c0.replace('Status:', '').trim();
-        continue;
-      }
-
-      // TOTAL BRUTO appears in c6 = "TOTAL BRUTO" with value in c8
-      if (/total\s+bruto/i.test(c6) && current.gross_amount === 0) {
-        current.gross_amount = parseMoney(c8);
-        continue;
-      }
-      // VALOR DEDUZIDO | REEMBOLSO (admin)
-      if (/valor\s+deduzido/i.test(c6) && /^reembolso$/i.test(c7)) {
-        current.fee_admin = parseMoney(c8);
-        continue;
-      }
-      // REEMBOLSO EXPRESSO (antecipação) — c7
-      if (/reembolso\s+expresso/i.test(c7)) {
-        current.fee_anticipation = parseMoney(c8);
-        continue;
-      }
-      // TOTAL LÍQUIDO
-      if (/total\s+l[ií]quido/i.test(c6)) {
-        if (current.net_amount === 0) current.net_amount = parseMoney(c8);
-        continue;
-      }
-      // Cabeçalho de transações
-      if (/^cnpj$/i.test(c0) && /raz/i.test(row[1] || '')) {
-        headerSeen = true;
-        continue;
-      }
-      // Linha de transação: CNPJ no c0, Origem no c9 (PAT/AUXILIO)
-      if (headerSeen && /^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(c0)) {
-        const dataTrans = parseDateBR(row[2] || '');
-        const gross = parseMoney(row[8] || '');
-        if (dataTrans && gross > 0) {
-          current.items.push({
-            data_transacao: dataTrans,
-            gross_amount: gross,
-            authorization_code: (row[7] || '').trim(),
-            card_number: (row[6] || '').trim(),
-            modalidade: (row[9] || '').trim(),
-          });
-        }
-      }
+      const lot = lotsByPagto.get(dtPag)!;
+      lot.items.push({
+        data_transacao: dtTrans,
+        gross_amount: bruto,
+        authorization_code: auth || undefined,
+        card_number: card || undefined,
+        modalidade: origem,
+      });
+      lot.gross_amount += bruto;
     }
-    if (current) lots.push(current);
 
-    // Deduplicar por (data_pagamento, gross, net) — Pluxee repete o cabeçalho do lote no fim
-    const seen = new Set<string>();
-    const uniqueLots: Lot[] = [];
-    let idx = 0;
-    for (const lot of lots) {
-      const key = `${lot.data_pagamento}|${lot.gross_amount.toFixed(2)}|${lot.net_amount.toFixed(2)}|${lot.items.length}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      lot.external_id = `pluxee_${lot.data_pagamento}_${idx}`;
+    // Estimar net + atribuir modalidade dominante
+    for (const lot of lotsByPagto.values()) {
+      lot.net_amount = +(lot.gross_amount * (1 - TAXA_PLUXEE_ESTIMADA)).toFixed(2);
+      lot.fee_admin = +(lot.gross_amount - lot.net_amount).toFixed(2);
       const mods = lot.items.map(i => i.modalidade).filter(Boolean) as string[];
       const set = new Set(mods);
       lot.modalidade = set.size === 0 ? null : set.size === 1 ? mods[0] : 'MIX';
-      uniqueLots.push(lot);
-      idx++;
     }
 
-    // Aceita todos os lotes com data_pagamento (sem filtro de período — competência fica na auditoria)
-    const validLots = uniqueLots.filter(l => l.data_pagamento);
+    // Aceita todos os lotes (sem filtro por período — competência fica na auditoria)
+    const validLots = Array.from(lotsByPagto.values());
 
-    // UPSERT por (audit_period_id, operadora, external_id). Mantém o ID do lote
-    // — preserva bb_deposit_id e qualquer match anterior que aponte pro lote.
+    // Validação anti-falso-sucesso
+    if (rows.length > 5 && validLots.length === 0) {
+      return jsonResponse({
+        error: `Pluxee: arquivo tem ${rows.length} linhas mas nenhum lote foi identificado. Verifique se o formato corresponde ao novo extrato (com colunas "CNPJ" e "Data de Pagamento").`,
+      }, 422);
+    }
+
     let importedLots = 0;
     let importedItems = 0;
 
@@ -161,7 +165,7 @@ Deno.serve(async (req) => {
           fee_other: 0,
           modalidade: lot.modalidade,
           status: 'imported',
-          raw_data: { status: lot.raw_status ?? null },
+          raw_data: { status: lot.raw_status ?? null, items_count: lot.items.length, estimated_net: true },
         }, { onConflict: 'audit_period_id,operadora,external_id' })
         .select('id')
         .single();
@@ -172,8 +176,6 @@ Deno.serve(async (req) => {
       }
       importedLots++;
 
-      // Substitui os items do lote (delete + insert) — items não têm cross-ref
-      // crítica; serão recriados pelo próximo match_voucher_lots_v2.
       await supabase.from('voucher_lot_items').delete().eq('lot_id', insertedLot.id);
 
       if (lot.items.length > 0) {
