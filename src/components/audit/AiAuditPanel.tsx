@@ -97,7 +97,12 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
           </Button>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {!voucher && <p className="text-muted-foreground">Aguardando execução da conciliação.</p>}
+          {!voucher && (
+            <p className="text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Reconciliando vouchers com IA... aguarde ~2 min
+            </p>
+          )}
           {voucher?.error && <p className="text-destructive">Erro: {String(voucher.error)}</p>}
           {voucher && !voucher.error && (
             <>
