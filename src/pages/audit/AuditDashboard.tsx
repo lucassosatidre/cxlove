@@ -349,8 +349,41 @@ export default function AuditDashboard() {
     setLogs((logRows as LogEntry[]) ?? []);
   };
 
-  useEffect(() => {
-    if (!isAdmin) return;
+  const handleUpload = async (src: ImportSource, files: FileList | null) => {
+    if (!files || files.length === 0 || !period) return;
+    setUploadingSource(src);
+    let okCount = 0;
+    let errCount = 0;
+    try {
+      for (const file of Array.from(files)) {
+        try {
+          const body = await buildUploadPayload(src, period.id, file);
+          const { data, error } = await supabase.functions.invoke(FUNCTION_BY_SOURCE[src], { body });
+          if (error) throw new Error(error.message);
+          if ((data as any)?.error) throw new Error((data as any).error);
+          if (data && (data as any).success === false) throw new Error((data as any).error || 'Falha na importação');
+          okCount++;
+        } catch (e: any) {
+          errCount++;
+          toast({
+            title: `Erro em "${file.name}"`,
+            description: e?.message ?? 'Erro inesperado',
+            variant: 'destructive',
+          });
+        }
+      }
+      if (okCount > 0) {
+        toast({
+          title: `✓ ${FILE_LABELS[src]}`,
+          description: `${okCount} arquivo(s) importado(s)${errCount > 0 ? ` · ${errCount} com erro` : ''}`,
+        });
+        await loadPeriodData(period.id);
+      }
+    } finally {
+      setUploadingSource(null);
+    }
+  };
+
     let active = true;
     (async () => {
       setLoading(true);
