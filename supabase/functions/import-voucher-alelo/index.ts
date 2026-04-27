@@ -65,22 +65,47 @@ Deno.serve(async (req) => {
     };
 
     // ---- Recebimentos ----
-    // O XLSX da Alelo pode vir SEM cabeçalho (dados puros desde a linha 0)
-    // OU com cabeçalho. Tentamos os dois caminhos.
+    // O XLSX da Alelo vem em DOIS formatos diferentes (ambos circulando):
+    //
+    // ANTIGO (15 colunas):
+    //   0:CNPJ 1:NºEC 2:NomeFantasia 3:ECdaTransação 4:DataVenda 5:HorárioTransação
+    //   6:NºdaTransação 7:NºAutorização 8:TipoCartão 9:NºCartão 10:PSR
+    //   11:ValorBruto 12:ValorLíquido 13:Status 14:DataPagamento
+    //
+    // NOVO (13 colunas, sem NomeFantasia/ECdaTransação/NºdaTransação separado):
+    //   0:Nome 1:CNPJ 2:NºEC 3:NºAutorização 4:DataVenda 5:HorárioTransação
+    //   6:TipoCartão 7:NºCartão 8:PSR 9:ValorBruto 10:ValorLíquido
+    //   11:Status 12:DataPagamento
+    //
+    // Em ambos formatos, SheetJS no navegador costuma PULAR a linha do header
+    // (problema de range no XLSX), então o `findHeader` retorna null e caímos
+    // em `looksLikePositional`.
     const recHeader = findHeader(recebimentosRows, ['status', 'valor bruto', 'transacao']);
 
-    // Layout posicional fixo do Alelo (sem header):
-    // 0:CNPJ 1:NºEC 2:RazãoSocial 3:NºEC 4:DataVenda 5:HoraVenda
-    // 6:NºAutorização 7:NºTransação 8:TipoCartão 9:NºCartão 10:Adquirente
-    // 11:ValorBruto 12:ValorLíquido 13:Status 14:DataPagamento
-    const POS = {
+    const POS_OLD = {
       dataVenda: 4, numTrans: 6, numAutorizacao: 7, tipoCartao: 8,
       numCartao: 9, bruto: 11, liquido: 12, status: 13, dataPag: 14,
     };
+    const POS_NEW = {
+      // No novo formato não há coluna separada para Nº Transação;
+      // usamos Nº Autorização tanto para identificação quanto para metadados.
+      dataVenda: 4, numTrans: 3, numAutorizacao: 3, tipoCartao: 6,
+      numCartao: 7, bruto: 9, liquido: 10, status: 11, dataPag: 12,
+    };
 
-    // Detecta se uma linha "parece" um registro Alelo posicional (status válido + datas).
+    // Detecta o formato pelo número de colunas da primeira linha de dado válida.
+    // 15+ colunas = formato antigo; 13-14 colunas = formato novo.
+    const detectFormat = (row: any[]): 'old' | 'new' | null => {
+      if (!row) return null;
+      if (row.length >= 15) return 'old';
+      if (row.length >= 13) return 'new';
+      return null;
+    };
+
     const looksLikePositional = (row: any[]): boolean => {
-      if (!row || row.length < 15) return false;
+      const fmt = detectFormat(row);
+      if (!fmt) return false;
+      const POS = fmt === 'old' ? POS_OLD : POS_NEW;
       const status = String(row[POS.status] ?? '').trim().toLowerCase();
       if (status !== 'aprovada' && status !== 'rejeitada' && status !== 'cancelada') return false;
       const dv = parseDateBR(row[POS.dataVenda]);
@@ -89,11 +114,17 @@ Deno.serve(async (req) => {
     };
 
     const usePositional = !recHeader && recebimentosRows.length > 0 && looksLikePositional(recebimentosRows[0]);
+    const detectedFormat: 'old' | 'new' | null = usePositional
+      ? detectFormat(recebimentosRows[0])
+      : null;
 
     if (recebimentosRows.length > 0 && !recHeader && !usePositional) {
-      console.error('[ALELO] header não encontrado E layout posicional não reconhecido');
+      console.error('[ALELO] header não encontrado E layout posicional não reconhecido', {
+        firstRowLength: recebimentosRows[0]?.length,
+        firstRowSample: recebimentosRows[0]?.slice(0, 5),
+      });
       return jsonResponse({
-        error: 'Não consegui identificar o formato da aba Recebimentos (nem header com "Status/Valor Bruto", nem layout posicional padrão da Alelo). Verifique o arquivo.',
+        error: 'Não consegui identificar o formato da aba Recebimentos. Esperado: 15 colunas (formato antigo) ou 13 colunas (formato novo). Recebido: ' + (recebimentosRows[0]?.length ?? 0) + ' colunas.',
       }, 422);
     }
 
@@ -107,7 +138,8 @@ Deno.serve(async (req) => {
     let startRow: number;
 
     if (usePositional) {
-      console.log('[ALELO] usando layout POSICIONAL (sem header)');
+      const POS = detectedFormat === 'old' ? POS_OLD : POS_NEW;
+      console.log('[ALELO] usando layout POSICIONAL formato', detectedFormat?.toUpperCase());
       cStatus = POS.status; cNumTrans = POS.numTrans; cBruto = POS.bruto; cLiquido = POS.liquido;
       cDataVenda = POS.dataVenda; cDataPag = POS.dataPag; cTipoCartao = POS.tipoCartao;
       cAuth = POS.numAutorizacao; cCard = POS.numCartao;
@@ -122,7 +154,7 @@ Deno.serve(async (req) => {
       cDataPag = findCol(recHeader!.idx, 'data de pagamento', 'data do pagamento');
       cTipoCartao = findCol(recHeader!.idx, 'tipo cartao', 'tipo do cartao');
       cAuth = findCol(recHeader!.idx, 'no da autorizacao', 'autorizacao');
-      cCard = findCol(recHeader!.idx, 'no cartao', 'n cartao', 'numero cartao', 'numero do cartao');
+      cCard = findCol(recHeader!.idx, 'no cartao', 'n cartao', 'numero cartao', 'numero do cartao', 'nº cartao');
       startRow = recHeader!.headerIdx + 1;
     }
 
