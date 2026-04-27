@@ -18,17 +18,10 @@ Deno.serve(async (req) => {
 
     const { data: period } = await supabase
       .from('audit_periods')
-      .select('month, year')
+      .select('id')
       .eq('id', audit_period_id)
       .maybeSingle();
     if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
-    const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
-    const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
-    const isInPeriod = (d: string | null): boolean => {
-      if (!d) return false;
-      const dt = new Date(d + 'T00:00:00Z');
-      return dt >= periodStart && dt < periodEnd;
-    };
 
     type Item = {
       data_transacao: string | null;
@@ -144,8 +137,8 @@ Deno.serve(async (req) => {
       idx++;
     }
 
-    // Filtrar lotes sem data de pagamento ou fora do período de competência
-    const validLots = uniqueLots.filter(l => l.data_pagamento && isInPeriod(l.data_pagamento));
+    // Aceita todos os lotes com data_pagamento (sem filtro de período — competência fica na auditoria)
+    const validLots = uniqueLots.filter(l => l.data_pagamento);
 
     // UPSERT por (audit_period_id, operadora, external_id). Mantém o ID do lote
     // — preserva bb_deposit_id e qualquer match anterior que aponte pro lote.
