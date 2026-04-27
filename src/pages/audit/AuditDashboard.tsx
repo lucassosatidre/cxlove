@@ -34,8 +34,21 @@ type AuditPeriod = {
   closed_by: string | null;
 };
 
+type ImportSource =
+  | 'maquinona' | 'cresol' | 'bb'
+  | 'pluxee' | 'alelo' | 'vr' | 'ticket';
+
 type AuditImport = {
   file_type: 'maquinona' | 'cresol' | 'bb';
+  status: string;
+  file_name: string;
+  imported_rows: number;
+  created_at: string;
+};
+
+type PeriodImportRow = {
+  audit_period_id: string;
+  source: ImportSource;
   status: string;
   file_name: string;
   imported_rows: number;
@@ -713,7 +726,7 @@ export default function AuditDashboard() {
         {/* iFood + Voucher detail entries */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">iFood (Cresol)</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">iFood</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {totals.liquidoIfood === 0 && depositRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
