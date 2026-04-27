@@ -46,7 +46,9 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Clear previous matches
+    // Clear previous matches (only the iFood daily summary; vouchers are now
+    // recomputed via match_voucher_lots_v2 + calculate_voucher_audit, which
+    // do their own idempotent updates).
     await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
     await supabase.from('audit_voucher_matches').delete().eq('audit_period_id', audit_period_id);
 
@@ -110,61 +112,57 @@ Deno.serve(async (req) => {
       if (dailyErr) throw dailyErr;
     }
 
-    // ===== VOUCHER MATCH (per company) =====
-    const companies = ['alelo', 'ticket', 'pluxee', 'vr'];
-    const { data: voucherTxs } = await supabase
-      .from('audit_card_transactions')
-      .select('deposit_group,gross_amount')
-      .eq('audit_period_id', audit_period_id)
-      .in('deposit_group', companies);
-
-    const { data: voucherDeps } = await supabase
-      .from('audit_bank_deposits')
-      .select('category,amount')
-      .eq('audit_period_id', audit_period_id)
-      .eq('bank', 'bb')
-      .in('category', companies);
-
-    const soldBy = new Map<string, { amount: number; count: number }>();
-    for (const t of voucherTxs ?? []) {
-      const k = t.deposit_group!;
-      const cur = soldBy.get(k) ?? { amount: 0, count: 0 };
-      cur.amount += Number(t.gross_amount || 0);
-      cur.count += 1;
-      soldBy.set(k, cur);
-    }
-    const depBy = new Map<string, { amount: number; count: number }>();
-    for (const d of voucherDeps ?? []) {
-      const k = d.category!;
-      const cur = depBy.get(k) ?? { amount: 0, count: 0 };
-      cur.amount += Number(d.amount || 0);
-      cur.count += 1;
-      depBy.set(k, cur);
+    // ===== VOUCHER MATCH v4 (competência por data Maquinona) =====
+    // 1) Cross-period: casa voucher_lot_items ↔ audit_card_transactions por data + valor
+    const { data: matchV2, error: matchV2Err } = await supabase
+      .rpc('match_voucher_lots_v2', { p_period_id: audit_period_id });
+    if (matchV2Err) {
+      console.error('match_voucher_lots_v2 error', matchV2Err);
+      throw matchV2Err;
     }
 
-    const voucherRows = companies.map(company => {
-      const sold = soldBy.get(company) ?? { amount: 0, count: 0 };
-      const dep = depBy.get(company) ?? { amount: 0, count: 0 };
-      const diff = sold.amount - dep.amount;
-      const rate = sold.amount > 0 ? diff / sold.amount : 0;
-      let status = 'ok';
-      if (sold.amount === 0 && dep.amount === 0) status = 'no_sales';
-      else if (sold.amount === 0) status = 'no_sales';
-      else if (rate > 0.10) status = 'critico';
-      else if (rate > 0.05) status = 'alerta';
-      else if (rate < -0.05) status = 'divergente';
+    // 2) Calcula auditoria por competência (vendido / reconhecido / pago / pendente)
+    //    e popula public.audit_voucher_competencia (4 linhas, uma por operadora)
+    const { data: calcRes, error: calcErr } = await supabase
+      .rpc('calculate_voucher_audit', { p_period_id: audit_period_id });
+    if (calcErr) {
+      console.error('calculate_voucher_audit error', calcErr);
+      throw calcErr;
+    }
+
+    // 3) Mantém audit_voucher_matches populada para telas legadas / PDFs antigos.
+    //    Agora alimentada a partir de audit_voucher_competencia, não mais do
+    //    bruto cego do período (que misturava meses).
+    const { data: compRows } = await supabase
+      .from('audit_voucher_competencia')
+      .select('operadora,vendido_bruto,vendido_count,pago_bruto,pago_lotes_count,taxa_real_pct,taxa_estimada_pct,taxa_efetiva_consolidada_pct,status')
+      .eq('audit_period_id', audit_period_id);
+
+    const voucherRows = (compRows ?? []).map((c: any) => {
+      const sold = Number(c.vendido_bruto || 0);
+      const paid = Number(c.pago_bruto || 0);
+      const diff = sold - paid;
+      // Status mapeado para o vocabulário antigo (ok/alerta/critico/divergente/no_sales)
+      let status: string = 'ok';
+      if (sold === 0 && paid === 0) status = 'no_sales';
+      else {
+        const rate = sold > 0 ? diff / sold : 0;
+        if (rate > 0.10) status = 'critico';
+        else if (rate > 0.05) status = 'alerta';
+        else if (rate < -0.05) status = 'divergente';
+      }
       return {
         audit_period_id,
-        company,
-        sold_amount: sold.amount,
-        sold_count: sold.count,
-        deposited_amount: dep.amount,
-        deposit_count: dep.count,
+        company: c.operadora,
+        sold_amount: sold,
+        sold_count: Number(c.vendido_count || 0),
+        deposited_amount: paid,
+        deposit_count: Number(c.pago_lotes_count || 0),
         difference: diff,
-        effective_tax_rate: rate * 100,
+        effective_tax_rate: Number(c.taxa_efetiva_consolidada_pct ?? c.taxa_real_pct ?? 0),
         status,
       };
-    }).filter(r => r.sold_amount > 0 || r.deposited_amount > 0);
+    }).filter((r: any) => r.sold_amount > 0 || r.deposited_amount > 0);
 
     if (voucherRows.length > 0) {
       const { error: vErr } = await supabase.from('audit_voucher_matches').insert(voucherRows);
