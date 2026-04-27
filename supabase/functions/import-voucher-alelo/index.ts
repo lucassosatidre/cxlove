@@ -137,10 +137,7 @@ Deno.serve(async (req) => {
 
     console.log('[ALELO] cols mapeadas =', { cStatus, cNumTrans, cBruto, cLiquido, cDataVenda, cDataPag, cTipoCartao });
 
-    // Limpar dados anteriores
-    await supabase.from('voucher_lots').delete()
-      .eq('audit_period_id', audit_period_id).eq('operadora', 'alelo');
-
+    // UPSERT (sem DELETE prévio) — preserva ID do lote e seus matches.
     for (let i = startRow; i < recebimentosRows.length; i++) {
       const row = recebimentosRows[i] ?? [];
       if (row.every(c => c == null || String(c).trim() === '')) continue;
@@ -161,28 +158,35 @@ Deno.serve(async (req) => {
         const externalId = `alelo_${numTrans}`;
         const modalidade = cTipoCartao >= 0 ? (String(row[cTipoCartao] ?? '').trim() || null) : null;
 
-        const { data: insertedLot, error: lotErr } = await supabase.from('voucher_lots').insert({
-          audit_period_id,
-          operadora: 'alelo',
-          external_id: externalId,
-          data_corte: dataVenda,
-          data_pagamento: dataPag,
-          gross_amount: bruto,
-          net_amount: liquido,
-          fee_admin: Math.max(bruto - liquido, 0),
-          fee_anticipation: 0,
-          fee_management: 0,
-          fee_other: 0,
-          modalidade,
-          status: 'imported',
-          raw_data: { status, autorizacao: cAuth >= 0 ? row[cAuth] : null },
-        }).select('id').single();
+        const { data: insertedLot, error: lotErr } = await supabase
+          .from('voucher_lots')
+          .upsert({
+            audit_period_id,
+            operadora: 'alelo',
+            external_id: externalId,
+            data_corte: dataVenda,
+            data_pagamento: dataPag,
+            gross_amount: bruto,
+            net_amount: liquido,
+            fee_admin: Math.max(bruto - liquido, 0),
+            fee_anticipation: 0,
+            fee_management: 0,
+            fee_other: 0,
+            modalidade,
+            status: 'imported',
+            raw_data: { status, autorizacao: cAuth >= 0 ? row[cAuth] : null },
+          }, { onConflict: 'audit_period_id,operadora,external_id' })
+          .select('id')
+          .single();
 
         if (lotErr) {
-          console.error('Erro inserindo lote alelo', externalId, lotErr);
+          console.error('Erro upsert lote alelo', externalId, lotErr);
           continue;
         }
         importedLots++;
+
+        // Substitui os items do lote
+        await supabase.from('voucher_lot_items').delete().eq('lot_id', insertedLot.id);
 
         if (dataVenda && bruto > 0) {
           const { error: itemErr } = await supabase.from('voucher_lot_items').insert({

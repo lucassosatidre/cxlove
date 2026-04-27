@@ -43,10 +43,7 @@ Deno.serve(async (req) => {
     }
     if (headerIdx < 0) return jsonResponse({ error: 'VR: cabeçalho "Número Guia" não encontrado' }, 400);
 
-    // Limpar dados anteriores
-    await supabase.from('voucher_lots').delete()
-      .eq('audit_period_id', audit_period_id).eq('operadora', 'vr');
-
+    // VR não tem voucher_lot_items — apenas lotes. Faremos UPSERT por external_id.
     let importedLots = 0;
     const lotsToInsert: any[] = [];
 
@@ -70,9 +67,8 @@ Deno.serve(async (req) => {
       let feeAntecip = 0;
 
       if (isAntecipado) {
-        // Inferência: usar taxa esperada por modalidade
         const m = (modalidade || '').toLowerCase();
-        let pct = 0.063; // default Auxílio
+        let pct = 0.063;
         if (m.includes('refeição pat') || m.includes('refeicao pat')) pct = 0.036;
         else if (m.includes('alimentação pat') || m.includes('alimentacao pat')) pct = 0.036;
         else if (m.includes('auxílio refeição') || m.includes('auxilio refeicao')) pct = 0.063;
@@ -107,13 +103,15 @@ Deno.serve(async (req) => {
     }
 
     if (lotsToInsert.length > 0) {
-      // Insere em batches
+      // UPSERT em batches por (audit_period_id, operadora, external_id)
       const batchSize = 200;
       for (let i = 0; i < lotsToInsert.length; i += batchSize) {
         const batch = lotsToInsert.slice(i, i + batchSize);
-        const { error } = await supabase.from('voucher_lots').insert(batch);
+        const { error } = await supabase
+          .from('voucher_lots')
+          .upsert(batch, { onConflict: 'audit_period_id,operadora,external_id' });
         if (error) {
-          console.error('Erro inserindo batch VR', error);
+          console.error('Erro upsert batch VR', error);
         } else {
           importedLots += batch.length;
         }

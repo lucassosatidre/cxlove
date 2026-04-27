@@ -147,17 +147,15 @@ Deno.serve(async (req) => {
     // Filtrar lotes sem data de pagamento ou fora do período de competência
     const validLots = uniqueLots.filter(l => l.data_pagamento && isInPeriod(l.data_pagamento));
 
-    // Limpar dados anteriores deste período + operadora
-    await supabase.from('voucher_lots').delete()
-      .eq('audit_period_id', audit_period_id).eq('operadora', 'pluxee');
-
+    // UPSERT por (audit_period_id, operadora, external_id). Mantém o ID do lote
+    // — preserva bb_deposit_id e qualquer match anterior que aponte pro lote.
     let importedLots = 0;
     let importedItems = 0;
 
     for (const lot of validLots) {
       const { data: insertedLot, error: lotErr } = await supabase
         .from('voucher_lots')
-        .insert({
+        .upsert({
           audit_period_id,
           operadora: 'pluxee',
           external_id: lot.external_id,
@@ -171,15 +169,19 @@ Deno.serve(async (req) => {
           modalidade: lot.modalidade,
           status: 'imported',
           raw_data: { status: lot.raw_status ?? null },
-        })
+        }, { onConflict: 'audit_period_id,operadora,external_id' })
         .select('id')
         .single();
 
       if (lotErr) {
-        console.error('Erro inserindo lote pluxee', lot.external_id, lotErr);
+        console.error('Erro upsert lote pluxee', lot.external_id, lotErr);
         continue;
       }
       importedLots++;
+
+      // Substitui os items do lote (delete + insert) — items não têm cross-ref
+      // crítica; serão recriados pelo próximo match_voucher_lots_v2.
+      await supabase.from('voucher_lot_items').delete().eq('lot_id', insertedLot.id);
 
       if (lot.items.length > 0) {
         const itemRows = lot.items.map(it => ({
