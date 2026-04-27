@@ -22,6 +22,7 @@ import {
   type ContabilDetalhamento,
 } from '@/lib/audit-pdf-contabil';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import AiAuditPanel from '@/components/audit/AiAuditPanel';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FileText, ChevronDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
