@@ -120,7 +120,10 @@ async function parseXlsxFile(file: File, type: FileType): Promise<{ rows: any[];
       return { rows: [], error: 'Aba "Transações" não encontrada. Exporte novamente do Portal iFood em Financeiro > Relatório de Transações.' };
     }
     const sheet = workbook.Sheets[sheetName];
-    const rows = XLSX.utils.sheet_to_json<any>(sheet, { defval: null, raw: false });
+    // raw:true → números vêm como Number JS e datas como Date JS (cellDates já ativo).
+    // Evita que o XLSX devolva strings formatadas em locale en-US ("R$ 1,023.10"),
+    // o que quebrava o parseNumber do edge para valores >= R$ 1.000.
+    const rows = XLSX.utils.sheet_to_json<any>(sheet, { defval: null, raw: true });
     if (!rows.length) return { rows: [], error: 'Aba "Transações" está vazia' };
     return { rows };
   }

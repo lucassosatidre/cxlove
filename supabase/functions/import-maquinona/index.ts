@@ -50,8 +50,15 @@ function parseNumber(v: any): number {
   const hasComma = s.includes(',');
   const hasDot = s.includes('.');
   if (hasComma && hasDot) {
-    // BR clássico: 1.234,56
-    s = s.replace(/\./g, '').replace(',', '.');
+    // Regra do "último separador é decimal" — funciona em qualquer locale.
+    // BR: "1.234,56" → vírgula é decimal. EN-US: "1,234.56" → ponto é decimal.
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
   } else if (hasComma) {
     // Só vírgula → decimal BR
     s = s.replace(',', '.');
