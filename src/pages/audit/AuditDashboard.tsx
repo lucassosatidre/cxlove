@@ -817,41 +817,92 @@ export default function AuditDashboard() {
           </Card>
         </div>
 
-        {/* Imports */}
+        {/* Imports — bloco unificado v4 (vw_period_imports) */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Importações do período</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+          <CardHeader>
+            <CardTitle className="text-base">Importações do período</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              7 fontes: Maquinona + Cresol + Banco do Brasil + 4 extratos das operadoras de voucher.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {isClosed && (
               <p className="text-xs text-muted-foreground italic">Este período está fechado. Para importar novos arquivos, reabra o período.</p>
             )}
-            {(['maquinona', 'cresol', 'bb'] as const).map(t => {
-              const allOfType = imports.filter(i => i.file_type === t && i.status === 'completed');
-              const latest = allOfType[0]; // imports já vem ordenado por created_at DESC
-              const totalRows = allOfType.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
-              const isCompleted = allOfType.length > 0;
-              const fileCount = allOfType.length;
-              return (
-                <div key={t} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <FileSpreadsheet className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{FILE_LABELS[t]}</span>
-                    {isCompleted && latest ? (
-                      <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400">
-                        ✓ {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · último em {formatDateTime(latest.created_at)} ({totalRows} transações no total)
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
-                    )}
-                  </div>
-                  <Button size="sm" variant="outline" disabled={!period || isClosed} onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}&period=${period?.id}`, { state: { month, year } })}>
-                    {isCompleted ? 'Re-importar' : 'Importar'}
-                  </Button>
-                </div>
-              );
-            })}
+            {SOURCE_GROUPS.map(group => (
+              <div key={group.label} className="space-y-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{group.label}</p>
+                {group.sources.map(src => {
+                  const rowsForSource = allImports.filter(i => i.source === src && i.status === 'completed');
+                  const latest = rowsForSource[0];
+                  const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
+                  const fileCount = rowsForSource.length;
+                  const isCompleted = fileCount > 0;
+                  const isVoucher = ['pluxee', 'alelo', 'vr', 'ticket'].includes(src);
+                  const uploadHref = isVoucher
+                    ? `/admin/auditoria/importar?period=${period?.id}&month=${month}&year=${year}#vouchers`
+                    : `/admin/auditoria/importar?tipo=${src}&period=${period?.id}`;
+
+                  return (
+                    <div key={src} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileSpreadsheet className="h-4 w-4 text-primary shrink-0" />
+                        <span className="font-medium">{FILE_LABELS[src]}</span>
+                        {isCompleted && latest ? (
+                          <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400 truncate">
+                            ✓ {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · último {formatDateTime(latest.created_at)} ({totalRows} linhas)
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
+                        )}
+                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button size="sm" variant="outline" disabled={!period || isClosed} className="gap-1.5">
+                            <UploadCloud className="h-3.5 w-3.5" />
+                            {isCompleted ? 'Re-importar' : 'Importar'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-80 space-y-3">
+                          <div>
+                            <p className="font-medium text-sm">{FILE_LABELS[src]}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {isVoucher
+                                ? 'Extrato detalhado da operadora — usado para calcular taxa real efetiva e cruzar pagamentos com vendas da Maquinona.'
+                                : src === 'maquinona'
+                                  ? 'Relatório bruto de vendas da Maquinona — fonte da competência.'
+                                  : src === 'cresol'
+                                    ? 'Extrato Cresol — depósitos do iFood.'
+                                    : 'Extrato BB — depósitos das operadoras de voucher.'}
+                            </p>
+                          </div>
+                          {isCompleted && latest && (
+                            <div className="rounded bg-muted/40 p-2 text-xs space-y-0.5">
+                              <p className="truncate" title={latest.file_name}><strong>Último arquivo:</strong> {latest.file_name}</p>
+                              <p><strong>Importado em:</strong> {formatDateTime(latest.created_at)}</p>
+                              <p><strong>Linhas:</strong> {totalRows}</p>
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            className="w-full gap-2"
+                            disabled={!period || isClosed}
+                            onClick={() => navigate(uploadHref, { state: { month, year } })}
+                          >
+                            <UploadCloud className="h-4 w-4" />
+                            Abrir uploader
+                          </Button>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
             {!period && (<p className="text-xs text-muted-foreground pt-1">Crie o período acima antes de importar arquivos.</p>)}
           </CardContent>
         </Card>
+
 
         {/* History */}
         {logs.length > 0 && (
