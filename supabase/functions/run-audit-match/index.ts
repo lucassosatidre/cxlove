@@ -184,45 +184,25 @@ Deno.serve(async (req) => {
     const totalIfood = dailyRows.reduce((s, r) => s + r.difference, 0);
     const totalVoucher = voucherRows.reduce((s, r) => s + r.difference, 0);
 
-    // ===== Camada IA: reconciliação Voucher (Opus) + auditoria iFood (Sonnet) em paralelo =====
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-    const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    let aiResults: any = {};
-    try {
-      const [voucherResp, ifoodResp] = await Promise.allSettled([
-        fetch(`${SUPABASE_URL}/functions/v1/reconcile-vouchers-ai`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE}` },
-          body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
-        }),
-        fetch(`${SUPABASE_URL}/functions/v1/audit-ifood-ai`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE}` },
-          body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
-        }),
-      ]);
+    // ===== Camada IA: fire-and-forget (não aguarda — evita timeout) =====
+    const SUPABASE_URL_AI = Deno.env.get('SUPABASE_URL')!;
+    const SERVICE_ROLE_AI = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-      if (voucherResp.status === 'fulfilled' && voucherResp.value.ok) {
-        aiResults.voucher = await voucherResp.value.json();
-      } else {
-        const reason = voucherResp.status === 'fulfilled'
-          ? await voucherResp.value.text().catch(() => 'unknown')
-          : (voucherResp as any).reason?.message ?? 'falha';
-        aiResults.voucher = { error: reason };
-      }
-
-      if (ifoodResp.status === 'fulfilled' && ifoodResp.value.ok) {
-        aiResults.ifood = await ifoodResp.value.json();
-      } else {
-        const reason = ifoodResp.status === 'fulfilled'
-          ? await ifoodResp.value.text().catch(() => 'unknown')
-          : (ifoodResp as any).reason?.message ?? 'falha';
-        aiResults.ifood = { error: reason };
-      }
-    } catch (e: any) {
-      console.error('IA layer error:', e.message);
-      aiResults.error = e.message;
-    }
+    // @ts-ignore EdgeRuntime is available at runtime
+    EdgeRuntime.waitUntil(
+      Promise.allSettled([
+        fetch(`${SUPABASE_URL_AI}/functions/v1/reconcile-vouchers-ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE_AI}` },
+          body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
+        }).catch((e: any) => console.error('reconcile-vouchers-ai fire error:', e.message)),
+        fetch(`${SUPABASE_URL_AI}/functions/v1/audit-ifood-ai`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE_AI}` },
+          body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
+        }).catch((e: any) => console.error('audit-ifood-ai fire error:', e.message)),
+      ])
+    );
 
     return new Response(JSON.stringify({
       success: true,
@@ -230,7 +210,7 @@ Deno.serve(async (req) => {
       voucher_matches_count: voucherRows.length,
       total_difference_ifood: totalIfood,
       total_difference_voucher: totalVoucher,
-      ai_audits: aiResults,
+      ai_pending: true,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('run-audit-match error', e);
