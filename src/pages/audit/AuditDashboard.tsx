@@ -384,6 +384,8 @@ export default function AuditDashboard() {
     }
   };
 
+  useEffect(() => {
+    if (!isAdmin) return;
     let active = true;
     (async () => {
       setLoading(true);
