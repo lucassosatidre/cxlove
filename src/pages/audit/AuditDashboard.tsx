@@ -24,6 +24,7 @@ import {
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FileText, ChevronDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 type AuditPeriod = {
   id: string;
@@ -125,6 +126,114 @@ const SOURCE_GROUPS: { label: string; sources: ImportSource[] }[] = [
   { label: 'Extratos das operadoras de voucher', sources: ['pluxee', 'alelo', 'vr', 'ticket'] },
 ];
 
+const ACCEPT_BY_SOURCE: Record<ImportSource, string> = {
+  maquinona: '.xlsx',
+  cresol: '.xlsx',
+  bb: '.xlsx',
+  pluxee: '.csv',
+  alelo: '.xlsx',
+  vr: '.xls,.xlsx',
+  ticket: '.xlsx',
+};
+
+const FUNCTION_BY_SOURCE: Record<ImportSource, string> = {
+  maquinona: 'import-maquinona',
+  cresol: 'import-cresol',
+  bb: 'import-bb',
+  pluxee: 'import-voucher-pluxee',
+  alelo: 'import-voucher-alelo',
+  vr: 'import-voucher-vr',
+  ticket: 'import-voucher-ticket',
+};
+
+async function readAsTextDetect(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('latin1').decode(bytes);
+  }
+}
+
+async function buildUploadPayload(src: ImportSource, periodId: string, file: File): Promise<any> {
+  const base = { audit_period_id: periodId, file_name: file.name };
+
+  if (src === 'maquinona') {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const sheetName = wb.SheetNames.find(
+      n => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'transacoes'
+    );
+    if (!sheetName) throw new Error('Aba "Transações" não encontrada no arquivo Maquinona.');
+    const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[sheetName], { defval: null, raw: false });
+    return { ...base, rows };
+  }
+
+  if (src === 'cresol') {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+    return { ...base, rows };
+  }
+
+  if (src === 'bb') {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const sheetName = wb.SheetNames.find(n => /extrato/i.test(n)) ?? wb.SheetNames[0];
+    const sheet = wb.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+    return { ...base, rows };
+  }
+
+  if (src === 'pluxee') {
+    const text = await readAsTextDetect(file);
+    const sep = text.split('\n')[0].includes(';') ? ';' : ',';
+    const rows = text.split('\n').map(l => l.split(sep).map(c => c.trim()));
+    return { ...base, rows };
+  }
+
+  if (src === 'alelo') {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const recebimentosSheet = wb.SheetNames.find(n => /recebimentos/i.test(n)) ?? wb.SheetNames[1];
+    const outrasSheet = wb.SheetNames.find(n => /outras/i.test(n));
+    return {
+      ...base,
+      recebimentos_rows: recebimentosSheet
+        ? XLSX.utils.sheet_to_json(wb.Sheets[recebimentosSheet], { header: 1, defval: null, raw: true })
+        : [],
+      outras_rows: outrasSheet
+        ? XLSX.utils.sheet_to_json(wb.Sheets[outrasSheet], { header: 1, defval: null, raw: true })
+        : [],
+    };
+  }
+
+  if (src === 'vr') {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+    return { ...base, rows };
+  }
+
+  if (src === 'ticket') {
+    const file_base64 = await new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => {
+        const result = r.result as string;
+        resolve(result.substring(result.indexOf(',') + 1));
+      };
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+    return { ...base, file_base64 };
+  }
+
+  throw new Error(`Source desconhecido: ${src}`);
+}
+
 const COMPANY_LABELS: Record<string, string> = {
   alelo: 'Alelo', ticket: 'Ticket', pluxee: 'Pluxee', vr: 'VR',
 };
@@ -170,6 +279,7 @@ export default function AuditDashboard() {
   const [exportingContabil, setExportingContabil] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [uploadingSource, setUploadingSource] = useState<ImportSource | null>(null);
 
   // Persist month/year to sessionStorage + URL on every change
   useEffect(() => {
@@ -237,6 +347,41 @@ export default function AuditDashboard() {
     setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
+  };
+
+  const handleUpload = async (src: ImportSource, files: FileList | null) => {
+    if (!files || files.length === 0 || !period) return;
+    setUploadingSource(src);
+    let okCount = 0;
+    let errCount = 0;
+    try {
+      for (const file of Array.from(files)) {
+        try {
+          const body = await buildUploadPayload(src, period.id, file);
+          const { data, error } = await supabase.functions.invoke(FUNCTION_BY_SOURCE[src], { body });
+          if (error) throw new Error(error.message);
+          if ((data as any)?.error) throw new Error((data as any).error);
+          if (data && (data as any).success === false) throw new Error((data as any).error || 'Falha na importação');
+          okCount++;
+        } catch (e: any) {
+          errCount++;
+          toast({
+            title: `Erro em "${file.name}"`,
+            description: e?.message ?? 'Erro inesperado',
+            variant: 'destructive',
+          });
+        }
+      }
+      if (okCount > 0) {
+        toast({
+          title: `✓ ${FILE_LABELS[src]}`,
+          description: `${okCount} arquivo(s) importado(s)${errCount > 0 ? ` · ${errCount} com erro` : ''}`,
+        });
+        await loadPeriodData(period.id);
+      }
+    } finally {
+      setUploadingSource(null);
+    }
   };
 
   useEffect(() => {
@@ -824,6 +969,10 @@ export default function AuditDashboard() {
             <p className="text-xs text-muted-foreground">
               7 fontes: Maquinona + Cresol + Banco do Brasil + 4 extratos das operadoras de voucher.
             </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+              Selecione múltiplos arquivos no botão "Importar" — eles são processados em sequência.
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             {isClosed && (
@@ -838,10 +987,8 @@ export default function AuditDashboard() {
                   const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
                   const fileCount = rowsForSource.length;
                   const isCompleted = fileCount > 0;
-                  const isVoucher = ['pluxee', 'alelo', 'vr', 'ticket'].includes(src);
-                  const uploadHref = isVoucher
-                    ? `/admin/auditoria/importar?period=${period?.id}&month=${month}&year=${year}#vouchers`
-                    : `/admin/auditoria/importar?tipo=${src}&period=${period?.id}`;
+                  const isUploading = uploadingSource === src;
+                  const inputId = `upload-input-${src}`;
 
                   return (
                     <div key={src} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
@@ -856,44 +1003,34 @@ export default function AuditDashboard() {
                           <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
                         )}
                       </div>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button size="sm" variant="outline" disabled={!period || isClosed} className="gap-1.5">
+                      <div className="flex items-center gap-2">
+                        <input
+                          id={inputId}
+                          type="file"
+                          multiple
+                          accept={ACCEPT_BY_SOURCE[src]}
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = e.target.files;
+                            handleUpload(src, files);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!period || isClosed || isUploading}
+                          className="gap-1.5"
+                          onClick={() => document.getElementById(inputId)?.click()}
+                        >
+                          {isUploading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
                             <UploadCloud className="h-3.5 w-3.5" />
-                            {isCompleted ? 'Re-importar' : 'Importar'}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-80 space-y-3">
-                          <div>
-                            <p className="font-medium text-sm">{FILE_LABELS[src]}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {isVoucher
-                                ? 'Extrato detalhado da operadora — usado para calcular taxa real efetiva e cruzar pagamentos com vendas da Maquinona.'
-                                : src === 'maquinona'
-                                  ? 'Relatório bruto de vendas da Maquinona — fonte da competência.'
-                                  : src === 'cresol'
-                                    ? 'Extrato Cresol — depósitos do iFood.'
-                                    : 'Extrato BB — depósitos das operadoras de voucher.'}
-                            </p>
-                          </div>
-                          {isCompleted && latest && (
-                            <div className="rounded bg-muted/40 p-2 text-xs space-y-0.5">
-                              <p className="truncate" title={latest.file_name}><strong>Último arquivo:</strong> {latest.file_name}</p>
-                              <p><strong>Importado em:</strong> {formatDateTime(latest.created_at)}</p>
-                              <p><strong>Linhas:</strong> {totalRows}</p>
-                            </div>
                           )}
-                          <Button
-                            size="sm"
-                            className="w-full gap-2"
-                            disabled={!period || isClosed}
-                            onClick={() => navigate(uploadHref, { state: { month, year } })}
-                          >
-                            <UploadCloud className="h-4 w-4" />
-                            Abrir uploader
-                          </Button>
-                        </PopoverContent>
-                      </Popover>
+                          {isUploading ? 'Importando...' : (isCompleted ? 'Re-importar' : 'Importar')}
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
