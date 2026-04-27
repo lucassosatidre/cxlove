@@ -189,7 +189,7 @@ export default function AuditIfood() {
   }
 
   return (
-    <AppLayout title="Conciliação iFood (Cresol)" subtitle={periodLabel}>
+    <AppLayout title="Conciliação iFood" subtitle={periodLabel}>
       <div className="space-y-4">
         <Breadcrumb>
           <BreadcrumbList>
@@ -199,11 +199,12 @@ export default function AuditIfood() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card de "Taxa antecipação est." removido — métrica enganosa para o caso iFood/Cresol (D+0/D+1).
+            v4: o spread líq. esperado vs depositado já é informado em "Diferença". */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <SummaryCard title="Líq. Esperado" value={fmt(totals.expected)} />
           <SummaryCard title="Depositado" value={fmt(totals.deposited)} />
           <SummaryCard title="Diferença" value={fmt(totals.diff)} accent={totals.diff < 0 ? 'negative' : 'positive'} />
-          <SummaryCard title="Taxa antecipação est." value={`${totals.antecRate.toFixed(2).replace('.', ',')}%`} />
         </div>
 
         <Card>

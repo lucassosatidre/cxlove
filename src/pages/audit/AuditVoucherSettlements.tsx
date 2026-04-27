@@ -12,7 +12,8 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { ArrowLeft, Loader2, Receipt, ListChecks } from 'lucide-react';
+import { ArrowLeft, Loader2, Receipt, ListChecks, Info } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 
 type Operadora = 'pluxee' | 'alelo' | 'vr' | 'ticket';
@@ -51,6 +52,23 @@ type Adjustment = {
 
 type Period = { id: string; month: number; year: number; status: string };
 
+type CompetenciaRow = {
+  operadora: string;
+  vendido_bruto: number;
+  vendido_count: number;
+  reconhecido_bruto: number;
+  reconhecido_count: number;
+  pago_bruto: number;
+  pago_liquido: number;
+  pago_lotes_count: number;
+  pendente_bruto: number;
+  pendente_count: number;
+  taxa_real_pct: number | null;
+  taxa_estimada_pct: number | null;
+  taxa_efetiva_consolidada_pct: number | null;
+  status: string;
+};
+
 const MONTHS = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 const OP_LABEL: Record<Operadora, string> = {
@@ -75,6 +93,7 @@ export default function AuditVoucherSettlements() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [competencia, setCompetencia] = useState<CompetenciaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNeutras, setShowNeutras] = useState(false);
   const [matching, setMatching] = useState(false);
@@ -86,13 +105,15 @@ export default function AuditVoucherSettlements() {
   }, [monthParam, yearParam, period]);
 
   const load = async (periodId: string) => {
-    const [{ data: lotsData }, { data: adjData }] = await Promise.all([
+    const [{ data: lotsData }, { data: adjData }, { data: compData }] = await Promise.all([
       supabase.from('voucher_lots').select('*').eq('audit_period_id', periodId).order('data_pagamento'),
       supabase.from('voucher_adjustments').select('*').eq('audit_period_id', periodId).order('data'),
+      supabase.from('audit_voucher_competencia').select('*').eq('audit_period_id', periodId),
     ]);
     const allLots = (lotsData as Lot[]) ?? [];
     setLots(allLots);
     setAdjustments((adjData as Adjustment[]) ?? []);
+    setCompetencia((compData as CompetenciaRow[]) ?? []);
 
     if (allLots.length > 0) {
       const lotIds = allLots.map(l => l.id);
@@ -133,10 +154,14 @@ export default function AuditVoucherSettlements() {
     if (!period) return;
     setMatching(true);
     try {
-      const { data, error } = await supabase.rpc('match_voucher_lots', { p_period_id: period.id });
+      // v4: roda o pipeline completo (cross-period match + cálculo competência)
+      const { data, error } = await supabase.functions.invoke('run-audit-match', {
+        body: { audit_period_id: period.id },
+      });
       if (error) throw error;
-      toast.success('✓ Conciliação rodada', {
-        description: `${(data as any)?.matched_items ?? 0} itens, ${(data as any)?.matched_lots ?? 0} lotes ↔ BB`,
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success('✓ Conciliação concluída', {
+        description: `Vouchers reprocessados por competência (data Maquinona).`,
       });
       await load(period.id);
     } catch (e: any) {
@@ -252,6 +277,27 @@ export default function AuditVoucherSettlements() {
           </Card>
         ) : (
           <>
+            {/* v4 — Bloco "Auditoria por competência" (data Maquinona) */}
+            <Alert className="border-primary/30 bg-primary/5">
+              <Info className="h-4 w-4 text-primary" />
+              <AlertTitle className="text-sm">Auditoria por competência (data Maquinona)</AlertTitle>
+              <AlertDescription className="text-xs leading-relaxed">
+                Vendas em vouchers são reconhecidas pela <strong>data da venda na Maquinona</strong>, não pela data
+                em que a operadora paga. Vendas feitas neste mês cujo pagamento cai em outro mês aparecem aqui como
+                <em> "Pendente"</em>; pagamentos recebidos neste mês referentes a vendas de meses anteriores aparecem como
+                <em> "Reconhecido fora do período"</em>. A diferença entre <strong>vendido</strong> e <strong>pago</strong> só é
+                anomalia quando ultrapassa as taxas estimadas (PAT 3,6% / Auxílio 6,3%).
+              </AlertDescription>
+            </Alert>
+
+            {competencia.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {competencia.map(c => (
+                  <CompetenciaCard key={c.operadora} row={c} />
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {(Object.keys(summary) as Operadora[]).map(op => {
                 const s = summary[op];
@@ -393,4 +439,54 @@ function formatDateBR(s: string) {
   if (!s) return '—';
   const [y, m, d] = s.split('-');
   return `${d}/${m}/${y}`;
+}
+
+const STATUS_BADGE: Record<string, string> = {
+  ok: 'bg-green-500/10 text-green-700 dark:text-green-400',
+  alerta: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+  critico: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  divergente: 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
+  no_sales: 'bg-muted text-muted-foreground',
+};
+
+function CompetenciaCard({ row }: { row: CompetenciaRow }) {
+  const op = row.operadora as Operadora;
+  const taxaReal = row.taxa_real_pct;
+  const taxaEst = row.taxa_estimada_pct;
+  const taxaCons = row.taxa_efetiva_consolidada_pct;
+  const fmtPctVal = (v: number | null) =>
+    v == null ? '—' : `${Number(v).toFixed(2).replace('.', ',')}%`;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>{OP_LABEL[op] ?? op} — Competência</span>
+          <Badge variant="secondary" className={STATUS_BADGE[row.status] ?? STATUS_BADGE.ok}>
+            {row.status}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label={`Vendido (${row.vendido_count})`} value={fmtMoney(row.vendido_bruto)} />
+          <Stat label={`Reconhecido (${row.reconhecido_count})`} value={fmtMoney(row.reconhecido_bruto)} />
+          <Stat label={`Pago bruto (${row.pago_lotes_count} lotes)`} value={fmtMoney(row.pago_bruto)} />
+          <Stat label="Pago líquido" value={fmtMoney(row.pago_liquido)} />
+          <Stat label={`Pendente (${row.pendente_count})`} value={fmtMoney(row.pendente_bruto)} />
+          <Stat label="Taxa consolidada" value={fmtPctVal(taxaCons)} />
+        </div>
+        <div className="rounded-md bg-muted/40 p-2 text-xs space-y-0.5">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Taxa real (sobre pago)</span>
+            <span className="font-mono-tabular text-foreground">{fmtPctVal(taxaReal)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Taxa estimada (sobre pendente)</span>
+            <span className="font-mono-tabular text-foreground">{fmtPctVal(taxaEst)}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

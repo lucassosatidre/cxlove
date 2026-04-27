@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History, Search } from 'lucide-react';
+import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
 import {
   generateContabilPdf,
@@ -34,8 +35,21 @@ type AuditPeriod = {
   closed_by: string | null;
 };
 
+type ImportSource =
+  | 'maquinona' | 'cresol' | 'bb'
+  | 'pluxee' | 'alelo' | 'vr' | 'ticket';
+
 type AuditImport = {
   file_type: 'maquinona' | 'cresol' | 'bb';
+  status: string;
+  file_name: string;
+  imported_rows: number;
+  created_at: string;
+};
+
+type PeriodImportRow = {
+  audit_period_id: string;
+  source: ImportSource;
   status: string;
   file_name: string;
   imported_rows: number;
@@ -96,11 +110,20 @@ const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   fechado: { label: 'Fechado', className: 'bg-green-500/15 text-green-700 dark:text-green-400' },
 };
 
-const FILE_LABELS: Record<string, string> = {
+const FILE_LABELS: Record<ImportSource, string> = {
   maquinona: 'Maquinona',
-  cresol: 'Cresol',
+  cresol: 'Cresol (iFood)',
   bb: 'Banco do Brasil',
+  pluxee: 'Pluxee',
+  alelo: 'Alelo',
+  vr: 'VR',
+  ticket: 'Ticket',
 };
+
+const SOURCE_GROUPS: { label: string; sources: ImportSource[] }[] = [
+  { label: 'Vendas & bancos', sources: ['maquinona', 'cresol', 'bb'] },
+  { label: 'Extratos das operadoras de voucher', sources: ['pluxee', 'alelo', 'vr', 'ticket'] },
+];
 
 const COMPANY_LABELS: Record<string, string> = {
   alelo: 'Alelo', ticket: 'Ticket', pluxee: 'Pluxee', vr: 'VR',
@@ -131,6 +154,7 @@ export default function AuditDashboard() {
   const [year, setYear] = useState<number>(() => getInitial('year', now.getFullYear()));
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
+  const [allImports, setAllImports] = useState<PeriodImportRow[]>([]);
   const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
   const [voucherMatches, setVoucherMatches] = useState<VoucherMatch[]>([]);
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
@@ -160,8 +184,9 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
+    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
+      supabase.from('vw_period_imports' as any).select('*').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
@@ -170,6 +195,7 @@ export default function AuditDashboard() {
       supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
     ]);
     setImports((imps as AuditImport[]) ?? []);
+    setAllImports(((allImps as unknown) as PeriodImportRow[]) ?? []);
 
     const t = (totalsRpc as any[])?.[0] ?? {};
     const bruto = Number(t.total_bruto ?? 0);
@@ -713,7 +739,7 @@ export default function AuditDashboard() {
         {/* iFood + Voucher detail entries */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">iFood (Cresol)</CardTitle></CardHeader>
+            <CardHeader className="pb-2"><CardTitle className="text-base">iFood</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {totals.liquidoIfood === 0 && depositRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
@@ -791,41 +817,92 @@ export default function AuditDashboard() {
           </Card>
         </div>
 
-        {/* Imports */}
+        {/* Imports — bloco unificado v4 (vw_period_imports) */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Importações do período</CardTitle></CardHeader>
-          <CardContent className="space-y-2">
+          <CardHeader>
+            <CardTitle className="text-base">Importações do período</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              7 fontes: Maquinona + Cresol + Banco do Brasil + 4 extratos das operadoras de voucher.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {isClosed && (
               <p className="text-xs text-muted-foreground italic">Este período está fechado. Para importar novos arquivos, reabra o período.</p>
             )}
-            {(['maquinona', 'cresol', 'bb'] as const).map(t => {
-              const allOfType = imports.filter(i => i.file_type === t && i.status === 'completed');
-              const latest = allOfType[0]; // imports já vem ordenado por created_at DESC
-              const totalRows = allOfType.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
-              const isCompleted = allOfType.length > 0;
-              const fileCount = allOfType.length;
-              return (
-                <div key={t} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <FileSpreadsheet className="h-4 w-4 text-primary" />
-                    <span className="font-medium">{FILE_LABELS[t]}</span>
-                    {isCompleted && latest ? (
-                      <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400">
-                        ✓ {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · último em {formatDateTime(latest.created_at)} ({totalRows} transações no total)
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
-                    )}
-                  </div>
-                  <Button size="sm" variant="outline" disabled={!period || isClosed} onClick={() => navigate(`/admin/auditoria/importar?tipo=${t}&period=${period?.id}`, { state: { month, year } })}>
-                    {isCompleted ? 'Re-importar' : 'Importar'}
-                  </Button>
-                </div>
-              );
-            })}
+            {SOURCE_GROUPS.map(group => (
+              <div key={group.label} className="space-y-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{group.label}</p>
+                {group.sources.map(src => {
+                  const rowsForSource = allImports.filter(i => i.source === src && i.status === 'completed');
+                  const latest = rowsForSource[0];
+                  const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
+                  const fileCount = rowsForSource.length;
+                  const isCompleted = fileCount > 0;
+                  const isVoucher = ['pluxee', 'alelo', 'vr', 'ticket'].includes(src);
+                  const uploadHref = isVoucher
+                    ? `/admin/auditoria/importar?period=${period?.id}&month=${month}&year=${year}#vouchers`
+                    : `/admin/auditoria/importar?tipo=${src}&period=${period?.id}`;
+
+                  return (
+                    <div key={src} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileSpreadsheet className="h-4 w-4 text-primary shrink-0" />
+                        <span className="font-medium">{FILE_LABELS[src]}</span>
+                        {isCompleted && latest ? (
+                          <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400 truncate">
+                            ✓ {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · último {formatDateTime(latest.created_at)} ({totalRows} linhas)
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
+                        )}
+                      </div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button size="sm" variant="outline" disabled={!period || isClosed} className="gap-1.5">
+                            <UploadCloud className="h-3.5 w-3.5" />
+                            {isCompleted ? 'Re-importar' : 'Importar'}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-80 space-y-3">
+                          <div>
+                            <p className="font-medium text-sm">{FILE_LABELS[src]}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {isVoucher
+                                ? 'Extrato detalhado da operadora — usado para calcular taxa real efetiva e cruzar pagamentos com vendas da Maquinona.'
+                                : src === 'maquinona'
+                                  ? 'Relatório bruto de vendas da Maquinona — fonte da competência.'
+                                  : src === 'cresol'
+                                    ? 'Extrato Cresol — depósitos do iFood.'
+                                    : 'Extrato BB — depósitos das operadoras de voucher.'}
+                            </p>
+                          </div>
+                          {isCompleted && latest && (
+                            <div className="rounded bg-muted/40 p-2 text-xs space-y-0.5">
+                              <p className="truncate" title={latest.file_name}><strong>Último arquivo:</strong> {latest.file_name}</p>
+                              <p><strong>Importado em:</strong> {formatDateTime(latest.created_at)}</p>
+                              <p><strong>Linhas:</strong> {totalRows}</p>
+                            </div>
+                          )}
+                          <Button
+                            size="sm"
+                            className="w-full gap-2"
+                            disabled={!period || isClosed}
+                            onClick={() => navigate(uploadHref, { state: { month, year } })}
+                          >
+                            <UploadCloud className="h-4 w-4" />
+                            Abrir uploader
+                          </Button>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
             {!period && (<p className="text-xs text-muted-foreground pt-1">Crie o período acima antes de importar arquivos.</p>)}
           </CardContent>
         </Card>
+
 
         {/* History */}
         {logs.length > 0 && (
