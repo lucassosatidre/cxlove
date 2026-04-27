@@ -27,19 +27,10 @@ Deno.serve(async (req) => {
 
     const { data: period } = await supabase
       .from('audit_periods')
-      .select('month, year')
+      .select('id')
       .eq('id', audit_period_id)
       .maybeSingle();
     if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
-    console.log('[ALELO] period =', JSON.stringify(period));
-
-    const periodStart = new Date(Date.UTC(period.year, period.month - 1, 1));
-    const periodEnd = new Date(Date.UTC(period.year, period.month, 1));
-    const isInPeriod = (d: string | null): boolean => {
-      if (!d) return false;
-      const dt = new Date(d + 'T00:00:00Z');
-      return dt >= periodStart && dt < periodEnd;
-    };
 
     // ---- Localiza header dinamicamente ----
     const norm = (s: any) =>
@@ -108,7 +99,7 @@ Deno.serve(async (req) => {
 
     let importedLots = 0;
     let importedItems = 0;
-    let skipStatus = 0, skipNumTrans = 0, skipDataPag = 0, skipPeriodo = 0;
+    let skipStatus = 0, skipNumTrans = 0, skipDataPag = 0;
 
     // Define mapeamento e linha de início conforme o modo
     let cStatus: number, cNumTrans: number, cBruto: number, cLiquido: number;
@@ -153,7 +144,6 @@ Deno.serve(async (req) => {
         const dataVenda = cDataVenda >= 0 ? parseDateBR(row[cDataVenda]) : null;
         const dataPag = cDataPag >= 0 ? parseDateBR(row[cDataPag]) : null;
         if (!dataPag) { skipDataPag++; continue; }
-        if (!isInPeriod(dataPag)) { skipPeriodo++; continue; }
 
         const externalId = `alelo_${numTrans}`;
         const modalidade = cTipoCartao >= 0 ? (String(row[cTipoCartao] ?? '').trim() || null) : null;
@@ -204,12 +194,12 @@ Deno.serve(async (req) => {
         }
       }
 
-    console.log('[ALELO] descartados:', { skipStatus, skipNumTrans, skipDataPag, skipPeriodo, importedLots });
+    console.log('[ALELO] descartados:', { skipStatus, skipNumTrans, skipDataPag, importedLots });
 
     // ---- Validação anti-falso-sucesso ----
     if (recebimentosRows.length > 5 && importedLots === 0) {
       return jsonResponse({
-        error: `Arquivo tem ${recebimentosRows.length} linhas mas nenhum lote foi importado (descartados: status=${skipStatus}, semNumTrans=${skipNumTrans}, semDataPag=${skipDataPag}, foraPeriodo=${skipPeriodo}). Verifique o período selecionado e o conteúdo do arquivo.`,
+        error: `Arquivo tem ${recebimentosRows.length} linhas mas nenhum lote foi importado (descartados: status=${skipStatus}, semNumTrans=${skipNumTrans}, semDataPag=${skipDataPag}). Verifique o conteúdo do arquivo.`,
       }, 422);
     }
 
@@ -270,13 +260,12 @@ Deno.serve(async (req) => {
       oData = -1; oDesc = -1; oValor = -1; oEc = -1; oTipo = -1; outrasStart = outrasRows.length;
     }
 
-    let skipOutrasData = 0, skipOutrasPeriodo = 0;
+    let skipOutrasData = 0;
     for (let i = outrasStart; i < outrasRows.length; i++) {
       const row = outrasRows[i] ?? [];
       if (row.every(c => c == null || String(c).trim() === '')) continue;
       const data = oData >= 0 ? parseDateBR(row[oData]) : null;
       if (!data) { skipOutrasData++; continue; }
-      if (!isInPeriod(data)) { skipOutrasPeriodo++; continue; }
       const desc = oDesc >= 0 ? String(row[oDesc] ?? '').trim() : '';
       const valor = oValor >= 0 ? parseMoney(row[oValor]) : 0;
       const ec = oEc >= 0 ? String(row[oEc] ?? '').trim() : '';
@@ -290,7 +279,7 @@ Deno.serve(async (req) => {
       else if (dl.includes('tarifa')) tipo = 'tarifa';
       adjs.push({ data, ec, descricao: desc, valor, modalidade, tipo });
     }
-    console.log('[ALELO] outras descartados:', { skipOutrasData, skipOutrasPeriodo, total: adjs.length });
+    console.log('[ALELO] outras descartados:', { skipOutrasData, total: adjs.length });
 
     // Detectar pares simétricos para compensações
     const used = new Set<number>();
