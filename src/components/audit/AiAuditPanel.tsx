@@ -155,7 +155,12 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
           </Button>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {!ifood && <p className="text-muted-foreground">Aguardando execução da conciliação.</p>}
+          {!ifood && (
+            <p className="text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Auditando iFood com IA... aguarde ~1 min
+            </p>
+          )}
           {ifood?.error && <p className="text-destructive">Erro: {String(ifood.error)}</p>}
           {ifood && !ifood.error && (
             <>
