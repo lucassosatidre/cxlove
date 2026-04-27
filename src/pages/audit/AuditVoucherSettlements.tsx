@@ -440,3 +440,53 @@ function formatDateBR(s: string) {
   const [y, m, d] = s.split('-');
   return `${d}/${m}/${y}`;
 }
+
+const STATUS_BADGE: Record<string, string> = {
+  ok: 'bg-green-500/10 text-green-700 dark:text-green-400',
+  alerta: 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400',
+  critico: 'bg-red-500/10 text-red-700 dark:text-red-400',
+  divergente: 'bg-orange-500/10 text-orange-700 dark:text-orange-400',
+  no_sales: 'bg-muted text-muted-foreground',
+};
+
+function CompetenciaCard({ row }: { row: CompetenciaRow }) {
+  const op = row.operadora as Operadora;
+  const taxaReal = row.taxa_real_pct;
+  const taxaEst = row.taxa_estimada_pct;
+  const taxaCons = row.taxa_efetiva_consolidada_pct;
+  const fmtPctVal = (v: number | null) =>
+    v == null ? '—' : `${Number(v).toFixed(2).replace('.', ',')}%`;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center justify-between">
+          <span>{OP_LABEL[op] ?? op} — Competência</span>
+          <Badge variant="secondary" className={STATUS_BADGE[row.status] ?? STATUS_BADGE.ok}>
+            {row.status}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <div className="grid grid-cols-2 gap-2">
+          <Stat label={`Vendido (${row.vendido_count})`} value={fmtMoney(row.vendido_bruto)} />
+          <Stat label={`Reconhecido (${row.reconhecido_count})`} value={fmtMoney(row.reconhecido_bruto)} />
+          <Stat label={`Pago bruto (${row.pago_lotes_count} lotes)`} value={fmtMoney(row.pago_bruto)} />
+          <Stat label="Pago líquido" value={fmtMoney(row.pago_liquido)} />
+          <Stat label={`Pendente (${row.pendente_count})`} value={fmtMoney(row.pendente_bruto)} />
+          <Stat label="Taxa consolidada" value={fmtPctVal(taxaCons)} />
+        </div>
+        <div className="rounded-md bg-muted/40 p-2 text-xs space-y-0.5">
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Taxa real (sobre pago)</span>
+            <span className="font-mono-tabular text-foreground">{fmtPctVal(taxaReal)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Taxa estimada (sobre pendente)</span>
+            <span className="font-mono-tabular text-foreground">{fmtPctVal(taxaEst)}</span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
