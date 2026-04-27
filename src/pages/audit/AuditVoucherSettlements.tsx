@@ -105,13 +105,15 @@ export default function AuditVoucherSettlements() {
   }, [monthParam, yearParam, period]);
 
   const load = async (periodId: string) => {
-    const [{ data: lotsData }, { data: adjData }] = await Promise.all([
+    const [{ data: lotsData }, { data: adjData }, { data: compData }] = await Promise.all([
       supabase.from('voucher_lots').select('*').eq('audit_period_id', periodId).order('data_pagamento'),
       supabase.from('voucher_adjustments').select('*').eq('audit_period_id', periodId).order('data'),
+      supabase.from('audit_voucher_competencia').select('*').eq('audit_period_id', periodId),
     ]);
     const allLots = (lotsData as Lot[]) ?? [];
     setLots(allLots);
     setAdjustments((adjData as Adjustment[]) ?? []);
+    setCompetencia((compData as CompetenciaRow[]) ?? []);
 
     if (allLots.length > 0) {
       const lotIds = allLots.map(l => l.id);
@@ -152,10 +154,14 @@ export default function AuditVoucherSettlements() {
     if (!period) return;
     setMatching(true);
     try {
-      const { data, error } = await supabase.rpc('match_voucher_lots', { p_period_id: period.id });
+      // v4: roda o pipeline completo (cross-period match + cálculo competência)
+      const { data, error } = await supabase.functions.invoke('run-audit-match', {
+        body: { audit_period_id: period.id },
+      });
       if (error) throw error;
-      toast.success('✓ Conciliação rodada', {
-        description: `${(data as any)?.matched_items ?? 0} itens, ${(data as any)?.matched_lots ?? 0} lotes ↔ BB`,
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success('✓ Conciliação concluída', {
+        description: `Vouchers reprocessados por competência (data Maquinona).`,
       });
       await load(period.id);
     } catch (e: any) {
