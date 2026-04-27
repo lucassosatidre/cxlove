@@ -146,126 +146,118 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (!period) return jsonResponse({ error: 'Período não encontrado' }, 404);
 
+    const TAXA_TICKET_ESTIMADA = 0.12;
+
+    const norm = (s: any) => String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+    // ---- Detectar header NOVO: 'Data da Transação' + 'Nº Reembolso' ----
     let headerIdx = -1;
-    for (let i = 0; i < Math.min(rows.length, 30); i++) {
-      const r = rows[i] ?? [];
-      if (r.some((c: any) => String(c ?? '').includes('Número do reembolso') || String(c ?? '').includes('Numero do reembolso'))) {
+    let cDataTrans = -1, cNumTrans = -1, cProduto = -1, cValor = -1, cReembolso = -1;
+    for (let i = 0; i < Math.min(30, rows.length); i++) {
+      const r = rows[i] || [];
+      const lower = r.map(norm);
+      const hasDataTrans = lower.some(c => c.includes('data da transacao'));
+      const hasReembolso = lower.some(c => c.includes('reembolso'));
+      if (hasDataTrans && hasReembolso) {
         headerIdx = i;
+        lower.forEach((c, j) => {
+          if (c.includes('data da transacao')) cDataTrans = j;
+          else if (c.includes('no transacao') || c.includes('n transacao')) cNumTrans = j;
+          else if (c === 'produto') cProduto = j;
+          else if (c.includes('vl transacao') || c.includes('valor')) cValor = j;
+          else if (c.includes('reembolso')) cReembolso = j;
+        });
         break;
       }
     }
-    if (headerIdx < 0) return jsonResponse({ error: 'Ticket: cabeçalho não encontrado' }, 400);
 
-    type Item = {
-      data_transacao: string | null;
-      gross_amount: number;
-      authorization_code?: string;
-      card_number?: string;
-      modalidade?: string;
-    };
+    if (headerIdx < 0) {
+      return jsonResponse({
+        error: 'Ticket: cabeçalho não encontrado. Esperado linha com "Data da Transação" e "Nº Reembolso".',
+      }, 400);
+    }
+
+    if (cDataTrans < 0 || cValor < 0 || cReembolso < 0) {
+      return jsonResponse({
+        error: `Ticket: colunas obrigatórias não encontradas (DataTransação=${cDataTrans}, Valor=${cValor}, Reembolso=${cReembolso}).`,
+      }, 400);
+    }
+
+    type Item = { data_transacao: string; gross_amount: number; authorization_code?: string; modalidade: string | null; };
     type Lot = {
       external_id: string;
-      modalidade: string;
-      data_corte: string | null;
-      data_pagamento: string | null;
+      data_corte: string;
+      data_pagamento: string;
       gross_amount: number;
-      fee_management: number;
-      fee_admin: number;
-      fee_other: number;
       net_amount: number;
+      fee_admin: number;
+      modalidade: string | null;
       items: Item[];
     };
 
-    const lots: Lot[] = [];
-    let current: Lot | null = null;
+    const lotsByReemb = new Map<string, Lot>();
 
     for (let i = headerIdx + 1; i < rows.length; i++) {
-      const row = (rows[i] ?? []).map((c: any) => (c == null ? '' : c));
-      const c0 = String(row[0] ?? '').trim();
-      const c2 = String(row[2] ?? '').trim();
-      const c11 = String(row[11] ?? '').trim();
+      const r = rows[i];
+      if (!r) continue;
+      const dataTransRaw = r[cDataTrans];
+      const numReemb = r[cReembolso];
+      if (!dataTransRaw || !numReemb) continue;
 
-      // Linha de transação: c0 = numero_reembolso (numérico), c10 = "TEF", c11 = "COMPRA"
-      if (/^\d+$/.test(c0) && c11.toUpperCase() === 'COMPRA') {
-        const externalId = `ticket_${c0}`;
-        if (!current || current.external_id !== externalId) {
-          if (current) lots.push(current);
-          current = {
-            external_id: externalId,
-            modalidade: c2, // TAE / TRE / TF
-            data_corte: parseDateBR(row[3]),
-            data_pagamento: parseDateBR(row[4]),
-            gross_amount: 0,
-            fee_management: 0,
-            fee_admin: 0,
-            fee_other: 0,
-            net_amount: 0,
-            items: [],
-          };
-        }
-        const dataTrans = parseDateBR(row[7]);
-        const gross = parseMoney(row[13]);
-        if (dataTrans && gross > 0) {
-          current.items.push({
-            data_transacao: dataTrans,
-            gross_amount: gross,
-            authorization_code: String(row[9] ?? '').trim(),
-            card_number: String(row[12] ?? '').trim(),
-            modalidade: c2,
-          });
-        }
-        continue;
-      }
+      const dt = parseDateBR(String(dataTransRaw).split(' ')[0]);
+      const bruto = parseMoney(r[cValor]);
+      if (!dt || bruto <= 0) continue;
 
-      if (!current) continue;
+      const reemb = String(numReemb).trim();
+      const numTrans = cNumTrans >= 0 ? String(r[cNumTrans] ?? '').trim() : '';
+      const produto = cProduto >= 0 ? String(r[cProduto] ?? '').trim() : null;
 
-      // Subtotal de Vendas (descrição em c11, valor em c13)
-      if (/subtotal\s+de\s+vendas/i.test(c11)) {
-        current.gross_amount = parseMoney(row[13]);
-        continue;
+      if (!lotsByReemb.has(reemb)) {
+        lotsByReemb.set(reemb, {
+          external_id: `ticket_${reemb}`,
+          data_corte: dt,
+          data_pagamento: dt,
+          gross_amount: 0,
+          net_amount: 0,
+          fee_admin: 0,
+          modalidade: null,
+          items: [],
+        });
       }
-      // Tarifa de gestão de pagamento (c11), valor c13
-      if (/tarifa\s+de\s+gest/i.test(c11)) {
-        current.fee_management += parseMoney(row[13]);
-        continue;
-      }
-      // Taxa TPE (c11), valor c13
-      if (/taxa\s+tpe/i.test(c11)) {
-        current.fee_admin += parseMoney(row[13]);
-        continue;
-      }
-      // Mensalidade / anuidade
-      if (/mensalidade|anuidade/i.test(c11)) {
-        current.fee_other += parseMoney(row[13]);
-        continue;
-      }
-      // Total de Descontos — ignora (=fee_management+fee_admin+fee_other)
-      if (/total\s+de\s+descontos/i.test(c11)) continue;
-      // Valor Líquido — fecha o lote
-      if (/valor\s+l[ií]quido/i.test(c11)) {
-        current.net_amount = parseMoney(row[13]);
-        lots.push(current);
-        current = null;
-        continue;
-      }
+      const lot = lotsByReemb.get(reemb)!;
+      lot.items.push({
+        data_transacao: dt,
+        gross_amount: bruto,
+        authorization_code: numTrans || undefined,
+        modalidade: produto,
+      });
+      lot.gross_amount += bruto;
+      if (dt < lot.data_corte) lot.data_corte = dt;
     }
-    if (current) lots.push(current);
 
-    console.log('[TICKET] lots parseados =', lots.length, 'rows totais =', rows.length);
+    for (const lot of lotsByReemb.values()) {
+      lot.net_amount = +(lot.gross_amount * (1 - TAXA_TICKET_ESTIMADA)).toFixed(2);
+      lot.fee_admin = +(lot.gross_amount - lot.net_amount).toFixed(2);
+      const dtPag = new Date(lot.data_corte + 'T00:00:00Z');
+      dtPag.setUTCDate(dtPag.getUTCDate() + 21);
+      lot.data_pagamento = dtPag.toISOString().substring(0, 10);
+      const mods = lot.items.map(i => i.modalidade).filter(Boolean) as string[];
+      const set = new Set(mods);
+      lot.modalidade = set.size === 0 ? null : set.size === 1 ? mods[0] : 'MIX';
+    }
 
-    // Validação anti-falso-sucesso: arquivo com conteúdo mas zero lotes parseados
-    if (rows.length > 5 && lots.length === 0) {
+    const validLots = Array.from(lotsByReemb.values());
+
+    if (rows.length > 5 && validLots.length === 0) {
       return jsonResponse({
-        error: `Arquivo tem ${rows.length} linhas mas nenhum lote foi identificado. Verifique o formato (Extrato de Reembolso DETALHADO da Ticket).`,
+        error: `Ticket: arquivo tem ${rows.length} linhas mas nenhum lote foi identificado. Verifique o formato (extrato com colunas "Data da Transação" e "Nº Reembolso").`,
       }, 422);
     }
 
-    // UPSERT (sem DELETE prévio)
     let importedLots = 0;
     let importedItems = 0;
 
-    for (const lot of lots) {
-      if (!lot.data_pagamento || lot.gross_amount === 0) continue;
+    for (const lot of validLots) {
       const { data: insertedLot, error: lotErr } = await supabase
         .from('voucher_lots')
         .upsert({
@@ -278,37 +270,32 @@ Deno.serve(async (req) => {
           net_amount: lot.net_amount,
           fee_admin: lot.fee_admin,
           fee_anticipation: 0,
-          fee_management: lot.fee_management,
-          fee_other: lot.fee_other,
-          modalidade: lot.modalidade || null,
+          fee_management: 0,
+          fee_other: 0,
+          modalidade: lot.modalidade,
           status: 'imported',
-          raw_data: { item_count: lot.items.length },
+          raw_data: { items_count: lot.items.length, num_reembolso: lot.external_id.replace('ticket_', ''), estimated_net: true },
         }, { onConflict: 'audit_period_id,operadora,external_id' })
-        .select('id')
-        .single();
-
+        .select('id').single();
       if (lotErr) {
-        console.error('Erro upsert lote ticket', lot.external_id, lotErr);
+        console.error('Erro upsert lote Ticket', lot.external_id, lotErr);
         continue;
       }
       importedLots++;
 
-      // Substitui os items do lote
       await supabase.from('voucher_lot_items').delete().eq('lot_id', insertedLot.id);
-
       if (lot.items.length > 0) {
         const itemRows = lot.items.map(it => ({
           lot_id: insertedLot.id,
           data_transacao: it.data_transacao,
           gross_amount: it.gross_amount,
           authorization_code: it.authorization_code || null,
-          card_number: it.card_number || null,
+          card_number: null,
           modalidade: it.modalidade || null,
           match_status: 'pending',
         }));
         const { error: itemErr } = await supabase.from('voucher_lot_items').insert(itemRows);
-        if (itemErr) console.error('Erro inserindo items ticket', itemErr);
-        else importedItems += itemRows.length;
+        if (!itemErr) importedItems += itemRows.length;
       }
     }
 
