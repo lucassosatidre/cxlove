@@ -277,6 +277,27 @@ export default function AuditVoucherSettlements() {
           </Card>
         ) : (
           <>
+            {/* v4 — Bloco "Auditoria por competência" (data Maquinona) */}
+            <Alert className="border-primary/30 bg-primary/5">
+              <Info className="h-4 w-4 text-primary" />
+              <AlertTitle className="text-sm">Auditoria por competência (data Maquinona)</AlertTitle>
+              <AlertDescription className="text-xs leading-relaxed">
+                Vendas em vouchers são reconhecidas pela <strong>data da venda na Maquinona</strong>, não pela data
+                em que a operadora paga. Vendas feitas neste mês cujo pagamento cai em outro mês aparecem aqui como
+                <em> "Pendente"</em>; pagamentos recebidos neste mês referentes a vendas de meses anteriores aparecem como
+                <em> "Reconhecido fora do período"</em>. A diferença entre <strong>vendido</strong> e <strong>pago</strong> só é
+                anomalia quando ultrapassa as taxas estimadas (PAT 3,6% / Auxílio 6,3%).
+              </AlertDescription>
+            </Alert>
+
+            {competencia.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {competencia.map(c => (
+                  <CompetenciaCard key={c.operadora} row={c} />
+                ))}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {(Object.keys(summary) as Operadora[]).map(op => {
                 const s = summary[op];
