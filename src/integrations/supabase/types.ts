@@ -34,6 +34,7 @@ export type Database = {
           matched: boolean
           matched_adjacente_amount: number | null
           matched_competencia_amount: number | null
+          row_hash: string | null
         }
         Insert: {
           amount: number
@@ -54,6 +55,7 @@ export type Database = {
           matched?: boolean
           matched_adjacente_amount?: number | null
           matched_competencia_amount?: number | null
+          row_hash?: string | null
         }
         Update: {
           amount?: number
@@ -74,6 +76,7 @@ export type Database = {
           matched?: boolean
           matched_adjacente_amount?: number | null
           matched_competencia_amount?: number | null
+          row_hash?: string | null
         }
         Relationships: [
           {
@@ -333,6 +336,74 @@ export type Database = {
           year?: number
         }
         Relationships: []
+      }
+      audit_voucher_competencia: {
+        Row: {
+          audit_period_id: string
+          calculado_em: string
+          id: string
+          operadora: string
+          pago_bruto: number
+          pago_liquido: number
+          pago_lotes_count: number
+          pendente_bruto: number
+          pendente_count: number
+          reconhecido_bruto: number
+          reconhecido_count: number
+          status: string
+          taxa_efetiva_consolidada_pct: number | null
+          taxa_estimada_pct: number | null
+          taxa_real_pct: number | null
+          vendido_bruto: number
+          vendido_count: number
+        }
+        Insert: {
+          audit_period_id: string
+          calculado_em?: string
+          id?: string
+          operadora: string
+          pago_bruto?: number
+          pago_liquido?: number
+          pago_lotes_count?: number
+          pendente_bruto?: number
+          pendente_count?: number
+          reconhecido_bruto?: number
+          reconhecido_count?: number
+          status: string
+          taxa_efetiva_consolidada_pct?: number | null
+          taxa_estimada_pct?: number | null
+          taxa_real_pct?: number | null
+          vendido_bruto?: number
+          vendido_count?: number
+        }
+        Update: {
+          audit_period_id?: string
+          calculado_em?: string
+          id?: string
+          operadora?: string
+          pago_bruto?: number
+          pago_liquido?: number
+          pago_lotes_count?: number
+          pendente_bruto?: number
+          pendente_count?: number
+          reconhecido_bruto?: number
+          reconhecido_count?: number
+          status?: string
+          taxa_efetiva_consolidada_pct?: number | null
+          taxa_estimada_pct?: number | null
+          taxa_real_pct?: number | null
+          vendido_bruto?: number
+          vendido_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_voucher_competencia_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_voucher_matches: {
         Row: {
@@ -1902,7 +1973,17 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      vw_period_imports: {
+        Row: {
+          audit_period_id: string | null
+          created_at: string | null
+          file_name: string | null
+          imported_rows: number | null
+          source: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       attempt_checkin: {
@@ -1915,6 +1996,7 @@ export type Database = {
         }
         Returns: Json
       }
+      calculate_voucher_audit: { Args: { p_period_id: string }; Returns: Json }
       classify_ifood_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
@@ -2008,6 +2090,7 @@ export type Database = {
       }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
       match_voucher_lots: { Args: { p_period_id: string }; Returns: Json }
+      match_voucher_lots_v2: { Args: { p_period_id: string }; Returns: Json }
       promote_from_waitlist: {
         Args: {
           p_freed_by: string
