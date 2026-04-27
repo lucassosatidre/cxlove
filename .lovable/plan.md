@@ -1,47 +1,95 @@
-## Limpar todos os dados de auditoria — Fev, Mar e Abr/2026
+## Objetivo
 
-### Períodos identificados (todos serão zerados, mas mantidos)
+Fazer as RPCs `get_audit_period_totals` e `get_audit_period_deposits` filtrarem por **data** (sale_date / deposit_date) em vez de `audit_period_id`, para que o dashboard de cada mês mostre só o seu mês — mesmo que Jan+Fev+Mar tenham sido importados sob o mesmo `audit_period_id`.
 
-| Período | ID | Status atual |
-|---|---|---|
-| Fev/2026 | `6112cd94-e577-44b2-aac7-3964bbac495a` | importado |
-| Mar/2026 | `74d75c7c-a4f2-4e58-ac97-721bf8ca9c4b` | importado |
-| Abr/2026 | `40e431fc-9766-4846-a8c8-0102df23922a` | aberto |
+## Ajustes necessários ao prompt (validados na DB)
 
-Os 3 períodos ficam preservados em `audit_periods`, mas voltam para status `aberto` e sem nenhum dado importado.
+Achei 2 problemas na migration proposta. Vou corrigir antes de aplicar:
 
-### O que será apagado (filtrado pelos 3 period_ids)
+**1. `audit_periods` não tem `start_date` / `end_date`.** Só tem `year` e `month`. Preciso derivar:
+```
+period_start := make_date(p.year, p.month, 1)
+period_end   := (period_start + INTERVAL '1 month' - INTERVAL '1 day')::date
+```
 
-**Extratos brutos**
-- `audit_card_transactions` (Maquinona)
-- `audit_bank_deposits` (Cresol + BB)
-- `audit_imports` (histórico de uploads Maquinona/Cresol/BB)
+**2. `get_audit_period_totals` retorna 7 colunas hoje, não 5.** O frontend usa `total_liquido_ifood` e `total_bruto_ifood` em `AuditDashboard.tsx:313-314` e `AuditIfood.tsx:111`. Se eu dropar e recriar com 5 colunas como o prompt pede, as duas telas quebram. Vou **preservar a assinatura completa** (7 colunas) e só trocar o filtro de `audit_period_id` para data. Também mantenho o filtro `is_competencia = true` que já existia.
 
-**Vouchers**
-- `voucher_lot_items`
-- `voucher_lots`
-- `voucher_imports`
-- `voucher_adjustments` (se houver)
+## Migration única
 
-**Resultados de conciliação**
-- `audit_daily_matches` (iFood)
-- `audit_voucher_matches` (legado)
-- `audit_voucher_competencia` (novo)
+`supabase/migrations/<ts>_fix_dashboard_filtra_por_data.sql`:
 
-**Histórico**
-- `audit_period_log` — também limpo para zerar a trilha
+```sql
+-- Fix v4: dashboard filtra por DATA (sale_date / deposit_date),
+-- não por audit_period_id. Permite cross-period.
+-- audit_periods só tem year/month → derivar range.
 
-### O que NÃO será mexido
+CREATE OR REPLACE FUNCTION public.get_audit_period_totals(p_period_id uuid)
+RETURNS TABLE (
+  total_bruto numeric,
+  total_liquido_declarado numeric,
+  total_liquido_ifood numeric,
+  total_bruto_ifood numeric,
+  total_taxa_declarada numeric,
+  total_promocao numeric,
+  total_count bigint
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  WITH p AS (
+    SELECT make_date(year, month, 1) AS d_ini,
+           (make_date(year, month, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date AS d_fim
+    FROM public.audit_periods WHERE id = p_period_id
+  )
+  SELECT
+    COALESCE(SUM(ct.gross_amount), 0),
+    COALESCE(SUM(ct.net_amount), 0),
+    COALESCE(SUM(ct.net_amount)   FILTER (WHERE ct.deposit_group = 'ifood'), 0),
+    COALESCE(SUM(ct.gross_amount) FILTER (WHERE ct.deposit_group = 'ifood'), 0),
+    COALESCE(SUM(ct.tax_amount), 0),
+    COALESCE(SUM(ct.promotion_amount), 0),
+    COUNT(*)
+  FROM public.audit_card_transactions ct, p
+  WHERE ct.sale_date BETWEEN p.d_ini AND p.d_fim
+    AND ct.is_competencia = true;
+$$;
 
-- Os 3 registros em `audit_periods` (continuam existindo, só voltam para status `aberto`)
-- Tabelas de outros módulos (Tele, Salão, Entregadores, etc.)
-- Dados de meses fora desses 3 períodos
-- Edge Functions, RPCs, RLS
+CREATE OR REPLACE FUNCTION public.get_audit_period_deposits(p_period_id uuid)
+RETURNS TABLE (
+  category text, bank text, match_status text,
+  total_amount numeric, deposit_count bigint
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public
+AS $$
+  WITH p AS (
+    SELECT make_date(year, month, 1) AS d_ini,
+           (make_date(year, month, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date AS d_fim
+    FROM public.audit_periods WHERE id = p_period_id
+  )
+  SELECT d.category, d.bank, d.match_status,
+         COALESCE(SUM(d.amount), 0), COUNT(*)
+  FROM public.audit_bank_deposits d, p
+  WHERE d.deposit_date BETWEEN p.d_ini AND (p.d_fim + INTERVAL '5 days')::date
+  GROUP BY d.category, d.bank, d.match_status;
+$$;
+```
 
-### Como será executado
+`+5 dias` no segundo: depósitos D+1/D+2 e fim de semana de vendas do fim do mês caem no mês seguinte.
 
-Uma única migration SQL com `DELETE ... WHERE audit_period_id IN (3 ids)` em cada tabela, na ordem correta de dependência (items antes de lots; deposits/transactions/lots antes de matches), seguido de `UPDATE audit_periods SET status='aberto'`.
+## Frontend
 
-### Validação pós-execução
+Nada a mudar. A query direta de `audit_bank_deposits` no `AuditDashboard.tsx:~304` para `matched_competencia_amount` continua igual (já é por sale_date naturalmente via classificador).
 
-SELECT de contagem em cada tabela filtrando pelos 3 period_ids, esperando 0 em todas.
+## Validação após aplicar
+
+Abrir `/admin/auditoria?period=<fev>`:
+- Vendido = só `sale_date` em Fev/2026 (esperado bem menor que os R$ 373k atuais que somam Jan+Fev+Mar)
+- Depósitos = só `deposit_date` em Fev/2026 + 5 primeiros dias de Mar
+
+Para ver Jan e Mar separados: criar `audit_periods` para esses meses (não precisa reimportar — os dados existentes vão aparecer pelo filtro de data).
+
+## O que NÃO vou tocar
+
+- import-cresol, import-bb, import-maquinona
+- `calcDepositGroup`, classificadores, voucher RPCs
+- UI fora do que já está
+- Nenhum UPDATE em dados existentes
