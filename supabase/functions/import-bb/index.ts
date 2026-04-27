@@ -233,34 +233,24 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { data: existing } = await supabase
+    // UPSERT por row_hash (calculado por trigger no banco). Permite reimportar
+    // o mesmo extrato sem duplicar e sem ignorar linhas atualizadas.
+    let inserted = 0;
+    let duplicates = 0;
+    const CHUNK = 200;
+
+    const { count: existingCount } = await supabase
       .from('audit_bank_deposits')
-      .select('deposit_date,amount,doc_number')
+      .select('id', { count: 'exact', head: true })
       .eq('audit_period_id', audit_period_id)
       .eq('bank', 'bb');
-    const existingKeys = new Set(
-      (existing ?? []).map((e: any) =>
-        `${e.deposit_date}|${Number(e.amount).toFixed(2)}|${e.doc_number ?? ''}`,
-      ),
-    );
+    const beforeCount = existingCount ?? 0;
 
-    const toInsert: any[] = [];
-    let duplicates = 0;
-    for (const d of deposits) {
-      const key = `${d.deposit_date}|${d.amount.toFixed(2)}|${d.doc_number ?? ''}`;
-      if (existingKeys.has(key)) {
-        duplicates++;
-        continue;
-      }
-      existingKeys.add(key);
-      toInsert.push(d);
-    }
-
-    let inserted = 0;
-    const CHUNK = 200;
-    for (let i = 0; i < toInsert.length; i += CHUNK) {
-      const chunk = toInsert.slice(i, i + CHUNK);
-      const { error: insErr } = await supabase.from('audit_bank_deposits').insert(chunk);
+    for (let i = 0; i < deposits.length; i += CHUNK) {
+      const chunk = deposits.slice(i, i + CHUNK);
+      const { error: insErr } = await supabase
+        .from('audit_bank_deposits')
+        .upsert(chunk, { onConflict: 'audit_period_id,bank,row_hash' });
       if (insErr) {
         await supabase.from('audit_imports').update({
           status: 'failed', error_message: insErr.message,
@@ -270,8 +260,15 @@ Deno.serve(async (req) => {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
-      inserted += chunk.length;
     }
+
+    const { count: afterCount } = await supabase
+      .from('audit_bank_deposits')
+      .select('id', { count: 'exact', head: true })
+      .eq('audit_period_id', audit_period_id)
+      .eq('bank', 'bb');
+    inserted = (afterCount ?? 0) - beforeCount;
+    duplicates = deposits.length - inserted;
 
     await supabase.from('audit_imports').update({
       status: 'completed',

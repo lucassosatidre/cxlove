@@ -267,38 +267,42 @@ Deno.serve(async (req) => {
       }, 422);
     }
 
-    // Limpar dados anteriores
-    await supabase.from('voucher_lots').delete()
-      .eq('audit_period_id', audit_period_id).eq('operadora', 'ticket');
-
+    // UPSERT (sem DELETE prévio)
     let importedLots = 0;
     let importedItems = 0;
 
     for (const lot of lots) {
       if (!lot.data_pagamento || lot.gross_amount === 0) continue;
       if (!isInPeriod(lot.data_pagamento)) continue;
-      const { data: insertedLot, error: lotErr } = await supabase.from('voucher_lots').insert({
-        audit_period_id,
-        operadora: 'ticket',
-        external_id: lot.external_id,
-        data_corte: lot.data_corte,
-        data_pagamento: lot.data_pagamento,
-        gross_amount: lot.gross_amount,
-        net_amount: lot.net_amount,
-        fee_admin: lot.fee_admin,
-        fee_anticipation: 0,
-        fee_management: lot.fee_management,
-        fee_other: lot.fee_other,
-        modalidade: lot.modalidade || null,
-        status: 'imported',
-        raw_data: { item_count: lot.items.length },
-      }).select('id').single();
+      const { data: insertedLot, error: lotErr } = await supabase
+        .from('voucher_lots')
+        .upsert({
+          audit_period_id,
+          operadora: 'ticket',
+          external_id: lot.external_id,
+          data_corte: lot.data_corte,
+          data_pagamento: lot.data_pagamento,
+          gross_amount: lot.gross_amount,
+          net_amount: lot.net_amount,
+          fee_admin: lot.fee_admin,
+          fee_anticipation: 0,
+          fee_management: lot.fee_management,
+          fee_other: lot.fee_other,
+          modalidade: lot.modalidade || null,
+          status: 'imported',
+          raw_data: { item_count: lot.items.length },
+        }, { onConflict: 'audit_period_id,operadora,external_id' })
+        .select('id')
+        .single();
 
       if (lotErr) {
-        console.error('Erro inserindo lote ticket', lot.external_id, lotErr);
+        console.error('Erro upsert lote ticket', lot.external_id, lotErr);
         continue;
       }
       importedLots++;
+
+      // Substitui os items do lote
+      await supabase.from('voucher_lot_items').delete().eq('lot_id', insertedLot.id);
 
       if (lot.items.length > 0) {
         const itemRows = lot.items.map(it => ({
