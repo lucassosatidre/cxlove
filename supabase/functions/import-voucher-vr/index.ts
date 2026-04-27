@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       const liquido = parseMoney(row[7]);
       if (!dataPag || bruto <= 0) continue;
 
-      const isAntecipado = status.includes('Antecipado');
+      const isAntecipado = status.toLowerCase().includes('antecipado');
       let feeAdmin = 0;
       let feeAntecip = 0;
 
