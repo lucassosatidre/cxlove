@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
     type Lot = {
       external_id: string;
       data_pagamento: string;
+      data_corte: string;
       gross_amount: number;
       net_amount: number;
       fee_admin: number;
@@ -108,6 +109,7 @@ Deno.serve(async (req) => {
         lotsByPagto.set(dtPag, {
           external_id: `pluxee_${dtPag}`,
           data_pagamento: dtPag,
+          data_corte: dtTrans,
           gross_amount: 0,
           net_amount: 0,
           fee_admin: 0,
@@ -125,6 +127,7 @@ Deno.serve(async (req) => {
         modalidade: origem,
       });
       lot.gross_amount += bruto;
+      if (dtTrans < lot.data_corte) lot.data_corte = dtTrans;
     }
 
     // Estimar net + atribuir modalidade dominante
@@ -157,6 +160,7 @@ Deno.serve(async (req) => {
           operadora: 'pluxee',
           external_id: lot.external_id,
           data_pagamento: lot.data_pagamento,
+          data_corte: lot.data_corte,
           gross_amount: lot.gross_amount,
           net_amount: lot.net_amount,
           fee_admin: lot.fee_admin,
