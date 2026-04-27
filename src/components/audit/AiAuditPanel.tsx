@@ -22,10 +22,13 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
   const [loadingVoucher, setLoadingVoucher] = useState(false);
   const [loadingIfood, setLoadingIfood] = useState(false);
 
-  // Load latest cached audits if no initial result passed
+  // Load latest cached audits + poll while results are missing
   useEffect(() => {
-    if (initialResult) return;
-    (async () => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    let stopTimeout: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const checkResults = async () => {
       const [{ data: v }, { data: i }] = await Promise.all([
         supabase.from('voucher_ai_audits')
           .select('result, cost_usd, total_recebido_competencia, total_taxa_real, items_matched, items_ambiguous, items_orphan, lots_matched_bb, created_at, error')
@@ -36,9 +39,24 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
           .eq('audit_period_id', periodId)
           .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       ]);
-      if (v) setVoucher({ cached: true, ...v });
-      if (i) setIfood({ cached: true, ...i });
-    })();
+      if (cancelled) return;
+      if (v) setVoucher((prev: any) => prev?.results ? prev : { cached: true, ...v });
+      if (i) setIfood((prev: any) => prev?.summary && !prev?.cached ? prev : { cached: true, ...i });
+      if (v && i && interval) { clearInterval(interval); interval = null; }
+    };
+
+    // Initial load (always) — even if initialResult exists, fetch latest persisted version
+    checkResults();
+
+    // Poll only if we don't have full results yet
+    interval = setInterval(checkResults, 15000);
+    stopTimeout = setTimeout(() => { if (interval) { clearInterval(interval); interval = null; } }, 300000);
+
+    return () => {
+      cancelled = true;
+      if (interval) clearInterval(interval);
+      if (stopTimeout) clearTimeout(stopTimeout);
+    };
   }, [periodId, initialResult]);
 
   const rerun = async (which: 'voucher' | 'ifood') => {
@@ -79,7 +97,12 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
           </Button>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {!voucher && <p className="text-muted-foreground">Aguardando execução da conciliação.</p>}
+          {!voucher && (
+            <p className="text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Reconciliando vouchers com IA... aguarde ~2 min
+            </p>
+          )}
           {voucher?.error && <p className="text-destructive">Erro: {String(voucher.error)}</p>}
           {voucher && !voucher.error && (
             <>
@@ -132,7 +155,12 @@ export default function AiAuditPanel({ periodId, initialResult }: Props) {
           </Button>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          {!ifood && <p className="text-muted-foreground">Aguardando execução da conciliação.</p>}
+          {!ifood && (
+            <p className="text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Auditando iFood com IA... aguarde ~1 min
+            </p>
+          )}
           {ifood?.error && <p className="text-destructive">Erro: {String(ifood.error)}</p>}
           {ifood && !ifood.error && (
             <>
