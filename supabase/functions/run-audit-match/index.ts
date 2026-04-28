@@ -184,24 +184,48 @@ Deno.serve(async (req) => {
     const totalIfood = dailyRows.reduce((s, r) => s + r.difference, 0);
     const totalVoucher = voucherRows.reduce((s, r) => s + r.difference, 0);
 
-    // ===== Camada IA: fire-and-forget (não aguarda — evita timeout) =====
+    // ===== Camada IA: 4 operadoras voucher em paralelo + iFood =====
     const SUPABASE_URL_AI = Deno.env.get('SUPABASE_URL')!;
     const SERVICE_ROLE_AI = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const aiHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SERVICE_ROLE_AI}`,
+    };
 
     // @ts-ignore EdgeRuntime is available at runtime
     EdgeRuntime.waitUntil(
-      Promise.allSettled([
-        fetch(`${SUPABASE_URL_AI}/functions/v1/reconcile-vouchers-ai`, {
+      (async () => {
+        // 4 operadoras voucher em paralelo
+        await Promise.allSettled(
+          ['alelo', 'ticket', 'pluxee', 'vr'].map(op =>
+            fetch(`${SUPABASE_URL_AI}/functions/v1/reconcile-vouchers-ai`, {
+              method: 'POST',
+              headers: aiHeaders,
+              body: JSON.stringify({
+                period_id: audit_period_id,
+                force_refresh: false,
+                operadora: op,
+              }),
+            }).catch((e: any) => console.error(`reconcile-${op} error:`, e.message))
+          )
+        );
+        // Ao terminar todas as operadoras, roda o classify pra refletir no dashboard
+        await fetch(`${SUPABASE_URL_AI}/rest/v1/rpc/classify_voucher_deposits`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE_AI}` },
-          body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
-        }).catch((e: any) => console.error('reconcile-vouchers-ai fire error:', e.message)),
-        fetch(`${SUPABASE_URL_AI}/functions/v1/audit-ifood-ai`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SERVICE_ROLE_AI}` },
-          body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
-        }).catch((e: any) => console.error('audit-ifood-ai fire error:', e.message)),
-      ])
+          headers: { ...aiHeaders, 'apikey': SERVICE_ROLE_AI },
+          body: JSON.stringify({ p_period_id: audit_period_id }),
+        }).catch((e: any) => console.error('classify_voucher_deposits final error:', e.message));
+      })()
+    );
+
+    // iFood em paralelo (já funciona, manter como está)
+    // @ts-ignore
+    EdgeRuntime.waitUntil(
+      fetch(`${SUPABASE_URL_AI}/functions/v1/audit-ifood-ai`, {
+        method: 'POST',
+        headers: aiHeaders,
+        body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
+      }).catch((e: any) => console.error('audit-ifood-ai fire error:', e.message))
     );
 
     return new Response(JSON.stringify({
