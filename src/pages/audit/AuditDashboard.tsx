@@ -286,12 +286,11 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: vMatches }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
+    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.from('vw_period_imports' as any).select('*').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
-      supabase.from('audit_voucher_matches').select('company,sold_amount,deposited_amount,difference,effective_tax_rate,status,sold_count,deposit_count').eq('audit_period_id', periodId),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
       supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
