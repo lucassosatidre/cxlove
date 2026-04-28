@@ -664,12 +664,11 @@ export default function AuditDashboard() {
   }
 
   const statusBadge = period ? STATUS_VARIANTS[period.status] : null;
-  const criticalVouchers = voucherMatches.filter(v => v.status === 'critico');
+  const criticalVouchers: any[] = [];
 
   const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
-  const voucherGap = voucherMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
   const custoReal = isConciliated || isClosed
-    ? Math.abs(Math.min(ifoodGap, 0)) + Math.max(voucherGap, 0) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido - Math.max(voucherGap, 0)) : 0)
+    ? Math.abs(Math.min(ifoodGap, 0)) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido) : 0)
     : totals.custo;
 
   // Breakdown of bank deposits by match_status (for iFood and Voucher cards)
