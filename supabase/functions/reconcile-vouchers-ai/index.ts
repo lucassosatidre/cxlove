@@ -202,7 +202,7 @@ Deno.serve(async (req) => {
 
   try {
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
-    const { period_id, force_refresh } = await req.json();
+    const { period_id, force_refresh, operadora } = await req.json();
 
     if (!period_id) {
       return new Response(JSON.stringify({ error: 'period_id obrigatório' }), {
@@ -210,19 +210,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    const operadoras = ['alelo', 'ticket', 'pluxee', 'vr'] as const;
+    const operadoras: string[] = operadora
+      ? [operadora]
+      : ['alelo', 'ticket', 'pluxee', 'vr'];
+
     const allResults: Record<string, any> = {};
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let totalCost = 0;
 
-    // Hash do estado pra cache
+    // Hash do estado pra cache (escopado por operadora)
     const { count: itemsCount } = await supabase.from('voucher_lot_items').select('id', { count: 'exact', head: true });
     const { count: lotsCount } = await supabase.from('voucher_lots').select('id', { count: 'exact', head: true }).eq('audit_period_id', period_id);
     const { count: depsCount } = await supabase.from('audit_bank_deposits').select('id', { count: 'exact', head: true })
       .eq('audit_period_id', period_id).eq('bank', 'bb').in('category', ['alelo','ticket','pluxee','vr']);
 
-    const inputHash = `${period_id}:${itemsCount ?? 0}:${lotsCount ?? 0}:${depsCount ?? 0}`;
+    const inputHash = `${period_id}:${operadora ?? 'all'}:${itemsCount ?? 0}:${lotsCount ?? 0}:${depsCount ?? 0}`;
 
     if (!force_refresh) {
       const { data: cached } = await supabase
@@ -245,6 +248,8 @@ Deno.serve(async (req) => {
     }
 
     for (const op of operadoras) {
+      console.log(`[${op}] iniciando...`);
+
       const { data: vendas } = await supabase
         .from('audit_card_transactions')
         .select('id, sale_date, gross_amount, net_amount, is_competencia')
@@ -275,6 +280,7 @@ Deno.serve(async (req) => {
         .eq('category', op);
 
       if ((!vendas || vendas.length === 0) && items.length === 0) {
+        console.log(`[${op}] sem dados, skip`);
         allResults[op] = { skipped: true, reason: 'sem dados' };
         continue;
       }
@@ -287,6 +293,7 @@ Deno.serve(async (req) => {
       const expected_rate = rateRow?.expected_rate_pct ?? 10.0;
 
       try {
+        console.log(`[${op}] chamando Opus 4.7...`);
         const { result, inputTokens, outputTokens, costUsd } = await reconcileOperadora({
           operadora: op,
           vendas_maquinona: vendas ?? [],
@@ -295,13 +302,14 @@ Deno.serve(async (req) => {
           bank_deposits: deps ?? [],
           expected_rate,
         });
+        console.log(`[${op}] Opus respondeu em ${Date.now() - startedAt}ms, custo $${costUsd.toFixed(4)}`);
 
         totalInputTokens += inputTokens;
         totalOutputTokens += outputTokens;
         totalCost += costUsd;
         allResults[op] = result;
 
-        const { data: auditRow } = await supabase.from('voucher_ai_audits').insert({
+        await supabase.from('voucher_ai_audits').insert({
           audit_period_id: period_id,
           model_used: MODEL,
           input_hash: inputHash,
@@ -316,11 +324,12 @@ Deno.serve(async (req) => {
           output_tokens: outputTokens,
           cost_usd: costUsd,
           duration_ms: Date.now() - startedAt,
-        }).select('id').single();
+        });
 
         await applyResult(supabase, result);
+        console.log(`[${op}] aplicado com sucesso`);
       } catch (opErr: any) {
-        console.error(`Erro operadora ${op}:`, opErr.message);
+        console.error(`[${op}] erro:`, opErr.message);
         allResults[op] = { error: opErr.message };
         await supabase.from('voucher_ai_audits').insert({
           audit_period_id: period_id,
@@ -333,12 +342,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Reflete nos cards do dashboard
-    await supabase.rpc('classify_voucher_deposits', { p_period_id: period_id });
+    // Só roda classify no final se processou TODAS as operadoras
+    if (!operadora) {
+      await supabase.rpc('classify_voucher_deposits', { p_period_id: period_id });
+    }
 
     return new Response(JSON.stringify({
       success: true,
       cached: false,
+      operadoras_processadas: operadoras,
       results: allResults,
       total_cost_usd: totalCost,
       total_tokens: totalInputTokens + totalOutputTokens,
