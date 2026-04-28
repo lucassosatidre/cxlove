@@ -93,8 +93,8 @@ Deno.serve(async (req) => {
           );
         }
 
-        const data = await apiRes.json();
-        const sales = Array.isArray(data) ? data : data.data || data.results || [];
+        const data = await apiRes.json().catch(() => null);
+        const sales = Array.isArray(data) ? data : (data?.data || data?.results || []);
         allRawSales.push(...sales);
 
         if (sales.length < rawLimit) break;
