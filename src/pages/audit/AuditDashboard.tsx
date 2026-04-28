@@ -502,7 +502,7 @@ export default function AuditDashboard() {
         custoTotal: totals.custo,
         taxaEfetiva: totals.taxaPct,
       },
-      criticalVouchers: voucherMatches.filter(v => v.status === 'critico'),
+      criticalVouchers: [],
       ifoodSummary: {
         bruto: totals.brutoIfood,
         taxaDeclarada: Math.max(totals.brutoIfood - totals.liquidoIfood, 0),
@@ -511,7 +511,7 @@ export default function AuditDashboard() {
         diferenca: recebidoCresol - totals.liquidoIfood,
       },
       dailyRows,
-      voucherRows: voucherMatches,
+      voucherRows: [],
     };
   };
 
