@@ -328,6 +328,7 @@ async function executeTool(
           'audit_voucher_competencia', 'audit_period_log',
           'voucher_lots', 'voucher_lot_items', 'voucher_expected_rates',
           'voucher_imports', 'voucher_adjustments',
+          'voucher_ai_audits', 'ifood_ai_audits',
           'clau_extracted_facts', 'clau_conversation_summaries',
         ]);
         const FORBIDDEN = /\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|EXECUTE|COPY|VACUUM)\b/i;
