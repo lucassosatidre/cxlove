@@ -172,8 +172,8 @@ Deno.serve(async (req) => {
         );
       }
 
-      const data = await apiRes.json();
-      const sales = Array.isArray(data) ? data : data.data || data.results || [];
+      const data = await apiRes.json().catch(() => null);
+      const sales = Array.isArray(data) ? data : (data?.data || data?.results || []);
 
       // Filter: delivery only (id_sale_type = 1) and not canceled
       const filtered = sales.filter(
@@ -435,8 +435,8 @@ Deno.serve(async (req) => {
         break;
       }
 
-      const updData = await updRes.json();
-      const updSalesPage = Array.isArray(updData) ? updData : updData.data || updData.results || [];
+      const updData = await updRes.json().catch(() => null);
+      const updSalesPage = Array.isArray(updData) ? updData : (updData?.data || updData?.results || []);
       const updFiltered = updSalesPage.filter(
         (s: any) => s.id_sale_type === 1 && s.canceled !== "Y"
       );
