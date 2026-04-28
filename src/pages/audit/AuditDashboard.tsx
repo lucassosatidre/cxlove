@@ -335,7 +335,7 @@ export default function AuditDashboard() {
       liquidoIfood, brutoIfood,
     });
     setDepositRows(depRows);
-    setVoucherMatches((vMatches as VoucherMatch[]) ?? []);
+    
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
   };
