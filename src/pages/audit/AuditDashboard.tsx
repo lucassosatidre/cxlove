@@ -72,16 +72,6 @@ type Totals = {
   brutoIfood: number;
 };
 
-type VoucherMatch = {
-  company: string;
-  sold_amount: number;
-  deposited_amount: number;
-  difference: number;
-  effective_tax_rate: number;
-  status: string;
-  sold_count?: number;
-  deposit_count?: number;
-};
 
 type DailyMatch = {
   match_date: string;
