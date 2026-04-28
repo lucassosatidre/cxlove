@@ -337,124 +337,6 @@ export type Database = {
         }
         Relationships: []
       }
-      audit_voucher_competencia: {
-        Row: {
-          audit_period_id: string
-          calculado_em: string
-          id: string
-          operadora: string
-          pago_bruto: number
-          pago_liquido: number
-          pago_lotes_count: number
-          pendente_bruto: number
-          pendente_count: number
-          reconhecido_bruto: number
-          reconhecido_count: number
-          status: string
-          taxa_efetiva_consolidada_pct: number | null
-          taxa_estimada_pct: number | null
-          taxa_real_pct: number | null
-          vendido_bruto: number
-          vendido_count: number
-        }
-        Insert: {
-          audit_period_id: string
-          calculado_em?: string
-          id?: string
-          operadora: string
-          pago_bruto?: number
-          pago_liquido?: number
-          pago_lotes_count?: number
-          pendente_bruto?: number
-          pendente_count?: number
-          reconhecido_bruto?: number
-          reconhecido_count?: number
-          status: string
-          taxa_efetiva_consolidada_pct?: number | null
-          taxa_estimada_pct?: number | null
-          taxa_real_pct?: number | null
-          vendido_bruto?: number
-          vendido_count?: number
-        }
-        Update: {
-          audit_period_id?: string
-          calculado_em?: string
-          id?: string
-          operadora?: string
-          pago_bruto?: number
-          pago_liquido?: number
-          pago_lotes_count?: number
-          pendente_bruto?: number
-          pendente_count?: number
-          reconhecido_bruto?: number
-          reconhecido_count?: number
-          status?: string
-          taxa_efetiva_consolidada_pct?: number | null
-          taxa_estimada_pct?: number | null
-          taxa_real_pct?: number | null
-          vendido_bruto?: number
-          vendido_count?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "audit_voucher_competencia_audit_period_id_fkey"
-            columns: ["audit_period_id"]
-            isOneToOne: false
-            referencedRelation: "audit_periods"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      audit_voucher_matches: {
-        Row: {
-          audit_period_id: string
-          company: string
-          created_at: string
-          deposit_count: number
-          deposited_amount: number
-          difference: number
-          effective_tax_rate: number | null
-          id: string
-          sold_amount: number
-          sold_count: number
-          status: string
-        }
-        Insert: {
-          audit_period_id: string
-          company: string
-          created_at?: string
-          deposit_count?: number
-          deposited_amount?: number
-          difference?: number
-          effective_tax_rate?: number | null
-          id?: string
-          sold_amount?: number
-          sold_count?: number
-          status?: string
-        }
-        Update: {
-          audit_period_id?: string
-          company?: string
-          created_at?: string
-          deposit_count?: number
-          deposited_amount?: number
-          difference?: number
-          effective_tax_rate?: number | null
-          id?: string
-          sold_amount?: number
-          sold_count?: number
-          status?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "audit_voucher_matches_audit_period_id_fkey"
-            columns: ["audit_period_id"]
-            isOneToOne: false
-            referencedRelation: "audit_periods"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       card_transactions: {
         Row: {
           brand: string | null
@@ -1086,68 +968,6 @@ export type Database = {
           vagas?: number
         }
         Relationships: []
-      }
-      ifood_ai_audits: {
-        Row: {
-          anomalies: Json | null
-          audit_period_id: string
-          cost_usd: number | null
-          created_at: string
-          duration_ms: number | null
-          error: string | null
-          id: string
-          input_hash: string
-          input_tokens: number | null
-          model_used: string
-          output_tokens: number | null
-          recommendations: Json | null
-          status: string
-          summary: string | null
-          triggered_by: string | null
-        }
-        Insert: {
-          anomalies?: Json | null
-          audit_period_id: string
-          cost_usd?: number | null
-          created_at?: string
-          duration_ms?: number | null
-          error?: string | null
-          id?: string
-          input_hash: string
-          input_tokens?: number | null
-          model_used: string
-          output_tokens?: number | null
-          recommendations?: Json | null
-          status: string
-          summary?: string | null
-          triggered_by?: string | null
-        }
-        Update: {
-          anomalies?: Json | null
-          audit_period_id?: string
-          cost_usd?: number | null
-          created_at?: string
-          duration_ms?: number | null
-          error?: string | null
-          id?: string
-          input_hash?: string
-          input_tokens?: number | null
-          model_used?: string
-          output_tokens?: number | null
-          recommendations?: Json | null
-          status?: string
-          summary?: string | null
-          triggered_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ifood_ai_audits_audit_period_id_fkey"
-            columns: ["audit_period_id"]
-            isOneToOne: false
-            referencedRelation: "audit_periods"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       imported_orders: {
         Row: {
@@ -1922,121 +1742,6 @@ export type Database = {
         }
         Relationships: []
       }
-      voucher_adjustments: {
-        Row: {
-          audit_period_id: string
-          created_at: string
-          data: string
-          descricao: string
-          id: string
-          operadora: string
-          tipo: string | null
-          valor: number
-        }
-        Insert: {
-          audit_period_id: string
-          created_at?: string
-          data: string
-          descricao: string
-          id?: string
-          operadora: string
-          tipo?: string | null
-          valor: number
-        }
-        Update: {
-          audit_period_id?: string
-          created_at?: string
-          data?: string
-          descricao?: string
-          id?: string
-          operadora?: string
-          tipo?: string | null
-          valor?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "voucher_adjustments_audit_period_id_fkey"
-            columns: ["audit_period_id"]
-            isOneToOne: false
-            referencedRelation: "audit_periods"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      voucher_ai_audits: {
-        Row: {
-          audit_period_id: string
-          cost_usd: number | null
-          created_at: string
-          duration_ms: number | null
-          error: string | null
-          id: string
-          input_hash: string
-          input_tokens: number | null
-          items_ambiguous: number | null
-          items_matched: number | null
-          items_orphan: number | null
-          lots_matched_bb: number | null
-          lots_unmatched_bb: number | null
-          model_used: string
-          output_tokens: number | null
-          result: Json
-          total_recebido_competencia: number | null
-          total_taxa_real: number | null
-          triggered_by: string | null
-        }
-        Insert: {
-          audit_period_id: string
-          cost_usd?: number | null
-          created_at?: string
-          duration_ms?: number | null
-          error?: string | null
-          id?: string
-          input_hash: string
-          input_tokens?: number | null
-          items_ambiguous?: number | null
-          items_matched?: number | null
-          items_orphan?: number | null
-          lots_matched_bb?: number | null
-          lots_unmatched_bb?: number | null
-          model_used: string
-          output_tokens?: number | null
-          result: Json
-          total_recebido_competencia?: number | null
-          total_taxa_real?: number | null
-          triggered_by?: string | null
-        }
-        Update: {
-          audit_period_id?: string
-          cost_usd?: number | null
-          created_at?: string
-          duration_ms?: number | null
-          error?: string | null
-          id?: string
-          input_hash?: string
-          input_tokens?: number | null
-          items_ambiguous?: number | null
-          items_matched?: number | null
-          items_orphan?: number | null
-          lots_matched_bb?: number | null
-          lots_unmatched_bb?: number | null
-          model_used?: string
-          output_tokens?: number | null
-          result?: Json
-          total_recebido_competencia?: number | null
-          total_taxa_real?: number | null
-          triggered_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "voucher_ai_audits_audit_period_id_fkey"
-            columns: ["audit_period_id"]
-            isOneToOne: false
-            referencedRelation: "audit_periods"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       voucher_expected_rates: {
         Row: {
           company: string
@@ -2064,39 +1769,39 @@ export type Database = {
       voucher_imports: {
         Row: {
           audit_period_id: string
-          file_name: string
+          created_at: string
+          error_message: string | null
+          filename: string | null
           id: string
-          imported_adjustments: number
-          imported_at: string
-          imported_by: string | null
-          imported_items: number
-          imported_lots: number
           operadora: string
+          raw_metadata: Json | null
+          rows_imported: number | null
           status: string
+          uploaded_by: string | null
         }
         Insert: {
           audit_period_id: string
-          file_name: string
+          created_at?: string
+          error_message?: string | null
+          filename?: string | null
           id?: string
-          imported_adjustments?: number
-          imported_at?: string
-          imported_by?: string | null
-          imported_items?: number
-          imported_lots?: number
           operadora: string
+          raw_metadata?: Json | null
+          rows_imported?: number | null
           status?: string
+          uploaded_by?: string | null
         }
         Update: {
           audit_period_id?: string
-          file_name?: string
+          created_at?: string
+          error_message?: string | null
+          filename?: string | null
           id?: string
-          imported_adjustments?: number
-          imported_at?: string
-          imported_by?: string | null
-          imported_items?: number
-          imported_lots?: number
           operadora?: string
+          raw_metadata?: Json | null
+          rows_imported?: number | null
           status?: string
+          uploaded_by?: string | null
         }
         Relationships: [
           {
@@ -2110,43 +1815,34 @@ export type Database = {
       }
       voucher_lot_items: {
         Row: {
-          ai_reasoning: string | null
-          authorization_code: string | null
-          card_number: string | null
+          created_at: string
           data_transacao: string
+          external_id: string | null
           gross_amount: number
           id: string
           lot_id: string
-          maquinona_match_id: string | null
-          match_status: string
-          modalidade: string | null
-          net_amount: number | null
+          net_amount: number
+          raw_data: Json | null
         }
         Insert: {
-          ai_reasoning?: string | null
-          authorization_code?: string | null
-          card_number?: string | null
+          created_at?: string
           data_transacao: string
-          gross_amount: number
+          external_id?: string | null
+          gross_amount?: number
           id?: string
           lot_id: string
-          maquinona_match_id?: string | null
-          match_status?: string
-          modalidade?: string | null
-          net_amount?: number | null
+          net_amount?: number
+          raw_data?: Json | null
         }
         Update: {
-          ai_reasoning?: string | null
-          authorization_code?: string | null
-          card_number?: string | null
+          created_at?: string
           data_transacao?: string
+          external_id?: string | null
           gross_amount?: number
           id?: string
           lot_id?: string
-          maquinona_match_id?: string | null
-          match_status?: string
-          modalidade?: string | null
-          net_amount?: number | null
+          net_amount?: number
+          raw_data?: Json | null
         }
         Relationships: [
           {
@@ -2156,20 +1852,11 @@ export type Database = {
             referencedRelation: "voucher_lots"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "voucher_lot_items_maquinona_match_id_fkey"
-            columns: ["maquinona_match_id"]
-            isOneToOne: false
-            referencedRelation: "audit_card_transactions"
-            referencedColumns: ["id"]
-          },
         ]
       }
       voucher_lots: {
         Row: {
-          ai_reasoning: string | null
           audit_period_id: string
-          bb_deposit_id: string | null
           created_at: string
           data_corte: string | null
           data_pagamento: string
@@ -2185,12 +1872,10 @@ export type Database = {
           net_amount: number
           operadora: string
           raw_data: Json | null
-          status: string
+          voucher_import_id: string | null
         }
         Insert: {
-          ai_reasoning?: string | null
           audit_period_id: string
-          bb_deposit_id?: string | null
           created_at?: string
           data_corte?: string | null
           data_pagamento: string
@@ -2206,12 +1891,10 @@ export type Database = {
           net_amount?: number
           operadora: string
           raw_data?: Json | null
-          status?: string
+          voucher_import_id?: string | null
         }
         Update: {
-          ai_reasoning?: string | null
           audit_period_id?: string
-          bb_deposit_id?: string | null
           created_at?: string
           data_corte?: string | null
           data_pagamento?: string
@@ -2227,7 +1910,7 @@ export type Database = {
           net_amount?: number
           operadora?: string
           raw_data?: Json | null
-          status?: string
+          voucher_import_id?: string | null
         }
         Relationships: [
           {
@@ -2238,27 +1921,17 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "voucher_lots_bb_deposit_id_fkey"
-            columns: ["bb_deposit_id"]
+            foreignKeyName: "voucher_lots_voucher_import_id_fkey"
+            columns: ["voucher_import_id"]
             isOneToOne: false
-            referencedRelation: "audit_bank_deposits"
+            referencedRelation: "voucher_imports"
             referencedColumns: ["id"]
           },
         ]
       }
     }
     Views: {
-      vw_period_imports: {
-        Row: {
-          audit_period_id: string | null
-          created_at: string | null
-          file_name: string | null
-          imported_rows: number | null
-          source: string | null
-          status: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       attempt_checkin: {
@@ -2271,12 +1944,7 @@ export type Database = {
         }
         Returns: Json
       }
-      calculate_voucher_audit: { Args: { p_period_id: string }; Returns: Json }
       classify_ifood_deposits: {
-        Args: { p_period_id: string }
-        Returns: undefined
-      }
-      classify_voucher_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
       }
@@ -2398,8 +2066,6 @@ export type Database = {
         Returns: boolean
       }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
-      match_voucher_lots: { Args: { p_period_id: string }; Returns: Json }
-      match_voucher_lots_v2: { Args: { p_period_id: string }; Returns: Json }
       promote_from_waitlist: {
         Args: {
           p_freed_by: string
