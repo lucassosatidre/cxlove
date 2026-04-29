@@ -204,9 +204,10 @@ export default function AuditDashboard() {
   const loadPeriodData = async (periodId: string) => {
     // ifoodCompRows pode passar de 1000 em meses cheios → usa fetchAllPaginated.
     // (audit_daily_matches max ~31 rows/mês; demais queries pequenas, OK.)
-    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, ifoodCompRows] = await Promise.all([
+    // vw_period_imports não existe no schema atual — substituído por query direta
+    // em audit_imports (mesmos dados). file_type vira source 1:1.
+    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, ifoodCompRows] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
-      supabase.from('vw_period_imports' as any).select('*').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
@@ -215,9 +216,17 @@ export default function AuditDashboard() {
         supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
       ),
     ]);
-    const vMatches: any[] = [];
     setImports((imps as AuditImport[]) ?? []);
-    setAllImports(((allImps as unknown) as PeriodImportRow[]) ?? []);
+    // allImports = mesma fonte de imps, com source = file_type
+    const allImps: PeriodImportRow[] = ((imps as any[]) ?? []).map((i: any) => ({
+      audit_period_id: periodId,
+      source: i.file_type as ImportSource,
+      status: i.status,
+      file_name: i.file_name,
+      imported_rows: Number(i.imported_rows ?? 0),
+      created_at: i.created_at,
+    }));
+    setAllImports(allImps);
 
     const t = (totalsRpc as any[])?.[0] ?? {};
     const bruto = Number(t.total_bruto ?? 0);
