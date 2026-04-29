@@ -14,11 +14,9 @@ type Operadora = 'pluxee' | 'alelo' | 'vr' | 'ticket';
 type VoucherImport = {
   id: string;
   operadora: string;
-  file_name: string;
-  imported_lots: number;
-  imported_items: number;
-  imported_adjustments: number;
-  imported_at: string;
+  filename: string;
+  rows_imported: number;
+  created_at: string;
 };
 
 const META: Record<Operadora, { title: string; accept: string; functionName: string; tip: string }> = {
@@ -72,7 +70,7 @@ export default function VoucherSettlementsImportSection({
       .from('voucher_imports')
       .select('*')
       .eq('audit_period_id', periodId)
-      .order('imported_at', { ascending: false });
+      .order('created_at', { ascending: false });
     setImports((data as VoucherImport[]) ?? []);
   };
 
@@ -86,20 +84,9 @@ export default function VoucherSettlementsImportSection({
   const allFour = ORDER.every(op => importsByOp[op]?.length > 0);
 
   const runMatch = async () => {
-    if (!periodId) return;
-    setMatching(true);
-    try {
-      const { data, error } = await supabase.rpc('match_voucher_lots', { p_period_id: periodId });
-      if (error) throw error;
-      setLastMatch(data);
-      toast.success('✓ Conciliação concluída', {
-        description: `${(data as any)?.matched_items ?? 0} itens casados, ${(data as any)?.matched_lots ?? 0} lotes ↔ BB. Confira o relatório abaixo ↓`,
-      });
-    } catch (e: any) {
-      toast.error('Erro ao conciliar extratos', { description: e?.message });
-    } finally {
-      setMatching(false);
-    }
+    toast.error('Conciliação de vouchers indisponível', {
+      description: 'O módulo de conciliação foi desativado. Apenas a importação está ativa.',
+    });
   };
 
   return (
@@ -252,7 +239,7 @@ function OperadoraDropzone({
         {imports.length > 0 ? (
           <Badge variant="secondary" className="bg-green-500/10 text-green-700 dark:text-green-400">
             <CheckCircle2 className="h-3 w-3 mr-1" />
-            {imports[0].imported_lots} lotes
+            {imports[0].rows_imported} linhas
           </Badge>
         ) : (
           <Badge variant="secondary" className="text-muted-foreground">não importado</Badge>
@@ -260,8 +247,8 @@ function OperadoraDropzone({
       </div>
 
       {imports.length > 0 && (
-        <p className="text-xs text-muted-foreground truncate" title={imports[0].file_name}>
-          {imports[0].file_name}
+        <p className="text-xs text-muted-foreground truncate" title={imports[0].filename}>
+          {imports[0].filename}
         </p>
       )}
 
