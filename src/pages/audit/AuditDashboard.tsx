@@ -10,7 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, AlertTriangle, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
+import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
 import {
@@ -37,9 +37,7 @@ type AuditPeriod = {
   closed_by: string | null;
 };
 
-type ImportSource =
-  | 'maquinona' | 'cresol' | 'bb'
-  | 'pluxee' | 'alelo' | 'vr' | 'ticket';
+type ImportSource = 'maquinona' | 'cresol' | 'bb';
 
 type AuditImport = {
   file_type: 'maquinona' | 'cresol' | 'bb';
@@ -106,46 +104,23 @@ const FILE_LABELS: Record<ImportSource, string> = {
   maquinona: 'Maquinona',
   cresol: 'Cresol (iFood)',
   bb: 'Banco do Brasil',
-  pluxee: 'Pluxee',
-  alelo: 'Alelo',
-  vr: 'VR',
-  ticket: 'Ticket',
 };
 
 const SOURCE_GROUPS: { label: string; sources: ImportSource[] }[] = [
   { label: 'Vendas & bancos', sources: ['maquinona', 'cresol', 'bb'] },
-  { label: 'Extratos das operadoras de voucher', sources: ['pluxee', 'alelo', 'vr', 'ticket'] },
 ];
 
 const ACCEPT_BY_SOURCE: Record<ImportSource, string> = {
   maquinona: '.xlsx',
   cresol: '.xlsx',
   bb: '.xlsx',
-  pluxee: '.csv',
-  alelo: '.xlsx',
-  vr: '.xls,.xlsx',
-  ticket: '.xlsx',
 };
 
 const FUNCTION_BY_SOURCE: Record<ImportSource, string> = {
   maquinona: 'import-maquinona',
   cresol: 'import-cresol',
   bb: 'import-bb',
-  pluxee: 'import-voucher-pluxee',
-  alelo: 'import-voucher-alelo',
-  vr: 'import-voucher-vr',
-  ticket: 'import-voucher-ticket',
 };
-
-async function readAsTextDetect(file: File): Promise<string> {
-  const buf = await file.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } catch {
-    return new TextDecoder('latin1').decode(bytes);
-  }
-}
 
 async function buildUploadPayload(src: ImportSource, periodId: string, file: File): Promise<any> {
   const base = { audit_period_id: periodId, file_name: file.name };
@@ -178,56 +153,8 @@ async function buildUploadPayload(src: ImportSource, periodId: string, file: Fil
     return { ...base, rows };
   }
 
-  if (src === 'pluxee') {
-    const text = await readAsTextDetect(file);
-    const sep = text.split('\n')[0].includes(';') ? ';' : ',';
-    const rows = text.split('\n').map(l => l.split(sep).map(c => c.trim()));
-    return { ...base, rows };
-  }
-
-  if (src === 'alelo') {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const recebimentosSheet = wb.SheetNames.find(n => /recebimentos/i.test(n)) ?? wb.SheetNames[1];
-    const outrasSheet = wb.SheetNames.find(n => /outras/i.test(n));
-    return {
-      ...base,
-      recebimentos_rows: recebimentosSheet
-        ? XLSX.utils.sheet_to_json(wb.Sheets[recebimentosSheet], { header: 1, defval: null, raw: true })
-        : [],
-      outras_rows: outrasSheet
-        ? XLSX.utils.sheet_to_json(wb.Sheets[outrasSheet], { header: 1, defval: null, raw: true })
-        : [],
-    };
-  }
-
-  if (src === 'vr') {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
-    return { ...base, rows };
-  }
-
-  if (src === 'ticket') {
-    const file_base64 = await new Promise<string>((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => {
-        const result = r.result as string;
-        resolve(result.substring(result.indexOf(',') + 1));
-      };
-      r.onerror = () => reject(r.error);
-      r.readAsDataURL(file);
-    });
-    return { ...base, file_base64 };
-  }
-
   throw new Error(`Source desconhecido: ${src}`);
 }
-
-const COMPANY_LABELS: Record<string, string> = {
-  alelo: 'Alelo', ticket: 'Ticket', pluxee: 'Pluxee', vr: 'VR',
-};
 
 const formatCurrency = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -258,16 +185,6 @@ export default function AuditDashboard() {
   const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
   
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
-  const [voucherMatches, setVoucherMatches] = useState<Array<{
-    company: string;
-    sold_amount: number;
-    sold_count: number;
-    deposited_amount: number;
-    deposit_count: number;
-    difference: number;
-    effective_tax_rate: number;
-    status: string;
-  }>>([]);
   const [depositRows, setDepositRows] = useState<{ category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]>([]);
   const [ifoodCompetencia, setIfoodCompetencia] = useState(0);
   const [ifoodAdjacente, setIfoodAdjacente] = useState(0);
@@ -331,12 +248,7 @@ export default function AuditDashboard() {
     setIfoodCompetencia(ifoodComp);
     setIfoodAdjacente(ifoodAdj);
 
-    // Voucher matched (BB) — usa valor cheio do depósito (sem split adjacente)
-    const voucherMatched = depRows
-      .filter(d => d.bank === 'bb' && d.match_status === 'matched')
-      .reduce((s, d) => s + Number(d.total_amount || 0), 0);
-
-    const recebido = ifoodComp + voucherMatched;
+    const recebido = ifoodComp;
     const custoReal = Math.max(bruto - recebido, 0);
     const taxaEfetiva = bruto > 0 ? (custoReal / bruto) * 100 : 0;
 
@@ -348,16 +260,6 @@ export default function AuditDashboard() {
     setDepositRows(depRows);
     
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
-    setVoucherMatches((vMatches as any[])?.map(m => ({
-      company: m.company,
-      sold_amount: Number(m.sold_amount ?? 0),
-      sold_count: Number(m.sold_count ?? 0),
-      deposited_amount: Number(m.deposited_amount ?? 0),
-      deposit_count: Number(m.deposit_count ?? 0),
-      difference: Number(m.difference ?? 0),
-      effective_tax_rate: Number(m.effective_tax_rate ?? 0),
-      status: m.status,
-    })) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
   };
 
@@ -415,7 +317,6 @@ export default function AuditDashboard() {
         setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
         
         setDailyMatches([]);
-        setVoucherMatches([]);
         setDepositRows([]);
         setLogs([]);
       }
@@ -476,7 +377,7 @@ export default function AuditDashboard() {
       if ((data as any)?.ai_audits) setAiAudits((data as any).ai_audits);
       toast({
         title: '✓ Conciliação concluída',
-        description: `${(data as any).daily_matches_count} matches diários · ${(data as any).voucher_matches_count} matches voucher`,
+        description: `${(data as any).daily_matches_count ?? 0} matches diários processados`,
       });
       const { data: p } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
       if (p) setPeriod(p as AuditPeriod);
@@ -686,23 +587,19 @@ export default function AuditDashboard() {
   }
 
   const statusBadge = period ? STATUS_VARIANTS[period.status] : null;
-  const criticalVouchers = voucherMatches.filter(v => v.status === 'critico');
 
   const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
   const custoReal = isConciliated || isClosed
     ? Math.abs(Math.min(ifoodGap, 0)) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido) : 0)
     : totals.custo;
 
-  // Breakdown of bank deposits by match_status (for iFood and Voucher cards)
+  // Breakdown of bank deposits by match_status (for iFood card)
   const sumDeposits = (filterFn: (d: typeof depositRows[number]) => boolean) =>
     depositRows.filter(filterFn).reduce((s, d) => s + Number(d.total_amount || 0), 0);
 
   // iFood: matched usa SOMENTE valor de competência; adjacente vem do state ifoodAdjacente
   const ifoodMatched = ifoodCompetencia;
   const ifoodNaoId = sumDeposits(d => d.bank === 'cresol' && d.category === 'ifood' && d.match_status === 'nao_identificado');
-
-  const voucherDepBy = (company: string, status: string) =>
-    sumDeposits(d => d.bank === 'bb' && d.category === company && d.match_status === status);
 
   const periodLabelStr = makePeriodLabel(month, year);
 
@@ -785,28 +682,6 @@ export default function AuditDashboard() {
               </div>
               <Button size="sm" variant="outline" onClick={() => setReopenOpen(true)} className="gap-2">
                 <LockOpen className="h-4 w-4" /> Reabrir Período
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Critical alert */}
-        {criticalVouchers.length > 0 && (
-          <Card className="border-red-500 bg-red-500/5">
-            <CardContent className="py-3 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
-              <div className="flex-1 text-sm">
-                <p className="font-semibold text-red-700 dark:text-red-400">
-                  🚨 ATENÇÃO: {criticalVouchers.map(v => COMPANY_LABELS[v.company]?.toUpperCase()).join(', ')} {criticalVouchers.length === 1 ? 'está retendo' : 'estão retendo'} acima do esperado
-                </p>
-                {criticalVouchers.map(v => (
-                  <p key={v.company} className="text-muted-foreground mt-0.5">
-                    <strong>{COMPANY_LABELS[v.company]}</strong>: {Number(v.effective_tax_rate).toFixed(1)}% · Esperado {formatCurrency(Number(v.sold_amount))} · Recebido {formatCurrency(Number(v.deposited_amount))} · Gap {formatCurrency(Number(v.difference))}
-                  </p>
-                ))}
-              </div>
-              <Button size="sm" variant="outline" onClick={() => navigate(`/admin/auditoria/voucher?period=${period?.id}`)}>
-                Investigar
               </Button>
             </CardContent>
           </Card>
@@ -895,8 +770,8 @@ export default function AuditDashboard() {
           <SummaryCard title="Taxa efetiva" value={`${totals.taxaPct.toFixed(2).replace('.', ',')}%`} />
         </div>
 
-        {/* iFood + Voucher detail entries */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* iFood detail */}
+        <div className="grid grid-cols-1 gap-4">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-base">iFood</CardTitle></CardHeader>
             <CardContent className="space-y-2">
@@ -945,35 +820,6 @@ export default function AuditDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">Vouchers (BB)</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {voucherMatches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma conciliação executada.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {['alelo', 'ticket', 'pluxee', 'vr'].map(c => {
-                    const v = voucherMatches.find(m => m.company === c);
-                    if (!v) return <div key={c} className="rounded border p-2 opacity-50"><div className="font-semibold">{COMPANY_LABELS[c]}</div><div className="text-muted-foreground">—</div></div>;
-                    const cls = v.status === 'critico' ? 'border-red-500 bg-red-500/5' : v.status === 'alerta' ? 'border-yellow-500/50 bg-yellow-500/5' : v.status === 'divergente' ? 'border-blue-500/50 bg-blue-500/5' : 'border-green-500/50 bg-green-500/5';
-                    const matched = voucherDepBy(c, 'matched');
-                    const fora = voucherDepBy(c, 'fora_periodo');
-                    return (
-                      <div key={c} className={`rounded border p-2 ${cls} space-y-0.5`}>
-                        <div className="font-semibold">{COMPANY_LABELS[c]}</div>
-                        <div>Matched: <strong>{formatCurrency(matched)}</strong></div>
-                        {fora > 0 && <div className="text-muted-foreground">Fora: {formatCurrency(fora)}</div>}
-                        <div className="text-muted-foreground uppercase">{v.status}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!canExport} onClick={() => navigate(`/admin/auditoria/voucher?period=${period?.id}`)}>
-                Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Imports — bloco unificado v4 (vw_period_imports) */}
@@ -981,7 +827,7 @@ export default function AuditDashboard() {
           <CardHeader>
             <CardTitle className="text-base">Importações do período</CardTitle>
             <p className="text-xs text-muted-foreground">
-              7 fontes: Maquinona + Cresol + Banco do Brasil + 4 extratos das operadoras de voucher.
+              3 fontes: Maquinona (vendas iFood) + Cresol (depósitos iFood) + Banco do Brasil.
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.

@@ -16,7 +16,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import { ArrowLeft, FileSpreadsheet, Loader2, UploadCloud, CheckCircle2, Landmark, Trash2 } from 'lucide-react';
-import VoucherSettlementsImportSection from './VoucherSettlementsImportSection';
 
 type AuditImport = {
   id: string;
@@ -81,17 +80,13 @@ const CARD_META: Record<FileType, { title: string; functionName: string; tip: Re
     multi: true,
   },
   bb: {
-    title: 'Banco do Brasil (Vouchers)',
+    title: 'Banco do Brasil',
     functionName: 'import-bb',
     tip: (
       <>
         💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
         <br />
         Ex: para auditar Março → importe Fevereiro + Março + Abril.
-        <br />
-        Vouchers (Pluxee, Ticket etc.) podem demorar até 10 dias para depositar; importar a janela completa evita falsos matches.
-        <br />
-        <span className="text-muted-foreground/80">Categorização Alelo/Ticket/Pluxee/VR/Brendi é automática e a classificação por competência também.</span>
       </>
     ),
     icon: Landmark,
@@ -298,13 +293,6 @@ export default function AuditImport() {
             onAfterImport={async () => { if (period) await refresh(period.id); }}
           />
         ))}
-
-        <VoucherSettlementsImportSection
-          periodId={period?.id ?? null}
-          periodMonth={period?.month ?? null}
-          periodYear={period?.year ?? null}
-          disabled={!period}
-        />
 
         <Button variant="outline" onClick={() => navigate(backUrl)} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Voltar ao Dashboard
