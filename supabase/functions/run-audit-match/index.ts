@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { fetchAllPaginated } from '../_shared/pagination.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -50,38 +51,25 @@ Deno.serve(async (req) => {
     await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
 
     // ===== iFOOD MATCH (by date) =====
-    // Paginação manual: Supabase tem limit padrão 1000. Vendas iFood
-    // facilmente ultrapassam isso (mês cheio = ~2.5k txs). Sem paginação,
+    // Usa fetchAllPaginated p/ contornar o limite default de 1000 do PostgREST.
+    // Vendas iFood facilmente passam disso (mês cheio = ~2.5k txs). Sem paginar,
     // dias do final do range somem do daily_matches e o carry-forward quebra.
-    const PAGE = 1000;
-    const txs: any[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
+    const txs = await fetchAllPaginated<any>(
+      supabase
         .from('audit_card_transactions')
         .select('expected_deposit_date,net_amount')
         .eq('audit_period_id', audit_period_id)
-        .eq('deposit_group', 'ifood')
-        .range(from, from + PAGE - 1);
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      txs.push(...data);
-      if (data.length < PAGE) break;
-    }
+        .eq('deposit_group', 'ifood'),
+    );
 
-    const deps: any[] = [];
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await supabase
+    const deps = await fetchAllPaginated<any>(
+      supabase
         .from('audit_bank_deposits')
         .select('deposit_date,amount')
         .eq('audit_period_id', audit_period_id)
         .eq('bank', 'cresol')
-        .eq('category', 'ifood')
-        .range(from, from + PAGE - 1);
-      if (error) throw error;
-      if (!data || data.length === 0) break;
-      deps.push(...data);
-      if (data.length < PAGE) break;
-    }
+        .eq('category', 'ifood'),
+    );
 
     const txByDate = new Map<string, { amount: number; count: number }>();
     for (const t of txs ?? []) {

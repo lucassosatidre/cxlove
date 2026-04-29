@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/hooks/useAuth';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
+import { fetchAllPaginated } from '@/lib/supabase-pagination';
 import { ArrowLeft, Download, FileDown, Loader2 } from 'lucide-react';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -67,43 +68,38 @@ export default function AuditIfood() {
     (async () => {
       setLoading(true);
 
-      // Paginated fetch to bypass the 1000-row .select() default limit
-      async function fetchAllIfoodTxs() {
-        const all: any[] = [];
-        let from = 0;
-        const pageSize = 1000;
-        while (true) {
-          const { data, error } = await supabase
+      // Paginated fetches: tabelas audit_* podem passar do limit padrão de 1000.
+      const fetchAllIfoodTxs = () =>
+        fetchAllPaginated<any>(
+          supabase
             .from('audit_card_transactions')
             .select('expected_deposit_date,gross_amount,tax_amount,net_amount')
             .eq('audit_period_id', periodId!)
-            .eq('deposit_group', 'ifood')
-            .range(from, from + pageSize - 1);
-          if (error || !data || data.length === 0) break;
-          all.push(...data);
-          if (data.length < pageSize) break;
-          from += pageSize;
-        }
-        return all;
-      }
+            .eq('deposit_group', 'ifood'),
+        );
+
+      const fetchAllMatchedDeps = () =>
+        fetchAllPaginated<any>(
+          supabase
+            .from('audit_bank_deposits')
+            .select('matched_competencia_amount')
+            .eq('audit_period_id', periodId!)
+            .eq('bank', 'cresol')
+            .eq('category', 'ifood')
+            .eq('match_status', 'matched'),
+        );
 
       const [
         { data: period },
         { data: dailyDetail },
         { data: periodTotals },
-        { data: matchedDeps },
+        matchedDeps,
         txs,
       ] = await Promise.all([
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
         supabase.rpc('get_audit_ifood_daily_detail', { p_period_id: periodId }),
         supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
-        supabase
-          .from('audit_bank_deposits')
-          .select('matched_competencia_amount')
-          .eq('audit_period_id', periodId)
-          .eq('bank', 'cresol')
-          .eq('category', 'ifood')
-          .eq('match_status', 'matched'),
+        fetchAllMatchedDeps(),
         fetchAllIfoodTxs(),
       ]);
 

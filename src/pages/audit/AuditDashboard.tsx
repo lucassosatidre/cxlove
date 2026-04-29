@@ -22,6 +22,7 @@ import {
   type ContabilDetalhamento,
 } from '@/lib/audit-pdf-contabil';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import { fetchAllPaginated } from '@/lib/supabase-pagination';
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FileText, ChevronDown } from 'lucide-react';
@@ -201,14 +202,18 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
+    // ifoodCompRows pode passar de 1000 em meses cheios → usa fetchAllPaginated.
+    // (audit_daily_matches max ~31 rows/mês; demais queries pequenas, OK.)
+    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, ifoodCompRows] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.from('vw_period_imports' as any).select('*').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
-      supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
+      fetchAllPaginated<any>(
+        supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
+      ),
     ]);
     const vMatches: any[] = [];
     setImports((imps as AuditImport[]) ?? []);
