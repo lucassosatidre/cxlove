@@ -258,6 +258,16 @@ export default function AuditDashboard() {
   const [totals, setTotals] = useState<Totals>({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
   
   const [dailyMatches, setDailyMatches] = useState<DailyMatch[]>([]);
+  const [voucherMatches, setVoucherMatches] = useState<Array<{
+    company: string;
+    sold_amount: number;
+    sold_count: number;
+    deposited_amount: number;
+    deposit_count: number;
+    difference: number;
+    effective_tax_rate: number;
+    status: string;
+  }>>([]);
   const [depositRows, setDepositRows] = useState<{ category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]>([]);
   const [ifoodCompetencia, setIfoodCompetencia] = useState(0);
   const [ifoodAdjacente, setIfoodAdjacente] = useState(0);
@@ -286,12 +296,13 @@ export default function AuditDashboard() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
+    const [{ data: imps }, { data: allImps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: vMatches }, { data: logRows }, { data: ifoodCompRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.from('vw_period_imports' as any).select('*').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
+      supabase.from('audit_voucher_matches').select('company,sold_amount,sold_count,deposited_amount,deposit_count,difference,effective_tax_rate,status').eq('audit_period_id', periodId),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
       supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
     ]);
@@ -337,6 +348,16 @@ export default function AuditDashboard() {
     setDepositRows(depRows);
     
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
+    setVoucherMatches((vMatches as any[])?.map(m => ({
+      company: m.company,
+      sold_amount: Number(m.sold_amount ?? 0),
+      sold_count: Number(m.sold_count ?? 0),
+      deposited_amount: Number(m.deposited_amount ?? 0),
+      deposit_count: Number(m.deposit_count ?? 0),
+      difference: Number(m.difference ?? 0),
+      effective_tax_rate: Number(m.effective_tax_rate ?? 0),
+      status: m.status,
+    })) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
   };
 
@@ -394,6 +415,7 @@ export default function AuditDashboard() {
         setTotals({ vendido: 0, recebido: 0, custo: 0, taxaPct: 0, txCount: 0, bruto: 0, taxa: 0, liquidoDeclarado: 0, custoDeclarado: 0, liquidoIfood: 0, brutoIfood: 0 });
         
         setDailyMatches([]);
+        setVoucherMatches([]);
         setDepositRows([]);
         setLogs([]);
       }
@@ -664,7 +686,7 @@ export default function AuditDashboard() {
   }
 
   const statusBadge = period ? STATUS_VARIANTS[period.status] : null;
-  const criticalVouchers: any[] = [];
+  const criticalVouchers = voucherMatches.filter(v => v.status === 'critico');
 
   const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
   const custoReal = isConciliated || isClosed
