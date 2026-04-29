@@ -48,6 +48,10 @@ type MatchRow = {
   status: string;
   gross: number;
   tax: number;
+  // Quando status='pending', match_date que fechou esse dia (cluster_matched/cluster_partial).
+  closed_by?: string;
+  // Quando status começa com 'cluster_', lista de match_dates pending que esse cluster fechou.
+  closes?: string[];
 };
 
 export default function AuditIfood() {
@@ -137,6 +141,26 @@ export default function AuditIfood() {
           gross: grossByDate.get(d.match_date) ?? 0,
           tax: taxByDate.get(d.match_date) ?? 0,
         }));
+
+      // Linka pending → cluster que fechou (e vice-versa) pra UI mostrar
+      // de onde veio o dinheiro. Walk: cada sequência de pending termina
+      // num cluster_matched/cluster_partial.
+      let pendingBuffer: string[] = [];
+      for (const r of enriched) {
+        if (r.status === 'pending') {
+          pendingBuffer.push(r.match_date);
+        } else if (r.status?.startsWith('cluster_')) {
+          for (const pd of pendingBuffer) {
+            const pendingRow = enriched.find(x => x.match_date === pd);
+            if (pendingRow) pendingRow.closed_by = r.match_date;
+          }
+          if (pendingBuffer.length > 0) r.closes = [...pendingBuffer, r.match_date];
+          pendingBuffer = [];
+        } else {
+          pendingBuffer = [];
+        }
+      }
+
       setRows(enriched);
 
       // Header totals: soma dos enriched (= o que está visível na tabela)
@@ -246,7 +270,19 @@ export default function AuditIfood() {
                     <TableCell className="text-right">{fmt(Number(r.expected_amount))}</TableCell>
                     <TableCell className="text-right">{fmt(Number(r.deposited_amount))}</TableCell>
                     <TableCell className={`text-right font-semibold ${Number(r.difference) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(r.difference))}</TableCell>
-                    <TableCell className="text-xs">{STATUS_LABEL[r.status] ?? r.status}</TableCell>
+                    <TableCell className="text-xs">
+                      <div>{STATUS_LABEL[r.status] ?? r.status}</div>
+                      {r.status === 'pending' && r.closed_by && (
+                        <div className="text-[10px] text-blue-700 dark:text-blue-400 mt-0.5">
+                          → fechado em {fmtDate(r.closed_by)}
+                        </div>
+                      )}
+                      {r.closes && r.closes.length > 1 && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          inclui: {r.closes.slice(0, -1).map(fmtDate).join(' + ')} + hoje
+                        </div>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
