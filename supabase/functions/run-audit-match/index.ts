@@ -132,10 +132,15 @@ Deno.serve(async (req) => {
       } else {
         // Há depósito. Compara com expected acumulado (incluindo carry).
         const diff = deposited - cumExpected;
+        // Tolerância adaptativa: max(R$ 1, 0.5% do esperado).
+        // Variação de centavos por transação é normal (taxa real varia).
+        // Sem isso, todo dia vira "partial" mesmo com diff irrelevante (ex: -R$ 9 em
+        // R$ 11k = 0,08% — taxa de transação variando entre tipos de cartão).
+        const tolerance = Math.max(1, cumExpected * 0.005);
         let status: string;
         if (cumCount === 0 && deposited > 0) {
           status = 'extra_deposit';
-        } else if (Math.abs(diff) < 1) {
+        } else if (Math.abs(diff) <= tolerance) {
           status = carryDates.length > 0 ? 'cluster_matched' : 'matched';
         } else {
           status = carryDates.length > 0 ? 'cluster_partial' : 'partial';

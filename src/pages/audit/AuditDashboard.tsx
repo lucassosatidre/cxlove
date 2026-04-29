@@ -828,9 +828,16 @@ export default function AuditDashboard() {
                             <span className="text-red-600 dark:text-red-400">{formatCurrency(ifoodNaoId)}</span>
                           </div>
                         )}
-                        {ifoodAdjacente > 0 && (
-                          <p className="italic pt-1">Parcelas de meses adjacentes (fev/abr) recebidas neste mês.</p>
-                        )}
+                        {ifoodAdjacente > 0 && (() => {
+                          const prevMonth = month === 1 ? 12 : month - 1;
+                          const nextMonth = month === 12 ? 1 : month + 1;
+                          const monthShort = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+                          return (
+                            <p className="italic pt-1">
+                              Parcelas de meses adjacentes ({monthShort[prevMonth - 1]}/{monthShort[nextMonth - 1]}) recebidas neste mês.
+                            </p>
+                          );
+                        })()}
                       </div>
                     )}
                     {gap < -0.5 && (
