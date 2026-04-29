@@ -142,9 +142,8 @@ export default function AuditIfood() {
           tax: taxByDate.get(d.match_date) ?? 0,
         }));
 
-      // Linka pending → cluster que fechou (e vice-versa) pra UI mostrar
-      // de onde veio o dinheiro. Walk: cada sequência de pending termina
-      // num cluster_matched/cluster_partial.
+      // Linka pending → cluster que fechou. Walk: cada sequência de pending
+      // termina num cluster_matched/cluster_partial.
       let pendingBuffer: string[] = [];
       for (const r of enriched) {
         if (r.status === 'pending') {
@@ -158,6 +157,49 @@ export default function AuditIfood() {
           pendingBuffer = [];
         } else {
           pendingBuffer = [];
+        }
+      }
+
+      // Rateio proporcional: distribui o depósito do cluster entre os dias
+      // que ele cobriu (pendings + dia do cluster) na proporção do líq esperado
+      // de cada dia. Permite auditoria dia-a-dia (cobrar operadora por
+      // desconto indevido em um dia específico em vez de bloco de 3 dias).
+      for (const cluster of enriched.filter(r => r.closes && r.closes.length > 1)) {
+        const memberDates = cluster.closes!;
+        const clusterDate = memberDates[memberDates.length - 1];
+        const pendingDates = memberDates.slice(0, -1);
+
+        // expected do cluster row é cumulativo (= pending1 + pending2 + dia).
+        // Recupera o expected do cluster day por si só.
+        const pendingsExpectedSum = pendingDates.reduce((s, d) => {
+          const r = enriched.find(x => x.match_date === d);
+          return s + (r?.expected_amount ?? 0);
+        }, 0);
+        const cumExpected = cluster.expected_amount;
+        const clusterDayOnly = Math.max(cumExpected - pendingsExpectedSum, 0);
+        const totalDeposited = cluster.deposited_amount;
+
+        // Atualiza cada linha do cluster com sua porção
+        for (const d of memberDates) {
+          const r = enriched.find(x => x.match_date === d);
+          if (!r) continue;
+
+          if (d === clusterDate) {
+            r.expected_amount = clusterDayOnly;
+          }
+          const expectedDay = r.expected_amount;
+          const proportion = cumExpected > 0 ? expectedDay / cumExpected : 0;
+          const distributed = totalDeposited * proportion;
+          r.deposited_amount = distributed;
+          r.difference = distributed - expectedDay;
+
+          // Re-classifica status baseado no diff individual após rateio
+          const tolerance = Math.max(1, expectedDay * 0.005);
+          if (Math.abs(r.difference) <= tolerance) {
+            r.status = 'matched';
+          } else {
+            r.status = 'partial';
+          }
         }
       }
 
@@ -272,14 +314,14 @@ export default function AuditIfood() {
                     <TableCell className={`text-right font-semibold ${Number(r.difference) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(r.difference))}</TableCell>
                     <TableCell className="text-xs">
                       <div>{STATUS_LABEL[r.status] ?? r.status}</div>
-                      {r.status === 'pending' && r.closed_by && (
+                      {r.closed_by && (
                         <div className="text-[10px] text-blue-700 dark:text-blue-400 mt-0.5">
-                          → fechado em {fmtDate(r.closed_by)}
+                          rateio do depósito de {fmtDate(r.closed_by)}
                         </div>
                       )}
                       {r.closes && r.closes.length > 1 && (
                         <div className="text-[10px] text-muted-foreground mt-0.5">
-                          inclui: {r.closes.slice(0, -1).map(fmtDate).join(' + ')} + hoje
+                          rateio cobre: {r.closes.slice(0, -1).map(fmtDate).join(', ')} + hoje
                         </div>
                       )}
                     </TableCell>
