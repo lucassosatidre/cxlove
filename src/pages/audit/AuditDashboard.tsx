@@ -177,6 +177,8 @@ export default function AuditDashboard() {
   const [depositRows, setDepositRows] = useState<{ category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]>([]);
   const [ifoodCompetencia, setIfoodCompetencia] = useState(0);
   const [ifoodAdjacente, setIfoodAdjacente] = useState(0);
+  const [custoDeclaradoIfood, setCustoDeclaradoIfood] = useState(0);
+  const [custoOculto, setCustoOculto] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -247,62 +249,49 @@ export default function AuditDashboard() {
     // feriado/carnaval). matched_competencia_amount do classify_ifood_deposits
     // não é cluster-aware e subestima.
     //
-    // Recebido competência = soma de deposited_amount em daily_matches do mês,
-    // limitado ao expected_amount do dia (excedente vai pra "outras comp.").
-    // Filtra status='pending' (cujo expected já está incluído no cluster que
-    // fechou os dias subsequentes — somar duplica).
-    // Usa month/year do state (sempre setado).
+    // Após refactor do run-audit-match (match lote-a-lote por valor):
+    // match_date em audit_daily_matches = sale_date (não expected_deposit_date).
+    // Cada linha = soma dos lotes (PIX+CARD) daquela venda, com líq Maquinona
+    // expected e Cresol deposited matched 1:1.
+    //
+    // Recebido competência = soma deposited das linhas do mês (= o que de
+    // fato caiu na Cresol referente a vendas de fev, mesmo que tenha caído em mar).
     const dailyInPeriod = ((dMatches as any[]) ?? []).filter(d => {
       const [y, m] = d.match_date.split('-').map(Number);
-      return y === year && m === month && d.status !== 'pending';
+      return y === year && m === month;
     });
-    let ifoodCompRaw = 0;
-    let ifoodAdj = 0;
-    for (const d of dailyInPeriod) {
-      const expected = Number(d.expected_amount || 0);
-      const deposited = Number(d.deposited_amount || 0);
-      // Quando deposited > expected (dia que fechou cluster), só conta o
-      // expected do dia como "competência"; o excedente é adjacente.
-      const matchedToday = Math.min(deposited, expected);
-      const adjacenteToday = Math.max(deposited - expected, 0);
-      ifoodCompRaw += matchedToday;
-      ifoodAdj += adjacenteToday;
-    }
-    // Clamp final: ifoodComp não pode exceder liquidoIfood (líquido esperado
-    // das vendas do mês de competência — RPC filtra por is_competencia=true).
-    // Excedente são depósitos relacionados a vendas de meses adjacentes que
-    // bateram em dias do nosso mês — vai pra ifoodAdj.
-    const ifoodComp = Math.min(ifoodCompRaw, liquidoIfood);
-    if (ifoodCompRaw > liquidoIfood) {
-      ifoodAdj += (ifoodCompRaw - liquidoIfood);
-    }
-    // Soma adjacente também dos depósitos fora do mês de competência (jan/mar
-    // importados pra contexto). Esses são depósitos puros de outras comps.
+    const ifoodComp = dailyInPeriod.reduce((s, d) => s + Number(d.deposited_amount || 0), 0);
+
+    // Adjacentes = depósitos relativos a vendas de outros meses que bateram
+    // por valor (jan/mar importados pra contexto).
     const dailyOutsidePeriod = ((dMatches as any[]) ?? []).filter(d => {
       const [y, m] = d.match_date.split('-').map(Number);
       return y !== year || m !== month;
     });
-    for (const d of dailyOutsidePeriod) {
-      ifoodAdj += Number(d.deposited_amount || 0);
-    }
+    const ifoodAdj = dailyOutsidePeriod.reduce((s, d) => s + Number(d.deposited_amount || 0), 0);
     setIfoodCompetencia(ifoodComp);
     setIfoodAdjacente(ifoodAdj);
 
     const recebido = ifoodComp;
-    // Estágio 1: vendido = só cartão+pix (bruto_ifood). Voucher fica fora,
-    // pois não cai na Cresol e portanto não entra no match.
+    // Estágio 1: vendido = só cartão+pix (bruto_ifood). Voucher fora.
     const vendidoIfood = brutoIfood;
-    // Custo = taxa REAL aplicada pela Maquinona (gross - net das vendas de competência).
-    // Esse é o número definitivo. Match gap mostra a discrepância no card iFood
-    // separado mas não infla o KPI principal de taxa efetiva.
-    const custoTaxaMaquinona = Math.max(brutoIfood - liquidoIfood, 0);
-    const taxaEfetiva = vendidoIfood > 0 ? (custoTaxaMaquinona / vendidoIfood) * 100 : 0;
+    // Custo declarado = bruto - líquido relatório (taxa transação + antecipação +
+    // promoção, tudo que o iFood declara em seu relatório).
+    const custoDeclaradoIfood = Math.max(brutoIfood - liquidoIfood, 0);
+    // Custo OCULTO = líquido relatório - recebido Cresol fiel. É o que o iFood
+    // diz que vai depositar mas chega menor (PIX retido sem declaração, ajustes
+    // não documentados, etc). Esse é o foco da auditoria pra cobrar a operadora.
+    const custoOculto = Math.max(liquidoIfood - recebido, 0);
+    const custoTotal = custoDeclaradoIfood + custoOculto;
+    const taxaEfetiva = vendidoIfood > 0 ? (custoTotal / vendidoIfood) * 100 : 0;
 
     setTotals({
-      vendido: vendidoIfood, recebido, custo: custoTaxaMaquinona, taxaPct: taxaEfetiva,
+      vendido: vendidoIfood, recebido, custo: custoTotal, taxaPct: taxaEfetiva,
       txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
       liquidoIfood, brutoIfood,
     });
+    setCustoDeclaradoIfood(custoDeclaradoIfood);
+    setCustoOculto(custoOculto);
     setDepositRows(depRows);
     
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
@@ -833,15 +822,18 @@ export default function AuditDashboard() {
                 <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
               ) : (() => {
                 const liquidoEsperado = totals.liquidoIfood;
-                const recebidoMatched = ifoodMatched;
-                const gap = recebidoMatched - liquidoEsperado;
+                const recebidoFiel = ifoodCompetencia;
+                const gap = recebidoFiel - liquidoEsperado;
+                const brutoFiel = totals.brutoIfood;
                 return (
                   <div className="space-y-1 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Líquido esperado:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido competência:</span><span className="font-medium">{formatCurrency(recebidoMatched)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Vendido (bruto Maq):</span><span className="font-medium">{formatCurrency(brutoFiel)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Custo declarado iFood:</span><span className="font-medium text-amber-700 dark:text-amber-500">{formatCurrency(custoDeclaradoIfood)}</span></div>
+                    <div className="flex justify-between border-t border-border/50 pt-1"><span className="text-muted-foreground">Líquido reportado iFood:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol (fiel):</span><span className="font-medium">{formatCurrency(recebidoFiel)}</span></div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Gap real:</span>
-                      <span className={`font-semibold ${gap < -0.5 ? 'text-red-600 dark:text-red-400' : gap > 0.5 ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground'}`}>{formatCurrency(gap)}</span>
+                      <span className="text-muted-foreground font-medium">⚠ Custo OCULTO:</span>
+                      <span className={`font-semibold ${custoOculto > 0.5 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{formatCurrency(custoOculto)}</span>
                     </div>
                     {(ifoodAdjacente > 0 || ifoodNaoId > 0) && (
                       <div className="pt-2 mt-1 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">

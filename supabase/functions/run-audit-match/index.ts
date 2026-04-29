@@ -50,14 +50,21 @@ Deno.serve(async (req) => {
     // Clear previous iFood daily matches (idempotent rerun)
     await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
 
-    // ===== iFOOD MATCH (by date) =====
-    // Usa fetchAllPaginated p/ contornar o limite default de 1000 do PostgREST.
-    // Vendas iFood facilmente passam disso (mês cheio = ~2.5k txs). Sem paginar,
-    // dias do final do range somem do daily_matches e o carry-forward quebra.
+    // ===== iFOOD MATCH (lote-a-lote por valor) =====
+    // Estratégia: cada lote (sale_date × tipo PIX/CARD) na Maquinona corresponde
+    // a UM depósito Cresol específico. O extrato bancário tem 1 lançamento por
+    // (sale_date × tipo). Match valor-a-valor com tolerância 5% pra detectar
+    // taxa oculta (PIX retido sem declaração, antecipação extra, etc).
+    //
+    // Vantagens vs match por expected_deposit_date:
+    // - Funciona com carnaval/feriados/fim de semana naturalmente (o depósito
+    //   está lá, só precisa achar o lote correspondente em valor)
+    // - Permite competência por sale_date (não expected_deposit_date)
+    // - Detecta divergências por dia × tipo (cobrável)
     const txs = await fetchAllPaginated<any>(
       supabase
         .from('audit_card_transactions')
-        .select('expected_deposit_date,net_amount')
+        .select('sale_date,payment_method,gross_amount,net_amount')
         .eq('audit_period_id', audit_period_id)
         .eq('deposit_group', 'ifood'),
     );
@@ -65,105 +72,97 @@ Deno.serve(async (req) => {
     const deps = await fetchAllPaginated<any>(
       supabase
         .from('audit_bank_deposits')
-        .select('deposit_date,amount')
+        .select('id,deposit_date,amount')
         .eq('audit_period_id', audit_period_id)
         .eq('bank', 'cresol')
         .eq('category', 'ifood'),
     );
 
-    const txByDate = new Map<string, { amount: number; count: number }>();
+    // Agrupa Maquinona em lotes (sale_date × tipo PIX/CARD)
+    type Lot = { sale_date: string; tipo: 'PIX'|'CARD'; bruto: number; liq: number; count: number };
+    const lotsMap = new Map<string, Lot>();
     for (const t of txs ?? []) {
-      const d = t.expected_deposit_date;
-      if (!d) continue;
-      const cur = txByDate.get(d) ?? { amount: 0, count: 0 };
-      cur.amount += Number(t.net_amount || 0);
-      cur.count += 1;
-      txByDate.set(d, cur);
+      const sd = t.sale_date as string;
+      const method = String(t.payment_method ?? '').toUpperCase();
+      const tipo: 'PIX'|'CARD' = method === 'PIX' ? 'PIX' : 'CARD';
+      const key = `${sd}|${tipo}`;
+      const lot = lotsMap.get(key) ?? { sale_date: sd, tipo, bruto: 0, liq: 0, count: 0 };
+      lot.bruto += Number(t.gross_amount || 0);
+      lot.liq += Number(t.net_amount || 0);
+      lot.count += 1;
+      lotsMap.set(key, lot);
     }
-    const depByDate = new Map<string, { amount: number; count: number }>();
-    for (const d of deps ?? []) {
-      const dt = d.deposit_date;
-      const cur = depByDate.get(dt) ?? { amount: 0, count: 0 };
-      cur.amount += Number(d.amount || 0);
-      cur.count += 1;
-      depByDate.set(dt, cur);
-    }
+    const lots: Lot[] = Array.from(lotsMap.values()).sort((a, b) => a.sale_date.localeCompare(b.sale_date));
 
-    // Carry-forward: vendas em dias sem depósito acumulam pra o próximo dia
-    // com depósito. Resolve carnaval/feriados bancários (carnaval, sex santa,
-    // outros feriados estaduais) onde a Maquinona escreve expected_deposit_date
-    // de um dia que o banco não opera, e o dinheiro só cai 1-3 dias depois.
-    const allDates = Array.from(new Set<string>([...txByDate.keys(), ...depByDate.keys()])).sort();
-    const dailyRows: any[] = [];
-    let carryAmount = 0;
-    let carryCount = 0;
-    let carryDates: string[] = [];
+    // Match: pra cada lote, busca depósito Cresol mais próximo em valor (tol 5%)
+    // que ainda não foi matched. Depósito >= sale_date é preferível mas não obrigatório.
+    type DepStatus = { id: string; date: string; amount: number; matched: boolean };
+    const depPool: DepStatus[] = (deps ?? []).map(d => ({
+      id: d.id, date: d.deposit_date, amount: Number(d.amount || 0), matched: false
+    }));
 
-    for (const date of allDates) {
-      const tx = txByDate.get(date);
-      const dp = depByDate.get(date);
-      const expectedToday = tx?.amount ?? 0;
-      const deposited = dp?.amount ?? 0;
-      const txCount = tx?.count ?? 0;
-      const dpCount = dp?.count ?? 0;
+    const matchedLots: Array<Lot & { cresol_amount?: number; cresol_date?: string; diff?: number; matched: boolean }> = [];
 
-      // Acumula vendas de hoje no carry pra ver o expected total
-      const cumExpected = expectedToday + carryAmount;
-      const cumCount = txCount + carryCount;
-
-      if (deposited === 0 && cumExpected > 0) {
-        // Dia com vendas mas sem depósito ainda. Marca pending e acumula.
-        dailyRows.push({
-          audit_period_id,
-          match_date: date,
-          expected_amount: expectedToday,
-          deposited_amount: 0,
-          difference: -expectedToday,
-          transaction_count: txCount,
-          deposit_count: 0,
-          status: 'pending',
-        });
-        carryAmount = cumExpected;
-        carryCount = cumCount;
-        carryDates.push(date);
-      } else if (deposited === 0 && cumExpected === 0) {
-        // Dia totalmente vazio (não chega aqui na prática, allDates filtra)
-        continue;
-      } else {
-        // Há depósito. Compara com expected acumulado (incluindo carry).
-        const diff = deposited - cumExpected;
-        // Tolerância adaptativa: max(R$ 1, 0.5% do esperado).
-        // Variação de centavos por transação é normal (taxa real varia).
-        // Sem isso, todo dia vira "partial" mesmo com diff irrelevante (ex: -R$ 9 em
-        // R$ 11k = 0,08% — taxa de transação variando entre tipos de cartão).
-        const tolerance = Math.max(1, cumExpected * 0.005);
-        let status: string;
-        if (cumCount === 0 && deposited > 0) {
-          status = 'extra_deposit';
-        } else if (Math.abs(diff) <= tolerance) {
-          status = carryDates.length > 0 ? 'cluster_matched' : 'matched';
-        } else {
-          status = carryDates.length > 0 ? 'cluster_partial' : 'partial';
+    for (const lot of lots) {
+      let best: DepStatus | null = null;
+      let bestPct = 999;
+      for (const dep of depPool) {
+        if (dep.matched) continue;
+        if (dep.date < lot.sale_date) continue; // depósito tem que ser >= sale_date
+        const diffPct = lot.liq > 0 ? Math.abs(dep.amount - lot.liq) / lot.liq : 999;
+        if (diffPct < 0.05 && diffPct < bestPct) {
+          best = dep;
+          bestPct = diffPct;
         }
-        dailyRows.push({
-          audit_period_id,
-          match_date: date,
-          expected_amount: cumExpected,
-          deposited_amount: deposited,
-          difference: diff,
-          transaction_count: cumCount,
-          deposit_count: dpCount,
-          status,
-        });
-        carryAmount = 0;
-        carryCount = 0;
-        carryDates = [];
+      }
+      if (best) {
+        best.matched = true;
+        matchedLots.push({ ...lot, cresol_amount: best.amount, cresol_date: best.date, diff: best.amount - lot.liq, matched: true });
+      } else {
+        matchedLots.push({ ...lot, matched: false });
       }
     }
 
-    // Se sobrou carry no fim do range (vendas dos últimos dias do mês cujo
-    // depósito cai no próximo período), registra como pending sem terminal.
-    // Não precisa de linha extra: as últimas linhas já estão com status='pending'.
+    // Agrega por sale_date pro audit_daily_matches (1 row por sale_date,
+    // somando PIX + CARD do dia)
+    type DayAgg = { expected: number; deposited: number; bruto: number; count: number; lots: number; matched_lots: number };
+    const byDay = new Map<string, DayAgg>();
+    for (const m of matchedLots) {
+      const a = byDay.get(m.sale_date) ?? { expected: 0, deposited: 0, bruto: 0, count: 0, lots: 0, matched_lots: 0 };
+      a.expected += m.liq;
+      a.deposited += m.cresol_amount ?? 0;
+      a.bruto += m.bruto;
+      a.count += m.count;
+      a.lots += 1;
+      if (m.matched) a.matched_lots += 1;
+      byDay.set(m.sale_date, a);
+    }
+
+    const dailyRows: any[] = [];
+    for (const [sale_date, a] of byDay) {
+      const diff = a.deposited - a.expected;
+      const tolerance = Math.max(1, a.expected * 0.005);
+      let status: string;
+      if (a.matched_lots === 0) {
+        status = 'pending'; // nenhum lote do dia foi matched (depósito não chegou)
+      } else if (a.matched_lots < a.lots) {
+        status = 'partial'; // alguns lotes matched, outros não
+      } else if (Math.abs(diff) <= tolerance) {
+        status = 'matched';
+      } else {
+        status = 'partial';
+      }
+      dailyRows.push({
+        audit_period_id,
+        match_date: sale_date,
+        expected_amount: a.expected,
+        deposited_amount: a.deposited,
+        difference: diff,
+        transaction_count: a.count,
+        deposit_count: a.matched_lots,
+        status,
+      });
+    }
 
     if (dailyRows.length > 0) {
       const { error: dailyErr } = await supabase.from('audit_daily_matches').insert(dailyRows);

@@ -77,7 +77,7 @@ export default function AuditIfood() {
         fetchAllPaginated<any>(
           supabase
             .from('audit_card_transactions')
-            .select('expected_deposit_date,gross_amount,tax_amount,net_amount')
+            .select('sale_date,gross_amount,net_amount')
             .eq('audit_period_id', periodId!)
             .eq('deposit_group', 'ifood'),
         );
@@ -105,12 +105,12 @@ export default function AuditIfood() {
         setPeriodMY({ month: (period as any).month, year: (period as any).year });
       }
 
-      // Calcula gross e tax por expected_deposit_date (= match_date) somando
-      // direto do audit_card_transactions. Tax real = gross - net.
+      // Calcula gross e tax por sale_date (= match_date após refactor).
+      // Tax real = gross - net (declarado pelo iFood, inclui antecipação).
       const grossByDate = new Map<string, number>();
       const taxByDate = new Map<string, number>();
       for (const t of (txs as any[]) ?? []) {
-        const d = (t as any).expected_deposit_date;
+        const d = (t as any).sale_date;
         if (!d) continue;
         const gross = Number((t as any).gross_amount || 0);
         const net = Number((t as any).net_amount || 0);
@@ -142,75 +142,15 @@ export default function AuditIfood() {
           tax: taxByDate.get(d.match_date) ?? 0,
         }));
 
-      // Linka pending → cluster que fechou. Walk: cada sequência de pending
-      // termina num cluster_matched/cluster_partial.
-      let pendingBuffer: string[] = [];
-      for (const r of enriched) {
-        if (r.status === 'pending') {
-          pendingBuffer.push(r.match_date);
-        } else if (r.status?.startsWith('cluster_')) {
-          for (const pd of pendingBuffer) {
-            const pendingRow = enriched.find(x => x.match_date === pd);
-            if (pendingRow) pendingRow.closed_by = r.match_date;
-          }
-          if (pendingBuffer.length > 0) r.closes = [...pendingBuffer, r.match_date];
-          pendingBuffer = [];
-        } else {
-          pendingBuffer = [];
-        }
-      }
-
-      // Rateio proporcional: distribui o depósito do cluster entre os dias
-      // que ele cobriu (pendings + dia do cluster) na proporção do líq esperado
-      // de cada dia. Permite auditoria dia-a-dia (cobrar operadora por
-      // desconto indevido em um dia específico em vez de bloco de 3 dias).
-      for (const cluster of enriched.filter(r => r.closes && r.closes.length > 1)) {
-        const memberDates = cluster.closes!;
-        const clusterDate = memberDates[memberDates.length - 1];
-        const pendingDates = memberDates.slice(0, -1);
-
-        // expected do cluster row é cumulativo (= pending1 + pending2 + dia).
-        // Recupera o expected do cluster day por si só.
-        const pendingsExpectedSum = pendingDates.reduce((s, d) => {
-          const r = enriched.find(x => x.match_date === d);
-          return s + (r?.expected_amount ?? 0);
-        }, 0);
-        const cumExpected = cluster.expected_amount;
-        const clusterDayOnly = Math.max(cumExpected - pendingsExpectedSum, 0);
-        const totalDeposited = cluster.deposited_amount;
-
-        // Atualiza cada linha do cluster com sua porção
-        for (const d of memberDates) {
-          const r = enriched.find(x => x.match_date === d);
-          if (!r) continue;
-
-          if (d === clusterDate) {
-            r.expected_amount = clusterDayOnly;
-          }
-          const expectedDay = r.expected_amount;
-          const proportion = cumExpected > 0 ? expectedDay / cumExpected : 0;
-          const distributed = totalDeposited * proportion;
-          r.deposited_amount = distributed;
-          r.difference = distributed - expectedDay;
-
-          // Re-classifica status baseado no diff individual após rateio
-          const tolerance = Math.max(1, expectedDay * 0.005);
-          if (Math.abs(r.difference) <= tolerance) {
-            r.status = 'matched';
-          } else {
-            r.status = 'partial';
-          }
-        }
-      }
-
+      // Após refactor do run-audit-match: cada linha em audit_daily_matches
+      // já é (sale_date) com match valor-a-valor pros depósitos Cresol.
+      // Sem cluster, sem pending, sem carry-forward — o match natural já
+      // funciona pra carnaval/feriados.
       setRows(enriched);
 
-      // Header totals: soma dos enriched (= o que está visível na tabela)
-      // Header totals: filtra pending pra não duplicar (expected do pending
-      // já está incluído no expected acumulado do cluster que fechou).
-      const nonPending = enriched.filter(r => r.status !== 'pending');
-      const totalExpected = nonPending.reduce((s, r) => s + r.expected_amount, 0);
-      const totalDeposited = nonPending.reduce((s, r) => s + r.deposited_amount, 0);
+      // Header totals: soma direta — sem pending após refactor de match valor-a-valor.
+      const totalExpected = enriched.reduce((s, r) => s + r.expected_amount, 0);
+      const totalDeposited = enriched.reduce((s, r) => s + r.deposited_amount, 0);
       setHeaderTotals({ expected: totalExpected, deposited: totalDeposited });
 
       setLoading(false);
@@ -313,17 +253,7 @@ export default function AuditIfood() {
                     <TableCell className="text-right">{fmt(Number(r.deposited_amount))}</TableCell>
                     <TableCell className={`text-right font-semibold ${Number(r.difference) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(r.difference))}</TableCell>
                     <TableCell className="text-xs">
-                      <div>{STATUS_LABEL[r.status] ?? r.status}</div>
-                      {r.closed_by && (
-                        <div className="text-[10px] text-blue-700 dark:text-blue-400 mt-0.5">
-                          rateio do depósito de {fmtDate(r.closed_by)}
-                        </div>
-                      )}
-                      {r.closes && r.closes.length > 1 && (
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          rateio cobre: {r.closes.slice(0, -1).map(fmtDate).join(', ')} + hoje
-                        </div>
-                      )}
+                      {STATUS_LABEL[r.status] ?? r.status}
                     </TableCell>
                   </TableRow>
                 ))}
