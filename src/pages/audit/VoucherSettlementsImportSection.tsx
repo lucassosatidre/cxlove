@@ -247,8 +247,8 @@ function OperadoraDropzone({
       </div>
 
       {imports.length > 0 && (
-        <p className="text-xs text-muted-foreground truncate" title={imports[0].file_name}>
-          {imports[0].file_name}
+        <p className="text-xs text-muted-foreground truncate" title={imports[0].filename}>
+          {imports[0].filename}
         </p>
       )}
 
