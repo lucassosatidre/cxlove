@@ -249,13 +249,14 @@ export default function AuditDashboard() {
     //
     // Recebido competência = soma de deposited_amount em daily_matches do mês,
     // limitado ao expected_amount do dia (excedente vai pra "outras comp.").
-    // Usa month/year do state direto (sempre set), não period?.month que pode
-    // ser null na primeira carga.
+    // Filtra status='pending' (cujo expected já está incluído no cluster que
+    // fechou os dias subsequentes — somar duplica).
+    // Usa month/year do state (sempre setado).
     const dailyInPeriod = ((dMatches as any[]) ?? []).filter(d => {
       const [y, m] = d.match_date.split('-').map(Number);
-      return y === year && m === month;
+      return y === year && m === month && d.status !== 'pending';
     });
-    let ifoodComp = 0;
+    let ifoodCompRaw = 0;
     let ifoodAdj = 0;
     for (const d of dailyInPeriod) {
       const expected = Number(d.expected_amount || 0);
@@ -264,8 +265,16 @@ export default function AuditDashboard() {
       // expected do dia como "competência"; o excedente é adjacente.
       const matchedToday = Math.min(deposited, expected);
       const adjacenteToday = Math.max(deposited - expected, 0);
-      ifoodComp += matchedToday;
+      ifoodCompRaw += matchedToday;
       ifoodAdj += adjacenteToday;
+    }
+    // Clamp final: ifoodComp não pode exceder liquidoIfood (líquido esperado
+    // das vendas do mês de competência — RPC filtra por is_competencia=true).
+    // Excedente são depósitos relacionados a vendas de meses adjacentes que
+    // bateram em dias do nosso mês — vai pra ifoodAdj.
+    const ifoodComp = Math.min(ifoodCompRaw, liquidoIfood);
+    if (ifoodCompRaw > liquidoIfood) {
+      ifoodAdj += (ifoodCompRaw - liquidoIfood);
     }
     // Soma adjacente também dos depósitos fora do mês de competência (jan/mar
     // importados pra contexto). Esses são depósitos puros de outras comps.
@@ -283,11 +292,14 @@ export default function AuditDashboard() {
     // Estágio 1: vendido = só cartão+pix (bruto_ifood). Voucher fica fora,
     // pois não cai na Cresol e portanto não entra no match.
     const vendidoIfood = brutoIfood;
-    const custoReal = Math.max(vendidoIfood - recebido, 0);
-    const taxaEfetiva = vendidoIfood > 0 ? (custoReal / vendidoIfood) * 100 : 0;
+    // Custo = taxa REAL aplicada pela Maquinona (gross - net das vendas de competência).
+    // Esse é o número definitivo. Match gap mostra a discrepância no card iFood
+    // separado mas não infla o KPI principal de taxa efetiva.
+    const custoTaxaMaquinona = Math.max(brutoIfood - liquidoIfood, 0);
+    const taxaEfetiva = vendidoIfood > 0 ? (custoTaxaMaquinona / vendidoIfood) * 100 : 0;
 
     setTotals({
-      vendido: vendidoIfood, recebido, custo: custoReal, taxaPct: taxaEfetiva,
+      vendido: vendidoIfood, recebido, custo: custoTaxaMaquinona, taxaPct: taxaEfetiva,
       txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
       liquidoIfood, brutoIfood,
     });
@@ -622,10 +634,18 @@ export default function AuditDashboard() {
 
   const statusBadge = period ? STATUS_VARIANTS[period.status] : null;
 
-  const ifoodGap = dailyMatches.reduce((s, m) => s + Number(m.difference || 0), 0);
-  const custoReal = isConciliated || isClosed
-    ? Math.abs(Math.min(ifoodGap, 0)) + (totals.recebido > 0 ? Math.max(0, totals.vendido - totals.recebido) : 0)
-    : totals.custo;
+  // Gap real do match: soma das diferenças no mês, EXCLUINDO linhas pending
+  // (cujo expected já está incluído no expected acumulado do cluster que fechou
+  // os dias subsequentes — somar pending dobra a contagem).
+  const ifoodGap = dailyMatches
+    .filter(m => {
+      const [y, mm] = m.match_date.split('-').map(Number);
+      return y === year && mm === month && m.status !== 'pending';
+    })
+    .reduce((s, m) => s + Number(m.difference || 0), 0);
+  // Custo = vem direto de totals.custo (= taxa real Maquinona, gross-net).
+  // Não calcula override aqui — manter consistente com setTotals.
+  const custoReal = totals.custo;
 
   // Breakdown of bank deposits by match_status (for iFood card)
   const sumDeposits = (filterFn: (d: typeof depositRows[number]) => boolean) =>

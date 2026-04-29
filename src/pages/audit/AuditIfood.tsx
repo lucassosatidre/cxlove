@@ -140,8 +140,11 @@ export default function AuditIfood() {
       setRows(enriched);
 
       // Header totals: soma dos enriched (= o que está visível na tabela)
-      const totalExpected = enriched.reduce((s, r) => s + r.expected_amount, 0);
-      const totalDeposited = enriched.reduce((s, r) => s + r.deposited_amount, 0);
+      // Header totals: filtra pending pra não duplicar (expected do pending
+      // já está incluído no expected acumulado do cluster que fechou).
+      const nonPending = enriched.filter(r => r.status !== 'pending');
+      const totalExpected = nonPending.reduce((s, r) => s + r.expected_amount, 0);
+      const totalDeposited = nonPending.reduce((s, r) => s + r.deposited_amount, 0);
       setHeaderTotals({ expected: totalExpected, deposited: totalDeposited });
 
       setLoading(false);
