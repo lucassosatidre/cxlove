@@ -121,28 +121,10 @@ Deno.serve(async (req) => {
 
     const totalIfood = dailyRows.reduce((s, r) => s + r.difference, 0);
 
-    // ===== Camada IA: comentários iFood em paralelo =====
-    const SUPABASE_URL_AI = Deno.env.get('SUPABASE_URL')!;
-    const SERVICE_ROLE_AI = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const aiHeaders = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${SERVICE_ROLE_AI}`,
-    };
-
-    // @ts-ignore EdgeRuntime is available at runtime
-    EdgeRuntime.waitUntil(
-      fetch(`${SUPABASE_URL_AI}/functions/v1/audit-ifood-ai`, {
-        method: 'POST',
-        headers: aiHeaders,
-        body: JSON.stringify({ period_id: audit_period_id, force_refresh: false }),
-      }).catch((e: any) => console.error('audit-ifood-ai fire error:', e.message))
-    );
-
     return new Response(JSON.stringify({
       success: true,
       daily_matches_count: dailyRows.length,
       total_difference_ifood: totalIfood,
-      ai_pending: true,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('run-audit-match error', e);
