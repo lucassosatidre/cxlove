@@ -240,11 +240,11 @@ export default function AuditDashboard() {
     //
     // Recebido competência = soma de deposited_amount em daily_matches do mês,
     // limitado ao expected_amount do dia (excedente vai pra "outras comp.").
-    const periodMonth = period?.month ?? 0;
-    const periodYear = period?.year ?? 0;
+    // Usa month/year do state direto (sempre set), não period?.month que pode
+    // ser null na primeira carga.
     const dailyInPeriod = ((dMatches as any[]) ?? []).filter(d => {
       const [y, m] = d.match_date.split('-').map(Number);
-      return y === periodYear && m === periodMonth;
+      return y === year && m === month;
     });
     let ifoodComp = 0;
     let ifoodAdj = 0;
@@ -262,7 +262,7 @@ export default function AuditDashboard() {
     // importados pra contexto). Esses são depósitos puros de outras comps.
     const dailyOutsidePeriod = ((dMatches as any[]) ?? []).filter(d => {
       const [y, m] = d.match_date.split('-').map(Number);
-      return y !== periodYear || m !== periodMonth;
+      return y !== year || m !== month;
     });
     for (const d of dailyOutsidePeriod) {
       ifoodAdj += Number(d.deposited_amount || 0);
