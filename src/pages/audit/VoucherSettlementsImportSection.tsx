@@ -14,11 +14,9 @@ type Operadora = 'pluxee' | 'alelo' | 'vr' | 'ticket';
 type VoucherImport = {
   id: string;
   operadora: string;
-  file_name: string;
-  imported_lots: number;
-  imported_items: number;
-  imported_adjustments: number;
-  imported_at: string;
+  filename: string;
+  rows_imported: number;
+  created_at: string;
 };
 
 const META: Record<Operadora, { title: string; accept: string; functionName: string; tip: string }> = {
