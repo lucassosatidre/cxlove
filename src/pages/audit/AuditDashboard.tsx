@@ -219,7 +219,9 @@ export default function AuditDashboard() {
     const liquidoDeclarado = Number(t.total_liquido_declarado ?? 0);
     const liquidoIfood = Number(t.total_liquido_ifood ?? 0);
     const brutoIfood = Number(t.total_bruto_ifood ?? 0);
-    const taxa = Number(t.total_taxa_declarada ?? 0);
+    // Taxa real Maquinona = gross - net (inclui taxa declarada + implícita/antecipação).
+    // total_taxa_declarada da RPC só pega a parte explícita (subestima ~30%).
+    const taxa = Math.max(brutoIfood - liquidoIfood, 0);
     const promocao = Number(t.total_promocao ?? 0);
     const txCount = Number(t.total_count ?? 0);
     const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0);
@@ -237,11 +239,14 @@ export default function AuditDashboard() {
     setIfoodAdjacente(ifoodAdj);
 
     const recebido = ifoodComp;
-    const custoReal = Math.max(bruto - recebido, 0);
-    const taxaEfetiva = bruto > 0 ? (custoReal / bruto) * 100 : 0;
+    // Estágio 1: vendido = só cartão+pix (bruto_ifood). Voucher fica fora,
+    // pois não cai na Cresol e portanto não entra no match.
+    const vendidoIfood = brutoIfood;
+    const custoReal = Math.max(vendidoIfood - recebido, 0);
+    const taxaEfetiva = vendidoIfood > 0 ? (custoReal / vendidoIfood) * 100 : 0;
 
     setTotals({
-      vendido: bruto, recebido, custo: custoReal, taxaPct: taxaEfetiva,
+      vendido: vendidoIfood, recebido, custo: custoReal, taxaPct: taxaEfetiva,
       txCount, bruto, taxa: taxa + promocao, liquidoDeclarado, custoDeclarado,
       liquidoIfood, brutoIfood,
     });

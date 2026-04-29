@@ -19,14 +19,20 @@ const fmtDate = (iso: string) => {
 
 const STATUS_BG: Record<string, string> = {
   matched: 'bg-green-500/10',
+  cluster_matched: 'bg-green-500/10',
   partial: 'bg-yellow-500/10',
+  cluster_partial: 'bg-yellow-500/10',
+  pending: 'bg-orange-500/10',
   missing_deposit: 'bg-red-500/10',
   extra_deposit: 'bg-blue-500/10',
 };
 
 const STATUS_LABEL: Record<string, string> = {
   matched: '🟢 OK',
+  cluster_matched: '🟢 OK (cluster)',
   partial: '🟡 Parcial',
+  cluster_partial: '🟡 Parcial (cluster)',
+  pending: '🟠 Aguardando depósito',
   missing_deposit: '🔴 Sem depósito',
   extra_deposit: '🔵 Depósito extra',
 };
@@ -69,7 +75,7 @@ export default function AuditIfood() {
         while (true) {
           const { data, error } = await supabase
             .from('audit_card_transactions')
-            .select('expected_deposit_date,gross_amount,tax_amount')
+            .select('expected_deposit_date,gross_amount,tax_amount,net_amount')
             .eq('audit_period_id', periodId!)
             .eq('deposit_group', 'ifood')
             .range(from, from + pageSize - 1);
@@ -115,12 +121,17 @@ export default function AuditIfood() {
       );
       setHeaderTotals({ expected: liquidoEsperado, deposited: depositadoMatched });
 
-      // Tax por dia (a RPC não retorna tax — derivar de audit_card_transactions)
+      // Tax por dia: usar a taxa REAL aplicada (gross - net), não tax_amount declarado.
+      // tax_amount na Maquinona só captura uma parte (~65%) — o restante é taxa
+      // implícita / antecipação não declarada explicitamente. gross-net dá o total real.
       const taxByDate = new Map<string, number>();
       for (const t of (txs as any[]) ?? []) {
         const d = (t as any).expected_deposit_date;
         if (!d) continue;
-        taxByDate.set(d, (taxByDate.get(d) ?? 0) + Number((t as any).tax_amount || 0));
+        const gross = Number((t as any).gross_amount || 0);
+        const net = Number((t as any).net_amount || 0);
+        const realTax = Math.max(gross - net, 0);
+        taxByDate.set(d, (taxByDate.get(d) ?? 0) + realTax);
       }
 
       // Rows da tabela: usar RPC (já filtra is_competencia + matched, sem fora_periodo)

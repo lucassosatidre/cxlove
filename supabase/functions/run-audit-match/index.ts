@@ -81,28 +81,76 @@ Deno.serve(async (req) => {
       depByDate.set(dt, cur);
     }
 
-    const allDates = new Set<string>([...txByDate.keys(), ...depByDate.keys()]);
-    const dailyRows = Array.from(allDates).map(date => {
+    // Carry-forward: vendas em dias sem depósito acumulam pra o próximo dia
+    // com depósito. Resolve carnaval/feriados bancários (carnaval, sex santa,
+    // outros feriados estaduais) onde a Maquinona escreve expected_deposit_date
+    // de um dia que o banco não opera, e o dinheiro só cai 1-3 dias depois.
+    const allDates = Array.from(new Set<string>([...txByDate.keys(), ...depByDate.keys()])).sort();
+    const dailyRows: any[] = [];
+    let carryAmount = 0;
+    let carryCount = 0;
+    let carryDates: string[] = [];
+
+    for (const date of allDates) {
       const tx = txByDate.get(date);
       const dp = depByDate.get(date);
-      const expected = tx?.amount ?? 0;
+      const expectedToday = tx?.amount ?? 0;
       const deposited = dp?.amount ?? 0;
-      const diff = deposited - expected;
-      let status = 'matched';
-      if (!tx) status = 'extra_deposit';
-      else if (!dp) status = 'missing_deposit';
-      else if (Math.abs(diff) >= 1) status = 'partial';
-      return {
-        audit_period_id,
-        match_date: date,
-        expected_amount: expected,
-        deposited_amount: deposited,
-        difference: diff,
-        transaction_count: tx?.count ?? 0,
-        deposit_count: dp?.count ?? 0,
-        status,
-      };
-    });
+      const txCount = tx?.count ?? 0;
+      const dpCount = dp?.count ?? 0;
+
+      // Acumula vendas de hoje no carry pra ver o expected total
+      const cumExpected = expectedToday + carryAmount;
+      const cumCount = txCount + carryCount;
+
+      if (deposited === 0 && cumExpected > 0) {
+        // Dia com vendas mas sem depósito ainda. Marca pending e acumula.
+        dailyRows.push({
+          audit_period_id,
+          match_date: date,
+          expected_amount: expectedToday,
+          deposited_amount: 0,
+          difference: -expectedToday,
+          transaction_count: txCount,
+          deposit_count: 0,
+          status: 'pending',
+        });
+        carryAmount = cumExpected;
+        carryCount = cumCount;
+        carryDates.push(date);
+      } else if (deposited === 0 && cumExpected === 0) {
+        // Dia totalmente vazio (não chega aqui na prática, allDates filtra)
+        continue;
+      } else {
+        // Há depósito. Compara com expected acumulado (incluindo carry).
+        const diff = deposited - cumExpected;
+        let status: string;
+        if (cumCount === 0 && deposited > 0) {
+          status = 'extra_deposit';
+        } else if (Math.abs(diff) < 1) {
+          status = carryDates.length > 0 ? 'cluster_matched' : 'matched';
+        } else {
+          status = carryDates.length > 0 ? 'cluster_partial' : 'partial';
+        }
+        dailyRows.push({
+          audit_period_id,
+          match_date: date,
+          expected_amount: cumExpected,
+          deposited_amount: deposited,
+          difference: diff,
+          transaction_count: cumCount,
+          deposit_count: dpCount,
+          status,
+        });
+        carryAmount = 0;
+        carryCount = 0;
+        carryDates = [];
+      }
+    }
+
+    // Se sobrou carry no fim do range (vendas dos últimos dias do mês cujo
+    // depósito cai no próximo período), registra como pending sem terminal.
+    // Não precisa de linha extra: as últimas linhas já estão com status='pending'.
 
     if (dailyRows.length > 0) {
       const { error: dailyErr } = await supabase.from('audit_daily_matches').insert(dailyRows);

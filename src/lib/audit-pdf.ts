@@ -76,23 +76,27 @@ const STATUS_LABELS: Record<string, string> = {
   divergente: 'DIVERG',
   no_sales: 'SEM VENDAS',
   matched: 'OK',
+  cluster_matched: 'OK (CLUSTER)',
   partial: 'PARCIAL',
+  cluster_partial: 'PARCIAL (CLUSTER)',
   missing_deposit: 'SEM DEP.',
   extra_deposit: 'DEP. EXTRA',
-  pending: '—',
+  pending: 'AGUARDANDO',
 };
 
 const STATUS_COLORS: Record<string, [number, number, number]> = {
   ok: GREEN,
   matched: GREEN,
+  cluster_matched: GREEN,
   alerta: YELLOW,
   partial: YELLOW,
+  cluster_partial: YELLOW,
   critico: RED,
   missing_deposit: RED,
   divergente: BLUE,
   extra_deposit: BLUE,
   no_sales: GRAY,
-  pending: GRAY,
+  pending: YELLOW,
 };
 
 function header(doc: jsPDF, periodLabel: string, emittedBy: string) {
