@@ -70,7 +70,7 @@ export default function VoucherSettlementsImportSection({
       .from('voucher_imports')
       .select('*')
       .eq('audit_period_id', periodId)
-      .order('imported_at', { ascending: false });
+      .order('created_at', { ascending: false });
     setImports((data as VoucherImport[]) ?? []);
   };
 
