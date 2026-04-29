@@ -233,13 +233,40 @@ export default function AuditDashboard() {
 
     const depRows = (depsRpc as { category: string | null; bank: string | null; match_status?: string | null; total_amount: number; deposit_count: number }[]) ?? [];
 
-    // iFood matched de COMPETÊNCIA (sem overshoot de meses adjacentes)
-    const ifoodComp = ((ifoodCompRows as any[]) ?? []).reduce(
-      (s, d) => s + Number(d.matched_competencia_amount || 0), 0
-    );
-    const ifoodAdj = ((ifoodCompRows as any[]) ?? []).reduce(
-      (s, d) => s + Number(d.matched_adjacente_amount || 0), 0
-    );
+    // iFood matched de COMPETÊNCIA: usa audit_daily_matches como fonte da verdade
+    // (escrita pelo run-audit-match com carry-forward, considera clusters de
+    // feriado/carnaval). matched_competencia_amount do classify_ifood_deposits
+    // não é cluster-aware e subestima.
+    //
+    // Recebido competência = soma de deposited_amount em daily_matches do mês,
+    // limitado ao expected_amount do dia (excedente vai pra "outras comp.").
+    const periodMonth = period?.month ?? 0;
+    const periodYear = period?.year ?? 0;
+    const dailyInPeriod = ((dMatches as any[]) ?? []).filter(d => {
+      const [y, m] = d.match_date.split('-').map(Number);
+      return y === periodYear && m === periodMonth;
+    });
+    let ifoodComp = 0;
+    let ifoodAdj = 0;
+    for (const d of dailyInPeriod) {
+      const expected = Number(d.expected_amount || 0);
+      const deposited = Number(d.deposited_amount || 0);
+      // Quando deposited > expected (dia que fechou cluster), só conta o
+      // expected do dia como "competência"; o excedente é adjacente.
+      const matchedToday = Math.min(deposited, expected);
+      const adjacenteToday = Math.max(deposited - expected, 0);
+      ifoodComp += matchedToday;
+      ifoodAdj += adjacenteToday;
+    }
+    // Soma adjacente também dos depósitos fora do mês de competência (jan/mar
+    // importados pra contexto). Esses são depósitos puros de outras comps.
+    const dailyOutsidePeriod = ((dMatches as any[]) ?? []).filter(d => {
+      const [y, m] = d.match_date.split('-').map(Number);
+      return y !== periodYear || m !== periodMonth;
+    });
+    for (const d of dailyOutsidePeriod) {
+      ifoodAdj += Number(d.deposited_amount || 0);
+    }
     setIfoodCompetencia(ifoodComp);
     setIfoodAdjacente(ifoodAdj);
 

@@ -78,28 +78,20 @@ export default function AuditIfood() {
             .eq('deposit_group', 'ifood'),
         );
 
-      const fetchAllMatchedDeps = () =>
-        fetchAllPaginated<any>(
-          supabase
-            .from('audit_bank_deposits')
-            .select('matched_competencia_amount')
-            .eq('audit_period_id', periodId!)
-            .eq('bank', 'cresol')
-            .eq('category', 'ifood')
-            .eq('match_status', 'matched'),
-        );
-
+      // Lê audit_daily_matches direto (escrita pelo run-audit-match com
+      // carry-forward) — fonte da verdade pro detalhamento diário.
+      // get_audit_ifood_daily_detail RPC ainda usa lógica antiga (sem cluster).
       const [
         { data: period },
-        { data: dailyDetail },
-        { data: periodTotals },
-        matchedDeps,
+        { data: dailyMatches },
         txs,
       ] = await Promise.all([
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
-        supabase.rpc('get_audit_ifood_daily_detail', { p_period_id: periodId }),
-        supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
-        fetchAllMatchedDeps(),
+        supabase
+          .from('audit_daily_matches')
+          .select('match_date,expected_amount,deposited_amount,difference,transaction_count,deposit_count,status')
+          .eq('audit_period_id', periodId)
+          .order('match_date'),
         fetchAllIfoodTxs(),
       ]);
 
@@ -109,17 +101,9 @@ export default function AuditIfood() {
         setPeriodMY({ month: (period as any).month, year: (period as any).year });
       }
 
-      // Header totals: usar a mesma lógica do dashboard
-      const liquidoEsperado = Number((periodTotals as any[])?.[0]?.total_liquido_ifood ?? 0);
-      const depositadoMatched = (matchedDeps ?? []).reduce(
-        (s: number, d: any) => s + Number(d.matched_competencia_amount || 0),
-        0
-      );
-      setHeaderTotals({ expected: liquidoEsperado, deposited: depositadoMatched });
-
-      // Tax por dia: usar a taxa REAL aplicada (gross - net), não tax_amount declarado.
-      // tax_amount na Maquinona só captura uma parte (~65%) — o restante é taxa
-      // implícita / antecipação não declarada explicitamente. gross-net dá o total real.
+      // Calcula gross e tax por expected_deposit_date (= match_date) somando
+      // direto do audit_card_transactions. Tax real = gross - net.
+      const grossByDate = new Map<string, number>();
       const taxByDate = new Map<string, number>();
       for (const t of (txs as any[]) ?? []) {
         const d = (t as any).expected_deposit_date;
@@ -127,22 +111,39 @@ export default function AuditIfood() {
         const gross = Number((t as any).gross_amount || 0);
         const net = Number((t as any).net_amount || 0);
         const realTax = Math.max(gross - net, 0);
+        grossByDate.set(d, (grossByDate.get(d) ?? 0) + gross);
         taxByDate.set(d, (taxByDate.get(d) ?? 0) + realTax);
       }
 
-      // Rows da tabela: usar RPC (já filtra is_competencia + matched, sem fora_periodo)
-      const enriched: MatchRow[] = ((dailyDetail as any[]) ?? []).map(d => ({
-        match_date: d.match_date,
-        expected_amount: Number(d.liquido || 0),
-        deposited_amount: Number(d.deposito || 0),
-        difference: Number(d.diferenca || 0),
-        transaction_count: Number(d.vendas_count || 0),
-        deposit_count: 0,
-        status: d.status,
-        gross: Number(d.bruto || 0),
-        tax: taxByDate.get(d.match_date) ?? 0,
-      }));
+      // Filtra apenas dates do período (mês/ano) — daily_matches pode ter linhas
+      // de meses adjacentes por causa do carry-forward.
+      const periodMonth = (period as any)?.month;
+      const periodYear = (period as any)?.year;
+
+      const enriched: MatchRow[] = ((dailyMatches as any[]) ?? [])
+        .filter(d => {
+          if (!periodMonth || !periodYear) return true;
+          const [y, m] = d.match_date.split('-').map(Number);
+          return y === periodYear && m === periodMonth;
+        })
+        .map(d => ({
+          match_date: d.match_date,
+          expected_amount: Number(d.expected_amount || 0),
+          deposited_amount: Number(d.deposited_amount || 0),
+          difference: Number(d.difference || 0),
+          transaction_count: Number(d.transaction_count || 0),
+          deposit_count: Number(d.deposit_count || 0),
+          status: d.status,
+          gross: grossByDate.get(d.match_date) ?? 0,
+          tax: taxByDate.get(d.match_date) ?? 0,
+        }));
       setRows(enriched);
+
+      // Header totals: soma dos enriched (= o que está visível na tabela)
+      const totalExpected = enriched.reduce((s, r) => s + r.expected_amount, 0);
+      const totalDeposited = enriched.reduce((s, r) => s + r.deposited_amount, 0);
+      setHeaderTotals({ expected: totalExpected, deposited: totalDeposited });
+
       setLoading(false);
     })();
   }, [periodId, isAdmin]);
