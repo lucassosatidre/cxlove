@@ -30,7 +30,7 @@ type AuditImport = {
 
 type AuditPeriod = { id: string; month: number; year: number; status: string };
 
-type FileType = 'maquinona' | 'cresol' | 'bb';
+type FileType = 'maquinona' | 'cresol';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -79,19 +79,6 @@ const CARD_META: Record<FileType, { title: string; functionName: string; tip: Re
     icon: Landmark,
     multi: true,
   },
-  bb: {
-    title: 'Banco do Brasil',
-    functionName: 'import-bb',
-    tip: (
-      <>
-        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
-        <br />
-        Ex: para auditar Março → importe Fevereiro + Março + Abril.
-      </>
-    ),
-    icon: Landmark,
-    multi: true,
-  },
 };
 
 function fmtDateTime(iso: string) {
@@ -123,10 +110,7 @@ async function parseXlsxFile(file: File, type: FileType): Promise<{ rows: any[];
     return { rows };
   }
 
-  const sheetName =
-    type === 'bb'
-      ? workbook.SheetNames.find(n => /extrato/i.test(n)) ?? workbook.SheetNames[0]
-      : workbook.SheetNames[0];
+  const sheetName = workbook.SheetNames[0];
   if (!sheetName) return { rows: [], error: 'Arquivo sem abas' };
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
@@ -188,9 +172,9 @@ export default function AuditImport() {
   }, [isAdmin, periodIdParam]);
 
   const importsByType = useMemo(() => {
-    const map: Record<FileType, AuditImport[]> = { maquinona: [], cresol: [], bb: [] };
+    const map: Record<FileType, AuditImport[]> = { maquinona: [], cresol: [] };
     for (const i of imports) {
-      if (i.status === 'completed' && (i.file_type === 'maquinona' || i.file_type === 'cresol' || i.file_type === 'bb')) {
+      if (i.status === 'completed' && (i.file_type === 'maquinona' || i.file_type === 'cresol')) {
         map[i.file_type as FileType].push(i);
       }
     }
@@ -231,9 +215,6 @@ export default function AuditImport() {
       description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
     } else if (type === 'cresol') {
       description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
-    } else if (type === 'bb') {
-      const b = data.breakdown_by_category ?? {};
-      description = `${data.imported_rows} créditos: ${b.alelo ?? 0} Alelo, ${b.ticket ?? 0} Ticket, ${b.pluxee ?? 0} Pluxee, ${b.vr ?? 0} VR, ${b.brendi ?? 0} Brendi, ${b.outro ?? 0} outros.`;
     }
     return { description };
   };
@@ -241,7 +222,7 @@ export default function AuditImport() {
   const removeImport = async (importId: string) => {
     setRemovingId(importId);
     try {
-      // Cascade deletes deposits via FK ON DELETE CASCADE for cresol/bb (import_id column)
+      // Cascade deletes deposits via FK ON DELETE CASCADE for cresol (import_id column)
       const { error } = await supabase.from('audit_imports').delete().eq('id', importId);
       if (error) throw error;
       toast.success('✓ Importação removida');
@@ -280,7 +261,7 @@ export default function AuditImport() {
           </Card>
         )}
 
-        {(['maquinona', 'cresol', 'bb'] as FileType[]).map((t) => (
+        {(['maquinona', 'cresol'] as FileType[]).map((t) => (
           <ImportCard
             key={t}
             type={t}
@@ -396,7 +377,7 @@ function ImportCard({
   const buttonLabel = (() => {
     if (uploading) return 'Processando...';
     const n = files.length;
-    const base = type === 'cresol' ? 'Cresol' : type === 'bb' ? 'BB' : 'Maquinona';
+    const base = type === 'cresol' ? 'Cresol' : 'Maquinona';
     if (existingImports.length > 0) {
       return n > 1 ? `Adicionar ${n} extratos ${base}` : `Adicionar extrato ${base}`;
     }

@@ -37,10 +37,10 @@ type AuditPeriod = {
   closed_by: string | null;
 };
 
-type ImportSource = 'maquinona' | 'cresol' | 'bb';
+type ImportSource = 'maquinona' | 'cresol';
 
 type AuditImport = {
-  file_type: 'maquinona' | 'cresol' | 'bb';
+  file_type: 'maquinona' | 'cresol';
   status: string;
   file_name: string;
   imported_rows: number;
@@ -103,23 +103,20 @@ const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
 const FILE_LABELS: Record<ImportSource, string> = {
   maquinona: 'Maquinona',
   cresol: 'Cresol (iFood)',
-  bb: 'Banco do Brasil',
 };
 
 const SOURCE_GROUPS: { label: string; sources: ImportSource[] }[] = [
-  { label: 'Vendas & bancos', sources: ['maquinona', 'cresol', 'bb'] },
+  { label: 'Vendas & banco', sources: ['maquinona', 'cresol'] },
 ];
 
 const ACCEPT_BY_SOURCE: Record<ImportSource, string> = {
   maquinona: '.xlsx',
   cresol: '.xlsx',
-  bb: '.xlsx',
 };
 
 const FUNCTION_BY_SOURCE: Record<ImportSource, string> = {
   maquinona: 'import-maquinona',
   cresol: 'import-cresol',
-  bb: 'import-bb',
 };
 
 async function buildUploadPayload(src: ImportSource, periodId: string, file: File): Promise<any> {
@@ -140,15 +137,6 @@ async function buildUploadPayload(src: ImportSource, periodId: string, file: Fil
     const buf = await file.arrayBuffer();
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
-    return { ...base, rows };
-  }
-
-  if (src === 'bb') {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const sheetName = wb.SheetNames.find(n => /extrato/i.test(n)) ?? wb.SheetNames[0];
-    const sheet = wb.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
     return { ...base, rows };
   }
@@ -359,8 +347,8 @@ export default function AuditDashboard() {
     toast({ title: 'Período criado', description: `${MONTHS[month - 1]} / ${year}` });
   };
 
-  const importByType = (t: 'maquinona' | 'cresol' | 'bb') => imports.find(i => i.file_type === t);
-  const allImported = ['maquinona', 'cresol', 'bb'].every(t => importByType(t as any)?.status === 'completed');
+  const importByType = (t: 'maquinona' | 'cresol') => imports.find(i => i.file_type === t);
+  const allImported = ['maquinona', 'cresol'].every(t => importByType(t as any)?.status === 'completed');
   const isConciliated = period?.status === 'conciliado';
   const isClosed = period?.status === 'fechado';
   const canExport = isConciliated || isClosed;
@@ -827,7 +815,7 @@ export default function AuditDashboard() {
           <CardHeader>
             <CardTitle className="text-base">Importações do período</CardTitle>
             <p className="text-xs text-muted-foreground">
-              3 fontes: Maquinona (vendas iFood) + Cresol (depósitos iFood) + Banco do Brasil.
+              2 fontes: Maquinona (vendas crédito/débito/PIX) + Cresol (depósitos correspondentes).
             </p>
             <p className="text-xs text-muted-foreground mt-1">
               💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.

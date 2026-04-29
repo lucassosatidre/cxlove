@@ -160,7 +160,6 @@ Deno.serve(async (req) => {
     // Se o período já foi conciliado, limpar matches anteriores e voltar para 'importado'
     if (period.status === 'conciliado') {
       await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
-      await supabase.from('audit_voucher_matches').delete().eq('audit_period_id', audit_period_id);
       await supabase.from('audit_periods').update({ status: 'importado' }).eq('id', audit_period_id);
     }
 

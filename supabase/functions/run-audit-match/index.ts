@@ -39,10 +39,10 @@ Deno.serve(async (req) => {
       .eq('status', 'completed');
 
     const types = new Set((imports ?? []).map((i: any) => i.file_type));
-    const missing = ['maquinona', 'cresol', 'bb'].filter(t => !types.has(t));
+    const missing = ['maquinona', 'cresol'].filter(t => !types.has(t));
     if (missing.length > 0) {
       return new Response(JSON.stringify({
-        error: `Importe os 3 arquivos antes de conciliar. Faltando: ${missing.join(', ')}`,
+        error: `Importe os 2 arquivos antes de conciliar. Faltando: ${missing.join(', ')}`,
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
