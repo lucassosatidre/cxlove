@@ -239,7 +239,7 @@ function OperadoraDropzone({
         {imports.length > 0 ? (
           <Badge variant="secondary" className="bg-green-500/10 text-green-700 dark:text-green-400">
             <CheckCircle2 className="h-3 w-3 mr-1" />
-            {imports[0].imported_lots} lotes
+            {imports[0].rows_imported} linhas
           </Badge>
         ) : (
           <Badge variant="secondary" className="text-muted-foreground">não importado</Badge>
