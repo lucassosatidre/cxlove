@@ -84,20 +84,9 @@ export default function VoucherSettlementsImportSection({
   const allFour = ORDER.every(op => importsByOp[op]?.length > 0);
 
   const runMatch = async () => {
-    if (!periodId) return;
-    setMatching(true);
-    try {
-      const { data, error } = await supabase.rpc('match_voucher_lots', { p_period_id: periodId });
-      if (error) throw error;
-      setLastMatch(data);
-      toast.success('✓ Conciliação concluída', {
-        description: `${(data as any)?.matched_items ?? 0} itens casados, ${(data as any)?.matched_lots ?? 0} lotes ↔ BB. Confira o relatório abaixo ↓`,
-      });
-    } catch (e: any) {
-      toast.error('Erro ao conciliar extratos', { description: e?.message });
-    } finally {
-      setMatching(false);
-    }
+    toast.error('Conciliação de vouchers indisponível', {
+      description: 'O módulo de conciliação foi desativado. Apenas a importação está ativa.',
+    });
   };
 
   return (
