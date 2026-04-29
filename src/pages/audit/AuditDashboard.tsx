@@ -1,4 +1,3 @@
-// rebuild trigger
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
