@@ -50,18 +50,38 @@ Deno.serve(async (req) => {
     await supabase.from('audit_daily_matches').delete().eq('audit_period_id', audit_period_id);
 
     // ===== iFOOD MATCH (by date) =====
-    const { data: txs } = await supabase
-      .from('audit_card_transactions')
-      .select('expected_deposit_date,net_amount')
-      .eq('audit_period_id', audit_period_id)
-      .eq('deposit_group', 'ifood');
+    // Paginação manual: Supabase tem limit padrão 1000. Vendas iFood
+    // facilmente ultrapassam isso (mês cheio = ~2.5k txs). Sem paginação,
+    // dias do final do range somem do daily_matches e o carry-forward quebra.
+    const PAGE = 1000;
+    const txs: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('audit_card_transactions')
+        .select('expected_deposit_date,net_amount')
+        .eq('audit_period_id', audit_period_id)
+        .eq('deposit_group', 'ifood')
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      txs.push(...data);
+      if (data.length < PAGE) break;
+    }
 
-    const { data: deps } = await supabase
-      .from('audit_bank_deposits')
-      .select('deposit_date,amount')
-      .eq('audit_period_id', audit_period_id)
-      .eq('bank', 'cresol')
-      .eq('category', 'ifood');
+    const deps: any[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('audit_bank_deposits')
+        .select('deposit_date,amount')
+        .eq('audit_period_id', audit_period_id)
+        .eq('bank', 'cresol')
+        .eq('category', 'ifood')
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+      deps.push(...data);
+      if (data.length < PAGE) break;
+    }
 
     const txByDate = new Map<string, { amount: number; count: number }>();
     for (const t of txs ?? []) {
