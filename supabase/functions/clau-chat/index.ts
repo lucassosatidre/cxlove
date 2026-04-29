@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { fetchAllPaginated } from '../_shared/pagination.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -231,15 +232,21 @@ async function executeTool(
     switch (toolName) {
       case 'get_period_summary': {
         const { period_id } = input;
-        const { data: deps } = await supabase
-          .from('audit_bank_deposits')
-          .select('bank, category, match_status, amount, matched_competencia_amount, matched_adjacente_amount')
-          .eq('audit_period_id', period_id);
-        const { data: sales } = await supabase
-          .from('audit_card_transactions')
-          .select('deposit_group, gross_amount, net_amount, is_competencia')
-          .eq('audit_period_id', period_id)
-          .eq('is_competencia', true);
+        // Paginado: audit_bank_deposits e audit_card_transactions podem
+        // facilmente passar de 1000 rows num período mensal cheio.
+        const deps = await fetchAllPaginated<any>(
+          supabase
+            .from('audit_bank_deposits')
+            .select('bank, category, match_status, amount, matched_competencia_amount, matched_adjacente_amount')
+            .eq('audit_period_id', period_id),
+        );
+        const sales = await fetchAllPaginated<any>(
+          supabase
+            .from('audit_card_transactions')
+            .select('deposit_group, gross_amount, net_amount, is_competencia')
+            .eq('audit_period_id', period_id)
+            .eq('is_competencia', true),
+        );
         const summary: any = {};
         for (const cat of ['ifood', 'alelo', 'ticket', 'pluxee', 'vr']) {
           const venda = (sales ?? []).filter((s: any) => s.deposit_group === cat);
