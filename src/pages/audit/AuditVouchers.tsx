@@ -701,40 +701,69 @@ function UploadBBCard({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
-  const handleFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      toast.error('Apenas .xlsx é aceito');
-      return;
-    }
+  const handleFiles = async (files: File[]) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+    if (xlsx.length === 0) return;
+
     setUploading(true);
+    setProgress({ current: 0, total: xlsx.length });
+    const totalBreakdown: Record<string, number> = {};
+    let totalImported = 0;
+    let totalDuplicates = 0;
+    const failures: string[] = [];
+
     try {
       const p = await ensurePeriod();
       if (!p) return;
 
-      const buf = await file.arrayBuffer();
-      const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) throw new Error('Arquivo sem abas');
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
-      if (!rows.length) throw new Error('Arquivo vazio');
+      for (let i = 0; i < xlsx.length; i++) {
+        const file = xlsx[i];
+        setProgress({ current: i + 1, total: xlsx.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+          const sheetName = workbook.SheetNames[0];
+          if (!sheetName) throw new Error('Arquivo sem abas');
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+          if (!rows.length) throw new Error('Arquivo vazio');
 
-      const { data, error } = await supabase.functions.invoke('import-bb', {
-        body: { audit_period_id: p.id, rows, file_name: file.name },
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha na importação');
+          const { data, error } = await supabase.functions.invoke('import-bb', {
+            body: { audit_period_id: p.id, rows, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha na importação');
 
-      toast.success(data.message ?? `${data.imported_rows} créditos importados`, {
-        description: `Categorias: ${Object.entries(data.breakdown_by_category ?? {})
-          .filter(([, n]) => Number(n) > 0).map(([k, n]) => `${k}=${n}`).join(', ') || '—'}`,
-      });
+          totalImported += Number(data.imported_rows ?? 0);
+          totalDuplicates += Number(data.duplicate_rows ?? 0);
+          for (const [k, n] of Object.entries(data.breakdown_by_category ?? {})) {
+            totalBreakdown[k] = (totalBreakdown[k] ?? 0) + Number(n);
+          }
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      const breakdown = Object.entries(totalBreakdown)
+        .filter(([, n]) => Number(n) > 0)
+        .map(([k, n]) => `${k}=${n}`).join(', ') || '—';
+      if (failures.length === 0) {
+        toast.success(`${totalImported} créditos importados de ${xlsx.length} arquivo(s)`, {
+          description: `${totalDuplicates} duplicados ignorados. Categorias: ${breakdown}`,
+        });
+      } else {
+        toast.error(`${failures.length} de ${xlsx.length} falharam`, {
+          description: failures.join(' | '),
+        });
+      }
       await onAfter();
-    } catch (e: any) {
-      toast.error('Erro no import BB', { description: e?.message ?? 'Erro inesperado' });
     } finally {
       setUploading(false);
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -749,15 +778,17 @@ function UploadBBCard({
         <p className="text-xs text-muted-foreground">
           Extrato Banco do Brasil — depósitos voucher categorizados automaticamente
           por descrição (alelo / ticket / pluxee / vr / brendi / outros).
+          Para cobrir defasagem, importe <strong>2 meses</strong> (mês competência + posterior).
         </p>
         <input
           ref={inputRef}
           type="file"
           accept=".xlsx"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
           }}
         />
         <Button
@@ -767,7 +798,9 @@ function UploadBBCard({
           onClick={() => inputRef.current?.click()}
         >
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-          {uploading ? 'Importando…' : 'Selecionar XLSX'}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLSX (1 ou mais)'}
         </Button>
       </CardContent>
     </Card>
@@ -783,41 +816,65 @@ function UploadTicketCard({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
-  const handleFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Apenas .pdf é aceito');
-      return;
-    }
+  const handleFiles = async (files: File[]) => {
+    const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    const invalid = files.length - pdfs.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .pdf é aceito`);
+    if (pdfs.length === 0) return;
+
     setUploading(true);
+    setProgress({ current: 0, total: pdfs.length });
+    let totalLots = 0;
+    let totalItems = 0;
+    const failures: string[] = [];
+    const allWarnings: string[] = [];
+    const allIntegrity: string[] = [];
+
     try {
       const p = await ensurePeriod();
       if (!p) return;
 
-      const rawText = await extractPdfText(file);
+      for (let i = 0; i < pdfs.length; i++) {
+        const file = pdfs[i];
+        setProgress({ current: i + 1, total: pdfs.length });
+        try {
+          const rawText = await extractPdfText(file);
+          const { data, error } = await supabase.functions.invoke('import-ticket-pdf', {
+            body: { audit_period_id: p.id, file_name: file.name, raw_text: rawText },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Ticket');
 
-      const { data, error } = await supabase.functions.invoke('import-ticket-pdf', {
-        body: { audit_period_id: p.id, file_name: file.name, raw_text: rawText },
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha no import Ticket');
+          totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
+          totalItems += Number(data.inserted_items ?? 0);
+          for (const w of (data.warnings ?? []) as string[]) allWarnings.push(`${file.name}: ${w}`);
+          for (const e of (data.integrity_errors ?? []) as string[]) allIntegrity.push(`${file.name}: ${e}`);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
 
-      const integrity = (data.integrity_errors ?? []) as string[];
-      const warnings = (data.warnings ?? []) as string[];
-      toast.success(data.message, {
-        description: integrity.length > 0
-          ? `⚠ ${integrity.length} divergências de integridade. Veja console.`
-          : warnings.length > 0
-            ? `${warnings.length} warnings (não crítico)`
-            : 'Sem divergências',
-      });
-      if (integrity.length > 0) console.warn('Integrity:', integrity);
-      if (warnings.length > 0) console.info('Warnings:', warnings);
+      if (failures.length === 0) {
+        toast.success(`${totalLots} lotes / ${totalItems} vendas de ${pdfs.length} arquivo(s)`, {
+          description: allIntegrity.length > 0
+            ? `⚠ ${allIntegrity.length} divergências de integridade (veja console)`
+            : allWarnings.length > 0
+              ? `${allWarnings.length} warnings (não crítico)`
+              : 'Sem divergências',
+        });
+      } else {
+        toast.error(`${failures.length} de ${pdfs.length} falharam`, {
+          description: failures.join(' | '),
+        });
+      }
+      if (allIntegrity.length > 0) console.warn('Integrity:', allIntegrity);
+      if (allWarnings.length > 0) console.info('Warnings:', allWarnings);
       await onAfter();
-    } catch (e: any) {
-      toast.error('Erro no import Ticket', { description: e?.message ?? 'Erro inesperado' });
     } finally {
       setUploading(false);
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -832,15 +889,17 @@ function UploadTicketCard({
         <p className="text-xs text-muted-foreground">
           PDF "Extrato de Reembolsos Detalhado" do portal Ticket Edenred.
           Cada Nº Reembolso vira 1 lote = 1 depósito esperado no BB.
+          Pode selecionar mais de 1 PDF (ex: meses separados).
         </p>
         <input
           ref={inputRef}
           type="file"
           accept=".pdf"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handleFile(f);
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
           }}
         />
         <Button
@@ -850,7 +909,9 @@ function UploadTicketCard({
           onClick={() => inputRef.current?.click()}
         >
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-          {uploading ? 'Importando…' : 'Selecionar PDF'}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar PDF (1 ou mais)'}
         </Button>
       </CardContent>
     </Card>
