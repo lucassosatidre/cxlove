@@ -144,6 +144,7 @@ export default function AuditVouchers() {
   const [overrides, setOverrides] = useState<CompOverride[]>([]);
   const [expandedLot, setExpandedLot] = useState<string | null>(null);
   const [matching, setMatching] = useState(false);
+  const [expandedDeposit, setExpandedDeposit] = useState<string | null>(null);
   const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
@@ -408,6 +409,18 @@ export default function AuditVouchers() {
   }, [deposits, competenciaIni, bbWindowFim]);
 
 
+  // Lotes pareados agrupados por bb_deposit_id (depósito BB pode ter N lotes)
+  const lotsByDeposit = useMemo(() => {
+    const map = new Map<string, Lot[]>();
+    for (const l of lots) {
+      if (!l.bb_deposit_id) continue;
+      const arr = map.get(l.bb_deposit_id) ?? [];
+      arr.push(l);
+      map.set(l.bb_deposit_id, arr);
+    }
+    return map;
+  }, [lots]);
+
   const handleAutoMatch = async () => {
     if (!period) return;
     setMatching(true);
@@ -431,20 +444,31 @@ export default function AuditVouchers() {
   };
 
   const setLotMatch = async (lotId: string, depositId: string | null) => {
-    const update = depositId
-      ? { bb_deposit_id: depositId, status: 'matched', manual: true,
-          diff: (() => {
-            const lot = lots.find(l => l.id === lotId);
-            const dep = deposits.find(d => d.id === depositId);
-            return lot && dep ? Number(dep.amount) - Number(lot.valor_liquido) : null;
-          })() }
-      : { bb_deposit_id: null, status: 'pending', manual: false, diff: null };
-    const { error } = await supabase.from('audit_voucher_lots').update(update).eq('id', lotId);
-    if (error) {
-      toast.error('Erro ao atualizar match', { description: error.message });
+    if (!depositId) {
+      const { error } = await supabase
+        .from('audit_voucher_lots')
+        .update({ bb_deposit_id: null, status: 'pending', manual: false, diff: null })
+        .eq('id', lotId);
+      if (error) { toast.error('Erro ao remover match', { description: error.message }); return; }
+      toast.success('Match removido');
+      if (period) await refresh(period.id);
       return;
     }
-    toast.success(depositId ? 'Match atualizado' : 'Match removido');
+    // Match individual = diff (este lote × dep). Quando depósito tem N lotes
+    // somados, diff fica 0 pra cada (a tabela "Depósitos BB" mostra a soma).
+    const dep = deposits.find(d => d.id === depositId);
+    const lot = lots.find(l => l.id === lotId);
+    const otherLotsOnSameDep = lots.filter(l => l.bb_deposit_id === depositId && l.id !== lotId);
+    const isMultiLot = otherLotsOnSameDep.length > 0;
+    const diff = (dep && lot && !isMultiLot)
+      ? Number(dep.amount) - Number(lot.valor_liquido)
+      : 0;
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update({ bb_deposit_id: depositId, status: 'matched', manual: true, diff })
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao atualizar match', { description: error.message }); return; }
+    toast.success(isMultiLot ? `Match agregado (depósito agora paga ${otherLotsOnSameDep.length + 1} lotes)` : 'Match atualizado');
     if (period) await refresh(period.id);
   };
 
@@ -674,6 +698,13 @@ export default function AuditVouchers() {
                     const inCompetencia = comp?.count ?? 0;
                     const isParcial = inCompetencia > 0 && inCompetencia < totalItems;
                     const { subtotal, totalDesc, liquido } = computedLot(l, allItems);
+                    const ovr = overrideByLot.get(l.id);
+                    // Pra lotes parciais: mostra override (taxa de competência) na coluna
+                    // Descontos. Pra lotes 100%: mostra total do lote. Sem override em
+                    // lote parcial: célula em itálico "manual".
+                    const colDesc = isParcial
+                      ? (ovr ? Number(ovr.taxa_competencia) : null)
+                      : totalDesc;
                     return (
                       <Fragment key={l.id}>
                         <TableRow className="cursor-pointer hover:bg-muted/30" onClick={() => loadItems(l.id)}>
@@ -697,8 +728,12 @@ export default function AuditVouchers() {
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">{fmt(subtotal)}</TableCell>
-                          <TableCell className="text-right text-amber-700 dark:text-amber-400">{fmt(totalDesc)}</TableCell>
+                          <TableCell className="text-right">{fmt(isParcial ? Number(comp?.valor ?? 0) : subtotal)}</TableCell>
+                          <TableCell className="text-right text-amber-700 dark:text-amber-400">
+                            {colDesc === null ? (
+                              <span className="italic text-muted-foreground text-xs">manual</span>
+                            ) : fmt(colDesc)}
+                          </TableCell>
                           <TableCell className="text-right font-medium">{fmt(liquido)}</TableCell>
                           <TableCell>
                             {l.bb_deposit_id ? (() => {
@@ -724,6 +759,7 @@ export default function AuditVouchers() {
                                 competenciaFim={competenciaFim}
                                 deposits={deposits}
                                 depositNumberById={depositNumberById}
+                                lotsByDeposit={lotsByDeposit}
                                 override={overrideByLot.get(l.id) ?? null}
                                 onSetMatch={(depId) => setLotMatch(l.id, depId)}
                                 onSaveOverride={(taxa, note) => saveOverride(l.id, taxa, note)}
@@ -772,28 +808,110 @@ export default function AuditVouchers() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-8"></TableHead>
                     <TableHead className="w-12">#</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Descrição</TableHead>
-                    <TableHead>Detalhe</TableHead>
+                    <TableHead>Lotes pareados</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredDeposits.map(d => {
                     const numbered = depositNumberById.get(d.id);
+                    const matchedLots = lotsByDeposit.get(d.id) ?? [];
+                    const sumLots = matchedLots.reduce((s, l) => s + Number(l.valor_liquido), 0);
+                    const diff = Number(d.amount) - sumLots;
+                    const isExpanded = expandedDeposit === d.id;
                     return (
-                      <TableRow key={d.id}>
-                        <TableCell className="font-mono text-xs">{numbered ? `#${numbered.n}` : '—'}</TableCell>
-                        <TableCell>{fmtDate(d.deposit_date)}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[280px] truncate text-xs">{d.description ?? '—'}</TableCell>
-                        <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{d.detail ?? '—'}</TableCell>
-                        <TableCell className="text-right font-medium">{fmt(Number(d.amount))}</TableCell>
-                      </TableRow>
+                      <Fragment key={d.id}>
+                        <TableRow
+                          className={matchedLots.length > 0 ? 'cursor-pointer hover:bg-muted/30' : ''}
+                          onClick={() => matchedLots.length > 0 && setExpandedDeposit(isExpanded ? null : d.id)}
+                        >
+                          <TableCell>
+                            {matchedLots.length > 0 ? (
+                              isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{numbered ? `#${numbered.n}` : '—'}</TableCell>
+                          <TableCell>{fmtDate(d.deposit_date)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[280px] truncate text-xs">{d.description ?? '—'}</TableCell>
+                          <TableCell className="text-xs">
+                            {matchedLots.length === 0 ? (
+                              <Badge variant="outline" className="text-muted-foreground">Sem match</Badge>
+                            ) : matchedLots.length === 1 ? (
+                              <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
+                                1 lote{Math.abs(diff) > 0.05 ? ` ⚠ diff ${fmt(diff)}` : ' ✓'}
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400">
+                                {matchedLots.length} lotes somados{Math.abs(diff) > 0.05 ? ` ⚠ diff ${fmt(diff)}` : ' ✓'}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{fmt(Number(d.amount))}</TableCell>
+                        </TableRow>
+                        {isExpanded && matchedLots.length > 0 && (
+                          <TableRow className="bg-muted/20 hover:bg-muted/20">
+                            <TableCell colSpan={7} className="p-0">
+                              <div className="px-6 py-3 space-y-2">
+                                <div className="text-xs uppercase text-muted-foreground">
+                                  Lotes pagos por este depósito
+                                </div>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Reembolso</TableHead>
+                                      <TableHead>Produto</TableHead>
+                                      <TableHead>Crédito previsto</TableHead>
+                                      <TableHead>Manual?</TableHead>
+                                      <TableHead className="text-right">Valor líquido</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {matchedLots.map(l => (
+                                      <TableRow key={l.id}>
+                                        <TableCell className="font-mono text-xs">{l.numero_reembolso}</TableCell>
+                                        <TableCell>
+                                          <Badge variant="outline" className="font-mono">{l.produto ?? '—'}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-xs">{fmtDate(l.data_credito)}</TableCell>
+                                        <TableCell className="text-xs">
+                                          {l.manual ? (
+                                            <Badge variant="outline" className="text-[10px]">Manual</Badge>
+                                          ) : (
+                                            <span className="text-muted-foreground text-[10px]">Auto</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-right text-xs">{fmt(Number(l.valor_liquido))}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                    <TableRow className="bg-muted/30">
+                                      <TableCell colSpan={4} className="text-xs font-semibold">Σ lotes</TableCell>
+                                      <TableCell className="text-right text-xs font-semibold">{fmt(sumLots)}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="text-xs font-semibold">Depósito BB</TableCell>
+                                      <TableCell className="text-right text-xs font-semibold">{fmt(Number(d.amount))}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="text-xs font-semibold">Diferença</TableCell>
+                                      <TableCell className={`text-right text-xs font-semibold ${Math.abs(diff) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                                        {fmt(diff)} {Math.abs(diff) < 0.05 ? '✓' : '⚠'}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </TableBody>
@@ -865,7 +983,7 @@ function Stat({ label, value, className, hint }: { label: string; value: string;
 
 function LotDetail({
   lot, items, competenciaIni, competenciaFim,
-  deposits, depositNumberById, override,
+  deposits, depositNumberById, lotsByDeposit, override,
   onSetMatch, onSaveOverride, onDeleteOverride,
   month, year,
 }: {
@@ -875,6 +993,7 @@ function LotDetail({
   competenciaFim: string;
   deposits: BankDeposit[];
   depositNumberById: Map<string, { n: number; deposit: BankDeposit }>;
+  lotsByDeposit: Map<string, Lot[]>;
   override: CompOverride | null;
   onSetMatch: (depositId: string | null) => Promise<void>;
   onSaveOverride: (taxa: number, note: string | null) => Promise<void>;
@@ -983,6 +1102,8 @@ function LotDetail({
               candidates={matchCandidates}
               expectedAmount={Number(lot.valor_liquido)}
               depositNumberById={depositNumberById}
+              lotsByDeposit={lotsByDeposit}
+              myLotId={lot.id}
               onSet={onSetMatch}
             />
           </div>
@@ -1052,12 +1173,14 @@ function ResumoLine({ label, value, valueClass, hint }: { label: string; value: 
 }
 
 function MatchSelector({
-  currentDepositId, candidates, expectedAmount, depositNumberById, onSet,
+  currentDepositId, candidates, expectedAmount, depositNumberById, lotsByDeposit, myLotId, onSet,
 }: {
   currentDepositId: string | null;
   candidates: BankDeposit[];
   expectedAmount: number;
   depositNumberById: Map<string, { n: number; deposit: BankDeposit }>;
+  lotsByDeposit: Map<string, Lot[]>;
+  myLotId: string;
   onSet: (depositId: string | null) => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
@@ -1079,12 +1202,20 @@ function MatchSelector({
           <SelectItem value="__none__">— Sem match (pendente)</SelectItem>
           {candidates.map(d => {
             const num = depositNumberById.get(d.id);
-            const diff = Number(d.amount) - expectedAmount;
-            const exact = Math.abs(diff) < 0.05;
+            // Outros lotes já apontando pra este depósito (excluindo o lote atual)
+            const others = (lotsByDeposit.get(d.id) ?? []).filter(l => l.id !== myLotId);
+            const otherSum = others.reduce((s, l) => s + Number(l.valor_liquido), 0);
+            // Pra esta venda fazer "soma exata" com os outros lotes:
+            const expectedTotal = otherSum + expectedAmount;
+            const diffSoma = Number(d.amount) - expectedTotal;
+            const exactSoma = Math.abs(diffSoma) < 0.05;
             return (
               <SelectItem key={d.id} value={d.id}>
                 #{num?.n ?? '?'} — {fmtDate(d.deposit_date)} — {fmt(Number(d.amount))}
-                {exact ? ' ✓' : ` (diff ${diff > 0 ? '+' : ''}${fmt(diff)})`}
+                {others.length === 0
+                  ? (exactSoma ? ' ✓' : ` (diff ${diffSoma > 0 ? '+' : ''}${fmt(diffSoma)})`)
+                  : ` · já tem ${others.length} lote(s) (soma${exactSoma ? ' ✓' : ` diff ${fmt(diffSoma)}`})`
+                }
               </SelectItem>
             );
           })}
