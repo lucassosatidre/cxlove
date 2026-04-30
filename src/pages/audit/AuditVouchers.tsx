@@ -705,7 +705,7 @@ export default function AuditVouchers() {
                               const dep = depositNumberById.get(l.bb_deposit_id);
                               return (
                                 <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
-                                  ✓ {dep ? `#${dep.n} ${fmtDate(dep.deposit_date)}` : 'Pareado'}
+                                  ✓ {dep ? `#${dep.n} ${fmtDate(dep.deposit.deposit_date)}` : 'Pareado'}
                                   {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
                                 </Badge>
                               );
