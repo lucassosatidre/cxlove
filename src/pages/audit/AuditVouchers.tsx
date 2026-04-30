@@ -646,10 +646,11 @@ export default function AuditVouchers() {
         </Card>
 
         {/* Cards de upload */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <UploadBBCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
           <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
           <UploadAleloCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
+          <UploadVRCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
         </div>
 
         {/* Cross-check Maquinona × operadora atual */}
@@ -1835,6 +1836,110 @@ function UploadAleloCard({
           {uploading
             ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
             : 'Selecionar XLSX (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function UploadVRCard({
+  period, ensurePeriod, onAfter,
+}: {
+  period: AuditPeriod | null;
+  ensurePeriod: () => Promise<AuditPeriod | null>;
+  onAfter: () => Promise<void> | void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const xls = files.filter(f => /\.(xlsx?|XLSX?)$/.test(f.name));
+    const invalid = files.length - xls.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xls ou .xlsx`);
+    if (xls.length === 0) return;
+
+    setUploading(true);
+    setProgress({ current: 0, total: xls.length });
+    let totalLots = 0;
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < xls.length; i++) {
+        const file = xls[i];
+        setProgress({ current: i + 1, total: xls.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+          let sheetName = workbook.SheetNames.find(n =>
+            n.trim().toLowerCase().includes('reembolso') || n.trim().toLowerCase().includes('guias')
+          );
+          if (!sheetName) sheetName = workbook.SheetNames[0];
+          if (!sheetName) throw new Error('Arquivo sem abas');
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+          if (!rows.length) throw new Error('Aba vazia');
+
+          const { data, error } = await supabase.functions.invoke('import-vr-xls', {
+            body: { audit_period_id: p.id, rows, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import VR');
+
+          totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalLots} lotes VR importados`);
+      } else {
+        toast.error(`${failures.length} de ${xls.length} falharam`, { description: failures.join(' | ') });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileSpreadsheet className="h-5 w-5 text-pink-600" />
+        <CardTitle className="text-base">Reembolsos VR (.xls)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          XLS "Guias de Reembolso" do portal VR. Cada Número Guia vira 1 lote = 1 crédito BB.
+          Sem detalhe venda-a-venda (item agregado por lote).
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xls,.xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button
+          variant="default"
+          className="gap-2"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLS (1 ou mais)'}
         </Button>
       </CardContent>
     </Card>
