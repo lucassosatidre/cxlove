@@ -1,0 +1,43 @@
+-- Recategorização de depósitos BB pra capturar variações que a regex original
+-- não cobria (ex: depósito Alelo cuja descrição/detalhe vinha sem o nome
+-- "ALELO" mas com o CNPJ 04.740.876/0001-25).
+--
+-- Aplica a mesma lógica do categorizeBB() atualizado em import-bb/index.ts.
+-- Roda em deps de bank='bb' e ATUALIZA category quando a regex nova pega
+-- algo que a antiga retornava 'outro'. Idempotente.
+
+UPDATE public.audit_bank_deposits
+SET category = 'alelo'
+WHERE bank = 'bb'
+  AND (
+    UPPER(COALESCE(description, '')) ~ 'ALELO|04\.?740\.?876'
+    OR UPPER(COALESCE(detail, '')) ~ 'ALELO|04\.?740\.?876'
+  )
+  AND COALESCE(category, '') != 'alelo';
+
+UPDATE public.audit_bank_deposits
+SET category = 'ticket'
+WHERE bank = 'bb'
+  AND (
+    UPPER(COALESCE(description, '')) ~ 'TICKET|EDENRED|47\.?866\.?934'
+    OR UPPER(COALESCE(detail, '')) ~ 'TICKET|EDENRED|47\.?866\.?934'
+  )
+  AND COALESCE(category, '') NOT IN ('ticket', 'alelo');
+
+UPDATE public.audit_bank_deposits
+SET category = 'pluxee'
+WHERE bank = 'bb'
+  AND (
+    UPPER(COALESCE(description, '')) ~ 'PLUXEE|SODEXO'
+    OR UPPER(COALESCE(detail, '')) ~ 'PLUXEE|SODEXO'
+  )
+  AND COALESCE(category, '') NOT IN ('pluxee', 'alelo', 'ticket');
+
+UPDATE public.audit_bank_deposits
+SET category = 'vr'
+WHERE bank = 'bb'
+  AND (
+    UPPER(COALESCE(description, '')) ~ '78626983|BANCO VR|VR BENEFICIOS|VR REFEICAO'
+    OR UPPER(COALESCE(detail, '')) ~ '78626983|BANCO VR|VR BENEFICIOS|VR REFEICAO'
+  )
+  AND COALESCE(category, '') NOT IN ('vr', 'alelo', 'ticket', 'pluxee');

@@ -48,10 +48,14 @@ function parseBBValue(v: any): { amount: number; isCredit: boolean } | null {
 
 function categorizeBB(detail: string): string {
   const d = (detail || '').toUpperCase();
-  if (/ALELO/.test(d)) return 'alelo';
-  if (/TICKET/.test(d)) return 'ticket';
+  // Alelo: nome ou CNPJ 04.740.876/0001-25
+  if (/ALELO/.test(d) || /04\.?740\.?876/.test(d)) return 'alelo';
+  // Ticket Edenred: nome ou CNPJ 47.866.934/0001-74
+  if (/TICKET|EDENRED/.test(d) || /47\.?866\.?934/.test(d)) return 'ticket';
+  // Pluxee/Sodexo
   if (/PLUXEE|SODEXO/.test(d)) return 'pluxee';
-  if (/78626983|BANCO VR/.test(d)) return 'vr';
+  // VR
+  if (/78626983|BANCO VR|VR\s+BENEFICIOS|VR\s+REFEICAO/.test(d)) return 'vr';
   if (/BRENDI/.test(d)) return 'brendi';
   return 'outro';
 }

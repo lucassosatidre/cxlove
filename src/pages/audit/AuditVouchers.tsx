@@ -459,6 +459,21 @@ export default function AuditVouchers() {
     }
   };
 
+  const setLotMatchSecondary = async (lotId: string, depositId: string | null) => {
+    const lot = lots.find(l => l.id === lotId);
+    const dep1 = lot?.bb_deposit_id ? deposits.find(d => d.id === lot.bb_deposit_id) : null;
+    const dep2 = depositId ? deposits.find(d => d.id === depositId) : null;
+    const sumDeps = (dep1 ? Number(dep1.amount) : 0) + (dep2 ? Number(dep2.amount) : 0);
+    const diff = lot ? sumDeps - Number(lot.valor_liquido) : 0;
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update({ bb_deposit_id_2: depositId, manual: true, diff })
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao atualizar 2º match', { description: error.message }); return; }
+    toast.success(depositId ? '2º depósito vinculado' : '2º depósito removido');
+    if (period) await refresh(period.id);
+  };
+
   const setLotMatch = async (lotId: string, depositId: string | null) => {
     if (!depositId) {
       const { error } = await supabase
@@ -801,6 +816,7 @@ export default function AuditVouchers() {
                                 lotsByDeposit={lotsByDeposit}
                                 override={overrideByLot.get(l.id) ?? null}
                                 onSetMatch={(depId) => setLotMatch(l.id, depId)}
+                                onSetMatchSecondary={(depId) => setLotMatchSecondary(l.id, depId)}
                                 onSaveOverride={(taxa, note) => saveOverride(l.id, taxa, note)}
                                 onDeleteOverride={() => deleteOverride(l.id)}
                                 month={month}
@@ -1023,7 +1039,7 @@ function Stat({ label, value, className, hint }: { label: string; value: string;
 function LotDetail({
   lot, items, competenciaIni, competenciaFim,
   deposits, depositNumberById, lotsByDeposit, override,
-  onSetMatch, onSaveOverride, onDeleteOverride,
+  onSetMatch, onSetMatchSecondary, onSaveOverride, onDeleteOverride,
   month, year,
 }: {
   lot: Lot;
@@ -1035,6 +1051,7 @@ function LotDetail({
   lotsByDeposit: Map<string, Lot[]>;
   override: CompOverride | null;
   onSetMatch: (depositId: string | null) => Promise<void>;
+  onSetMatchSecondary: (depositId: string | null) => Promise<void>;
   onSaveOverride: (taxa: number, note: string | null) => Promise<void>;
   onDeleteOverride: () => Promise<void>;
   month: number;
@@ -1154,6 +1171,23 @@ function LotDetail({
               myLotId={lot.id}
               onSet={onSetMatch}
             />
+            {/* 2º depósito (caso 1 lote pago em 2 TEDs separados — Alelo) */}
+            {lot.bb_deposit_id && (
+              <div className="mt-2 space-y-1">
+                <div className="text-[11px] text-muted-foreground">
+                  + 2º depósito (opcional, quando lote foi pago em 2 TEDs)
+                </div>
+                <MatchSelector
+                  currentDepositId={lot.bb_deposit_id_2}
+                  candidates={matchCandidates.filter(d => d.id !== lot.bb_deposit_id)}
+                  expectedAmount={Number(lot.valor_liquido) - Number(deposits.find(d => d.id === lot.bb_deposit_id)?.amount ?? 0)}
+                  depositNumberById={depositNumberById}
+                  lotsByDeposit={lotsByDeposit}
+                  myLotId={lot.id}
+                  onSet={onSetMatchSecondary}
+                />
+              </div>
+            )}
           </div>
 
           {/* Override de taxa quando lote parcial */}
