@@ -152,6 +152,7 @@ export default function AuditVouchers() {
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
   const [showAllLots, setShowAllLots] = useState(false);
   const [selectedOperadora, setSelectedOperadora] = useState<string>('ticket');
+  const [showCrossDetail, setShowCrossDetail] = useState(false);
 
   const refresh = async (periodId: string) => {
     const compIni = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -375,26 +376,62 @@ export default function AuditVouchers() {
   }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot]);
 
   // Cross-check Maquinona × operadora atual.
+  // Lista também as divergências individuais: vendas que estão só em um dos lados
+  // (match por data exata + valor com tolerância R$0,01).
   const crossCheck = useMemo(() => {
+    type MaqV = { id: string; sale_date: string; gross_amount: number };
+    type PortalV = { id: string; lot_id: string; data_transacao: string; valor: number; numero_documento: string | null };
+
     const maqFiltered = maquinonaVouchers.filter(m => m.deposit_group === selectedOperadora);
-    const maqCount = maqFiltered.length;
-    const maqBruto = maqFiltered.reduce((s, m) => s + Number(m.gross_amount || 0), 0);
+    const maqList: MaqV[] = maqFiltered.map(m => ({
+      id: m.id, sale_date: m.sale_date, gross_amount: Number(m.gross_amount || 0),
+    }));
+    const maqCount = maqList.length;
+    const maqBruto = maqList.reduce((s, m) => s + m.gross_amount, 0);
+
     const operadoraLotIds = new Set(allOperadoraLots.map(l => l.id));
-    let opCount = 0;
-    let opBruto = 0;
+    const portalList: PortalV[] = [];
     for (const [lotId, items] of Object.entries(allItemsByLot)) {
       if (!operadoraLotIds.has(lotId)) continue;
       for (const it of items) {
         if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
-          opCount++;
-          opBruto += Number(it.valor || 0);
+          portalList.push({
+            id: it.id, lot_id: lotId,
+            data_transacao: it.data_transacao,
+            valor: Number(it.valor || 0),
+            numero_documento: it.numero_documento ?? null,
+          });
         }
       }
     }
+    const opCount = portalList.length;
+    const opBruto = portalList.reduce((s, p) => s + p.valor, 0);
+
+    // Match: pra cada venda portal, procura UMA venda Maquinona com mesma data + valor (±0.01)
+    const usedMaq = new Set<string>();
+    const usedPortal = new Set<string>();
+    for (const p of portalList) {
+      const candidate = maqList.find(m =>
+        !usedMaq.has(m.id) && m.sale_date === p.data_transacao && Math.abs(m.gross_amount - p.valor) <= 0.01
+      );
+      if (candidate) {
+        usedMaq.add(candidate.id);
+        usedPortal.add(p.id);
+      }
+    }
+    const onlyMaq = maqList.filter(m => !usedMaq.has(m.id));
+    const onlyPortal = portalList.filter(p => !usedPortal.has(p.id));
+
     const diffCount = maqCount - opCount;
     const diffBruto = Math.round((maqBruto - opBruto) * 100) / 100;
-    return { maqCount, maqBruto, opCount, opBruto, diffCount, diffBruto };
+    return { maqCount, maqBruto, opCount, opBruto, diffCount, diffBruto, onlyMaq, onlyPortal };
   }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots]);
+
+  const lotById = useMemo(() => {
+    const m = new Map<string, Lot>();
+    for (const l of lots) m.set(l.id, l);
+    return m;
+  }, [lots]);
 
   // Depósitos BB filtrados pela janela do mês de competência (até +60 dias) e categoria.
   const filteredDeposits = useMemo(() => {
@@ -637,16 +674,98 @@ export default function AuditVouchers() {
                 hint={`${crossCheck.diffCount > 0 ? '+' : ''}${crossCheck.diffCount} venda(s)`}
                 className={Math.abs(crossCheck.diffBruto) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
               />
-              <div className="md:col-span-2 flex items-center">
+              <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
                 {crossCheck.maqCount === 0 && crossCheck.opCount === 0 ? (
                   <Badge variant="outline" className="text-muted-foreground">Sem dados</Badge>
-                ) : Math.abs(crossCheck.diffBruto) < 0.05 && crossCheck.diffCount === 0 ? (
+                ) : Math.abs(crossCheck.diffBruto) < 0.05 && crossCheck.diffCount === 0
+                    && crossCheck.onlyMaq.length === 0 && crossCheck.onlyPortal.length === 0 ? (
                   <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">✓ Vendas batem</Badge>
                 ) : (
-                  <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400">⚠ Divergência</Badge>
+                  <>
+                    <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400">⚠ Divergência</Badge>
+                    {(crossCheck.onlyMaq.length > 0 || crossCheck.onlyPortal.length > 0) && (
+                      <Button size="sm" variant="outline" onClick={() => setShowCrossDetail(s => !s)}>
+                        {showCrossDetail ? 'Ocultar' : 'Detalhar'} ({crossCheck.onlyMaq.length + crossCheck.onlyPortal.length})
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
+
+            {showCrossDetail && (crossCheck.onlyMaq.length > 0 || crossCheck.onlyPortal.length > 0) && (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded border bg-card">
+                  <div className="px-3 py-2 text-xs uppercase text-muted-foreground border-b flex justify-between">
+                    <span>Só na Maquinona ({crossCheck.onlyMaq.length})</span>
+                    <span className="font-mono">
+                      {fmt(crossCheck.onlyMaq.reduce((s, m) => s + m.gross_amount, 0))}
+                    </span>
+                  </div>
+                  {crossCheck.onlyMaq.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data venda</TableHead>
+                          <TableHead className="text-right">Bruto</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {crossCheck.onlyMaq.map(m => (
+                          <TableRow key={m.id}>
+                            <TableCell className="text-xs">{fmtDate(m.sale_date)}</TableCell>
+                            <TableCell className="text-right text-xs">{fmt(m.gross_amount)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <div className="rounded border bg-card">
+                  <div className="px-3 py-2 text-xs uppercase text-muted-foreground border-b flex justify-between">
+                    <span>Só no portal {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} ({crossCheck.onlyPortal.length})</span>
+                    <span className="font-mono">
+                      {fmt(crossCheck.onlyPortal.reduce((s, p) => s + p.valor, 0))}
+                    </span>
+                  </div>
+                  {crossCheck.onlyPortal.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data venda</TableHead>
+                          <TableHead>Doc</TableHead>
+                          <TableHead>Lote</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {crossCheck.onlyPortal.map(p => {
+                          const lot = lotById.get(p.lot_id);
+                          return (
+                            <TableRow key={p.id}>
+                              <TableCell className="text-xs">{fmtDate(p.data_transacao)}</TableCell>
+                              <TableCell className="font-mono text-xs">{p.numero_documento ?? '—'}</TableCell>
+                              <TableCell className="font-mono text-xs">{lot?.numero_reembolso ?? '—'}</TableCell>
+                              <TableCell className="text-right text-xs">{fmt(p.valor)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <p className="md:col-span-2 text-[11px] text-muted-foreground">
+                  Match feito por <strong>data + valor exato</strong>. Possíveis causas de divergência:
+                  cancelamento parcial (valor diferente), venda de fim do dia que muda de competência
+                  no portal por fuso/corte, venda Maquinona não-aprovada que não foi gravada no portal,
+                  ou vendas duplicadas/repetidas.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
