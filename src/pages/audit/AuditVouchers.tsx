@@ -407,12 +407,6 @@ export default function AuditVouchers() {
     return map;
   }, [deposits, competenciaIni, bbWindowFim]);
 
-  // Override de competência indexado por lot_id
-  const overrideByLot = useMemo(() => {
-    const map = new Map<string, CompOverride>();
-    for (const o of overrides) map.set(o.lot_id, o);
-    return map;
-  }, [overrides]);
 
   const handleAutoMatch = async () => {
     if (!period) return;
