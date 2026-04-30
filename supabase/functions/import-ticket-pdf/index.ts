@@ -1,16 +1,9 @@
 // @ts-nocheck
-// Recebe texto bruto extraído do PDF "Extrato de Reembolsos Detalhado" Ticket Edenred
-// (frontend usa pdfjs-dist pra extrair via getDocument().getTextContent()).
-//
-// Estrutura do PDF — cada lote (Nº Reembolso) tem:
-//   linhas de venda: <num_reembolso> <num_contrato> <produto> <data_corte> <data_credito> <cod_estab> PIZZARIA ESTRELA <data_transacao> <data_postagem> <num_doc> TEF COMPRA <num_cartao_mascarado> R$<valor> <cnpj>
-//   linha subtotal: <num_reembolso> Subtotal de Vendas R$<x>
-//   linhas de descontos: <num_contrato> <data_credito> <descrição> R$<x>
-//     descrições: "Tarifa de gestão de pagamento", "Tarifa por transação", "Taxa TPE", "Anuidade Cartao Tre Ref."
-//   linha total descontos: Total de Descontos R$<x>
-//   linha valor líquido: Valor Líquido R$<x>
-//
-// Um lote = um crédito BB. Persistimos audit_voucher_lots (1 row) + audit_voucher_lot_items (N rows).
+// Recebe texto bruto extraído do PDF "Extrato de Reembolsos Detalhado" Ticket Edenred.
+// O frontend (pdfjs-dist) envia tudo concatenado por espaço (ordenado por Y desc, X asc),
+// sem tentar reconstruir linhas — colunas tabulares têm Y ligeiramente diferente que
+// rompiam agrupamento por Y. Aqui usamos regex globais sobre a string contínua e ordenamos
+// os matches por posição pra reconstruir a sequência lógica.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -37,100 +30,20 @@ function parseValor(s: string): number | null {
   return isFinite(n) ? n : null;
 }
 
-// ============================================================
-// Pré-processamento: junta linhas de continuação do extract_text.
-// O pdfjs quebra textos longos em múltiplas linhas. Estratégias:
-//   - "PIZZARIA\nESTRELA" → "PIZZARIA ESTRELA" (cabeçalho do estabelecimento na linha de venda)
-//   - "Tarifa de gestão\nde pagamento R$8,70" → uma linha
-//   - "Tarifa por\ntransação R$0,87" → uma linha
-//   - "Anuidade Cartao\nTre Ref. R$341,92" → uma linha
-//   - "Subtotal de\nVendas R$X" → uma linha
-//   - "Total de\nDescontos R$X" → uma linha
-//   - Cabeçalhos multi-linha "Número do\nReembolso", etc — descartar antes do data
-//   - "Página X de Y" — remover
-// ============================================================
-function preprocessRawText(raw: string): string[] {
-  // 1) Une quebras de linha "soltas" — heurística: se a próxima linha não começa
-  //    com um padrão de início de registro (Nº Reembolso 8-9 dígitos, ou Nº Contrato
-  //    12 dígitos seguido de data, ou "Total de", "Valor Líquido", "Subtotal de"),
-  //    ela é continuação da anterior.
-  const lines = raw.split(/\r?\n/);
-  const merged: string[] = [];
-  let buf = '';
-
-  const isNewRecordStart = (line: string): boolean => {
-    const t = line.trim();
-    if (!t) return false;
-    // Linha de venda: começa com "<reembolso 8-9 dígitos> <contrato 11-12 dígitos> <produto>"
-    if (/^\d{8,9}\s+\d{10,12}\s+(TRE|TAE|TF)\s/.test(t)) return true;
-    // Linha de subtotal: "<reembolso 8-9 dígitos> Subtotal de"
-    if (/^\d{8,9}\s+Subtotal\s+de/.test(t)) return true;
-    // Linha de desconto: "<contrato 11-12 dígitos> <data DD/MM/YYYY>"
-    if (/^\d{10,12}\s+\d{2}\/\d{2}\/\d{4}/.test(t)) return true;
-    // Linhas finais
-    if (/^Total\s+de\s+Descontos/.test(t)) return true;
-    if (/^Total\s+de$/.test(t)) return true;
-    if (/^Valor\s+Líquido/.test(t)) return true;
-    // Página X de Y
-    if (/^Página\s+\d+\s+de\s+\d+/.test(t)) return true;
-    return false;
-  };
-
-  for (const line of lines) {
-    if (isNewRecordStart(line)) {
-      if (buf) merged.push(buf);
-      buf = line.trim();
-    } else {
-      // Continuação — concatena com espaço
-      buf = buf ? buf + ' ' + line.trim() : line.trim();
-    }
-  }
-  if (buf) merged.push(buf);
-
-  // 2) Normaliza fragmentação de "Tarifa por transação" entre páginas. O PDF
-  //    quebra em duas linhas: "<C> <D> Tarifa por R$X" + "<C> <D> transação R$X"
-  //    (com Página N de Y entre elas), e o merge agrupa cada uma como discount
-  //    separado. Solução: descarta a continuação "<C> <D> transação R$X" pra não
-  //    duplicar, e a categorizacão de "Tarifa por" sozinho fica como tarifa_transacao
-  //    em normalizeDiscountKey.
-  const dedupedContinuation = merged.filter(l => {
-    return !/^\d{10,12}\s+\d{2}\/\d{2}\/\d{4}\s+transação\s+R\$/.test(l);
-  });
-
-  // 3) Remove cabeçalhos das páginas (header da tabela, dados da empresa, "Página X de Y").
-  return dedupedContinuation.filter(l => {
-    if (!l) return false;
-    if (/^Página\s+\d+\s+de\s+\d+/.test(l)) return false;
-    if (/^Empresa:\s/.test(l)) return false;
-    if (/^CNPJ:\s/.test(l)) return false;
-    if (/^Emissão:\s/.test(l)) return false;
-    if (/^Extrato\s+de\s+Reembolsos/.test(l)) return false;
-    if (/^Contrato:\s/.test(l)) return false;
-    if (/^Frequência:\s/.test(l)) return false;
-    if (/^Lançamentos\s+Efetuados/.test(l)) return false;
-    // Cabeçalho da tabela
-    if (/^Número\s+do/.test(l)) return false;
-    if (/^Reembolso/.test(l)) return false;
-    if (/^Contrato\s+Produto/.test(l)) return false;
-    if (/^Data\s+de\s+corte/.test(l)) return false;
-    if (/^Cód\.\s+Estabelecimento/.test(l)) return false;
-    if (/^Estabelecimento/.test(l)) return false;
-    if (/^Data\s+da/.test(l)) return false;
-    if (/^transação\s*$/.test(l)) return false;
-    if (/^postagem\s*$/.test(l)) return false;
-    if (/^documento\s*$/.test(l)) return false;
-    if (/^Tipo\s+de/.test(l)) return false;
-    if (/^Descrição\s+do/.test(l)) return false;
-    if (/^lançamento/.test(l)) return false;
-    if (/^Valor\s+da\s*$/.test(l)) return false;
-    if (/^CNPJ\s+da\s+transação/.test(l)) return false;
-    return true;
-  });
+function normalizeDiscountKey(descricao: string): string {
+  const d = descricao.toLowerCase().trim();
+  if (d.includes('tarifa de gestão') || d.includes('tarifa de gestao')) return 'tarifa_gestao';
+  if (d.includes('tarifa por transação') || d.includes('tarifa por transacao')) return 'tarifa_transacao';
+  if (d === 'tarifa por') return 'tarifa_transacao'; // fragmento da quebra de página (raro)
+  if (d.includes('taxa tpe')) return 'taxa_tpe';
+  if (d.includes('anuidade')) return 'anuidade';
+  return 'outros';
 }
 
 // ============================================================
-// Parser: estado-máquina sobre as linhas pré-processadas.
-// Retorna lotes parseados.
+// Parser por eventos posicionais.
+// Regex globais detectam cada padrão na string contínua. Eventos são ordenados
+// por posição (m.index) e processados como estado-máquina.
 // ============================================================
 type ParsedItem = {
   data_transacao: string;
@@ -138,7 +51,6 @@ type ParsedItem = {
   numero_documento: string | null;
   numero_cartao_mascarado: string | null;
   valor: number;
-  estabelecimento: string | null;
   cnpj: string | null;
 };
 
@@ -156,27 +68,134 @@ type ParsedLot = {
   valor_liquido: number;
 };
 
-function parseTicketRefundLines(lines: string[]): { lots: ParsedLot[]; warnings: string[] } {
-  const lots: ParsedLot[] = [];
+// Padrões — `g` flag pra matchAll. Vários campos opcionais/flexíveis pq o pdfjs
+// pode extrair tokens em ordem diferente da visual ou separar números.
+//
+// Estrutura visual de uma linha de venda:
+//   <reembolso 8-9d> <contrato 10-12d> <TRE|TAE|TF> <data_corte> <data_credito>
+//   <cod_estab> [PIZZARIA ESTRELA] <data_tx> <data_post> <num_doc> [TEF COMPRA]
+//   <****cartao> R$<valor> <cnpj>
+//
+// Ancoramos pelo cartão (`\*+\d+`) que é a âncora mais específica do registro.
+// Entre data_postagem e o cartão pode ter num_doc fragmentado e/ou "TEF COMPRA"
+// — capturamos como bloco "miolo" não-greedy de até 40 chars.
+const SALE_RE =
+  /(\d{8,9})\s+(\d{10,12})\s+(TRE|TAE|TF)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d+)\s+(?:PIZZARIA\s+ESTRELA\s+)?(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+([\S\s]{1,60}?)\s+(\*+\d+)\s+(R\$[\d.,]+)\s+(\d+\.\d{3}\.\d+\/\d+-\d+)/g;
+
+// Subtotal: "<reembolso> Subtotal de Vendas R$X"
+const SUBTOTAL_RE = /(\d{8,9})\s+Subtotal\s+de\s+Vendas\s+(R\$[\d.,]+)/g;
+
+// Descontos: "<contrato> <data> <descrição até "R$"> R$X"
+// Captura o bloco descrição até R$ — pode ser "Tarifa de gestão de pagamento",
+// "Tarifa por transação", "Taxa TPE", "Anuidade Cartao Tre Ref.", etc.
+const DISCOUNT_RE = /(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.]+?)\s+(R\$[\d.,]+)/g;
+
+// Total Descontos
+const TOTAL_DESC_RE = /Total\s+de\s+Descontos\s+(R\$[\d.,]+)/g;
+
+// Valor Líquido
+const VALOR_LIQ_RE = /Valor\s+Líquido\s+(R\$[\d.,]+)/g;
+
+type Event =
+  | { kind: 'sale'; pos: number; numReembolso: string; numContrato: string; produto: string;
+      dataCorte: string | null; dataCredito: string; codEstab: string;
+      dataTx: string; dataPost: string | null; numDoc: string | null;
+      numCartao: string; valor: number; cnpj: string }
+  | { kind: 'subtotal'; pos: number; numReembolso: string; valor: number }
+  | { kind: 'discount'; pos: number; numContrato: string; descricao: string; valor: number }
+  | { kind: 'total_desc'; pos: number; valor: number }
+  | { kind: 'valor_liq'; pos: number; valor: number };
+
+function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[] } {
   const warnings: string[] = [];
+  const events: Event[] = [];
+
+  // Coleta vendas
+  for (const m of text.matchAll(SALE_RE)) {
+    const valor = parseValor(m[11]);
+    const dataTx = parseDateBR(m[7]);
+    const dataCredito = parseDateBR(m[5]);
+    if (valor == null || !dataTx || !dataCredito) continue;
+    // Extrai num_doc do "miolo" (m[9]) que pode conter "TEF COMPRA" e números
+    // fragmentados. Junta tokens não-letra (números) que provavelmente são
+    // continuação do mesmo número de documento.
+    const miolo = m[9].replace(/TEF/gi, '').replace(/COMPRA/gi, '').trim();
+    const mioloTokens = miolo.split(/\s+/).filter(t => t.length > 0);
+    // Concatena tokens numéricos consecutivos (caso "35926" tenha virado "359" "26")
+    const numericTokens: string[] = [];
+    for (const t of mioloTokens) {
+      if (/^\d+$/.test(t)) numericTokens.push(t);
+    }
+    const numDoc = numericTokens.length > 0 ? numericTokens.join('') : (mioloTokens[0] ?? null);
+    events.push({
+      kind: 'sale',
+      pos: m.index!,
+      numReembolso: m[1],
+      numContrato: m[2],
+      produto: m[3],
+      dataCorte: parseDateBR(m[4]),
+      dataCredito,
+      codEstab: m[6],
+      dataTx,
+      dataPost: parseDateBR(m[8]),
+      numDoc,
+      numCartao: m[10],
+      valor,
+      cnpj: m[12],
+    });
+  }
+
+  // Coleta subtotais (cada lote tem 1)
+  for (const m of text.matchAll(SUBTOTAL_RE)) {
+    const valor = parseValor(m[2]);
+    if (valor == null) continue;
+    events.push({ kind: 'subtotal', pos: m.index!, numReembolso: m[1], valor });
+  }
+
+  // Coleta descontos. Cuidado: o regex pode "casar" trechos dentro de uma venda
+  // (porque vendas têm "<contrato> <data>" no meio). Pra evitar, descartamos
+  // discounts cujo (m.index, m.index + m[0].length) caia dentro de qualquer
+  // intervalo de venda já capturado.
+  const saleSpans: Array<[number, number]> = events
+    .filter(e => e.kind === 'sale')
+    .map(e => {
+      // m[0] da venda — não temos guardado. Mas a venda vai do reembolso até o CNPJ.
+      // O CNPJ aparece logo no fim, então estimamos um span generoso usando o
+      // próximo evento. Pra simplificar: span = [pos, pos + 250] (tamanho típico de uma linha de venda).
+      return [(e as any).pos, (e as any).pos + 250] as [number, number];
+    });
+
+  function isInsideSale(start: number): boolean {
+    return saleSpans.some(([s, e]) => start >= s && start <= e);
+  }
+
+  for (const m of text.matchAll(DISCOUNT_RE)) {
+    if (isInsideSale(m.index!)) continue;
+    const descricao = m[3].trim();
+    const valor = parseValor(m[4]);
+    if (valor == null) continue;
+    // Filtra descrições muito curtas ou que parecem números (false positives)
+    if (descricao.length < 3) continue;
+    events.push({ kind: 'discount', pos: m.index!, numContrato: m[1], descricao, valor });
+  }
+
+  for (const m of text.matchAll(TOTAL_DESC_RE)) {
+    const valor = parseValor(m[1]);
+    if (valor == null) continue;
+    events.push({ kind: 'total_desc', pos: m.index!, valor });
+  }
+
+  for (const m of text.matchAll(VALOR_LIQ_RE)) {
+    const valor = parseValor(m[1]);
+    if (valor == null) continue;
+    events.push({ kind: 'valor_liq', pos: m.index!, valor });
+  }
+
+  // Ordena por posição e processa estado-máquina
+  events.sort((a, b) => a.pos - b.pos);
+
+  const lots: ParsedLot[] = [];
   let current: ParsedLot | null = null;
-
-  // Linha de venda completa (depois do merge):
-  // "<reembolso> <contrato> <produto> <data_corte DD/MM/YYYY> <data_credito DD/MM/YYYY> <cod_estab> PIZZARIA ESTRELA <data_transacao DD/MM/YYYY> <data_postagem DD/MM/YYYY> <num_doc> TEF COMPRA <num_cartao> R$<valor> <cnpj>"
-  const SALE_RE =
-    /^(\d{8,9})\s+(\d{10,12})\s+(TRE|TAE|TF)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d+)\s+PIZZARIA\s+ESTRELA\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\S+)\s+TEF\s+COMPRA\s+(\*+\d+)\s+(R\$[\d.,]+)\s+([\d./-]+)/;
-
-  // Subtotal: "<reembolso> Subtotal de Vendas R$X"
-  const SUBTOTAL_RE = /^(\d{8,9})\s+Subtotal\s+de\s+Vendas\s+(R\$[\d.,]+)/;
-
-  // Desconto: "<contrato> <data> <descrição> R$X"
-  const DISCOUNT_RE = /^(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+(.+?)\s+(R\$[\d.,]+)$/;
-
-  // Total descontos
-  const TOTAL_DESC_RE = /^Total\s+de\s+Descontos\s+(R\$[\d.,]+)/;
-
-  // Valor líquido
-  const VALOR_LIQ_RE = /^Valor\s+Líquido\s+(R\$[\d.,]+)/;
 
   const closeLot = () => {
     if (current) {
@@ -185,26 +204,18 @@ function parseTicketRefundLines(lines: string[]): { lots: ParsedLot[]; warnings:
     }
   };
 
-  for (const line of lines) {
-    let m: RegExpMatchArray | null;
-
-    if ((m = line.match(SALE_RE))) {
-      const [, numReembolso, numContrato, produto, dataCorteRaw, dataCreditoRaw, codEstab,
-        dataTxRaw, dataPostRaw, numDoc, numCartao, valorRaw, cnpj] = m;
-
+  for (const ev of events) {
+    if (ev.kind === 'sale') {
       // Se mudou Nº Reembolso, fecha o anterior e abre novo
-      if (current && current.numero_reembolso !== numReembolso) {
-        closeLot();
-      }
-
+      if (current && current.numero_reembolso !== ev.numReembolso) closeLot();
       if (!current) {
         current = {
-          numero_reembolso: numReembolso,
-          numero_contrato: numContrato,
-          produto,
-          data_corte: parseDateBR(dataCorteRaw),
-          data_credito: parseDateBR(dataCreditoRaw)!,
-          cod_estabelecimento: codEstab,
+          numero_reembolso: ev.numReembolso,
+          numero_contrato: ev.numContrato,
+          produto: ev.produto,
+          data_corte: ev.dataCorte,
+          data_credito: ev.dataCredito,
+          cod_estabelecimento: ev.codEstab,
           items: [],
           subtotal_vendas: 0,
           descontos: {},
@@ -212,69 +223,46 @@ function parseTicketRefundLines(lines: string[]): { lots: ParsedLot[]; warnings:
           valor_liquido: 0,
         };
       }
-
       current.items.push({
-        data_transacao: parseDateBR(dataTxRaw)!,
-        data_postagem: parseDateBR(dataPostRaw),
-        numero_documento: numDoc,
-        numero_cartao_mascarado: numCartao,
-        valor: parseValor(valorRaw)!,
-        estabelecimento: 'PIZZARIA ESTRELA',
-        cnpj,
+        data_transacao: ev.dataTx,
+        data_postagem: ev.dataPost,
+        numero_documento: ev.numDoc,
+        numero_cartao_mascarado: ev.numCartao,
+        valor: ev.valor,
+        cnpj: ev.cnpj,
       });
-      continue;
-    }
-
-    if ((m = line.match(SUBTOTAL_RE))) {
-      const [, numReembolso, valorRaw] = m;
-      if (current && current.numero_reembolso === numReembolso) {
-        current.subtotal_vendas = parseValor(valorRaw)!;
+    } else if (ev.kind === 'subtotal') {
+      if (current && current.numero_reembolso === ev.numReembolso) {
+        current.subtotal_vendas = ev.valor;
       }
-      continue;
-    }
-
-    if ((m = line.match(DISCOUNT_RE))) {
-      const [, , , descricao, valorRaw] = m;
+    } else if (ev.kind === 'discount') {
       if (current) {
-        const valor = parseValor(valorRaw)!;
-        const key = normalizeDiscountKey(descricao);
-        current.descontos[key] = (current.descontos[key] ?? 0) + valor;
+        const key = normalizeDiscountKey(ev.descricao);
+        current.descontos[key] = (current.descontos[key] ?? 0) + ev.valor;
       }
-      continue;
-    }
-
-    if ((m = line.match(TOTAL_DESC_RE))) {
-      if (current) current.total_descontos = parseValor(m[1])!;
-      continue;
-    }
-
-    if ((m = line.match(VALOR_LIQ_RE))) {
+    } else if (ev.kind === 'total_desc') {
+      if (current) current.total_descontos = ev.valor;
+    } else if (ev.kind === 'valor_liq') {
       if (current) {
-        current.valor_liquido = parseValor(m[1])!;
+        current.valor_liquido = ev.valor;
         closeLot(); // valor líquido = fim do lote
       }
-      continue;
-    }
-
-    // Linha não reconhecida — guarda warning se não for vazia
-    if (line.trim()) {
-      warnings.push(`Linha ignorada: ${line.substring(0, 100)}`);
     }
   }
 
-  closeLot(); // fecha último se sobrou
+  closeLot();
+
+  // Diagnóstico se o parser não pegou nada de estrutura conhecida
+  if (lots.length === 0) {
+    const sampleSale = text.match(SALE_RE);
+    const sampleSubtotal = text.match(/Subtotal\s+de\s+Vendas/);
+    const sampleLiq = text.match(/Valor\s+Líquido/);
+    warnings.push(`Diagnóstico: SALE_RE matches=${[...text.matchAll(SALE_RE)].length}, sample subtotal=${!!sampleSubtotal}, sample liq=${!!sampleLiq}`);
+    if (sampleSale) warnings.push(`Primeiro match venda: ${sampleSale[0].substring(0, 200)}`);
+    warnings.push(`Texto recebido (primeiros 500 chars): ${text.substring(0, 500)}`);
+  }
 
   return { lots, warnings };
-}
-
-function normalizeDiscountKey(descricao: string): string {
-  const d = descricao.toLowerCase().trim();
-  if (d.includes('tarifa de gestão') || d.includes('tarifa de gestao')) return 'tarifa_gestao';
-  if (d.includes('tarifa por transação') || d.includes('tarifa por transacao')) return 'tarifa_transacao';
-  if (d === 'tarifa por') return 'tarifa_transacao'; // fragmento da quebra de página
-  if (d.includes('taxa tpe')) return 'taxa_tpe';
-  if (d.includes('anuidade')) return 'anuidade';
-  return 'outros';
 }
 
 // ============================================================
@@ -333,19 +321,18 @@ Deno.serve(async (req) => {
     }
     const wasConciliado = period.status === 'conciliado';
 
-    const lines = preprocessRawText(raw_text);
-    const { lots, warnings } = parseTicketRefundLines(lines);
+    const { lots, warnings } = parseTicketRefund(raw_text);
 
     if (lots.length === 0) {
       return new Response(JSON.stringify({
         error: 'Nenhum lote reconhecido no PDF. Verifique se o arquivo é o "Extrato de Reembolsos Detalhado" da Ticket.',
-        warnings: warnings.slice(0, 10),
+        warnings,
       }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Sanity: subtotal_vendas deve bater com soma dos items, e (subtotal - total_descontos) com valor_liquido.
+    // Sanity: subtotal_vendas == soma items, e (subtotal - total_descontos) == valor_liquido.
     const integrityErrors: string[] = [];
     for (const l of lots) {
       const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
@@ -360,7 +347,6 @@ Deno.serve(async (req) => {
 
     const totalItems = lots.reduce((s, l) => s + l.items.length, 0);
 
-    // Registra import
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id,
@@ -376,13 +362,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Upsert lotes
     let insertedLots = 0;
     let updatedLots = 0;
     let insertedItems = 0;
 
     for (const l of lots) {
-      // upsert por (period, operadora='ticket', numero_reembolso)
       const { data: existing } = await supabase
         .from('audit_voucher_lots')
         .select('id')
@@ -420,7 +404,6 @@ Deno.serve(async (req) => {
           }).eq('id', importRec.id);
           throw updErr;
         }
-        // Apaga items pra repopular
         await supabase.from('audit_voucher_lot_items').delete().eq('lot_id', existing.id);
         lotId = existing.id;
         updatedLots++;
@@ -448,7 +431,7 @@ Deno.serve(async (req) => {
         numero_documento: it.numero_documento,
         numero_cartao_mascarado: it.numero_cartao_mascarado,
         valor: it.valor,
-        estabelecimento: it.estabelecimento,
+        estabelecimento: 'PIZZARIA ESTRELA',
         cnpj: it.cnpj,
       }));
 
