@@ -15,7 +15,21 @@ const corsHeaders = {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const TOLERANCE = 0.02; // R$0,02
+
+// Tolerância por operadora.
+// - Ticket: valor exato do extrato bate certinho com BB (R$0,02 só pra arredondamento).
+// - Alelo: cobra "tarifa de transação" no momento do depósito (NÃO incluída no
+//   valor_liquido das vendas), que reduz 1-3 reais por lote. Tolerância R$15
+//   absorve isso sem casar lotes errados (lotes Alelo distintos costumam diferir
+//   em dezenas/centenas de reais).
+// - Pluxee/VR: padrão R$15 até descobrirmos comportamento real.
+const TOLERANCE_BY_OPERADORA: Record<string, number> = {
+  ticket: 0.02,
+  alelo: 15,
+  pluxee: 15,
+  vr: 15,
+};
+const DEFAULT_TOLERANCE = 0.02;
 const WINDOW_DAYS = 2;  // ±2 dias úteis SC
 
 function fmtBRDate(iso: string): string {
@@ -58,6 +72,7 @@ Deno.serve(async (req) => {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    const TOLERANCE = TOLERANCE_BY_OPERADORA[operadora] ?? DEFAULT_TOLERANCE;
 
     // Reset matches automáticos (manual=false) se solicitado
     if (reset) {
