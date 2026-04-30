@@ -388,6 +388,138 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_voucher_lot_items: {
+        Row: {
+          cnpj: string | null
+          created_at: string
+          data_postagem: string | null
+          data_transacao: string
+          estabelecimento: string | null
+          id: string
+          lot_id: string
+          numero_cartao_mascarado: string | null
+          numero_documento: string | null
+          valor: number
+        }
+        Insert: {
+          cnpj?: string | null
+          created_at?: string
+          data_postagem?: string | null
+          data_transacao: string
+          estabelecimento?: string | null
+          id?: string
+          lot_id: string
+          numero_cartao_mascarado?: string | null
+          numero_documento?: string | null
+          valor: number
+        }
+        Update: {
+          cnpj?: string | null
+          created_at?: string
+          data_postagem?: string | null
+          data_transacao?: string
+          estabelecimento?: string | null
+          id?: string
+          lot_id?: string
+          numero_cartao_mascarado?: string | null
+          numero_documento?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_voucher_lot_items_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "audit_voucher_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_voucher_lots: {
+        Row: {
+          audit_period_id: string
+          bb_deposit_id: string | null
+          created_at: string
+          data_corte: string | null
+          data_credito: string
+          descontos: Json | null
+          diff: number | null
+          id: string
+          import_id: string | null
+          manual: boolean
+          numero_contrato: string | null
+          numero_reembolso: string
+          operadora: string
+          produto: string | null
+          status: string
+          subtotal_vendas: number
+          total_descontos: number
+          valor_liquido: number
+        }
+        Insert: {
+          audit_period_id: string
+          bb_deposit_id?: string | null
+          created_at?: string
+          data_corte?: string | null
+          data_credito: string
+          descontos?: Json | null
+          diff?: number | null
+          id?: string
+          import_id?: string | null
+          manual?: boolean
+          numero_contrato?: string | null
+          numero_reembolso: string
+          operadora: string
+          produto?: string | null
+          status?: string
+          subtotal_vendas?: number
+          total_descontos?: number
+          valor_liquido: number
+        }
+        Update: {
+          audit_period_id?: string
+          bb_deposit_id?: string | null
+          created_at?: string
+          data_corte?: string | null
+          data_credito?: string
+          descontos?: Json | null
+          diff?: number | null
+          id?: string
+          import_id?: string | null
+          manual?: boolean
+          numero_contrato?: string | null
+          numero_reembolso?: string
+          operadora?: string
+          produto?: string | null
+          status?: string
+          subtotal_vendas?: number
+          total_descontos?: number
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_voucher_lots_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_voucher_lots_bb_deposit_id_fkey"
+            columns: ["bb_deposit_id"]
+            isOneToOne: false
+            referencedRelation: "audit_bank_deposits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_voucher_lots_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "audit_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       card_transactions: {
         Row: {
           brand: string | null
@@ -1790,30 +1922,6 @@ export type Database = {
           id?: string
           origin?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      voucher_expected_rates: {
-        Row: {
-          company: string
-          expected_rate_pct: number
-          has_anticipation: boolean
-          notes: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          company: string
-          expected_rate_pct: number
-          has_anticipation?: boolean
-          notes?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          company?: string
-          expected_rate_pct?: number
-          has_anticipation?: boolean
-          notes?: string | null
-          updated_at?: string | null
         }
         Relationships: []
       }
