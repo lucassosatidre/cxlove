@@ -98,26 +98,37 @@ Deno.serve(async (req) => {
     }
     const wasConciliado = period.status === 'conciliado';
 
-    // Detecta linha de header (procura "Data de Pagamento" + "Valor Bruto" entre as primeiras 5 linhas)
+    // Detecta linha de header (procura "Data de Pagamento" + "Valor Bruto" em até 20 linhas)
+    function normalizeKey(s: string): string {
+      return String(s ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')   // remove combining marks (acentos)
+        .replace(/\s+/g, ' ')
+        .toLowerCase()
+        .trim();
+    }
+
     let headerIdx = -1;
     let colMap: Record<string, number> = {};
-    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const probedLines: any[] = [];
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
       const r = rows[i];
+      if (i < 5) probedLines.push({ idx: i, row: Array.isArray(r) ? r.slice(0, 15) : r });
       if (!Array.isArray(r)) continue;
-      const lower = r.map((c: any) => String(c ?? '').toLowerCase().trim());
-      const hasPag = lower.some(c => c.includes('data de pagamento'));
-      const hasBruto = lower.some(c => c.includes('valor bruto'));
+      const norm = r.map(normalizeKey);
+      const hasPag = norm.some(c => c.includes('data de pagamento'));
+      const hasBruto = norm.some(c => c.includes('valor bruto'));
       if (hasPag && hasBruto) {
         headerIdx = i;
         for (let j = 0; j < r.length; j++) {
-          const k = String(r[j] ?? '').toLowerCase().trim();
+          const k = normalizeKey(r[j]);
           if (k === 'cnpj') colMap.cnpj = j;
-          else if (k === 'número da autorização' || k === 'numero da autorizacao') colMap.autorizacao = j;
+          else if (k === 'numero da autorizacao' || k.includes('autorizacao')) colMap.autorizacao = j;
           else if (k === 'data da venda') colMap.dataVenda = j;
-          else if (k === 'tipo cartão' || k === 'tipo cartao') colMap.tipo = j;
-          else if (k === 'nº cartão' || k === 'no cartao' || k === 'n cartao') colMap.cartao = j;
+          else if (k.startsWith('tipo cartao') || k === 'tipo cartao') colMap.tipo = j;
+          else if (k.startsWith('n cartao') || k.includes('cartao') && !k.includes('tipo')) colMap.cartao = j;
           else if (k === 'valor bruto') colMap.bruto = j;
-          else if (k === 'valor líquido' || k === 'valor liquido') colMap.liquido = j;
+          else if (k === 'valor liquido') colMap.liquido = j;
           else if (k === 'status') colMap.status = j;
           else if (k === 'data de pagamento') colMap.dataPag = j;
         }
@@ -126,12 +137,16 @@ Deno.serve(async (req) => {
     }
     if (headerIdx < 0) {
       return new Response(JSON.stringify({
-        error: 'Header não encontrado. Esperado linhas com "Data de Pagamento" e "Valor Bruto" entre as 5 primeiras.',
+        error: 'Header não encontrado. Esperado linhas com "Data de Pagamento" e "Valor Bruto" entre as 20 primeiras.',
+        diagnostic: {
+          total_rows: rows.length,
+          first_5_rows: probedLines,
+        },
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (colMap.bruto == null || colMap.liquido == null || colMap.dataPag == null || colMap.dataVenda == null) {
       return new Response(JSON.stringify({
-        error: `Colunas obrigatórias faltando. Encontrei: ${JSON.stringify(colMap)}`,
+        error: `Colunas obrigatórias faltando. Encontrei: ${JSON.stringify(colMap)}. Header detectado: ${JSON.stringify(rows[headerIdx])}`,
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
