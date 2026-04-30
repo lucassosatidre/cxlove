@@ -31,15 +31,6 @@ export type DailyMatchRow = {
   tax?: number;
 };
 
-export type VoucherMatchRow = {
-  company: string;
-  sold_amount: number;
-  deposited_amount: number;
-  difference: number;
-  effective_tax_rate: number;
-  status: string;
-};
-
 export type AuditPdfData = {
   periodLabel: string;        // e.g. "Março / 2026"
   periodFileTag: string;      // e.g. "2026-03"
@@ -50,7 +41,6 @@ export type AuditPdfData = {
     custoTotal: number;
     taxaEfetiva: number;
   };
-  criticalVouchers: VoucherMatchRow[];
   ifoodSummary?: {
     bruto: number;
     taxaDeclarada: number;
@@ -59,14 +49,6 @@ export type AuditPdfData = {
     diferenca: number;
   };
   dailyRows?: DailyMatchRow[];
-  voucherRows?: VoucherMatchRow[];
-};
-
-const COMPANY_LABELS: Record<string, string> = {
-  alelo: 'ALELO',
-  ticket: 'TICKET',
-  pluxee: 'PLUXEE',
-  vr: 'VR',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -179,38 +161,11 @@ function coverPage(doc: jsPDF, data: AuditPdfData) {
     ],
   });
 
-  let y = (doc as any).lastAutoTable.finalY + 12;
-
-  if (data.criticalVouchers.length > 0) {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.setTextColor(...RED);
-    doc.text('🚨 ALERTAS', 20, y);
-    y += 6;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    doc.setTextColor(...BLACK);
-    for (const v of data.criticalVouchers) {
-      const label = COMPANY_LABELS[v.company] ?? v.company.toUpperCase();
-      doc.text(
-        `• ${label}: taxa efetiva de ${fmtNum(Number(v.effective_tax_rate))}% — CRÍTICO`,
-        24, y
-      );
-      y += 5;
-      doc.setTextColor(...GRAY);
-      doc.text(
-        `   Vendido ${fmtBRL(Number(v.sold_amount))} · Recebido ${fmtBRL(Number(v.deposited_amount))} · Diferença ${fmtBRL(Number(v.difference))}`,
-        24, y
-      );
-      doc.setTextColor(...BLACK);
-      y += 7;
-    }
-  } else {
-    doc.setFont('helvetica', 'italic');
-    doc.setFontSize(10);
-    doc.setTextColor(...GRAY);
-    doc.text('Nenhum alerta crítico no período.', 20, y);
-  }
+  const y = (doc as any).lastAutoTable.finalY + 12;
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(10);
+  doc.setTextColor(...GRAY);
+  doc.text('Nenhum alerta crítico no período.', 20, y);
 }
 
 function ifoodPage(doc: jsPDF, data: AuditPdfData) {
@@ -290,70 +245,8 @@ function ifoodPage(doc: jsPDF, data: AuditPdfData) {
   });
 }
 
-function voucherPage(doc: jsPDF, data: AuditPdfData) {
-  doc.addPage();
-  header(doc, data.periodLabel, data.emittedBy);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(...ORANGE);
-  doc.text('CONCILIAÇÃO VOUCHER (BB)', 20, 32);
-
-  const ordered = ['alelo', 'ticket', 'pluxee', 'vr']
-    .map(c => (data.voucherRows ?? []).find(v => v.company === c))
-    .filter(Boolean) as VoucherMatchRow[];
-
-  const totalSold = ordered.reduce((s, r) => s + Number(r.sold_amount), 0);
-  const totalDep = ordered.reduce((s, r) => s + Number(r.deposited_amount), 0);
-  const totalDiff = totalSold - totalDep;
-  const totalRate = totalSold > 0 ? (totalDiff / totalSold) * 100 : 0;
-
-  const body = ordered.map(v => [
-    COMPANY_LABELS[v.company] ?? v.company.toUpperCase(),
-    fmtBRL(Number(v.sold_amount)),
-    fmtBRL(Number(v.deposited_amount)),
-    `${fmtNum(Number(v.effective_tax_rate))}%`,
-    STATUS_LABELS[v.status] ?? v.status,
-  ]);
-
-  body.push([
-    'TOTAL',
-    fmtBRL(totalSold),
-    fmtBRL(totalDep),
-    `${fmtNum(totalRate)}%`,
-    '',
-  ]);
-
-  autoTable(doc, {
-    startY: 40,
-    head: [['Empresa', 'Vendido', 'Recebido', 'Taxa Efetiva', 'Status']],
-    body,
-    theme: 'grid',
-    styles: { font: 'helvetica', fontSize: 10, cellPadding: 3.5, textColor: BLACK },
-    headStyles: { fillColor: ORANGE, textColor: [255, 255, 255], fontStyle: 'bold' },
-    columnStyles: {
-      0: { fontStyle: 'bold' },
-      1: { halign: 'right' },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-      4: { halign: 'center', fontStyle: 'bold' },
-    },
-    didParseCell: (hookData) => {
-      if (hookData.section === 'body' && hookData.row.index === body.length - 1) {
-        hookData.cell.styles.fillColor = [240, 240, 240];
-        hookData.cell.styles.fontStyle = 'bold';
-      }
-      if (hookData.section === 'body' && hookData.column.index === 4 && hookData.row.index < ordered.length) {
-        const status = ordered[hookData.row.index]?.status;
-        const color = status ? STATUS_COLORS[status] : undefined;
-        if (color) hookData.cell.styles.textColor = color;
-      }
-    },
-  });
-}
-
 export function generateAuditPdf(
-  type: 'completo' | 'ifood' | 'voucher',
+  type: 'completo' | 'ifood',
   data: AuditPdfData
 ): void {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
@@ -361,7 +254,6 @@ export function generateAuditPdf(
   coverPage(doc, data);
 
   if (type === 'completo' || type === 'ifood') ifoodPage(doc, data);
-  if (type === 'completo' || type === 'voucher') voucherPage(doc, data);
 
   footer(doc);
 

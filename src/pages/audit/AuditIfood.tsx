@@ -557,7 +557,6 @@ export default function AuditIfood() {
                     custoTotal: Math.abs(Math.min(totals.diff, 0)),
                     taxaEfetiva: totals.antecRate,
                   },
-                  criticalVouchers: [],
                   ifoodSummary: {
                     bruto: rows.reduce((s, r) => s + Number(r.gross || 0), 0),
                     taxaDeclarada: rows.reduce((s, r) => s + Number(r.tax || 0), 0),

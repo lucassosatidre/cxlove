@@ -42,19 +42,11 @@ type DetailRow = {
 const CATEGORIA_LABELS: Record<string, string> = {
   credito_debito: 'Crédito/Débito',
   pix: 'Pix',
-  alelo: 'Alelo',
-  ticket: 'Ticket',
-  pluxee: 'Pluxee',
-  vr: 'VR',
 };
 
 const CATEGORIA_BADGE: Record<string, string> = {
   credito_debito: 'bg-blue-500/15 text-blue-700 dark:text-blue-400',
   pix: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  alelo: 'bg-orange-500/15 text-orange-700 dark:text-orange-400',
-  ticket: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-  pluxee: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
-  vr: 'bg-pink-500/15 text-pink-700 dark:text-pink-400',
 };
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -283,10 +275,6 @@ export default function AuditMatch() {
                   <SelectItem value="todas">Todas</SelectItem>
                   <SelectItem value="credito_debito">Crédito/Débito</SelectItem>
                   <SelectItem value="pix">Pix</SelectItem>
-                  <SelectItem value="alelo">Alelo</SelectItem>
-                  <SelectItem value="ticket">Ticket</SelectItem>
-                  <SelectItem value="pluxee">Pluxee</SelectItem>
-                  <SelectItem value="vr">VR</SelectItem>
                 </SelectContent>
               </Select>
             </div>
