@@ -30,32 +30,6 @@ const TOOLS = [
     },
   },
   {
-    name: 'get_voucher_audit',
-    description: 'Retorna a linha do audit_voucher_competencia (vendido, reconhecido, pago bruto, pago líquido, taxa real) por operadora.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        period_id: { type: 'string' },
-        operadora: { type: 'string', enum: ['alelo', 'ticket', 'pluxee', 'vr'] },
-      },
-      required: ['period_id'],
-    },
-  },
-  {
-    name: 'get_voucher_lots',
-    description: 'Lista lotes de voucher importados com bruto, líquido, data de pagamento e se já casaram com depósito BB.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        period_id: { type: 'string' },
-        operadora: { type: 'string', enum: ['alelo', 'ticket', 'pluxee', 'vr'] },
-        status: { type: 'string', enum: ['matched', 'pending', 'all'] },
-        limit: { type: 'integer', default: 50 },
-      },
-      required: ['period_id'],
-    },
-  },
-  {
     name: 'get_bank_deposits',
     description: 'Lista depósitos bancários (Cresol/iFood ou BB/Vouchers) com matched_competencia, matched_adjacente e match_status.',
     input_schema: {
@@ -153,12 +127,10 @@ Dados visíveis:
 {PINNED_SUMMARIES}
 
 # Suas capacidades (Camada B ativa)
-Você tem ACESSO READ-ONLY ao banco de dados via 9 tools:
+Você tem ACESSO READ-ONLY ao banco de dados via 7 tools:
 
 ## Tools específicas (use primeiro, mais rápidas):
 - **get_period_summary(period_id)** — totais consolidados (vendido/recebido por categoria)
-- **get_voucher_audit(period_id, operadora?)** — auditoria de voucher
-- **get_voucher_lots(period_id, operadora?, status?)** — lotes de extratos voucher
 - **get_bank_deposits(period_id, bank?, category?, status?)** — depósitos Cresol/BB
 - **get_maquinona_sales(period_id, deposit_group?, ...)** — vendas Maquinona
 
@@ -168,7 +140,7 @@ Você tem ACESSO READ-ONLY ao banco de dados via 9 tools:
 - **extract_fact(fact, category)** — salva fato útil afirmado pelo usuário
 
 ## SQL livre (último recurso):
-- **run_query(sql, explanation)** — SELECT em tabelas audit_*, voucher_*, clau_extracted_facts, clau_conversation_summaries. Auto LIMIT 100, timeout 5s.
+- **run_query(sql, explanation)** — SELECT em tabelas audit_*, clau_extracted_facts, clau_conversation_summaries. Auto LIMIT 100, timeout 5s.
 
 # Esquema principal
 
@@ -177,12 +149,10 @@ Você tem ACESSO READ-ONLY ao banco de dados via 9 tools:
 audit_period_id, sale_date, deposit_group (ifood|alelo|ticket|pluxee|vr), brand, gross_amount, net_amount, expected_deposit_date, is_competencia
 ## audit_bank_deposits:
 audit_period_id, bank (cresol|bb), category, deposit_date, amount, matched_competencia_amount, matched_adjacente_amount, match_status (matched|fora_periodo|pending)
-## voucher_lots:
-audit_period_id, operadora, gross_amount, net_amount, data_pagamento, data_corte, bb_deposit_id
-## voucher_lot_items:
-lot_id, gross_amount, net_amount, data_transacao, maquinona_match_id
-## audit_voucher_competencia (view):
-audit_period_id, operadora, vendido_bruto, reconhecido_bruto, pago_bruto, pago_liquido, taxa_real_pct, taxa_estimada_pct
+## audit_voucher_lots (estágio 2 — em construção):
+audit_period_id, operadora, numero_reembolso, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos (jsonb), bb_deposit_id, status
+## audit_voucher_lot_items:
+lot_id, data_transacao, numero_documento, valor
 
 # Como agir
 1. Pergunta operacional simples → responde direto sem tools
@@ -265,33 +235,6 @@ async function executeTool(
         break;
       }
 
-      case 'get_voucher_audit': {
-        const { period_id, operadora } = input;
-        let q = supabase.from('audit_voucher_competencia').select('*').eq('audit_period_id', period_id);
-        if (operadora) q = q.eq('operadora', operadora);
-        const { data, error } = await q;
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
-      case 'get_voucher_lots': {
-        const { period_id, operadora, status, limit = 50 } = input;
-        let q = supabase
-          .from('voucher_lots')
-          .select('id, operadora, gross_amount, net_amount, data_pagamento, data_corte, bb_deposit_id, status')
-          .eq('audit_period_id', period_id)
-          .order('data_pagamento', { ascending: false })
-          .limit(Math.min(limit, 200));
-        if (operadora) q = q.eq('operadora', operadora);
-        if (status === 'matched') q = q.not('bb_deposit_id', 'is', null);
-        else if (status === 'pending') q = q.is('bb_deposit_id', null);
-        const { data, error } = await q;
-        if (error) throw error;
-        result = data;
-        break;
-      }
-
       case 'get_bank_deposits': {
         const { period_id, bank, category, status, limit = 50 } = input;
         let q = supabase
@@ -331,11 +274,10 @@ async function executeTool(
         const { sql } = input;
         const ALLOWED_TABLES = new Set([
           'audit_periods', 'audit_card_transactions', 'audit_bank_deposits',
-          'audit_voucher_matches', 'audit_daily_matches', 'audit_imports',
-          'audit_voucher_competencia', 'audit_period_log',
-          'voucher_lots', 'voucher_lot_items', 'voucher_expected_rates',
-          'voucher_imports', 'voucher_adjustments',
-          'voucher_ai_audits', 'ifood_ai_audits',
+          'audit_daily_matches', 'audit_imports', 'audit_period_log',
+          'audit_lot_overrides',
+          'audit_voucher_lots', 'audit_voucher_lot_items',
+          'ifood_ai_audits',
           'clau_extracted_facts', 'clau_conversation_summaries',
         ]);
         const FORBIDDEN = /\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|EXECUTE|COPY|VACUUM)\b/i;
