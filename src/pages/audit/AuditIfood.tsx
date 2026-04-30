@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,17 @@ const STATUS_LABEL: Record<string, string> = {
   extra_deposit: '🔵 Depósito extra',
 };
 
+type LotMatch = {
+  tipo: 'PIX' | 'CARD';
+  count: number;
+  bruto: number;
+  liq: number;
+  cresol_date?: string;
+  cresol_amount?: number;
+  diff?: number;
+  matched: boolean;
+};
+
 type MatchRow = {
   match_date: string;
   expected_amount: number;
@@ -48,10 +59,7 @@ type MatchRow = {
   status: string;
   gross: number;
   tax: number;
-  // Quando status='pending', match_date que fechou esse dia (cluster_matched/cluster_partial).
-  closed_by?: string;
-  // Quando status começa com 'cluster_', lista de match_dates pending que esse cluster fechou.
-  closes?: string[];
+  lots: LotMatch[]; // breakdown PIX + CARD com cresol pareado
 };
 
 export default function AuditIfood() {
@@ -66,37 +74,42 @@ export default function AuditIfood() {
   const [periodMY, setPeriodMY] = useState<{ month: number; year: number } | null>(null);
 
   const [headerTotals, setHeaderTotals] = useState({ expected: 0, deposited: 0 });
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [unmatchedCresolDeps, setUnmatchedCresolDeps] = useState<Array<{ date: string; amount: number }>>([]);
 
   useEffect(() => {
     if (!isAdmin || !periodId) return;
     (async () => {
       setLoading(true);
 
-      // Paginated fetches: tabelas audit_* podem passar do limit padrão de 1000.
+      // Carrega TODAS as transações Maquinona iFood + TODOS os depósitos Cresol
+      // do audit_period (inclui meses adjacentes pra match valor-a-valor).
       const fetchAllIfoodTxs = () =>
         fetchAllPaginated<any>(
           supabase
             .from('audit_card_transactions')
-            .select('sale_date,gross_amount,net_amount')
+            .select('sale_date,payment_method,gross_amount,net_amount')
             .eq('audit_period_id', periodId!)
             .eq('deposit_group', 'ifood'),
         );
+      const fetchAllCresolDeps = () =>
+        fetchAllPaginated<any>(
+          supabase
+            .from('audit_bank_deposits')
+            .select('id,deposit_date,amount,description')
+            .eq('audit_period_id', periodId!)
+            .eq('bank', 'cresol')
+            .eq('category', 'ifood'),
+        );
 
-      // Lê audit_daily_matches direto (escrita pelo run-audit-match com
-      // carry-forward) — fonte da verdade pro detalhamento diário.
-      // get_audit_ifood_daily_detail RPC ainda usa lógica antiga (sem cluster).
       const [
         { data: period },
-        { data: dailyMatches },
         txs,
+        cresolDeps,
       ] = await Promise.all([
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
-        supabase
-          .from('audit_daily_matches')
-          .select('match_date,expected_amount,deposited_amount,difference,transaction_count,deposit_count,status')
-          .eq('audit_period_id', periodId)
-          .order('match_date'),
         fetchAllIfoodTxs(),
+        fetchAllCresolDeps(),
       ]);
 
       if (period) {
@@ -104,54 +117,125 @@ export default function AuditIfood() {
         setPeriodLabel(`${months[(period as any).month - 1]}/${(period as any).year}`);
         setPeriodMY({ month: (period as any).month, year: (period as any).year });
       }
-
-      // Calcula gross e tax por sale_date (= match_date após refactor).
-      // Tax real = gross - net (declarado pelo iFood, inclui antecipação).
-      const grossByDate = new Map<string, number>();
-      const taxByDate = new Map<string, number>();
-      for (const t of (txs as any[]) ?? []) {
-        const d = (t as any).sale_date;
-        if (!d) continue;
-        const gross = Number((t as any).gross_amount || 0);
-        const net = Number((t as any).net_amount || 0);
-        const realTax = Math.max(gross - net, 0);
-        grossByDate.set(d, (grossByDate.get(d) ?? 0) + gross);
-        taxByDate.set(d, (taxByDate.get(d) ?? 0) + realTax);
-      }
-
-      // Filtra apenas dates do período (mês/ano) — daily_matches pode ter linhas
-      // de meses adjacentes por causa do carry-forward.
       const periodMonth = (period as any)?.month;
       const periodYear = (period as any)?.year;
 
-      const enriched: MatchRow[] = ((dailyMatches as any[]) ?? [])
-        .filter(d => {
-          if (!periodMonth || !periodYear) return true;
-          const [y, m] = d.match_date.split('-').map(Number);
-          return y === periodYear && m === periodMonth;
-        })
-        .map(d => ({
-          match_date: d.match_date,
-          expected_amount: Number(d.expected_amount || 0),
-          deposited_amount: Number(d.deposited_amount || 0),
-          difference: Number(d.difference || 0),
-          transaction_count: Number(d.transaction_count || 0),
-          deposit_count: Number(d.deposit_count || 0),
-          status: d.status,
-          gross: grossByDate.get(d.match_date) ?? 0,
-          tax: taxByDate.get(d.match_date) ?? 0,
-        }));
+      // Agrupa Maquinona em lotes (sale_date × tipo PIX/CARD)
+      type LotInternal = { sale_date: string; tipo: 'PIX'|'CARD'; bruto: number; liq: number; count: number };
+      const lotsMap = new Map<string, LotInternal>();
+      for (const t of (txs as any[]) ?? []) {
+        const sd = String(t.sale_date);
+        const method = String(t.payment_method ?? '').toUpperCase();
+        const tipo: 'PIX'|'CARD' = method === 'PIX' ? 'PIX' : 'CARD';
+        const key = `${sd}|${tipo}`;
+        const lot = lotsMap.get(key) ?? { sale_date: sd, tipo, bruto: 0, liq: 0, count: 0 };
+        lot.bruto += Number(t.gross_amount || 0);
+        lot.liq += Number(t.net_amount || 0);
+        lot.count += 1;
+        lotsMap.set(key, lot);
+      }
+      const lotsArr: LotInternal[] = Array.from(lotsMap.values());
 
-      // Após refactor do run-audit-match: cada linha em audit_daily_matches
-      // já é (sale_date) com match valor-a-valor pros depósitos Cresol.
-      // Sem cluster, sem pending, sem carry-forward — o match natural já
-      // funciona pra carnaval/feriados.
+      // Match valor-a-valor (replica algoritmo do run-audit-match):
+      // tolerance 10%, janela 14d, lotes maiores primeiro
+      const depPool: Array<{ id: string; date: string; amount: number; matched: boolean }> =
+        ((cresolDeps as any[]) ?? []).map(d => ({
+          id: d.id, date: String(d.deposit_date), amount: Number(d.amount || 0), matched: false,
+        }));
+      const addDays = (iso: string, n: number) => {
+        const d = new Date(iso + 'T00:00:00Z');
+        d.setUTCDate(d.getUTCDate() + n);
+        return d.toISOString().slice(0, 10);
+      };
+      const lotsForMatch = [...lotsArr].sort((a, b) => b.liq - a.liq);
+      const lotResults: Array<LotInternal & { cresol_date?: string; cresol_amount?: number; diff?: number; matched: boolean }> = [];
+      for (const lot of lotsForMatch) {
+        const maxDate = addDays(lot.sale_date, 14);
+        let best: typeof depPool[0] | null = null;
+        let bestPct = 999;
+        for (const dep of depPool) {
+          if (dep.matched) continue;
+          if (dep.date < lot.sale_date) continue;
+          if (dep.date > maxDate) continue;
+          const diffPct = lot.liq > 0 ? Math.abs(dep.amount - lot.liq) / lot.liq : 999;
+          if (diffPct < 0.10 && diffPct < bestPct) {
+            best = dep;
+            bestPct = diffPct;
+          }
+        }
+        if (best) {
+          best.matched = true;
+          lotResults.push({ ...lot, cresol_date: best.date, cresol_amount: best.amount, diff: best.amount - lot.liq, matched: true });
+        } else {
+          lotResults.push({ ...lot, matched: false });
+        }
+      }
+
+      // Agrupa lotes por sale_date pra montar as rows da tabela
+      const lotsBySaleDate = new Map<string, LotMatch[]>();
+      for (const lr of lotResults) {
+        const arr = lotsBySaleDate.get(lr.sale_date) ?? [];
+        arr.push({
+          tipo: lr.tipo,
+          count: lr.count,
+          bruto: lr.bruto,
+          liq: lr.liq,
+          cresol_date: lr.cresol_date,
+          cresol_amount: lr.cresol_amount,
+          diff: lr.diff,
+          matched: lr.matched,
+        });
+        lotsBySaleDate.set(lr.sale_date, arr);
+      }
+
+      // Monta rows agregadas (1 por sale_date), filtradas pelo mês do período
+      const enriched: MatchRow[] = [];
+      for (const [sd, lots] of lotsBySaleDate) {
+        const [y, m] = sd.split('-').map(Number);
+        if (periodMonth && (y !== periodYear || m !== periodMonth)) continue;
+        const matchedLots = lots.filter(l => l.matched);
+        const expected = lots.reduce((s, l) => s + l.liq, 0);
+        const expectedMatched = matchedLots.reduce((s, l) => s + l.liq, 0);
+        const deposited = matchedLots.reduce((s, l) => s + (l.cresol_amount ?? 0), 0);
+        const diff = deposited - expectedMatched;
+        const tolerance = Math.max(1, expectedMatched * 0.005);
+        let status: string;
+        if (matchedLots.length === 0) status = 'pending';
+        else if (matchedLots.length < lots.length) status = 'partial';
+        else if (Math.abs(diff) <= tolerance) status = 'matched';
+        else status = 'partial';
+        const bruto = lots.reduce((s, l) => s + l.bruto, 0);
+        const tax = bruto - expected;
+        enriched.push({
+          match_date: sd,
+          expected_amount: expected,
+          deposited_amount: deposited,
+          difference: diff,
+          transaction_count: lots.reduce((s, l) => s + l.count, 0),
+          deposit_count: matchedLots.length,
+          status,
+          gross: bruto,
+          tax: Math.max(tax, 0),
+          lots: lots.sort((a, b) => a.tipo.localeCompare(b.tipo)),
+        });
+      }
+      enriched.sort((a, b) => a.match_date.localeCompare(b.match_date));
       setRows(enriched);
 
-      // Header totals: soma direta — sem pending após refactor de match valor-a-valor.
       const totalExpected = enriched.reduce((s, r) => s + r.expected_amount, 0);
       const totalDeposited = enriched.reduce((s, r) => s + r.deposited_amount, 0);
       setHeaderTotals({ expected: totalExpected, deposited: totalDeposited });
+
+      // Lista depósitos Cresol não pareados (outro lado do cruzamento)
+      // Filtra só os do mês de competência pra não poluir.
+      const unmatchedDeps = depPool
+        .filter(d => !d.matched)
+        .filter(d => {
+          const [y, m] = d.date.split('-').map(Number);
+          return !periodMonth || (y === periodYear && m === periodMonth);
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+      setUnmatchedCresolDeps(unmatchedDeps.map(d => ({ date: d.date, amount: d.amount })));
 
       setLoading(false);
     })();
@@ -229,6 +313,7 @@ export default function AuditIfood() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-6"></TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead className="text-right">Vendas</TableHead>
                   <TableHead className="text-right">Bruto</TableHead>
@@ -241,26 +326,118 @@ export default function AuditIfood() {
               </TableHeader>
               <TableBody>
                 {rows.length === 0 && (
-                  <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Nenhum match encontrado. Execute a conciliação no dashboard.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Nenhum match encontrado. Execute a conciliação no dashboard.</TableCell></TableRow>
                 )}
-                {rows.map(r => (
-                  <TableRow key={r.match_date} className={STATUS_BG[r.status] ?? ''}>
-                    <TableCell className="font-medium">{fmtDate(r.match_date)}</TableCell>
-                    <TableCell className="text-right">{r.transaction_count}</TableCell>
-                    <TableCell className="text-right">{fmt(r.gross)}</TableCell>
-                    <TableCell className="text-right">{fmt(r.tax)}</TableCell>
-                    <TableCell className="text-right">{fmt(Number(r.expected_amount))}</TableCell>
-                    <TableCell className="text-right">{fmt(Number(r.deposited_amount))}</TableCell>
-                    <TableCell className={`text-right font-semibold ${Number(r.difference) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(r.difference))}</TableCell>
-                    <TableCell className="text-xs">
-                      {STATUS_LABEL[r.status] ?? r.status}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {rows.map(r => {
+                  const isExpanded = expandedDates.has(r.match_date);
+                  return (
+                    <Fragment key={r.match_date}>
+                      <TableRow
+                        className={`${STATUS_BG[r.status] ?? ''} cursor-pointer hover:bg-muted/30`}
+                        onClick={() => {
+                          const next = new Set(expandedDates);
+                          if (next.has(r.match_date)) next.delete(r.match_date);
+                          else next.add(r.match_date);
+                          setExpandedDates(next);
+                        }}
+                      >
+                        <TableCell className="w-6">{isExpanded ? '▼' : '▶'}</TableCell>
+                        <TableCell className="font-medium">{fmtDate(r.match_date)}</TableCell>
+                        <TableCell className="text-right">{r.transaction_count}</TableCell>
+                        <TableCell className="text-right">{fmt(r.gross)}</TableCell>
+                        <TableCell className="text-right">{fmt(r.tax)}</TableCell>
+                        <TableCell className="text-right">{fmt(Number(r.expected_amount))}</TableCell>
+                        <TableCell className="text-right">{fmt(Number(r.deposited_amount))}</TableCell>
+                        <TableCell className={`text-right font-semibold ${Number(r.difference) < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{fmt(Number(r.difference))}</TableCell>
+                        <TableCell className="text-xs">{STATUS_LABEL[r.status] ?? r.status}</TableCell>
+                      </TableRow>
+                      {isExpanded && (
+                        <TableRow className="bg-muted/20">
+                          <TableCell colSpan={9} className="p-0">
+                            <div className="p-3 text-xs space-y-1">
+                              <div className="font-semibold mb-1 text-muted-foreground">
+                                Lotes Maquinona × depósitos Cresol pareados:
+                              </div>
+                              <table className="w-full">
+                                <thead className="text-[10px] text-muted-foreground">
+                                  <tr>
+                                    <th className="text-left py-1">Tipo</th>
+                                    <th className="text-right">Vendas</th>
+                                    <th className="text-right">Bruto Maq</th>
+                                    <th className="text-right">Líq Maq</th>
+                                    <th className="text-right">→ Cresol Data</th>
+                                    <th className="text-right">→ Cresol Valor</th>
+                                    <th className="text-right">Diff</th>
+                                    <th className="text-right">% retido</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {r.lots.map((l, i) => {
+                                    const pct = l.matched && l.liq > 0 && l.diff != null
+                                      ? (l.diff / l.liq) * 100 : null;
+                                    return (
+                                      <tr key={i} className={!l.matched ? 'text-amber-600 dark:text-amber-500' : ''}>
+                                        <td className="py-1 font-mono">{l.tipo}</td>
+                                        <td className="text-right">{l.count}</td>
+                                        <td className="text-right">{fmt(l.bruto)}</td>
+                                        <td className="text-right">{fmt(l.liq)}</td>
+                                        <td className="text-right">{l.matched ? fmtDate(l.cresol_date!) : '— sem match'}</td>
+                                        <td className="text-right">{l.matched ? fmt(l.cresol_amount!) : '—'}</td>
+                                        <td className={`text-right font-semibold ${l.matched && l.diff != null && l.diff < -0.5 ? 'text-red-600 dark:text-red-400' : ''}`}>
+                                          {l.matched ? fmt(l.diff!) : '—'}
+                                        </td>
+                                        <td className="text-right">{pct != null ? `${pct.toFixed(2)}%` : '—'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                              {r.lots.some(l => !l.matched) && (
+                                <div className="mt-2 text-[11px] text-amber-700 dark:text-amber-500">
+                                  ⚠ Lote(s) sem match: a Cresol provavelmente agregou esse PIX/CARD em outro depósito ou repassou em padrão atípico. Confira o extrato manualmente.
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
+
+        {unmatchedCresolDeps.length > 0 && (
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <div className="text-sm font-semibold text-amber-700 dark:text-amber-500">
+                ⚠ {unmatchedCresolDeps.length} depósito(s) Cresol no mês sem lote Maquinona pareado
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Esses depósitos chegaram na Cresol mas o algoritmo não encontrou venda Maquinona correspondente (tolerance 10%, janela 14d). Possíveis causas: estorno, ajuste manual do iFood, ou referem-se a vendas de meses muito adjacentes.
+              </p>
+              <table className="w-full text-xs mt-2">
+                <thead className="text-[10px] text-muted-foreground">
+                  <tr><th className="text-left">Data</th><th className="text-right">Valor</th></tr>
+                </thead>
+                <tbody>
+                  {unmatchedCresolDeps.map((d, i) => (
+                    <tr key={i}>
+                      <td className="py-0.5">{fmtDate(d.date)}</td>
+                      <td className="text-right font-mono">{fmt(d.amount)}</td>
+                    </tr>
+                  ))}
+                  <tr className="border-t font-semibold">
+                    <td className="pt-1">Total</td>
+                    <td className="text-right font-mono pt-1">{fmt(unmatchedCresolDeps.reduce((s, d) => s + d.amount, 0))}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="flex items-center justify-between flex-wrap gap-2">
           <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
