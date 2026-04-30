@@ -1586,11 +1586,23 @@ function UploadAleloCard({
         try {
           const buf = await file.arrayBuffer();
           const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
-          // Procura aba "Extrato" (Alelo) ou usa primeira disponível
-          const sheetName = workbook.SheetNames.find(
-            n => n.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase() === 'extrato',
-          ) ?? workbook.SheetNames[0];
-          if (!sheetName) throw new Error('Arquivo sem abas');
+          // Tenta a aba "Extrato" (case-insensitive). Se não achar, procura
+          // qualquer aba cujas primeiras linhas tenham "Data de Pagamento"
+          // (assim ignora "Instruções" / "Não Exportadas").
+          let sheetName = workbook.SheetNames.find(n => n.trim().toLowerCase() === 'extrato');
+          if (!sheetName) {
+            for (const candidate of workbook.SheetNames) {
+              const sheet = workbook.Sheets[candidate];
+              const probe = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+              const hasHeader = probe.slice(0, 5).some(r =>
+                Array.isArray(r) && r.some(c => String(c ?? '').toLowerCase().includes('data de pagamento')),
+              );
+              if (hasHeader) { sheetName = candidate; break; }
+            }
+          }
+          if (!sheetName) {
+            throw new Error(`Aba "Extrato" não encontrada (abas disponíveis: ${workbook.SheetNames.join(', ')})`);
+          }
           const sheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
