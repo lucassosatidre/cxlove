@@ -2058,7 +2058,7 @@ function UploadPluxeeCard({
         <input
           ref={inputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,text/csv,text/plain,application/csv,application/vnd.ms-excel,application/octet-stream"
           multiple
           className="hidden"
           onChange={(e) => {
