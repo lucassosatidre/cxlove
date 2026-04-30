@@ -266,6 +266,57 @@ export type Database = {
           },
         ]
       }
+      audit_lot_overrides: {
+        Row: {
+          audit_period_id: string
+          created_at: string
+          created_by: string | null
+          cresol_deposit_id: string | null
+          id: string
+          note: string | null
+          sale_date: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          audit_period_id: string
+          created_at?: string
+          created_by?: string | null
+          cresol_deposit_id?: string | null
+          id?: string
+          note?: string | null
+          sale_date: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          audit_period_id?: string
+          created_at?: string
+          created_by?: string | null
+          cresol_deposit_id?: string | null
+          id?: string
+          note?: string | null
+          sale_date?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_lot_overrides_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_lot_overrides_cresol_deposit_id_fkey"
+            columns: ["cresol_deposit_id"]
+            isOneToOne: false
+            referencedRelation: "audit_bank_deposits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_period_log: {
         Row: {
           action: string
