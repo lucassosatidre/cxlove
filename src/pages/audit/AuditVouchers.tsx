@@ -109,7 +109,9 @@ export default function AuditVouchers() {
   const [deposits, setDeposits] = useState<BankDeposit[]>([]);
   const [expandedLot, setExpandedLot] = useState<string | null>(null);
   const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
+  const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
+  const [showAllLots, setShowAllLots] = useState(false);
 
   const refresh = async (periodId: string) => {
     const [lotsRes, importsRes, depRes] = await Promise.all([
@@ -131,9 +133,28 @@ export default function AuditVouchers() {
         .eq('bank', 'bb')
         .order('deposit_date', { ascending: true }),
     ]);
-    setLots((lotsRes.data ?? []) as Lot[]);
+    const fetchedLots = (lotsRes.data ?? []) as Lot[];
+    setLots(fetchedLots);
     setImports((importsRes.data ?? []) as AuditImport[]);
     setDeposits((depRes.data ?? []) as BankDeposit[]);
+
+    // Carrega TODOS os items de TODOS os lotes (em batch) pra calcular competência
+    // de venda. lot_items é compacto (10-50 rows por lote típico), 19 lotes ~= 50-200 rows.
+    const lotIds = fetchedLots.map(l => l.id);
+    if (lotIds.length > 0) {
+      const { data: allItems } = await supabase
+        .from('audit_voucher_lot_items')
+        .select('id, lot_id, data_transacao, data_postagem, numero_documento, numero_cartao_mascarado, valor')
+        .in('lot_id', lotIds);
+      const grouped: Record<string, LotItem[]> = {};
+      for (const it of (allItems ?? []) as LotItem[]) {
+        if (!grouped[it.lot_id]) grouped[it.lot_id] = [];
+        grouped[it.lot_id].push(it);
+      }
+      setAllItemsByLot(grouped);
+    } else {
+      setAllItemsByLot({});
+    }
   };
 
   useEffect(() => {
@@ -161,17 +182,15 @@ export default function AuditVouchers() {
     setSearchParams(next, { replace: true });
   }, [month, year]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadItems = async (lotId: string) => {
-    if (itemsByLot[lotId]) {
+  const loadItems = (lotId: string) => {
+    if (itemsByLot[lotId] || allItemsByLot[lotId]) {
+      if (!itemsByLot[lotId] && allItemsByLot[lotId]) {
+        const sorted = [...allItemsByLot[lotId]].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao));
+        setItemsByLot(s => ({ ...s, [lotId]: sorted }));
+      }
       setExpandedLot(expandedLot === lotId ? null : lotId);
       return;
     }
-    const { data } = await supabase
-      .from('audit_voucher_lot_items')
-      .select('id, lot_id, data_transacao, data_postagem, numero_documento, numero_cartao_mascarado, valor')
-      .eq('lot_id', lotId)
-      .order('data_transacao', { ascending: true });
-    setItemsByLot(s => ({ ...s, [lotId]: (data ?? []) as LotItem[] }));
     setExpandedLot(lotId);
   };
 
@@ -192,19 +211,82 @@ export default function AuditVouchers() {
     return p;
   };
 
-  const ticketLots = useMemo(() => lots.filter(l => l.operadora === 'ticket'), [lots]);
-  const ticketStats = useMemo(() => {
-    const subtotal = ticketLots.reduce((s, l) => s + Number(l.subtotal_vendas), 0);
-    const descontos = ticketLots.reduce((s, l) => s + Number(l.total_descontos), 0);
-    const liquido = ticketLots.reduce((s, l) => s + Number(l.valor_liquido), 0);
-    const matched = ticketLots.filter(l => l.bb_deposit_id).length;
-    return { count: ticketLots.length, subtotal, descontos, liquido, matched };
-  }, [ticketLots]);
+  // Janela do mês de competência (vendas) — YYYY-MM-DD
+  const competenciaIni = useMemo(() => `${year}-${String(month).padStart(2, '0')}-01`, [year, month]);
+  const competenciaFim = useMemo(() => {
+    const next = new Date(year, month, 1); // mês seguinte
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+  }, [year, month]);
+  // Janela do BB: começa no início da competência, vai até +60 dias depois do fim do mês de competência (cobre defasagem Ticket de até 26d + folga)
+  const bbWindowFim = useMemo(() => {
+    const fim = new Date(competenciaFim + 'T00:00:00');
+    fim.setDate(fim.getDate() + 60);
+    return fim.toISOString().slice(0, 10);
+  }, [competenciaFim]);
 
+  // Agrega valor de vendas DENTRO da competência por lote.
+  // saleByLotInCompetencia[lotId] = { count, valor } (só items com data_transacao no mês X)
+  const competenciaByLot = useMemo(() => {
+    const map: Record<string, { count: number; valor: number }> = {};
+    for (const [lotId, items] of Object.entries(allItemsByLot)) {
+      let count = 0; let valor = 0;
+      for (const it of items) {
+        if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
+          count++;
+          valor += Number(it.valor);
+        }
+      }
+      if (count > 0) map[lotId] = { count, valor };
+    }
+    return map;
+  }, [allItemsByLot, competenciaIni, competenciaFim]);
+
+  const allTicketLots = useMemo(() => lots.filter(l => l.operadora === 'ticket'), [lots]);
+
+  // Lotes com pelo menos 1 venda na competência
+  const ticketLotsCompetencia = useMemo(
+    () => allTicketLots.filter(l => competenciaByLot[l.id]),
+    [allTicketLots, competenciaByLot],
+  );
+
+  // Visíveis na tabela: ou todos (toggle on), ou só os de competência
+  const visibleTicketLots = useMemo(
+    () => showAllLots ? allTicketLots : ticketLotsCompetencia,
+    [showAllLots, allTicketLots, ticketLotsCompetencia],
+  );
+
+  // Stats SEMPRE refletem competência (vendas do mês X), independente do toggle.
+  // Para lotes parciais (vendas dividas entre meses), usamos só a fração de competência:
+  //   - subtotal/descontos/líquido proporcionais à fração de vendas no mês X
+  //   - valor exato é raro porque na prática Ticket fecha lote semanal (quase tudo cai num único mês)
+  const ticketStats = useMemo(() => {
+    let count = 0;
+    let subtotal = 0;
+    let descontos = 0;
+    let liquido = 0;
+    let matched = 0;
+    let salesCount = 0;
+    for (const l of allTicketLots) {
+      const comp = competenciaByLot[l.id];
+      if (!comp) continue;
+      count++;
+      salesCount += comp.count;
+      const totalSubtotal = Number(l.subtotal_vendas) || 0;
+      const fraction = totalSubtotal > 0 ? comp.valor / totalSubtotal : 0;
+      subtotal += comp.valor;
+      descontos += Number(l.total_descontos) * fraction;
+      liquido += Number(l.valor_liquido) * fraction;
+      if (l.bb_deposit_id) matched++;
+    }
+    return { count, salesCount, subtotal, descontos, liquido, matched };
+  }, [allTicketLots, competenciaByLot]);
+
+  // Depósitos BB filtrados pela janela do mês de competência (até +60 dias) e categoria.
   const filteredDeposits = useMemo(() => {
-    if (categoryFilter === 'todos') return deposits;
-    return deposits.filter(d => d.category === categoryFilter);
-  }, [deposits, categoryFilter]);
+    let arr = deposits.filter(d => d.deposit_date >= competenciaIni && d.deposit_date < bbWindowFim);
+    if (categoryFilter !== 'todos') arr = arr.filter(d => d.category === categoryFilter);
+    return arr;
+  }, [deposits, categoryFilter, competenciaIni, bbWindowFim]);
 
   if (roleLoading || loading) {
     return (
@@ -289,20 +371,40 @@ export default function AuditVouchers() {
 
         {/* Stats Ticket */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Ticket — Lotes do período</CardTitle>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
+            <div>
+              <CardTitle className="text-base">Ticket — Competência {MONTHS[month - 1]} {year}</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Vendas Ticket no mês selecionado. Lotes podem ter sido pagos no BB em meses seguintes.
+              </p>
+            </div>
+            {allTicketLots.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAllLots(s => !s)}
+              >
+                {showAllLots
+                  ? `Mostrar só competência (${ticketLotsCompetencia.length})`
+                  : `Ver todos os lotes (${allTicketLots.length})`}
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 grid-cols-2 md:grid-cols-5 mb-4 text-sm">
-              <Stat label="Lotes" value={String(ticketStats.count)} />
-              <Stat label="Subtotal vendas" value={fmt(ticketStats.subtotal)} />
-              <Stat label="Total descontos" value={fmt(ticketStats.descontos)} className="text-amber-700 dark:text-amber-400" />
-              <Stat label="Valor líquido" value={fmt(ticketStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+              <Stat label="Lotes" value={`${ticketStats.count} (${ticketStats.salesCount} vendas)`} />
+              <Stat label="Vendido (bruto)" value={fmt(ticketStats.subtotal)} />
+              <Stat label="Descontos (proporc.)" value={fmt(ticketStats.descontos)} className="text-amber-700 dark:text-amber-400" />
+              <Stat label="Líquido (proporc.)" value={fmt(ticketStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
               <Stat label="Pareados c/ BB" value={`${ticketStats.matched} / ${ticketStats.count}`} />
             </div>
 
-            {ticketLots.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">Nenhum lote Ticket importado neste período.</p>
+            {visibleTicketLots.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                {allTicketLots.length === 0
+                  ? 'Nenhum lote Ticket importado neste período.'
+                  : `Nenhum lote com vendas em ${MONTHS[month - 1]}/${year}. Use "Ver todos os lotes" pra inspecionar os ${allTicketLots.length} importados.`}
+              </p>
             ) : (
               <Table>
                 <TableHeader>
@@ -312,6 +414,7 @@ export default function AuditVouchers() {
                     <TableHead>Produto</TableHead>
                     <TableHead>Corte</TableHead>
                     <TableHead>Crédito BB</TableHead>
+                    <TableHead>Vendas no mês</TableHead>
                     <TableHead className="text-right">Subtotal</TableHead>
                     <TableHead className="text-right">Descontos</TableHead>
                     <TableHead className="text-right">Líquido</TableHead>
@@ -319,8 +422,11 @@ export default function AuditVouchers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ticketLots.map(l => {
+                  {visibleTicketLots.map(l => {
                     const expanded = expandedLot === l.id;
+                    const comp = competenciaByLot[l.id];
+                    const totalItems = (allItemsByLot[l.id] ?? []).length;
+                    const inCompetencia = comp?.count ?? 0;
                     return (
                       <Fragment key={l.id}>
                         <TableRow className="cursor-pointer hover:bg-muted/30" onClick={() => loadItems(l.id)}>
@@ -333,6 +439,17 @@ export default function AuditVouchers() {
                           </TableCell>
                           <TableCell>{fmtDate(l.data_corte)}</TableCell>
                           <TableCell>{fmtDate(l.data_credito)}</TableCell>
+                          <TableCell className="text-xs">
+                            {inCompetencia === 0 ? (
+                              <span className="text-muted-foreground">— / {totalItems}</span>
+                            ) : inCompetencia === totalItems ? (
+                              <Badge variant="outline" className="font-mono">{inCompetencia} / {totalItems}</Badge>
+                            ) : (
+                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono">
+                                {inCompetencia} / {totalItems}
+                              </Badge>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right">{fmt(Number(l.subtotal_vendas))}</TableCell>
                           <TableCell className="text-right text-amber-700 dark:text-amber-400">{fmt(Number(l.total_descontos))}</TableCell>
                           <TableCell className="text-right font-medium">{fmt(Number(l.valor_liquido))}</TableCell>
@@ -346,8 +463,13 @@ export default function AuditVouchers() {
                         </TableRow>
                         {expanded && (
                           <TableRow className="bg-muted/20 hover:bg-muted/20">
-                            <TableCell colSpan={9} className="p-0">
-                              <LotDetail lot={l} items={itemsByLot[l.id] ?? []} />
+                            <TableCell colSpan={10} className="p-0">
+                              <LotDetail
+                                lot={l}
+                                items={itemsByLot[l.id] ?? allItemsByLot[l.id] ?? []}
+                                competenciaIni={competenciaIni}
+                                competenciaFim={competenciaFim}
+                              />
                             </TableCell>
                           </TableRow>
                         )}
@@ -363,7 +485,12 @@ export default function AuditVouchers() {
         {/* Depósitos BB */}
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
-            <CardTitle className="text-base">Depósitos BB</CardTitle>
+            <div>
+              <CardTitle className="text-base">Depósitos BB — janela {MONTHS[month - 1]} {year} + 60d</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Inclui pagamentos de vendas do mês que cairam até 60 dias depois (defasagem Ticket).
+              </p>
+            </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -469,9 +596,20 @@ function Stat({ label, value, className }: { label: string; value: string; class
   );
 }
 
-function LotDetail({ lot, items }: { lot: Lot; items: LotItem[] }) {
+function LotDetail({
+  lot, items, competenciaIni, competenciaFim,
+}: {
+  lot: Lot;
+  items: LotItem[];
+  competenciaIni: string;
+  competenciaFim: string;
+}) {
   const descontos = lot.descontos ?? {};
   const descKeys = Object.keys(descontos);
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao)),
+    [items],
+  );
   return (
     <div className="px-4 py-3 space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
@@ -487,14 +625,20 @@ function LotDetail({ lot, items }: { lot: Lot; items: LotItem[] }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map(it => (
-                <TableRow key={it.id}>
-                  <TableCell className="text-xs">{fmtDate(it.data_transacao)}</TableCell>
-                  <TableCell className="font-mono text-xs">{it.numero_documento ?? '—'}</TableCell>
-                  <TableCell className="font-mono text-xs">{it.numero_cartao_mascarado ?? '—'}</TableCell>
-                  <TableCell className="text-right text-xs">{fmt(Number(it.valor))}</TableCell>
-                </TableRow>
-              ))}
+              {sortedItems.map(it => {
+                const inComp = it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim;
+                return (
+                  <TableRow key={it.id} className={inComp ? '' : 'opacity-60'}>
+                    <TableCell className="text-xs">
+                      {fmtDate(it.data_transacao)}
+                      {!inComp && <span className="ml-1 text-[10px] text-muted-foreground">(fora)</span>}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{it.numero_documento ?? '—'}</TableCell>
+                    <TableCell className="font-mono text-xs">{it.numero_cartao_mascarado ?? '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{fmt(Number(it.valor))}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
