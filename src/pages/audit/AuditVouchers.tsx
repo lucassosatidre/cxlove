@@ -44,6 +44,7 @@ type Lot = {
   valor_liquido: number;
   descontos: Record<string, number> | null;
   bb_deposit_id: string | null;
+  bb_deposit_id_2: string | null;
   status: string;
   manual: boolean;
 };
@@ -160,7 +161,7 @@ export default function AuditVouchers() {
     const [lotsRes, importsRes, depRes, maqRes, ovrRes] = await Promise.all([
       supabase
         .from('audit_voucher_lots')
-        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, status, manual')
+        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, bb_deposit_id_2, status, manual')
         .eq('audit_period_id', periodId)
         .order('data_credito', { ascending: true }),
       supabase
@@ -421,14 +422,17 @@ export default function AuditVouchers() {
   }, [deposits, competenciaIni, bbWindowFim]);
 
 
-  // Lotes pareados agrupados por bb_deposit_id (depósito BB pode ter N lotes)
+  // Lotes pareados agrupados por bb_deposit_id (depósito BB pode ter N lotes
+  // apontando, e 1 lote pode estar em 2 depósitos via bb_deposit_id_2).
   const lotsByDeposit = useMemo(() => {
     const map = new Map<string, Lot[]>();
     for (const l of lots) {
-      if (!l.bb_deposit_id) continue;
-      const arr = map.get(l.bb_deposit_id) ?? [];
-      arr.push(l);
-      map.set(l.bb_deposit_id, arr);
+      for (const depId of [l.bb_deposit_id, l.bb_deposit_id_2]) {
+        if (!depId) continue;
+        const arr = map.get(depId) ?? [];
+        arr.push(l);
+        map.set(depId, arr);
+      }
     }
     return map;
   }, [lots]);
@@ -459,15 +463,13 @@ export default function AuditVouchers() {
     if (!depositId) {
       const { error } = await supabase
         .from('audit_voucher_lots')
-        .update({ bb_deposit_id: null, status: 'pending', manual: false, diff: null })
+        .update({ bb_deposit_id: null, bb_deposit_id_2: null, status: 'pending', manual: false, diff: null })
         .eq('id', lotId);
       if (error) { toast.error('Erro ao remover match', { description: error.message }); return; }
       toast.success('Match removido');
       if (period) await refresh(period.id);
       return;
     }
-    // Match individual = diff (este lote × dep). Quando depósito tem N lotes
-    // somados, diff fica 0 pra cada (a tabela "Depósitos BB" mostra a soma).
     const dep = deposits.find(d => d.id === depositId);
     const lot = lots.find(l => l.id === lotId);
     const otherLotsOnSameDep = lots.filter(l => l.bb_deposit_id === depositId && l.id !== lotId);
@@ -475,9 +477,10 @@ export default function AuditVouchers() {
     const diff = (dep && lot && !isMultiLot)
       ? Number(dep.amount) - Number(lot.valor_liquido)
       : 0;
+    // Edição manual primária zera o secundário (usuário recomeça do zero)
     const { error } = await supabase
       .from('audit_voucher_lots')
-      .update({ bb_deposit_id: depositId, status: 'matched', manual: true, diff })
+      .update({ bb_deposit_id: depositId, bb_deposit_id_2: null, status: 'matched', manual: true, diff })
       .eq('id', lotId);
     if (error) { toast.error('Erro ao atualizar match', { description: error.message }); return; }
     toast.success(isMultiLot ? `Match agregado (depósito agora paga ${otherLotsOnSameDep.length + 1} lotes)` : 'Match atualizado');
@@ -770,10 +773,13 @@ export default function AuditVouchers() {
                           <TableCell className="text-right font-medium">{fmt(liquido)}</TableCell>
                           <TableCell>
                             {l.bb_deposit_id ? (() => {
-                              const dep = depositNumberById.get(l.bb_deposit_id);
+                              const d1 = depositNumberById.get(l.bb_deposit_id);
+                              const d2 = l.bb_deposit_id_2 ? depositNumberById.get(l.bb_deposit_id_2) : null;
                               return (
                                 <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
-                                  ✓ {dep ? `#${dep.n} ${fmtDate(dep.deposit.deposit_date)}` : 'Pareado'}
+                                  {d1 && d2
+                                    ? `✓ #${d1.n}+#${d2.n}`
+                                    : `✓ ${d1 ? `#${d1.n} ${fmtDate(d1.deposit.deposit_date)}` : 'Pareado'}`}
                                   {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
                                 </Badge>
                               );
@@ -1047,6 +1053,9 @@ function LotDetail({
   const isParcial = itensComp.length > 0 && itensComp.length < sortedItems.length;
   const compValor = itensComp.reduce((s, i) => s + Number(i.valor), 0);
   const matchedDep = lot.bb_deposit_id ? depositNumberById.get(lot.bb_deposit_id) : null;
+  const matchedDep2 = lot.bb_deposit_id_2 ? depositNumberById.get(lot.bb_deposit_id_2) : null;
+  const matchedSumAmount = (matchedDep ? Number(matchedDep.deposit.amount) : 0)
+    + (matchedDep2 ? Number(matchedDep2.deposit.amount) : 0);
 
   // Candidatos pra match manual: BB Ticket dentro da janela do mês (+60d)
   const ticketCategoryMatch = lot.operadora;
@@ -1109,11 +1118,17 @@ function LotDetail({
               <ResumoLine label="Líquido teórico" value={fmt(liquidoTeorico)} valueClass="text-emerald-700 dark:text-emerald-400" hint="subtotal − descontos" />
               <ResumoLine
                 label="Líquido recebido"
-                value={fmt(liquido)}
-                valueClass={Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
-                hint={matchedDep
-                  ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
-                  : Math.abs(liquidoTeorico - liquido) < 0.05 ? '(extrato Ticket) ✓ bate' : `(extrato Ticket) ✗ diff ${fmt(liquido - liquidoTeorico)}`
+                value={matchedDep ? fmt(matchedSumAmount) : fmt(liquido)}
+                valueClass={
+                  matchedDep
+                    ? (Math.abs(matchedSumAmount - liquido) < 0.5 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
+                    : (Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
+                }
+                hint={matchedDep && matchedDep2
+                  ? `operações #${matchedDep.n} (${fmtDate(matchedDep.deposit.deposit_date)}) + #${matchedDep2.n} (${fmtDate(matchedDep2.deposit.deposit_date)})${lot.manual ? ' — manual' : ''}`
+                  : matchedDep
+                    ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
+                    : Math.abs(liquidoTeorico - liquido) < 0.05 ? '(extrato operadora) ✓ bate' : `(extrato operadora) ✗ diff ${fmt(liquido - liquidoTeorico)}`
                 }
               />
               {isParcial && (

@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
     if (reset) {
       await supabase
         .from('audit_voucher_lots')
-        .update({ bb_deposit_id: null, status: 'pending', diff: null })
+        .update({ bb_deposit_id: null, bb_deposit_id_2: null, status: 'pending', diff: null })
         .eq('audit_period_id', audit_period_id)
         .eq('operadora', operadora)
         .eq('manual', false);
@@ -87,7 +87,7 @@ Deno.serve(async (req) => {
     // Carrega lotes pendentes (sem bb_deposit_id e não-manuais)
     const { data: lots } = await supabase
       .from('audit_voucher_lots')
-      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, manual')
+      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual')
       .eq('audit_period_id', audit_period_id)
       .eq('operadora', operadora)
       .order('data_credito', { ascending: true });
@@ -112,14 +112,18 @@ Deno.serve(async (req) => {
       id: d.id, deposit_date: d.deposit_date, amount: Number(d.amount),
     }));
 
-    // Marca depósitos já usados por lotes manuais (sem reset)
+    // Marca depósitos já usados por lotes manuais ou pré-existentes (em
+    // bb_deposit_id ou bb_deposit_id_2)
     const { data: alreadyMatched } = await supabase
       .from('audit_voucher_lots')
-      .select('id, bb_deposit_id')
+      .select('id, bb_deposit_id, bb_deposit_id_2')
       .eq('audit_period_id', audit_period_id)
-      .eq('operadora', operadora)
-      .not('bb_deposit_id', 'is', null);
-    const usedIds = new Set((alreadyMatched ?? []).map(r => r.bb_deposit_id as string));
+      .eq('operadora', operadora);
+    const usedIds = new Set<string>();
+    for (const r of (alreadyMatched ?? [])) {
+      if (r.bb_deposit_id) usedIds.add(r.bb_deposit_id as string);
+      if (r.bb_deposit_id_2) usedIds.add(r.bb_deposit_id_2 as string);
+    }
     for (const d of depPool) if (usedIds.has(d.id)) d.usedBy = 'preexisting';
 
     type PendingLot = { id: string; numero_reembolso: string; valor_liquido: number; data_credito: string };
@@ -133,13 +137,49 @@ Deno.serve(async (req) => {
       }));
 
     let matchedSingle = 0;
-    let matchedPair = 0;
-    const updates: Array<{ id: string; bb_deposit_id: string; diff: number }> = [];
+    let matchedPair = 0;        // 2 lotes → 1 dep
+    let matchedSplit = 0;        // 1 lote → 2 deps somados
+    const updates: Array<{ id: string; bb_deposit_id: string; bb_deposit_id_2?: string | null; diff: number }> = [];
     const ambiguous: string[] = [];
 
-    // Itera POR DEPÓSITO (não por lote), pq um depósito pode pagar 2 lotes
-    // somados (caso real: BB 23/03 R$226,57 = lote 422809580 R$141,74 + lote
-    // 424272823 R$84,83). Tentamos:
+    // Pass 1: 1 lote → 2 depósitos somados (Alelo divide um lote em 2 TEDs).
+    // Caso real: ALELO-20260218 R$692,23 = #10 (R$530,95) + #11 (R$161,28).
+    // Faz ANTES da iteração por depósito pra "consumir" os deps fragmentados
+    // e evitar que depPool processing tente parear mal.
+    for (const lot of pendingLots) {
+      const window = new Set(businessDayWindow(lot.data_credito, WINDOW_DAYS));
+      const candidates = depPool.filter(d => !d.usedBy && window.has(d.deposit_date));
+      // Tenta single primeiro — se já bate sozinho, deixa pro pass 2 (consistência)
+      const singleExact = candidates.some(d => Math.abs(d.amount - lot.valor_liquido) <= TOLERANCE);
+      if (singleExact) continue;
+      // Procura par de deps cuja soma == valor_liquido
+      const pairs: [Dep, Dep][] = [];
+      for (let i = 0; i < candidates.length; i++) {
+        for (let j = i + 1; j < candidates.length; j++) {
+          const a = candidates[i];
+          const b = candidates[j];
+          if (Math.abs((a.amount + b.amount) - lot.valor_liquido) <= TOLERANCE) {
+            pairs.push([a, b]);
+          }
+        }
+      }
+      if (pairs.length === 1) {
+        const [a, b] = pairs[0];
+        a.usedBy = lot.id;
+        b.usedBy = lot.id;
+        updates.push({
+          id: lot.id,
+          bb_deposit_id: a.id,
+          bb_deposit_id_2: b.id,
+          diff: (a.amount + b.amount) - lot.valor_liquido,
+        });
+        matchedSplit++;
+      } else if (pairs.length > 1) {
+        ambiguous.push(`Lote ${lot.numero_reembolso} R$${lot.valor_liquido.toFixed(2)}: ${pairs.length} pares de depósitos possíveis`);
+      }
+    }
+
+    // Pass 2: itera POR DEPÓSITO. Casos:
     //   1) Match 1-pra-1 (valor exato)
     //   2) Combinação de 2 lotes (ambos com data_credito na janela do depósito)
     for (const dep of depPool) {
@@ -194,7 +234,12 @@ Deno.serve(async (req) => {
     for (const u of updates) {
       await supabase
         .from('audit_voucher_lots')
-        .update({ bb_deposit_id: u.bb_deposit_id, diff: u.diff, status: 'matched' })
+        .update({
+          bb_deposit_id: u.bb_deposit_id,
+          bb_deposit_id_2: u.bb_deposit_id_2 ?? null,
+          diff: u.diff,
+          status: 'matched',
+        })
         .eq('id', u.id);
     }
 
@@ -203,9 +248,10 @@ Deno.serve(async (req) => {
       total_lots: lots.length,
       matched_single: matchedSingle,
       matched_pair: matchedPair,
-      matched: matchedSingle + matchedPair * 2,
+      matched_split: matchedSplit,
+      matched: matchedSingle + matchedPair * 2 + matchedSplit,
       ambiguous: ambiguous.slice(0, 20),
-      message: `${matchedSingle} lote(s) 1-pra-1 + ${matchedPair} par(es) somados${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos pra resolver manualmente)` : ''}`,
+      message: `${matchedSingle} 1-pra-1 + ${matchedPair} 2 lotes→1 dep + ${matchedSplit} 1 lote→2 deps${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('match-vouchers error', e);
