@@ -94,23 +94,37 @@ Deno.serve(async (req) => {
     }
     const lots: Lot[] = Array.from(lotsMap.values()).sort((a, b) => a.sale_date.localeCompare(b.sale_date));
 
-    // Match: pra cada lote, busca depósito Cresol mais próximo em valor (tol 5%)
-    // que ainda não foi matched. Depósito >= sale_date é preferível mas não obrigatório.
+    // Match: pra cada lote, busca depósito Cresol mais próximo em valor.
+    // Tolerance 10% (suficiente pra absorver até taxa de antecipação iFood + PIX retido).
+    // Janela: depósito tem que ser entre sale_date e sale_date + 14 dias (cobre
+    // carnaval, finais de mês emendados, etc).
+    // Algoritmo gulose: itera lotes maiores primeiro (CARD antes de PIX) — lotes
+    // grandes têm match mais ambíguo se houver muitos depósitos de valor próximo.
     type DepStatus = { id: string; date: string; amount: number; matched: boolean };
     const depPool: DepStatus[] = (deps ?? []).map(d => ({
       id: d.id, date: d.deposit_date, amount: Number(d.amount || 0), matched: false
     }));
 
+    function addDays(iso: string, n: number): string {
+      const d = new Date(iso + 'T00:00:00Z');
+      d.setUTCDate(d.getUTCDate() + n);
+      return d.toISOString().slice(0, 10);
+    }
+
+    // Ordena lotes por valor desc — lotes grandes primeiro (mais determinísticos)
+    const lotsForMatch = [...lots].sort((a, b) => b.liq - a.liq);
     const matchedLots: Array<Lot & { cresol_amount?: number; cresol_date?: string; diff?: number; matched: boolean }> = [];
 
-    for (const lot of lots) {
+    for (const lot of lotsForMatch) {
+      const maxDate = addDays(lot.sale_date, 14);
       let best: DepStatus | null = null;
       let bestPct = 999;
       for (const dep of depPool) {
         if (dep.matched) continue;
-        if (dep.date < lot.sale_date) continue; // depósito tem que ser >= sale_date
+        if (dep.date < lot.sale_date) continue;
+        if (dep.date > maxDate) continue;
         const diffPct = lot.liq > 0 ? Math.abs(dep.amount - lot.liq) / lot.liq : 999;
-        if (diffPct < 0.05 && diffPct < bestPct) {
+        if (diffPct < 0.10 && diffPct < bestPct) {
           best = dep;
           bestPct = diffPct;
         }
@@ -124,29 +138,37 @@ Deno.serve(async (req) => {
     }
 
     // Agrega por sale_date pro audit_daily_matches (1 row por sale_date,
-    // somando PIX + CARD do dia)
-    type DayAgg = { expected: number; deposited: number; bruto: number; count: number; lots: number; matched_lots: number };
+    // somando PIX + CARD do dia). Separa expected_matched (= líq dos lotes
+    // que pareou) de expected_unmatched (= líq dos lotes que não pareou).
+    // O diff (depositado - expected_matched) é o "custo oculto real" — não
+    // inflado por lotes não conciliados.
+    type DayAgg = { expected_matched: number; expected_unmatched: number; deposited: number; bruto: number; count: number; lots: number; matched_lots: number };
     const byDay = new Map<string, DayAgg>();
     for (const m of matchedLots) {
-      const a = byDay.get(m.sale_date) ?? { expected: 0, deposited: 0, bruto: 0, count: 0, lots: 0, matched_lots: 0 };
-      a.expected += m.liq;
-      a.deposited += m.cresol_amount ?? 0;
+      const a = byDay.get(m.sale_date) ?? { expected_matched: 0, expected_unmatched: 0, deposited: 0, bruto: 0, count: 0, lots: 0, matched_lots: 0 };
+      if (m.matched) {
+        a.expected_matched += m.liq;
+        a.deposited += m.cresol_amount ?? 0;
+        a.matched_lots += 1;
+      } else {
+        a.expected_unmatched += m.liq;
+      }
       a.bruto += m.bruto;
       a.count += m.count;
       a.lots += 1;
-      if (m.matched) a.matched_lots += 1;
       byDay.set(m.sale_date, a);
     }
 
     const dailyRows: any[] = [];
     for (const [sale_date, a] of byDay) {
-      const diff = a.deposited - a.expected;
-      const tolerance = Math.max(1, a.expected * 0.005);
+      const expectedTotal = a.expected_matched + a.expected_unmatched;
+      const diff = a.deposited - a.expected_matched; // diff só dos matched (custo oculto real)
+      const tolerance = Math.max(1, a.expected_matched * 0.005);
       let status: string;
       if (a.matched_lots === 0) {
-        status = 'pending'; // nenhum lote do dia foi matched (depósito não chegou)
+        status = 'pending';
       } else if (a.matched_lots < a.lots) {
-        status = 'partial'; // alguns lotes matched, outros não
+        status = 'partial'; // tem lotes sem match, mostrar
       } else if (Math.abs(diff) <= tolerance) {
         status = 'matched';
       } else {
@@ -155,9 +177,9 @@ Deno.serve(async (req) => {
       dailyRows.push({
         audit_period_id,
         match_date: sale_date,
-        expected_amount: a.expected,
+        expected_amount: expectedTotal,
         deposited_amount: a.deposited,
-        difference: diff,
+        difference: diff, // negative = custo oculto (taxa real escondida) + unmatched
         transaction_count: a.count,
         deposit_count: a.matched_lots,
         status,
