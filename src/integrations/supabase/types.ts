@@ -388,6 +388,53 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_voucher_lot_competencia_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          lot_id: string
+          month: number
+          note: string | null
+          taxa_competencia: number
+          updated_at: string
+          updated_by: string | null
+          year: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id: string
+          month: number
+          note?: string | null
+          taxa_competencia: number
+          updated_at?: string
+          updated_by?: string | null
+          year: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lot_id?: string
+          month?: number
+          note?: string | null
+          taxa_competencia?: number
+          updated_at?: string
+          updated_by?: string | null
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_voucher_lot_competencia_overrides_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "audit_voucher_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_voucher_lot_items: {
         Row: {
           cnpj: string | null
