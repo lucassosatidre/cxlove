@@ -779,6 +779,13 @@ export default function AuditDashboard() {
                   <Search className="h-4 w-4" /> Auditar Match
                 </Button>
               )}
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => navigate(`/admin/auditoria/vouchers?month=${month}&year=${year}`)}
+              >
+                Vouchers (Estágio 2)
+              </Button>
               {period && isConciliated && !isClosed && (
                 <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
                   <Lock className="h-4 w-4" /> Fechar Período
