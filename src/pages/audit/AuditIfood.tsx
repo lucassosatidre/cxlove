@@ -10,6 +10,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/hooks/useAuth';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
 import { fetchAllPaginated } from '@/lib/supabase-pagination';
+import { nextBusinessDay } from '@/lib/business-calendar';
 import { ArrowLeft, Download, FileDown, Loader2 } from 'lucide-react';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -136,29 +137,27 @@ export default function AuditIfood() {
       }
       const lotsArr: LotInternal[] = Array.from(lotsMap.values());
 
-      // Match valor-a-valor (replica algoritmo do run-audit-match):
-      // tolerance 10%, janela 14d, lotes maiores primeiro
+      // Match D+1 com calendário bancário SC (replica run-audit-match novo):
+      // - expected = nextBusinessDay(sale_date) considerando feriados nacionais
+      //   + estaduais SC + carnaval (banco não opera)
+      // - data ESTRITA: dep só casa se dep.date === expected
+      // - tolerance 15% pra absorver retenção PIX + antecipação variável
+      // - lotes maiores primeiro (CARD antes de PIX)
       const depPool: Array<{ id: string; date: string; amount: number; matched: boolean }> =
         ((cresolDeps as any[]) ?? []).map(d => ({
           id: d.id, date: String(d.deposit_date), amount: Number(d.amount || 0), matched: false,
         }));
-      const addDays = (iso: string, n: number) => {
-        const d = new Date(iso + 'T00:00:00Z');
-        d.setUTCDate(d.getUTCDate() + n);
-        return d.toISOString().slice(0, 10);
-      };
       const lotsForMatch = [...lotsArr].sort((a, b) => b.liq - a.liq);
       const lotResults: Array<LotInternal & { cresol_date?: string; cresol_amount?: number; diff?: number; matched: boolean }> = [];
       for (const lot of lotsForMatch) {
-        const maxDate = addDays(lot.sale_date, 14);
+        const expectedDate = nextBusinessDay(lot.sale_date);
         let best: typeof depPool[0] | null = null;
         let bestPct = 999;
         for (const dep of depPool) {
           if (dep.matched) continue;
-          if (dep.date < lot.sale_date) continue;
-          if (dep.date > maxDate) continue;
+          if (dep.date !== expectedDate) continue;
           const diffPct = lot.liq > 0 ? Math.abs(dep.amount - lot.liq) / lot.liq : 999;
-          if (diffPct < 0.10 && diffPct < bestPct) {
+          if (diffPct < 0.15 && diffPct < bestPct) {
             best = dep;
             bestPct = diffPct;
           }

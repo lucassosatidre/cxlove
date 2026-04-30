@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { fetchAllPaginated } from '../_shared/pagination.ts';
+import { nextBusinessDay } from '../_shared/calendar.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -94,37 +95,33 @@ Deno.serve(async (req) => {
     }
     const lots: Lot[] = Array.from(lotsMap.values()).sort((a, b) => a.sale_date.localeCompare(b.sale_date));
 
-    // Match: pra cada lote, busca depósito Cresol mais próximo em valor.
-    // Tolerance 10% (suficiente pra absorver até taxa de antecipação iFood + PIX retido).
-    // Janela: depósito tem que ser entre sale_date e sale_date + 14 dias (cobre
-    // carnaval, finais de mês emendados, etc).
-    // Algoritmo gulose: itera lotes maiores primeiro (CARD antes de PIX) — lotes
-    // grandes têm match mais ambíguo se houver muitos depósitos de valor próximo.
+    // Match: D+1 com calendário bancário SC (não usa "valor próximo em janela
+    // larga" — isso causava cross-day mismatch quando lotes de tamanhos similares
+    // existiam em dias diferentes).
+    //
+    // Regra:
+    // 1. Pra cada lote (sale_date × tipo), expected = nextBusinessDay(sale_date)
+    //    considerando feriados nacionais + estaduais SC + carnaval (banco fecha).
+    // 2. Busca depósito Cresol APENAS na data expected (data estrita).
+    // 3. Tolerance 15% pra absorver retenções PIX (1-3%) + antecipação variável.
+    // 4. Lotes maiores primeiro (CARD antes de PIX) — pra evitar PIX pegar dep CARD.
     type DepStatus = { id: string; date: string; amount: number; matched: boolean };
     const depPool: DepStatus[] = (deps ?? []).map(d => ({
       id: d.id, date: d.deposit_date, amount: Number(d.amount || 0), matched: false
     }));
 
-    function addDays(iso: string, n: number): string {
-      const d = new Date(iso + 'T00:00:00Z');
-      d.setUTCDate(d.getUTCDate() + n);
-      return d.toISOString().slice(0, 10);
-    }
-
-    // Ordena lotes por valor desc — lotes grandes primeiro (mais determinísticos)
     const lotsForMatch = [...lots].sort((a, b) => b.liq - a.liq);
     const matchedLots: Array<Lot & { cresol_amount?: number; cresol_date?: string; diff?: number; matched: boolean }> = [];
 
     for (const lot of lotsForMatch) {
-      const maxDate = addDays(lot.sale_date, 14);
+      const expectedDate = nextBusinessDay(lot.sale_date);
       let best: DepStatus | null = null;
       let bestPct = 999;
       for (const dep of depPool) {
         if (dep.matched) continue;
-        if (dep.date < lot.sale_date) continue;
-        if (dep.date > maxDate) continue;
+        if (dep.date !== expectedDate) continue; // data estrita: D+1 útil bancário
         const diffPct = lot.liq > 0 ? Math.abs(dep.amount - lot.liq) / lot.liq : 999;
-        if (diffPct < 0.10 && diffPct < bestPct) {
+        if (diffPct < 0.15 && diffPct < bestPct) {
           best = dep;
           bestPct = diffPct;
         }
