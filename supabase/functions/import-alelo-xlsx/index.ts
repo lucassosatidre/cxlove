@@ -33,18 +33,40 @@ const COL = {
   dataPag: 12,
 };
 
+// xlsx.js no browser converte Excel datetime pra Date JS em horário LOCAL.
+// Ao virar JSON (envio pra edge), o ISO sai em UTC. Vendas BRT >= 21h saem
+// como UTC do dia seguinte. Compensamos aqui aplicando offset BRT (-3h)
+// antes de extrair a data civil. Funciona pra vendas com hora local; pra
+// strings BR/ISO sem tempo, usa direto.
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
-    const y = v.getUTCFullYear();
-    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(v.getUTCDate()).padStart(2, '0');
+    // Date com componente de tempo — aplica offset BRT
+    const adjusted = new Date(v.getTime() - 3 * 3600 * 1000);
+    const y = adjusted.getUTCFullYear();
+    const m = String(adjusted.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(adjusted.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   const s = String(v).trim();
+  // ISO datetime (chega assim do JSON.stringify(Date))
+  const isoDt = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})/);
+  if (isoDt) {
+    // O ISO vem em UTC; converte pra Date e aplica offset BRT
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const adjusted = new Date(d.getTime() - 3 * 3600 * 1000);
+      const y = adjusted.getUTCFullYear();
+      const m = String(adjusted.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(adjusted.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    }
+  }
+  // DD/MM/YYYY sem tempo
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (br) return `${br[3]}-${br[2]}-${br[1]}`;
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  // YYYY-MM-DD sem tempo
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   return null;
 }
