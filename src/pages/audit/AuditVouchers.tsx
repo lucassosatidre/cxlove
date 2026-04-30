@@ -1862,7 +1862,10 @@ function UploadVRCard({
     setUploading(true);
     setProgress({ current: 0, total: xls.length });
     let totalLots = 0;
+    let totalLinkedSales = 0;
+    let totalOrphans = 0;
     const failures: string[] = [];
+    const orphansAcc: any[] = [];
 
     try {
       const p = await ensurePeriod();
@@ -1874,29 +1877,59 @@ function UploadVRCard({
         try {
           const buf = await file.arrayBuffer();
           const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
-          let sheetName = workbook.SheetNames.find(n =>
-            n.trim().toLowerCase().includes('reembolso') || n.trim().toLowerCase().includes('guias')
-          );
-          if (!sheetName) sheetName = workbook.SheetNames[0];
-          if (!sheetName) throw new Error('Arquivo sem abas');
+
+          // Detecta tipo pela aba: "Guias de Reembolso" → reembolsos;
+          // "Relatorio de Transação de Venda" → vendas
+          let kind: 'reembolsos' | 'vendas' | null = null;
+          let sheetName: string | undefined;
+          for (const n of workbook.SheetNames) {
+            const lower = n.trim().toLowerCase();
+            if (lower.includes('reembolso') || lower.includes('guias')) {
+              kind = 'reembolsos'; sheetName = n; break;
+            }
+            if (lower.includes('venda') || lower.includes('transação') || lower.includes('transacao')) {
+              kind = 'vendas'; sheetName = n; break;
+            }
+          }
+          if (!kind || !sheetName) {
+            // Fallback: usa primeira aba e detecta pelo header
+            sheetName = workbook.SheetNames[0];
+            const probe = XLSX.utils.sheet_to_json<any[]>(workbook.Sheets[sheetName], { header: 1, defval: null, raw: true });
+            const flat = probe.slice(0, 25).flat().map((c: any) => String(c ?? '').toLowerCase());
+            if (flat.some(c => c.includes('número guia') || c.includes('numero guia'))) kind = 'reembolsos';
+            else if (flat.some(c => c.includes('autorização') || c.includes('autorizacao'))) kind = 'vendas';
+            else throw new Error('Não identificou tipo. Abas: ' + workbook.SheetNames.join(', '));
+          }
           const sheet = workbook.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
-          const { data, error } = await supabase.functions.invoke('import-vr-xls', {
+          const fnName = kind === 'reembolsos' ? 'import-vr-xls' : 'import-vr-vendas-xls';
+          const { data, error } = await supabase.functions.invoke(fnName, {
             body: { audit_period_id: p.id, rows, file_name: file.name },
           });
           if (error) throw new Error(error.message);
-          if (!data?.success) throw new Error(data?.error || 'Falha no import VR');
+          if (!data?.success) throw new Error(data?.error || `Falha no import ${kind}`);
 
-          totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
+          if (kind === 'reembolsos') {
+            totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
+          } else {
+            totalLinkedSales += Number(data.linked_count ?? 0);
+            totalOrphans += Number(data.orphan_count ?? 0);
+            for (const o of (data.orphans ?? [])) orphansAcc.push(o);
+          }
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
         }
       }
 
       if (failures.length === 0) {
-        toast.success(`${totalLots} lotes VR importados`);
+        const parts: string[] = [];
+        if (totalLots > 0) parts.push(`${totalLots} lotes VR`);
+        if (totalLinkedSales > 0) parts.push(`${totalLinkedSales} vendas vinculadas`);
+        const desc = totalOrphans > 0 ? `${totalOrphans} venda(s) órfã(s) — sem lote correspondente. Veja console.` : '';
+        toast.success(parts.join(' + ') || 'Import concluído', { description: desc });
+        if (orphansAcc.length > 0) console.warn('Vendas VR órfãs:', orphansAcc);
       } else {
         toast.error(`${failures.length} de ${xls.length} falharam`, { description: failures.join(' | ') });
       }
@@ -1912,12 +1945,13 @@ function UploadVRCard({
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
         <FileSpreadsheet className="h-5 w-5 text-pink-600" />
-        <CardTitle className="text-base">Reembolsos VR (.xls)</CardTitle>
+        <CardTitle className="text-base">VR — Reembolsos + Vendas (.xls)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          XLS "Guias de Reembolso" do portal VR. Cada Número Guia vira 1 lote = 1 crédito BB.
-          Sem detalhe venda-a-venda (item agregado por lote).
+          Aceita "Guias de Reembolso" (lotes) e "Relatório de Transação de Venda"
+          (vendas individuais). Importe os 2 — vendas precisam dos lotes pra serem
+          vinculadas pelo produto + data_corte.
         </p>
         <input
           ref={inputRef}

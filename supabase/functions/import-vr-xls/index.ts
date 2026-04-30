@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
 
     let insertedLots = 0;
     let updatedLots = 0;
-    let insertedItems = 0;
+    const insertedItems = 0;
 
     for (const lot of lots) {
       const totalDesc = Math.round((lot.bruto - lot.liquido) * 100) / 100;
@@ -268,31 +268,10 @@ Deno.serve(async (req) => {
         insertedLots++;
       }
 
-      // Item sintético "agregado": representa o lote inteiro como 1 linha. Sem
-      // breakdown de vendas individuais (que estão no outro extrato VR). Permite
-      // que cross-check de competência (data_transacao no mês) capture o lote
-      // todo no mês de competência baseado em data_corte.
-      const dataAgregada = lot.data_corte ?? lot.data_pagamento;
-      const { error: itErr } = await supabase
-        .from('audit_voucher_lot_items')
-        .insert({
-          lot_id: lotId,
-          data_transacao: dataAgregada,
-          data_postagem: lot.data_pagamento,
-          numero_documento: lot.guia,
-          numero_cartao_mascarado: 'AGREGADO',
-          valor: Math.round(lot.bruto * 100) / 100,
-          estabelecimento: 'PIZZARIA ESTRELA',
-          cnpj: null,
-        });
-      if (itErr) {
-        await supabase.from('audit_imports').update({
-          status: 'error',
-          error_message: `Erro ao inserir item agregado do lote ${lot.guia}: ${itErr.message}`,
-        }).eq('id', importRec.id);
-        throw itErr;
-      }
-      insertedItems++;
+      // Não criamos mais item agregado sintético. Vendas individuais virão
+      // pelo upload do extrato_vendas_vr (edge import-vr-vendas-xls), que
+      // vincula cada venda real ao lote correto baseado em produto+data_corte.
+      // Lote sem items vinculados é normal até o user importar o vendas.xls.
     }
 
     await supabase.from('audit_imports').update({
