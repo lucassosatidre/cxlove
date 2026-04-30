@@ -605,7 +605,7 @@ export default function AuditVouchers() {
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="py-3 text-sm">
             <strong>Em construção (Estágio 2).</strong> Esta aba é independente da auditoria iFood/Cresol.
-            Operadoras habilitadas: <strong>Ticket, Alelo</strong> (Pluxee e VR ainda não).
+            Operadoras habilitadas: <strong>Ticket, Alelo, VR e Pluxee</strong>.
             Use o seletor abaixo pra alternar entre operadoras.
           </CardContent>
         </Card>
@@ -646,11 +646,12 @@ export default function AuditVouchers() {
         </Card>
 
         {/* Cards de upload */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <UploadBBCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
           <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
           <UploadAleloCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
           <UploadVRCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
+          <UploadPluxeeCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
         </div>
 
         {/* Cross-check Maquinona × operadora atual */}
@@ -1974,6 +1975,107 @@ function UploadVRCard({
           {uploading
             ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
             : 'Selecionar XLS (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function UploadPluxeeCard({
+  period, ensurePeriod, onAfter,
+}: {
+  period: AuditPeriod | null;
+  ensurePeriod: () => Promise<AuditPeriod | null>;
+  onAfter: () => Promise<void> | void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const csvs = files.filter(f => /\.csv$/i.test(f.name));
+    const invalid = files.length - csvs.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .csv`);
+    if (csvs.length === 0) return;
+
+    setUploading(true);
+    setProgress({ current: 0, total: csvs.length });
+    let totalLots = 0;
+    let totalItems = 0;
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < csvs.length; i++) {
+        const file = csvs[i];
+        setProgress({ current: i + 1, total: csvs.length });
+        try {
+          // CSV Pluxee vem em ISO-8859-1 (Latin-1) — chars com acento ficam
+          // quebrados se decodificado como UTF-8. Usamos TextDecoder('iso-8859-1').
+          const buf = await file.arrayBuffer();
+          const content = new TextDecoder('iso-8859-1').decode(buf);
+
+          const { data, error } = await supabase.functions.invoke('import-pluxee-csv', {
+            body: { audit_period_id: p.id, content, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Pluxee');
+
+          totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
+          totalItems += Number(data.inserted_items ?? 0);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalLots} lotes Pluxee + ${totalItems} vendas`);
+      } else {
+        toast.error(`${failures.length} de ${csvs.length} falharam`, { description: failures.join(' | ') });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileText className="h-5 w-5 text-violet-600" />
+        <CardTitle className="text-base">Pluxee — Reembolsos (.csv)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          CSV de reembolsos Pluxee/Sodexo (arquivos com "1976928" no nome).
+          Cada arquivo contém os lotes pagos com vendas embutidas.
+          Arquivos de "vendas" sem o prefixo são redundantes — sistema avisa.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button
+          variant="default"
+          className="gap-2"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar CSV (1 ou mais)'}
         </Button>
       </CardContent>
     </Card>
