@@ -67,6 +67,14 @@ type BankDeposit = {
   amount: number;
 };
 
+type MaquinonaSale = {
+  id: string;
+  sale_date: string;
+  gross_amount: number;
+  net_amount: number;
+  brand: string | null;
+};
+
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
@@ -90,8 +98,24 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+// Fallback runtime: pdf parser pode ter salvo subtotal/total_descontos como 0
+// quando regex flexível não casou. Reconstroi a partir dos items+valor_liquido.
+function computedLot(lot: Lot, items: LotItem[]) {
+  const sumItems = items.reduce((s, i) => s + Number(i.valor || 0), 0);
+  const subtotal = Number(lot.subtotal_vendas) > 0
+    ? Number(lot.subtotal_vendas)
+    : Math.round(sumItems * 100) / 100;
+  let totalDesc = Number(lot.total_descontos);
+  const liquido = Number(lot.valor_liquido);
+  if (totalDesc === 0 && subtotal > 0 && liquido > 0 && subtotal > liquido) {
+    totalDesc = Math.round((subtotal - liquido) * 100) / 100;
+  }
+  return { subtotal, totalDesc, liquido };
+}
 
 export default function AuditVouchers() {
   const navigate = useNavigate();
@@ -107,6 +131,7 @@ export default function AuditVouchers() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [deposits, setDeposits] = useState<BankDeposit[]>([]);
+  const [maquinonaTicket, setMaquinonaTicket] = useState<MaquinonaSale[]>([]);
   const [expandedLot, setExpandedLot] = useState<string | null>(null);
   const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
@@ -114,7 +139,11 @@ export default function AuditVouchers() {
   const [showAllLots, setShowAllLots] = useState(false);
 
   const refresh = async (periodId: string) => {
-    const [lotsRes, importsRes, depRes] = await Promise.all([
+    const compIni = `${year}-${String(month).padStart(2, '0')}-01`;
+    const next = new Date(year, month, 1);
+    const compFim = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const [lotsRes, importsRes, depRes, maqRes] = await Promise.all([
       supabase
         .from('audit_voucher_lots')
         .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, status, manual')
@@ -132,11 +161,19 @@ export default function AuditVouchers() {
         .eq('audit_period_id', periodId)
         .eq('bank', 'bb')
         .order('deposit_date', { ascending: true }),
+      // Maquinona Ticket no MÊS DE COMPETÊNCIA — pra cross-check
+      supabase
+        .from('audit_card_transactions')
+        .select('id, sale_date, gross_amount, net_amount, brand')
+        .eq('deposit_group', 'ticket')
+        .gte('sale_date', compIni)
+        .lt('sale_date', compFim),
     ]);
     const fetchedLots = (lotsRes.data ?? []) as Lot[];
     setLots(fetchedLots);
     setImports((importsRes.data ?? []) as AuditImport[]);
     setDeposits((depRes.data ?? []) as BankDeposit[]);
+    setMaquinonaTicket((maqRes.data ?? []) as MaquinonaSale[]);
 
     // Carrega TODOS os items de TODOS os lotes (em batch) pra calcular competência
     // de venda. lot_items é compacto (10-50 rows por lote típico), 19 lotes ~= 50-200 rows.
@@ -168,7 +205,7 @@ export default function AuditVouchers() {
       if (!active) return;
       setPeriod(p);
       if (p) await refresh(p.id);
-      else { setLots([]); setImports([]); setDeposits([]); }
+      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaTicket([]); setAllItemsByLot({}); }
       setLoading(false);
     })();
     return () => { active = false; };
@@ -256,11 +293,11 @@ export default function AuditVouchers() {
   );
 
   // Stats SEMPRE refletem competência (vendas do mês X), independente do toggle.
-  // Para lotes parciais (vendas dividas entre meses), usamos só a fração de competência:
-  //   - subtotal/descontos/líquido proporcionais à fração de vendas no mês X
-  //   - valor exato é raro porque na prática Ticket fecha lote semanal (quase tudo cai num único mês)
+  // Lotes 100% no mês: contam valores integrais. Lotes parciais: aplicam fração
+  // proporcional pra descontos/líquido (com TODO de input manual no futuro).
   const ticketStats = useMemo(() => {
     let count = 0;
+    let countParcial = 0;
     let subtotal = 0;
     let descontos = 0;
     let liquido = 0;
@@ -271,15 +308,42 @@ export default function AuditVouchers() {
       if (!comp) continue;
       count++;
       salesCount += comp.count;
-      const totalSubtotal = Number(l.subtotal_vendas) || 0;
-      const fraction = totalSubtotal > 0 ? comp.valor / totalSubtotal : 0;
+
+      const items = allItemsByLot[l.id] ?? [];
+      const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
+
+      const fraction = lotSubtotal > 0 ? comp.valor / lotSubtotal : 0;
+      const isParcial = items.length > comp.count;
+      if (isParcial) countParcial++;
+
       subtotal += comp.valor;
-      descontos += Number(l.total_descontos) * fraction;
-      liquido += Number(l.valor_liquido) * fraction;
+      descontos += totalDesc * fraction;
+      liquido += lotLiquido * fraction;
       if (l.bb_deposit_id) matched++;
     }
-    return { count, salesCount, subtotal, descontos, liquido, matched };
-  }, [allTicketLots, competenciaByLot]);
+    const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
+    return { count, countParcial, salesCount, subtotal, descontos, liquido, matched, taxaPct };
+  }, [allTicketLots, competenciaByLot, allItemsByLot]);
+
+  // Cross-check Maquinona × Ticket: vendas Maquinona no mês vs items de lote
+  // Ticket que caem no mês (por data_transacao). Devem bater em count e bruto.
+  const crossCheck = useMemo(() => {
+    const maqCount = maquinonaTicket.length;
+    const maqBruto = maquinonaTicket.reduce((s, m) => s + Number(m.gross_amount || 0), 0);
+    let ticketCount = 0;
+    let ticketBruto = 0;
+    for (const items of Object.values(allItemsByLot)) {
+      for (const it of items) {
+        if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
+          ticketCount++;
+          ticketBruto += Number(it.valor || 0);
+        }
+      }
+    }
+    const diffCount = maqCount - ticketCount;
+    const diffBruto = Math.round((maqBruto - ticketBruto) * 100) / 100;
+    return { maqCount, maqBruto, ticketCount, ticketBruto, diffCount, diffBruto };
+  }, [maquinonaTicket, allItemsByLot, competenciaIni, competenciaFim]);
 
   // Depósitos BB filtrados pela janela do mês de competência (até +60 dias) e categoria.
   const filteredDeposits = useMemo(() => {
@@ -369,6 +433,38 @@ export default function AuditVouchers() {
           <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
         </div>
 
+        {/* Cross-check Maquinona × Ticket */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Cross-check Maquinona × Ticket — vendas em {MONTHS[month - 1]} {year}</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Vendas Ticket no extrato Maquinona devem ter o mesmo total das vendas listadas no PDF Ticket
+              (data_transacao no mês). Se diferir, falta importar Maquinona ou um lote do portal Ticket.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-5 text-sm">
+              <Stat label="Maquinona Ticket" value={fmt(crossCheck.maqBruto)} hint={`${crossCheck.maqCount} vendas`} />
+              <Stat label="Portal Ticket (lotes)" value={fmt(crossCheck.ticketBruto)} hint={`${crossCheck.ticketCount} vendas`} />
+              <Stat
+                label="Diferença"
+                value={fmt(crossCheck.diffBruto)}
+                hint={`${crossCheck.diffCount > 0 ? '+' : ''}${crossCheck.diffCount} venda(s)`}
+                className={Math.abs(crossCheck.diffBruto) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
+              />
+              <div className="md:col-span-2 flex items-center">
+                {crossCheck.maqCount === 0 && crossCheck.ticketCount === 0 ? (
+                  <Badge variant="outline" className="text-muted-foreground">Sem dados</Badge>
+                ) : Math.abs(crossCheck.diffBruto) < 0.05 && crossCheck.diffCount === 0 ? (
+                  <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">✓ Vendas batem</Badge>
+                ) : (
+                  <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400">⚠ Divergência</Badge>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Stats Ticket */}
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
@@ -391,11 +487,13 @@ export default function AuditVouchers() {
             )}
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-5 mb-4 text-sm">
-              <Stat label="Lotes" value={`${ticketStats.count} (${ticketStats.salesCount} vendas)`} />
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-6 mb-4 text-sm">
+              <Stat label="Lotes" value={`${ticketStats.count} (${ticketStats.salesCount} vendas)`}
+                hint={ticketStats.countParcial > 0 ? `${ticketStats.countParcial} parcial(is)` : undefined} />
               <Stat label="Vendido (bruto)" value={fmt(ticketStats.subtotal)} />
-              <Stat label="Descontos (proporc.)" value={fmt(ticketStats.descontos)} className="text-amber-700 dark:text-amber-400" />
-              <Stat label="Líquido (proporc.)" value={fmt(ticketStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+              <Stat label="Descontos" value={fmt(ticketStats.descontos)} className="text-amber-700 dark:text-amber-400" />
+              <Stat label="Líquido" value={fmt(ticketStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+              <Stat label="Taxa efetiva" value={fmtPct(ticketStats.taxaPct)} className="text-rose-700 dark:text-rose-400" />
               <Stat label="Pareados c/ BB" value={`${ticketStats.matched} / ${ticketStats.count}`} />
             </div>
 
@@ -425,8 +523,11 @@ export default function AuditVouchers() {
                   {visibleTicketLots.map(l => {
                     const expanded = expandedLot === l.id;
                     const comp = competenciaByLot[l.id];
-                    const totalItems = (allItemsByLot[l.id] ?? []).length;
+                    const allItems = allItemsByLot[l.id] ?? [];
+                    const totalItems = allItems.length;
                     const inCompetencia = comp?.count ?? 0;
+                    const isParcial = inCompetencia > 0 && inCompetencia < totalItems;
+                    const { subtotal, totalDesc, liquido } = computedLot(l, allItems);
                     return (
                       <Fragment key={l.id}>
                         <TableRow className="cursor-pointer hover:bg-muted/30" onClick={() => loadItems(l.id)}>
@@ -445,17 +546,19 @@ export default function AuditVouchers() {
                             ) : inCompetencia === totalItems ? (
                               <Badge variant="outline" className="font-mono">{inCompetencia} / {totalItems}</Badge>
                             ) : (
-                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono">
-                                {inCompetencia} / {totalItems}
+                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono" title="Lote parcial — taxa precisa input manual">
+                                {inCompetencia} / {totalItems} ⚠
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">{fmt(Number(l.subtotal_vendas))}</TableCell>
-                          <TableCell className="text-right text-amber-700 dark:text-amber-400">{fmt(Number(l.total_descontos))}</TableCell>
-                          <TableCell className="text-right font-medium">{fmt(Number(l.valor_liquido))}</TableCell>
+                          <TableCell className="text-right">{fmt(subtotal)}</TableCell>
+                          <TableCell className="text-right text-amber-700 dark:text-amber-400">{fmt(totalDesc)}</TableCell>
+                          <TableCell className="text-right font-medium">{fmt(liquido)}</TableCell>
                           <TableCell>
                             {l.bb_deposit_id ? (
                               <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">✓ Pareado</Badge>
+                            ) : isParcial ? (
+                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400">Manual</Badge>
                             ) : (
                               <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>
                             )}
@@ -587,11 +690,12 @@ export default function AuditVouchers() {
   );
 }
 
-function Stat({ label, value, className }: { label: string; value: string; className?: string }) {
+function Stat({ label, value, className, hint }: { label: string; value: string; className?: string; hint?: string }) {
   return (
     <div className="rounded-md border bg-card px-3 py-2">
       <div className="text-[10px] uppercase text-muted-foreground tracking-wide">{label}</div>
       <div className={`text-base font-semibold ${className ?? ''}`}>{value}</div>
+      {hint && <div className="text-[10px] text-muted-foreground mt-0.5">{hint}</div>}
     </div>
   );
 }
@@ -610,6 +714,13 @@ function LotDetail({
     () => [...items].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao)),
     [items],
   );
+  const { subtotal, totalDesc, liquido } = computedLot(lot, items);
+  const liquidoTeorico = subtotal - totalDesc;
+  const taxaPct = subtotal > 0 ? (totalDesc / subtotal) * 100 : 0;
+  const itensComp = sortedItems.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
+  const isParcial = itensComp.length > 0 && itensComp.length < sortedItems.length;
+  const compValor = itensComp.reduce((s, i) => s + Number(i.valor), 0);
+
   return (
     <div className="px-4 py-3 space-y-3">
       <div className="grid gap-3 md:grid-cols-2">
@@ -639,51 +750,87 @@ function LotDetail({
                   </TableRow>
                 );
               })}
+              <TableRow className="bg-muted/30">
+                <TableCell colSpan={3} className="text-xs font-semibold">Total das vendas</TableCell>
+                <TableCell className="text-right text-xs font-semibold">{fmt(subtotal)}</TableCell>
+              </TableRow>
+              {isParcial && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-[10px] text-muted-foreground">Vendas na competência ({itensComp.length})</TableCell>
+                  <TableCell className="text-right text-[10px] text-muted-foreground">{fmt(compValor)}</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>
-        <div>
-          <div className="text-xs uppercase text-muted-foreground mb-1">Descontos</div>
-          {descKeys.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Sem descontos detalhados.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {descKeys.map(k => (
-                  <TableRow key={k}>
-                    <TableCell className="text-xs">{DISCOUNT_LABELS[k] ?? k}</TableCell>
-                    <TableCell className="text-right text-xs text-amber-700 dark:text-amber-400">
-                      {fmt(Number(descontos[k]))}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                <TableRow>
-                  <TableCell className="text-xs font-semibold">Total</TableCell>
-                  <TableCell className="text-right text-xs font-semibold text-amber-700 dark:text-amber-400">
-                    {fmt(Number(lot.total_descontos))}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">Resumo</div>
+            <div className="rounded border bg-card divide-y">
+              <ResumoLine label="Total das vendas" value={fmt(subtotal)} />
+              <ResumoLine label="Total de descontos" value={fmt(totalDesc)} valueClass="text-amber-700 dark:text-amber-400" />
+              <ResumoLine label="Líquido teórico" value={fmt(liquidoTeorico)} valueClass="text-emerald-700 dark:text-emerald-400" hint="subtotal − descontos" />
+              <ResumoLine
+                label="Líquido recebido"
+                value={fmt(liquido)}
+                valueClass={Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
+                hint={`(extrato Ticket) ${Math.abs(liquidoTeorico - liquido) < 0.05 ? '✓ bate' : `✗ diff ${fmt(liquido - liquidoTeorico)}`}`}
+              />
+              <ResumoLine label="Taxa efetiva" value={fmtPct(taxaPct)} valueClass="text-rose-700 dark:text-rose-400" />
+            </div>
+          </div>
+
+          {descKeys.length > 0 && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">Quebra de descontos</div>
+              <Table>
+                <TableBody>
+                  {descKeys.map(k => (
+                    <TableRow key={k}>
+                      <TableCell className="text-xs py-1.5">{DISCOUNT_LABELS[k] ?? k}</TableCell>
+                      <TableCell className="text-right text-xs py-1.5 text-amber-700 dark:text-amber-400">
+                        {fmt(Number(descontos[k]))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="rounded border px-2 py-1">
               <div className="text-muted-foreground">Contrato</div>
               <div className="font-mono">{lot.numero_contrato ?? '—'}</div>
             </div>
             <div className="rounded border px-2 py-1">
-              <div className="text-muted-foreground">Líquido</div>
-              <div className="font-semibold text-emerald-700 dark:text-emerald-400">{fmt(Number(lot.valor_liquido))}</div>
+              <div className="text-muted-foreground">Crédito BB</div>
+              <div>{fmtDate(lot.data_credito)}</div>
             </div>
           </div>
+
+          {isParcial && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
+              <strong>Lote parcial.</strong> Tem {itensComp.length} venda(s) em competência e
+              {' '}{sortedItems.length - itensComp.length} fora. A taxa real desta(s) venda(s) específica(s)
+              precisa ser consultada no portal Ticket — a taxa do lote inteiro mistura vendas de meses
+              diferentes (ex: anuidade fixa não rateia proporcional).
+            </div>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ResumoLine({ label, value, valueClass, hint }: { label: string; value: string; valueClass?: string; hint?: string }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-1.5 text-xs gap-2">
+      <div>
+        <div>{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
+      </div>
+      <div className={`font-semibold tabular-nums ${valueClass ?? ''}`}>{value}</div>
     </div>
   );
 }

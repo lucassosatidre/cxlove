@@ -82,19 +82,19 @@ type ParsedLot = {
 const SALE_RE =
   /(\d{8,9})\s+(\d{10,12})\s+(TRE|TAE|TF)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d+)\s+(?:PIZZARIA\s+ESTRELA\s+)?(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+([\S\s]{1,60}?)\s+(\*+\d+)\s+(R\$[\d.,]+)\s+(\d+\.\d{3}\.\d+\/\d+-\d+)/g;
 
-// Subtotal: "<reembolso> Subtotal de Vendas R$X"
-const SUBTOTAL_RE = /(\d{8,9})\s+Subtotal\s+de\s+Vendas\s+(R\$[\d.,]+)/g;
+// Subtotal: "<reembolso> Subtotal de Vendas R$X". O pdfjs pode reordenar
+// "Subtotal de", "Vendas" e "R$X" em qualquer ordem (Y diferentes nas células).
+// Aceitamos QUALQUER coisa entre "Subtotal" e o R$X (até 40 chars).
+const SUBTOTAL_RE = /(\d{8,9})\s+Subtotal[\s\S]{0,40}?(R\$[\d.,]+)/g;
 
 // Descontos: "<contrato> <data> <descrição até "R$"> R$X"
-// Captura o bloco descrição até R$ — pode ser "Tarifa de gestão de pagamento",
-// "Tarifa por transação", "Taxa TPE", "Anuidade Cartao Tre Ref.", etc.
 const DISCOUNT_RE = /(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.]+?)\s+(R\$[\d.,]+)/g;
 
-// Total Descontos
-const TOTAL_DESC_RE = /Total\s+de\s+Descontos\s+(R\$[\d.,]+)/g;
+// Total Descontos — flexível também (pdfjs pode separar "Total de" de "Descontos")
+const TOTAL_DESC_RE = /Total[\s\S]{0,20}?Descontos[\s\S]{0,30}?(R\$[\d.,]+)/g;
 
-// Valor Líquido
-const VALOR_LIQ_RE = /Valor\s+Líquido\s+(R\$[\d.,]+)/g;
+// Valor Líquido — flexível
+const VALOR_LIQ_RE = /Valor[\s\S]{0,15}?Líquido[\s\S]{0,30}?(R\$[\d.,]+)/g;
 
 type Event =
   | { kind: 'sale'; pos: number; numReembolso: string; numContrato: string; produto: string;
@@ -252,12 +252,41 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
 
   closeLot();
 
+  // Fallback computacional: pdfjs as vezes reordena tokens e não casamos
+  // subtotal/total_descontos/valor_liquido. Calcula a partir das outras
+  // grandezas se possível, e registra warning pra rastreio.
+  let inferredCount = 0;
+  for (const l of lots) {
+    const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
+    if (l.subtotal_vendas === 0 && sumItems > 0) {
+      l.subtotal_vendas = Math.round(sumItems * 100) / 100;
+      warnings.push(`Lote ${l.numero_reembolso}: subtotal inferido pela soma de items (R$${l.subtotal_vendas.toFixed(2)})`);
+      inferredCount++;
+    }
+    if (l.total_descontos === 0 && l.subtotal_vendas > 0 && l.valor_liquido > 0) {
+      const calc = l.subtotal_vendas - l.valor_liquido;
+      if (calc > 0) {
+        l.total_descontos = Math.round(calc * 100) / 100;
+        warnings.push(`Lote ${l.numero_reembolso}: total_descontos inferido (subtotal - liquido = R$${l.total_descontos.toFixed(2)})`);
+        inferredCount++;
+      }
+    }
+    if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos > 0) {
+      l.valor_liquido = Math.round((l.subtotal_vendas - l.total_descontos) * 100) / 100;
+      warnings.push(`Lote ${l.numero_reembolso}: valor_liquido inferido (subtotal - desc = R$${l.valor_liquido.toFixed(2)})`);
+      inferredCount++;
+    }
+  }
+  if (inferredCount > 0) {
+    warnings.unshift(`${inferredCount} valor(es) inferidos por fallback (regex flexível não casou direto).`);
+  }
+
   // Diagnóstico se o parser não pegou nada de estrutura conhecida
   if (lots.length === 0) {
     const sampleSale = text.match(SALE_RE);
-    const sampleSubtotal = text.match(/Subtotal\s+de\s+Vendas/);
-    const sampleLiq = text.match(/Valor\s+Líquido/);
-    warnings.push(`Diagnóstico: SALE_RE matches=${[...text.matchAll(SALE_RE)].length}, sample subtotal=${!!sampleSubtotal}, sample liq=${!!sampleLiq}`);
+    const sampleSubtotal = text.match(/Subtotal/);
+    const sampleLiq = text.match(/Líquido/);
+    warnings.push(`Diagnóstico: SALE matches=${[...text.matchAll(SALE_RE)].length}, sample Subtotal=${!!sampleSubtotal}, sample Líquido=${!!sampleLiq}`);
     if (sampleSale) warnings.push(`Primeiro match venda: ${sampleSale[0].substring(0, 200)}`);
     warnings.push(`Texto recebido (primeiros 500 chars): ${text.substring(0, 500)}`);
   }
