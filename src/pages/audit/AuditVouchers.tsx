@@ -75,6 +75,15 @@ type MaquinonaSale = {
   brand: string | null;
 };
 
+type CompOverride = {
+  id: string;
+  lot_id: string;
+  year: number;
+  month: number;
+  taxa_competencia: number;
+  note: string | null;
+};
+
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
@@ -132,7 +141,9 @@ export default function AuditVouchers() {
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [deposits, setDeposits] = useState<BankDeposit[]>([]);
   const [maquinonaTicket, setMaquinonaTicket] = useState<MaquinonaSale[]>([]);
+  const [overrides, setOverrides] = useState<CompOverride[]>([]);
   const [expandedLot, setExpandedLot] = useState<string | null>(null);
+  const [matching, setMatching] = useState(false);
   const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
@@ -143,7 +154,7 @@ export default function AuditVouchers() {
     const next = new Date(year, month, 1);
     const compFim = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
 
-    const [lotsRes, importsRes, depRes, maqRes] = await Promise.all([
+    const [lotsRes, importsRes, depRes, maqRes, ovrRes] = await Promise.all([
       supabase
         .from('audit_voucher_lots')
         .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, status, manual')
@@ -161,19 +172,24 @@ export default function AuditVouchers() {
         .eq('audit_period_id', periodId)
         .eq('bank', 'bb')
         .order('deposit_date', { ascending: true }),
-      // Maquinona Ticket no MÊS DE COMPETÊNCIA — pra cross-check
       supabase
         .from('audit_card_transactions')
         .select('id, sale_date, gross_amount, net_amount, brand')
         .eq('deposit_group', 'ticket')
         .gte('sale_date', compIni)
         .lt('sale_date', compFim),
+      supabase
+        .from('audit_voucher_lot_competencia_overrides')
+        .select('id, lot_id, year, month, taxa_competencia, note')
+        .eq('year', year)
+        .eq('month', month),
     ]);
     const fetchedLots = (lotsRes.data ?? []) as Lot[];
     setLots(fetchedLots);
     setImports((importsRes.data ?? []) as AuditImport[]);
     setDeposits((depRes.data ?? []) as BankDeposit[]);
     setMaquinonaTicket((maqRes.data ?? []) as MaquinonaSale[]);
+    setOverrides((ovrRes.data ?? []) as CompOverride[]);
 
     // Carrega TODOS os items de TODOS os lotes (em batch) pra calcular competência
     // de venda. lot_items é compacto (10-50 rows por lote típico), 19 lotes ~= 50-200 rows.
@@ -205,7 +221,7 @@ export default function AuditVouchers() {
       if (!active) return;
       setPeriod(p);
       if (p) await refresh(p.id);
-      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaTicket([]); setAllItemsByLot({}); }
+      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaTicket([]); setAllItemsByLot({}); setOverrides([]); }
       setLoading(false);
     })();
     return () => { active = false; };
@@ -292,14 +308,17 @@ export default function AuditVouchers() {
     [showAllLots, allTicketLots, ticketLotsCompetencia],
   );
 
-  // Stats SEMPRE refletem competência (vendas do mês X), independente do toggle.
-  // Lotes 100% no mês: contam valores integrais. Lotes parciais: aplicam fração
-  // proporcional pra descontos/líquido (com TODO de input manual no futuro).
+  // Stats refletem competência (vendas no mês X). Regras:
+  // - Lote 100% no mês: usa total_descontos do lote inteiro
+  // - Lote parcial COM override: usa override.taxa_competencia
+  // - Lote parcial SEM override: NÃO contribui pro KPI (countAguardando) e
+  //   precisa input manual; o usuário consulta portal Ticket pra digitar.
   const ticketStats = useMemo(() => {
     let count = 0;
     let countParcial = 0;
-    let subtotal = 0;
-    let descontos = 0;
+    let countAguardando = 0; // parciais sem override
+    let subtotal = 0;        // bruto vendido na competência
+    let descontos = 0;       // taxa relevante (com override quando parcial)
     let liquido = 0;
     let matched = 0;
     let salesCount = 0;
@@ -311,19 +330,30 @@ export default function AuditVouchers() {
 
       const items = allItemsByLot[l.id] ?? [];
       const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
-
-      const fraction = lotSubtotal > 0 ? comp.valor / lotSubtotal : 0;
       const isParcial = items.length > comp.count;
-      if (isParcial) countParcial++;
 
       subtotal += comp.valor;
-      descontos += totalDesc * fraction;
-      liquido += lotLiquido * fraction;
+
+      if (!isParcial) {
+        // 100% no mês — usa valores totais do lote
+        descontos += totalDesc;
+        liquido += lotLiquido;
+      } else {
+        countParcial++;
+        const ovr = overrideByLot.get(l.id);
+        if (ovr) {
+          descontos += Number(ovr.taxa_competencia);
+          liquido += comp.valor - Number(ovr.taxa_competencia);
+        } else {
+          countAguardando++;
+          // não contribui pra KPI até input manual
+        }
+      }
       if (l.bb_deposit_id) matched++;
     }
     const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
-    return { count, countParcial, salesCount, subtotal, descontos, liquido, matched, taxaPct };
-  }, [allTicketLots, competenciaByLot, allItemsByLot]);
+    return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, taxaPct };
+  }, [allTicketLots, competenciaByLot, allItemsByLot, overrideByLot]);
 
   // Cross-check Maquinona × Ticket: vendas Maquinona no mês vs items de lote
   // Ticket que caem no mês (por data_transacao). Devem bater em count e bruto.
@@ -351,6 +381,101 @@ export default function AuditVouchers() {
     if (categoryFilter !== 'todos') arr = arr.filter(d => d.category === categoryFilter);
     return arr;
   }, [deposits, categoryFilter, competenciaIni, bbWindowFim]);
+
+  // Numeração #N por depósito BB DENTRO da categoria (na janela do mês). Usado
+  // pra exibir "operação N - data" no resumo do lote pareado.
+  const depositNumberById = useMemo(() => {
+    const map = new Map<string, { n: number; deposit: BankDeposit }>();
+    const byCat: Record<string, BankDeposit[]> = {};
+    for (const d of deposits) {
+      if (d.deposit_date < competenciaIni || d.deposit_date >= bbWindowFim) continue;
+      const cat = d.category ?? 'outro';
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(d);
+    }
+    for (const cat of Object.keys(byCat)) {
+      byCat[cat].sort((a, b) => a.deposit_date.localeCompare(b.deposit_date));
+      byCat[cat].forEach((d, idx) => map.set(d.id, { n: idx + 1, deposit: d }));
+    }
+    return map;
+  }, [deposits, competenciaIni, bbWindowFim]);
+
+  // Override de competência indexado por lot_id
+  const overrideByLot = useMemo(() => {
+    const map = new Map<string, CompOverride>();
+    for (const o of overrides) map.set(o.lot_id, o);
+    return map;
+  }, [overrides]);
+
+  const handleAutoMatch = async () => {
+    if (!period) return;
+    setMatching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('match-vouchers', {
+        body: { audit_period_id: period.id, operadora: 'ticket', reset: false },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Falha no match');
+      const ambig = (data.ambiguous ?? []) as string[];
+      toast.success(data.message ?? `${data.matched} pareados`, {
+        description: ambig.length > 0 ? `${ambig.length} ambíguos (resolva manualmente)` : 'OK',
+      });
+      if (ambig.length > 0) console.warn('Match ambíguos:', ambig);
+      await refresh(period.id);
+    } catch (e: any) {
+      toast.error('Erro no auto-match', { description: e?.message ?? 'Erro inesperado' });
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  const setLotMatch = async (lotId: string, depositId: string | null) => {
+    const update = depositId
+      ? { bb_deposit_id: depositId, status: 'matched', manual: true,
+          diff: (() => {
+            const lot = lots.find(l => l.id === lotId);
+            const dep = deposits.find(d => d.id === depositId);
+            return lot && dep ? Number(dep.amount) - Number(lot.valor_liquido) : null;
+          })() }
+      : { bb_deposit_id: null, status: 'pending', manual: false, diff: null };
+    const { error } = await supabase.from('audit_voucher_lots').update(update).eq('id', lotId);
+    if (error) {
+      toast.error('Erro ao atualizar match', { description: error.message });
+      return;
+    }
+    toast.success(depositId ? 'Match atualizado' : 'Match removido');
+    if (period) await refresh(period.id);
+  };
+
+  const saveOverride = async (lotId: string, taxaCompetencia: number, note: string | null) => {
+    const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
+    if (existing) {
+      const { error } = await supabase
+        .from('audit_voucher_lot_competencia_overrides')
+        .update({ taxa_competencia: taxaCompetencia, note, updated_by: null })
+        .eq('id', existing.id);
+      if (error) { toast.error('Erro ao salvar', { description: error.message }); return; }
+    } else {
+      const { error } = await supabase
+        .from('audit_voucher_lot_competencia_overrides')
+        .insert({ lot_id: lotId, year, month, taxa_competencia: taxaCompetencia, note });
+      if (error) { toast.error('Erro ao salvar', { description: error.message }); return; }
+    }
+    toast.success('Taxa da competência salva');
+    if (period) await refresh(period.id);
+  };
+
+  const deleteOverride = async (lotId: string) => {
+    const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
+    if (!existing) return;
+    const { error } = await supabase
+      .from('audit_voucher_lot_competencia_overrides')
+      .delete()
+      .eq('id', existing.id);
+    if (error) { toast.error('Erro ao remover', { description: error.message }); return; }
+    toast.success('Override removido');
+    if (period) await refresh(period.id);
+  };
 
   if (roleLoading || loading) {
     return (
@@ -474,26 +599,46 @@ export default function AuditVouchers() {
                 Vendas Ticket no mês selecionado. Lotes podem ter sido pagos no BB em meses seguintes.
               </p>
             </div>
-            {allTicketLots.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAllLots(s => !s)}
-              >
-                {showAllLots
-                  ? `Mostrar só competência (${ticketLotsCompetencia.length})`
-                  : `Ver todos os lotes (${allTicketLots.length})`}
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {allTicketLots.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAutoMatch}
+                  disabled={matching || !period}
+                  className="gap-2"
+                >
+                  {matching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Auto-match BB
+                </Button>
+              )}
+              {allTicketLots.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAllLots(s => !s)}
+                >
+                  {showAllLots
+                    ? `Mostrar só competência (${ticketLotsCompetencia.length})`
+                    : `Ver todos os lotes (${allTicketLots.length})`}
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 grid-cols-2 md:grid-cols-6 mb-4 text-sm">
               <Stat label="Lotes" value={`${ticketStats.count} (${ticketStats.salesCount} vendas)`}
                 hint={ticketStats.countParcial > 0 ? `${ticketStats.countParcial} parcial(is)` : undefined} />
               <Stat label="Vendido (bruto)" value={fmt(ticketStats.subtotal)} />
-              <Stat label="Descontos" value={fmt(ticketStats.descontos)} className="text-amber-700 dark:text-amber-400" />
+              <Stat label="Descontos"
+                value={fmt(ticketStats.descontos)}
+                className="text-amber-700 dark:text-amber-400"
+                hint={ticketStats.countAguardando > 0 ? `${ticketStats.countAguardando} aguardando manual` : undefined} />
               <Stat label="Líquido" value={fmt(ticketStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
-              <Stat label="Taxa efetiva" value={fmtPct(ticketStats.taxaPct)} className="text-rose-700 dark:text-rose-400" />
+              <Stat label="Taxa efetiva"
+                value={fmtPct(ticketStats.taxaPct)}
+                className="text-rose-700 dark:text-rose-400"
+                hint={ticketStats.countAguardando > 0 ? 'parciais sem override fora do total' : undefined} />
               <Stat label="Pareados c/ BB" value={`${ticketStats.matched} / ${ticketStats.count}`} />
             </div>
 
@@ -555,11 +700,15 @@ export default function AuditVouchers() {
                           <TableCell className="text-right text-amber-700 dark:text-amber-400">{fmt(totalDesc)}</TableCell>
                           <TableCell className="text-right font-medium">{fmt(liquido)}</TableCell>
                           <TableCell>
-                            {l.bb_deposit_id ? (
-                              <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">✓ Pareado</Badge>
-                            ) : isParcial ? (
-                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400">Manual</Badge>
-                            ) : (
+                            {l.bb_deposit_id ? (() => {
+                              const dep = depositNumberById.get(l.bb_deposit_id);
+                              return (
+                                <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
+                                  ✓ {dep ? `#${dep.n} ${fmtDate(dep.deposit_date)}` : 'Pareado'}
+                                  {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
+                                </Badge>
+                              );
+                            })() : (
                               <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>
                             )}
                           </TableCell>
@@ -572,6 +721,14 @@ export default function AuditVouchers() {
                                 items={itemsByLot[l.id] ?? allItemsByLot[l.id] ?? []}
                                 competenciaIni={competenciaIni}
                                 competenciaFim={competenciaFim}
+                                deposits={deposits}
+                                depositNumberById={depositNumberById}
+                                override={overrideByLot.get(l.id) ?? null}
+                                onSetMatch={(depId) => setLotMatch(l.id, depId)}
+                                onSaveOverride={(taxa, note) => saveOverride(l.id, taxa, note)}
+                                onDeleteOverride={() => deleteOverride(l.id)}
+                                month={month}
+                                year={year}
                               />
                             </TableCell>
                           </TableRow>
@@ -614,6 +771,7 @@ export default function AuditVouchers() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">#</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Descrição</TableHead>
@@ -622,17 +780,21 @@ export default function AuditVouchers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDeposits.map(d => (
-                    <TableRow key={d.id}>
-                      <TableCell>{fmtDate(d.deposit_date)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
-                      </TableCell>
-                      <TableCell className="max-w-[280px] truncate text-xs">{d.description ?? '—'}</TableCell>
-                      <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{d.detail ?? '—'}</TableCell>
-                      <TableCell className="text-right font-medium">{fmt(Number(d.amount))}</TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredDeposits.map(d => {
+                    const numbered = depositNumberById.get(d.id);
+                    return (
+                      <TableRow key={d.id}>
+                        <TableCell className="font-mono text-xs">{numbered ? `#${numbered.n}` : '—'}</TableCell>
+                        <TableCell>{fmtDate(d.deposit_date)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-[280px] truncate text-xs">{d.description ?? '—'}</TableCell>
+                        <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">{d.detail ?? '—'}</TableCell>
+                        <TableCell className="text-right font-medium">{fmt(Number(d.amount))}</TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
@@ -702,11 +864,22 @@ function Stat({ label, value, className, hint }: { label: string; value: string;
 
 function LotDetail({
   lot, items, competenciaIni, competenciaFim,
+  deposits, depositNumberById, override,
+  onSetMatch, onSaveOverride, onDeleteOverride,
+  month, year,
 }: {
   lot: Lot;
   items: LotItem[];
   competenciaIni: string;
   competenciaFim: string;
+  deposits: BankDeposit[];
+  depositNumberById: Map<string, { n: number; deposit: BankDeposit }>;
+  override: CompOverride | null;
+  onSetMatch: (depositId: string | null) => Promise<void>;
+  onSaveOverride: (taxa: number, note: string | null) => Promise<void>;
+  onDeleteOverride: () => Promise<void>;
+  month: number;
+  year: number;
 }) {
   const descontos = lot.descontos ?? {};
   const descKeys = Object.keys(descontos);
@@ -720,6 +893,16 @@ function LotDetail({
   const itensComp = sortedItems.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
   const isParcial = itensComp.length > 0 && itensComp.length < sortedItems.length;
   const compValor = itensComp.reduce((s, i) => s + Number(i.valor), 0);
+  const matchedDep = lot.bb_deposit_id ? depositNumberById.get(lot.bb_deposit_id) : null;
+
+  // Candidatos pra match manual: BB Ticket dentro da janela do mês (+60d)
+  const ticketCategoryMatch = lot.operadora;
+  const matchCandidates = useMemo(() => {
+    return deposits
+      .filter(d => d.category === ticketCategoryMatch)
+      .filter(d => depositNumberById.has(d.id))
+      .sort((a, b) => a.deposit_date.localeCompare(b.deposit_date));
+  }, [deposits, ticketCategoryMatch, depositNumberById]);
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -765,20 +948,61 @@ function LotDetail({
         </div>
         <div className="space-y-3">
           <div>
-            <div className="text-xs uppercase text-muted-foreground mb-1">Resumo</div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">Resumo do lote</div>
             <div className="rounded border bg-card divide-y">
               <ResumoLine label="Total das vendas" value={fmt(subtotal)} />
               <ResumoLine label="Total de descontos" value={fmt(totalDesc)} valueClass="text-amber-700 dark:text-amber-400" />
+              <ResumoLine label="Taxa efetiva" value={fmtPct(taxaPct)} valueClass="text-rose-700 dark:text-rose-400" />
               <ResumoLine label="Líquido teórico" value={fmt(liquidoTeorico)} valueClass="text-emerald-700 dark:text-emerald-400" hint="subtotal − descontos" />
               <ResumoLine
                 label="Líquido recebido"
                 value={fmt(liquido)}
                 valueClass={Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
-                hint={`(extrato Ticket) ${Math.abs(liquidoTeorico - liquido) < 0.05 ? '✓ bate' : `✗ diff ${fmt(liquido - liquidoTeorico)}`}`}
+                hint={matchedDep
+                  ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
+                  : Math.abs(liquidoTeorico - liquido) < 0.05 ? '(extrato Ticket) ✓ bate' : `(extrato Ticket) ✗ diff ${fmt(liquido - liquidoTeorico)}`
+                }
               />
-              <ResumoLine label="Taxa efetiva" value={fmtPct(taxaPct)} valueClass="text-rose-700 dark:text-rose-400" />
+              {isParcial && (
+                <ResumoLine
+                  label="Taxa da competência"
+                  value={override ? fmt(Number(override.taxa_competencia)) : '— preencher'}
+                  valueClass={override ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground italic'}
+                  hint={`refere-se às ${itensComp.length} venda(s) de ${MONTHS[month - 1].toLowerCase()} (R$${compValor.toFixed(2)})`}
+                />
+              )}
             </div>
           </div>
+
+          {/* Match BB */}
+          <div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">Match Banco do Brasil</div>
+            <MatchSelector
+              currentDepositId={lot.bb_deposit_id}
+              candidates={matchCandidates}
+              expectedAmount={Number(lot.valor_liquido)}
+              depositNumberById={depositNumberById}
+              onSet={onSetMatch}
+            />
+          </div>
+
+          {/* Override de taxa quando lote parcial */}
+          {isParcial && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">
+                Taxa referente às vendas da competência ({MONTHS[month - 1]} {year})
+              </div>
+              <CompetenciaOverrideInput
+                override={override}
+                onSave={onSaveOverride}
+                onDelete={onDeleteOverride}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Consulte o portal Ticket pra obter a taxa real desta(s) venda(s). O sistema usa este
+                valor no KPI mensal em vez de ratear proporcional o desconto do lote inteiro.
+              </p>
+            </div>
+          )}
 
           {descKeys.length > 0 && (
             <div>
@@ -804,19 +1028,10 @@ function LotDetail({
               <div className="font-mono">{lot.numero_contrato ?? '—'}</div>
             </div>
             <div className="rounded border px-2 py-1">
-              <div className="text-muted-foreground">Crédito BB</div>
+              <div className="text-muted-foreground">Crédito previsto BB</div>
               <div>{fmtDate(lot.data_credito)}</div>
             </div>
           </div>
-
-          {isParcial && (
-            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
-              <strong>Lote parcial.</strong> Tem {itensComp.length} venda(s) em competência e
-              {' '}{sortedItems.length - itensComp.length} fora. A taxa real desta(s) venda(s) específica(s)
-              precisa ser consultada no portal Ticket — a taxa do lote inteiro mistura vendas de meses
-              diferentes (ex: anuidade fixa não rateia proporcional).
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -831,6 +1046,114 @@ function ResumoLine({ label, value, valueClass, hint }: { label: string; value: 
         {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
       </div>
       <div className={`font-semibold tabular-nums ${valueClass ?? ''}`}>{value}</div>
+    </div>
+  );
+}
+
+function MatchSelector({
+  currentDepositId, candidates, expectedAmount, depositNumberById, onSet,
+}: {
+  currentDepositId: string | null;
+  candidates: BankDeposit[];
+  expectedAmount: number;
+  depositNumberById: Map<string, { n: number; deposit: BankDeposit }>;
+  onSet: (depositId: string | null) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const handleChange = async (val: string) => {
+    setSaving(true);
+    try {
+      await onSet(val === '__none__' ? null : val);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <Select value={currentDepositId ?? '__none__'} onValueChange={handleChange} disabled={saving}>
+        <SelectTrigger className="h-9 text-xs">
+          <SelectValue placeholder="Selecionar depósito BB" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">— Sem match (pendente)</SelectItem>
+          {candidates.map(d => {
+            const num = depositNumberById.get(d.id);
+            const diff = Number(d.amount) - expectedAmount;
+            const exact = Math.abs(diff) < 0.05;
+            return (
+              <SelectItem key={d.id} value={d.id}>
+                #{num?.n ?? '?'} — {fmtDate(d.deposit_date)} — {fmt(Number(d.amount))}
+                {exact ? ' ✓' : ` (diff ${diff > 0 ? '+' : ''}${fmt(diff)})`}
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+    </div>
+  );
+}
+
+function CompetenciaOverrideInput({
+  override, onSave, onDelete,
+}: {
+  override: CompOverride | null;
+  onSave: (taxa: number, note: string | null) => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const [value, setValue] = useState<string>(override ? String(override.taxa_competencia) : '');
+  const [note, setNote] = useState<string>(override?.note ?? '');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(override ? String(override.taxa_competencia) : '');
+    setNote(override?.note ?? '');
+  }, [override]);
+
+  const handleSave = async () => {
+    const num = Number(value.replace(',', '.'));
+    if (!isFinite(num) || num < 0) {
+      toast.error('Valor inválido');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(num, note.trim() || null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex-1 min-w-[120px]">
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder="Ex: 13,85"
+          className="w-full h-9 rounded-md border bg-background px-2 text-xs"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+        />
+      </div>
+      <div className="flex-1 min-w-[180px]">
+        <input
+          type="text"
+          placeholder="Nota (opcional)"
+          className="w-full h-9 rounded-md border bg-background px-2 text-xs"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+        />
+      </div>
+      <Button size="sm" variant="default" onClick={handleSave} disabled={saving || !value}>
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+        Salvar
+      </Button>
+      {override && (
+        <Button size="sm" variant="outline" onClick={onDelete} disabled={saving}>
+          Remover
+        </Button>
+      )}
     </div>
   );
 }

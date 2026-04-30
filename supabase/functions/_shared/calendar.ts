@@ -76,3 +76,37 @@ export function nextBusinessDay(saleDateIso: string): string {
   }
   return saleDateIso; // fallback (não deveria chegar aqui)
 }
+
+/**
+ * Retorna a lista de dias úteis na janela [iso ± nBusinessDays] inclusive.
+ * Usada pra match Ticket: "lote pago dia X ± 2 dias úteis SC" porque o BB pode
+ * creditar 1-2 dias úteis após a data prevista do extrato Ticket.
+ */
+export function businessDayWindow(iso: string, nBusinessDays: number): string[] {
+  const result: string[] = [];
+  // Volta nBusinessDays
+  let d = new Date(iso + 'T00:00:00Z');
+  let backCount = 0;
+  while (backCount < nBusinessDays) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const day = d.toISOString().slice(0, 10);
+    if (isBusinessDay(day)) {
+      result.unshift(day);
+      backCount++;
+    }
+  }
+  // Inclui o iso (se for dia útil)
+  if (isBusinessDay(iso)) result.push(iso);
+  // Avança nBusinessDays
+  d = new Date(iso + 'T00:00:00Z');
+  let fwdCount = 0;
+  while (fwdCount < nBusinessDays) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const day = d.toISOString().slice(0, 10);
+    if (isBusinessDay(day)) {
+      result.push(day);
+      fwdCount++;
+    }
+  }
+  return result;
+}
