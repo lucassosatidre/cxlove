@@ -1,13 +1,13 @@
 // @ts-nocheck
 // Recebe rows pré-parseadas do XLSX "Extrato" da Alelo (frontend usa xlsx.js
-// pra extrair). Diferenças vs Ticket:
-//   - Não há "Nº Reembolso" explícito; lote = grupo de vendas com mesma
-//     "Data de Pagamento" (sintetizamos ALELO-YYYYMMDD como id).
-//   - Cada venda já tem Valor Bruto e Valor Líquido próprio — taxa é por
-//     transação. Subtotal/total_descontos/valor_líquido do lote = somas.
-//   - Produtos mistos no mesmo lote (Refeição / Refeição PAT / Refeição
-//     Auxílio): produto do lote = "MIX" se >1 tipo, senão o único.
-//   - Filtramos Status='APROVADA' (descarta canceladas/recusadas).
+// pra extrair). Usa LAYOUT POSICIONAL FIXO (não detecta header pelo nome) —
+// xlsx.js no browser ocasionalmente omite a linha de header dependendo do
+// estilo da célula, então confiamos nas posições documentadas.
+//
+// Layout aba "Extrato" portal Alelo (validado em alelo março exc.xlsx, A1:M33):
+//   Col 0=Nome  1=CNPJ  2=NumEC  3=Autorização  4=Data Venda  5=Hora
+//   6=Tipo Cartão  7=Cartão  8=PSR  9=Valor Bruto  10=Valor Líquido
+//   11=Status  12=Data Pagamento
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -21,6 +21,18 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
+const COL = {
+  cnpj: 1,
+  autorizacao: 3,
+  dataVenda: 4,
+  tipo: 6,
+  cartao: 7,
+  bruto: 9,
+  liquido: 10,
+  status: 11,
+  dataPag: 12,
+};
+
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
@@ -30,10 +42,8 @@ function toIsoDate(v: any): string | null {
     return `${y}-${m}-${d}`;
   }
   const s = String(v).trim();
-  // DD/MM/YYYY
   const br = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (br) return `${br[3]}-${br[2]}-${br[1]}`;
-  // YYYY-MM-DD
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   return null;
@@ -45,6 +55,12 @@ function toNumber(v: any): number | null {
   const s = String(v).trim().replace(/^R\$\s*/, '').replace(/\./g, '').replace(',', '.');
   const n = Number(s);
   return isFinite(n) ? n : null;
+}
+
+function isHeaderRow(r: any[]): boolean {
+  const c0 = String(r?.[0] ?? '').toLowerCase().trim();
+  const c1 = String(r?.[1] ?? '').toLowerCase().trim();
+  return c0 === 'nome' || c1 === 'cnpj';
 }
 
 Deno.serve(async (req) => {
@@ -98,100 +114,58 @@ Deno.serve(async (req) => {
     }
     const wasConciliado = period.status === 'conciliado';
 
-    // Detecta linha de header (procura "Data de Pagamento" + "Valor Bruto" em até 20 linhas)
-    function normalizeKey(s: string): string {
-      return String(s ?? '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')   // remove combining marks (acentos)
-        .replace(/\s+/g, ' ')
-        .toLowerCase()
-        .trim();
-    }
-
-    let headerIdx = -1;
-    let colMap: Record<string, number> = {};
-    const probedLines: any[] = [];
-    for (let i = 0; i < Math.min(rows.length, 20); i++) {
-      const r = rows[i];
-      if (i < 5) probedLines.push({ idx: i, row: Array.isArray(r) ? r.slice(0, 15) : r });
-      if (!Array.isArray(r)) continue;
-      const norm = r.map(normalizeKey);
-      const hasPag = norm.some(c => c.includes('data de pagamento'));
-      const hasBruto = norm.some(c => c.includes('valor bruto'));
-      if (hasPag && hasBruto) {
-        headerIdx = i;
-        for (let j = 0; j < r.length; j++) {
-          const k = normalizeKey(r[j]);
-          if (k === 'cnpj') colMap.cnpj = j;
-          else if (k === 'numero da autorizacao' || k.includes('autorizacao')) colMap.autorizacao = j;
-          else if (k === 'data da venda') colMap.dataVenda = j;
-          else if (k.startsWith('tipo cartao') || k === 'tipo cartao') colMap.tipo = j;
-          else if (k.startsWith('n cartao') || k.includes('cartao') && !k.includes('tipo')) colMap.cartao = j;
-          else if (k === 'valor bruto') colMap.bruto = j;
-          else if (k === 'valor liquido') colMap.liquido = j;
-          else if (k === 'status') colMap.status = j;
-          else if (k === 'data de pagamento') colMap.dataPag = j;
-        }
-        break;
-      }
-    }
-    if (headerIdx < 0) {
-      return new Response(JSON.stringify({
-        error: 'Header não encontrado. Esperado linhas com "Data de Pagamento" e "Valor Bruto" entre as 20 primeiras.',
-        diagnostic: {
-          total_rows: rows.length,
-          first_5_rows: probedLines,
-        },
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-    if (colMap.bruto == null || colMap.liquido == null || colMap.dataPag == null || colMap.dataVenda == null) {
-      return new Response(JSON.stringify({
-        error: `Colunas obrigatórias faltando. Encontrei: ${JSON.stringify(colMap)}. Header detectado: ${JSON.stringify(rows[headerIdx])}`,
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
     type RawSale = {
       data_venda: string; data_pag: string; tipo: string;
       autorizacao: string | null; cartao: string | null;
       bruto: number; liquido: number; cnpj: string | null;
     };
     const sales: RawSale[] = [];
+    let skippedHeader = 0;
     let skippedNonApproved = 0;
     let skippedInvalid = 0;
-    for (let i = headerIdx + 1; i < rows.length; i++) {
+
+    for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
-      if (!Array.isArray(r) || r.every(c => c == null || c === '')) continue;
-      const status = String(r[colMap.status] ?? '').toUpperCase().trim();
+      if (!Array.isArray(r) || r.every((c: any) => c == null || c === '')) continue;
+      if (isHeaderRow(r)) { skippedHeader++; continue; }
+
+      const status = String(r[COL.status] ?? '').toUpperCase().trim();
       if (status && status !== 'APROVADA') { skippedNonApproved++; continue; }
-      const dataVenda = toIsoDate(r[colMap.dataVenda]);
-      const dataPag = toIsoDate(r[colMap.dataPag]);
-      const bruto = toNumber(r[colMap.bruto]);
-      const liquido = toNumber(r[colMap.liquido]);
+
+      const dataVenda = toIsoDate(r[COL.dataVenda]);
+      const dataPag = toIsoDate(r[COL.dataPag]);
+      const bruto = toNumber(r[COL.bruto]);
+      const liquido = toNumber(r[COL.liquido]);
       if (!dataVenda || !dataPag || bruto == null || liquido == null) {
         skippedInvalid++;
         continue;
       }
+
       sales.push({
         data_venda: dataVenda,
         data_pag: dataPag,
-        tipo: String(r[colMap.tipo] ?? '').trim() || 'Refeição',
-        autorizacao: colMap.autorizacao != null ? String(r[colMap.autorizacao] ?? '').trim() || null : null,
-        cartao: colMap.cartao != null ? String(r[colMap.cartao] ?? '').trim() || null : null,
+        tipo: String(r[COL.tipo] ?? '').trim() || 'Refeição',
+        autorizacao: String(r[COL.autorizacao] ?? '').trim() || null,
+        cartao: String(r[COL.cartao] ?? '').trim() || null,
         bruto,
         liquido,
-        cnpj: colMap.cnpj != null ? String(r[colMap.cnpj] ?? '').trim() || null : null,
+        cnpj: String(r[COL.cnpj] ?? '').trim() || null,
       });
     }
 
     if (sales.length === 0) {
       return new Response(JSON.stringify({
-        error: 'Nenhuma venda Alelo aprovada encontrada no arquivo.',
-        skipped_non_approved: skippedNonApproved,
-        skipped_invalid: skippedInvalid,
+        error: 'Nenhuma venda Alelo aprovada encontrada no arquivo. Confira que selecionou o XLSX exportado da aba "Extrato" do portal Alelo.',
+        diagnostic: {
+          total_rows: rows.length,
+          skipped_header: skippedHeader,
+          skipped_non_approved: skippedNonApproved,
+          skipped_invalid: skippedInvalid,
+          sample_first_3: rows.slice(0, 3),
+        },
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Agrupa por data_pag (lote)
     type Lot = {
       data_pag: string;
       items: RawSale[];
@@ -208,7 +182,6 @@ Deno.serve(async (req) => {
     }
     const lots = Array.from(lotMap.values()).sort((a, b) => a.data_pag.localeCompare(b.data_pag));
 
-    // Registra import
     const totalItems = sales.length;
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
@@ -321,6 +294,7 @@ Deno.serve(async (req) => {
       updated_lots: updatedLots,
       total_items: totalItems,
       inserted_items: insertedItems,
+      skipped_header: skippedHeader,
       skipped_non_approved: skippedNonApproved,
       skipped_invalid: skippedInvalid,
       message: `${insertedLots} lotes novos + ${updatedLots} atualizados (${insertedItems} vendas)`,
