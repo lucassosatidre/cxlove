@@ -308,6 +308,13 @@ export default function AuditVouchers() {
     [showAllLots, allTicketLots, ticketLotsCompetencia],
   );
 
+  // Override de competência indexado por lot_id
+  const overrideByLot = useMemo(() => {
+    const map = new Map<string, CompOverride>();
+    for (const o of overrides) map.set(o.lot_id, o);
+    return map;
+  }, [overrides]);
+
   // Stats refletem competência (vendas no mês X). Regras:
   // - Lote 100% no mês: usa total_descontos do lote inteiro
   // - Lote parcial COM override: usa override.taxa_competencia
