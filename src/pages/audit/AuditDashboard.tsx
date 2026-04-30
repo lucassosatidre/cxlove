@@ -179,6 +179,7 @@ export default function AuditDashboard() {
   const [ifoodAdjacente, setIfoodAdjacente] = useState(0);
   const [custoDeclaradoIfood, setCustoDeclaradoIfood] = useState(0);
   const [custoOculto, setCustoOculto] = useState(0);
+  const [ifoodNaoConciliado, setIfoodNaoConciliado] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -261,6 +262,22 @@ export default function AuditDashboard() {
       return y === year && m === month;
     });
     const ifoodComp = dailyInPeriod.reduce((s, d) => s + Number(d.deposited_amount || 0), 0);
+    // Custo OCULTO REAL: soma dos abs(diff negativos) só dos lotes matched.
+    // Cada row do daily_matches.difference = deposited - expected_matched (post-refactor).
+    // Diff negativo = retenção real (PIX retido, antecipação extra não-declarada).
+    const ifoodOcultoMatched = dailyInPeriod.reduce((s, d) => {
+      const diff = Number(d.difference || 0);
+      return s + (diff < 0 ? -diff : 0);
+    }, 0);
+    // Não conciliado: expected_total (do daily_matches) - expected_matched.
+    // expected_matched = deposited - difference (= sum dos lotes que bateram).
+    const ifoodNaoConciliado = dailyInPeriod.reduce((s, d) => {
+      const expectedTotal = Number(d.expected_amount || 0);
+      const deposited = Number(d.deposited_amount || 0);
+      const diff = Number(d.difference || 0);
+      const expectedMatched = deposited - diff; // recupera líq dos matched
+      return s + Math.max(expectedTotal - expectedMatched, 0);
+    }, 0);
 
     // Adjacentes = depósitos relativos a vendas de outros meses que bateram
     // por valor (jan/mar importados pra contexto).
@@ -271,17 +288,14 @@ export default function AuditDashboard() {
     const ifoodAdj = dailyOutsidePeriod.reduce((s, d) => s + Number(d.deposited_amount || 0), 0);
     setIfoodCompetencia(ifoodComp);
     setIfoodAdjacente(ifoodAdj);
+    setIfoodNaoConciliado(ifoodNaoConciliado);
 
     const recebido = ifoodComp;
-    // Estágio 1: vendido = só cartão+pix (bruto_ifood). Voucher fora.
     const vendidoIfood = brutoIfood;
-    // Custo declarado = bruto - líquido relatório (taxa transação + antecipação +
-    // promoção, tudo que o iFood declara em seu relatório).
     const custoDeclaradoIfood = Math.max(brutoIfood - liquidoIfood, 0);
-    // Custo OCULTO = líquido relatório - recebido Cresol fiel. É o que o iFood
-    // diz que vai depositar mas chega menor (PIX retido sem declaração, ajustes
-    // não documentados, etc). Esse é o foco da auditoria pra cobrar a operadora.
-    const custoOculto = Math.max(liquidoIfood - recebido, 0);
+    // Custo oculto = só o que tem evidência (diff negativo dos matched).
+    // Não inclui não-conciliado (esse é incerteza do match, não taxa real).
+    const custoOculto = ifoodOcultoMatched;
     const custoTotal = custoDeclaradoIfood + custoOculto;
     const taxaEfetiva = vendidoIfood > 0 ? (custoTotal / vendidoIfood) * 100 : 0;
 
@@ -832,9 +846,15 @@ export default function AuditDashboard() {
                     <div className="flex justify-between border-t border-border/50 pt-1"><span className="text-muted-foreground">Líquido reportado iFood:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol (fiel):</span><span className="font-medium">{formatCurrency(recebidoFiel)}</span></div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground font-medium">⚠ Custo OCULTO:</span>
+                      <span className="text-muted-foreground font-medium">⚠ Custo OCULTO (cobrável):</span>
                       <span className={`font-semibold ${custoOculto > 0.5 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{formatCurrency(custoOculto)}</span>
                     </div>
+                    {ifoodNaoConciliado > 0.5 && (
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground text-xs">↳ não conciliado (lotes sem cresol identificado):</span>
+                        <span className="text-xs text-amber-600 dark:text-amber-500">{formatCurrency(ifoodNaoConciliado)}</span>
+                      </div>
+                    )}
                     {(ifoodAdjacente > 0 || ifoodNaoId > 0) && (
                       <div className="pt-2 mt-1 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">
                         {ifoodAdjacente > 0 && (
