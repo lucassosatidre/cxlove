@@ -5,13 +5,16 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
 import { fetchAllPaginated } from '@/lib/supabase-pagination';
 import { nextBusinessDay } from '@/lib/business-calendar';
-import { ArrowLeft, Download, FileDown, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, FileDown, Loader2, Pencil } from 'lucide-react';
 
 const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const fmtDate = (iso: string) => {
@@ -46,9 +49,13 @@ type LotMatch = {
   liq: number;
   cresol_date?: string;
   cresol_amount?: number;
+  cresol_id?: string;
   diff?: number;
   matched: boolean;
+  manual?: boolean; // veio de override
 };
+
+type CresolDep = { id: string; date: string; amount: number; description: string; matched: boolean };
 
 type MatchRow = {
   match_date: string;
@@ -77,6 +84,56 @@ export default function AuditIfood() {
   const [headerTotals, setHeaderTotals] = useState({ expected: 0, deposited: 0 });
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
   const [unmatchedCresolDeps, setUnmatchedCresolDeps] = useState<Array<{ date: string; amount: number }>>([]);
+  const [allCresolDeps, setAllCresolDeps] = useState<CresolDep[]>([]);
+  const [editingLot, setEditingLot] = useState<{ sale_date: string; tipo: 'PIX'|'CARD'; liq: number; current_dep_id?: string } | null>(null);
+  const [editFilter, setEditFilter] = useState('');
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  async function saveOverride(cresolDepId: string | null) {
+    if (!editingLot || !periodId) return;
+    setSavingOverride(true);
+    try {
+      const { error } = await supabase
+        .from('audit_lot_overrides')
+        .upsert({
+          audit_period_id: periodId,
+          sale_date: editingLot.sale_date,
+          tipo: editingLot.tipo,
+          cresol_deposit_id: cresolDepId,
+          created_by: user?.id ?? null,
+        }, { onConflict: 'audit_period_id,sale_date,tipo' });
+      if (error) throw error;
+      toast.success(cresolDepId ? 'Match manual salvo' : 'Lote marcado sem match');
+      setEditingLot(null);
+      setReloadKey(k => k + 1);
+    } catch (e: any) {
+      toast.error('Erro ao salvar override', { description: e.message });
+    } finally {
+      setSavingOverride(false);
+    }
+  }
+
+  async function removeOverride() {
+    if (!editingLot || !periodId) return;
+    setSavingOverride(true);
+    try {
+      const { error } = await supabase
+        .from('audit_lot_overrides')
+        .delete()
+        .eq('audit_period_id', periodId)
+        .eq('sale_date', editingLot.sale_date)
+        .eq('tipo', editingLot.tipo);
+      if (error) throw error;
+      toast.success('Override removido — voltou ao match automático');
+      setEditingLot(null);
+      setReloadKey(k => k + 1);
+    } catch (e: any) {
+      toast.error('Erro ao remover', { description: e.message });
+    } finally {
+      setSavingOverride(false);
+    }
+  }
 
   useEffect(() => {
     if (!isAdmin || !periodId) return;
@@ -107,11 +164,17 @@ export default function AuditIfood() {
         { data: period },
         txs,
         cresolDeps,
+        { data: overridesData },
       ] = await Promise.all([
         supabase.from('audit_periods').select('month,year').eq('id', periodId).maybeSingle(),
         fetchAllIfoodTxs(),
         fetchAllCresolDeps(),
+        supabase.from('audit_lot_overrides').select('sale_date,tipo,cresol_deposit_id,note').eq('audit_period_id', periodId),
       ]);
+      const overrides = new Map<string, { cresol_deposit_id: string | null }>();
+      for (const o of (overridesData as any[]) ?? []) {
+        overrides.set(`${o.sale_date}|${o.tipo}`, { cresol_deposit_id: o.cresol_deposit_id });
+      }
 
       if (period) {
         const months = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -137,21 +200,39 @@ export default function AuditIfood() {
       }
       const lotsArr: LotInternal[] = Array.from(lotsMap.values());
 
-      // Match D+1 com calendário bancário SC (replica run-audit-match novo):
-      // - expected = nextBusinessDay(sale_date) considerando feriados nacionais
-      //   + estaduais SC + carnaval (banco não opera)
-      // - data ESTRITA: dep só casa se dep.date === expected
-      // - tolerance 15% pra absorver retenção PIX + antecipação variável
-      // - lotes maiores primeiro (CARD antes de PIX)
-      const depPool: Array<{ id: string; date: string; amount: number; matched: boolean }> =
+      // Match D+1 + overrides manuais (replica run-audit-match):
+      const depPool: CresolDep[] =
         ((cresolDeps as any[]) ?? []).map(d => ({
-          id: d.id, date: String(d.deposit_date), amount: Number(d.amount || 0), matched: false,
+          id: d.id, date: String(d.deposit_date), amount: Number(d.amount || 0),
+          description: String(d.description ?? ''), matched: false,
         }));
-      const lotsForMatch = [...lotsArr].sort((a, b) => b.liq - a.liq);
-      const lotResults: Array<LotInternal & { cresol_date?: string; cresol_amount?: number; diff?: number; matched: boolean }> = [];
-      for (const lot of lotsForMatch) {
+      setAllCresolDeps(depPool.map(d => ({ ...d })));
+      const depById = new Map(depPool.map(d => [d.id, d]));
+      const lotResults: Array<LotInternal & { cresol_date?: string; cresol_amount?: number; cresol_id?: string; diff?: number; matched: boolean; manual?: boolean }> = [];
+
+      // 1. Aplica overrides primeiro
+      const overriddenKeys = new Set<string>();
+      for (const lot of lotsArr) {
+        const key = `${lot.sale_date}|${lot.tipo}`;
+        if (!overrides.has(key)) continue;
+        overriddenKeys.add(key);
+        const ov = overrides.get(key)!;
+        if (ov.cresol_deposit_id) {
+          const dep = depById.get(ov.cresol_deposit_id);
+          if (dep) {
+            dep.matched = true;
+            lotResults.push({ ...lot, cresol_date: dep.date, cresol_amount: dep.amount, cresol_id: dep.id, diff: dep.amount - lot.liq, matched: true, manual: true });
+            continue;
+          }
+        }
+        lotResults.push({ ...lot, matched: false, manual: true });
+      }
+
+      // 2. Match auto pros lotes sem override
+      const autoLots = lotsArr.filter(l => !overriddenKeys.has(`${l.sale_date}|${l.tipo}`)).sort((a, b) => b.liq - a.liq);
+      for (const lot of autoLots) {
         const expectedDate = nextBusinessDay(lot.sale_date);
-        let best: typeof depPool[0] | null = null;
+        let best: CresolDep | null = null;
         let bestPct = 999;
         for (const dep of depPool) {
           if (dep.matched) continue;
@@ -164,7 +245,7 @@ export default function AuditIfood() {
         }
         if (best) {
           best.matched = true;
-          lotResults.push({ ...lot, cresol_date: best.date, cresol_amount: best.amount, diff: best.amount - lot.liq, matched: true });
+          lotResults.push({ ...lot, cresol_date: best.date, cresol_amount: best.amount, cresol_id: best.id, diff: best.amount - lot.liq, matched: true });
         } else {
           lotResults.push({ ...lot, matched: false });
         }
@@ -181,8 +262,10 @@ export default function AuditIfood() {
           liq: lr.liq,
           cresol_date: lr.cresol_date,
           cresol_amount: lr.cresol_amount,
+          cresol_id: lr.cresol_id,
           diff: lr.diff,
           matched: lr.matched,
+          manual: lr.manual,
         });
         lotsBySaleDate.set(lr.sale_date, arr);
       }
@@ -238,7 +321,7 @@ export default function AuditIfood() {
 
       setLoading(false);
     })();
-  }, [periodId, isAdmin]);
+  }, [periodId, isAdmin, reloadKey]);
 
   const totals = useMemo(() => {
     const expected = headerTotals.expected;
@@ -368,6 +451,7 @@ export default function AuditIfood() {
                                     <th className="text-right">→ Cresol Valor</th>
                                     <th className="text-right">Diff</th>
                                     <th className="text-right">% retido</th>
+                                    <th className="text-right w-8"></th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -376,7 +460,10 @@ export default function AuditIfood() {
                                       ? (l.diff / l.liq) * 100 : null;
                                     return (
                                       <tr key={i} className={!l.matched ? 'text-amber-600 dark:text-amber-500' : ''}>
-                                        <td className="py-1 font-mono">{l.tipo}</td>
+                                        <td className="py-1 font-mono">
+                                          {l.tipo}
+                                          {l.manual && <span title="Match manual" className="ml-1 text-[9px] text-blue-600">✏️</span>}
+                                        </td>
                                         <td className="text-right">{l.count}</td>
                                         <td className="text-right">{fmt(l.bruto)}</td>
                                         <td className="text-right">{fmt(l.liq)}</td>
@@ -386,6 +473,19 @@ export default function AuditIfood() {
                                           {l.matched ? fmt(l.diff!) : '—'}
                                         </td>
                                         <td className="text-right">{pct != null ? `${pct.toFixed(2)}%` : '—'}</td>
+                                        <td className="text-right">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setEditingLot({ sale_date: r.match_date, tipo: l.tipo, liq: l.liq, current_dep_id: l.cresol_id });
+                                              setEditFilter('');
+                                            }}
+                                            className="text-blue-600 hover:text-blue-800 p-0.5"
+                                            title="Editar match deste lote"
+                                          >
+                                            <Pencil className="w-3 h-3" />
+                                          </button>
+                                        </td>
                                       </tr>
                                     );
                                   })}
@@ -479,6 +579,117 @@ export default function AuditIfood() {
           </div>
         </div>
       </div>
+
+      <Dialog open={editingLot !== null} onOpenChange={(open) => !open && setEditingLot(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar match do lote</DialogTitle>
+          </DialogHeader>
+          {editingLot && (
+            <div className="space-y-3">
+              <div className="text-sm bg-muted/30 rounded p-3 space-y-1">
+                <div><strong>Sale date:</strong> {fmtDate(editingLot.sale_date)} ({editingLot.tipo})</div>
+                <div><strong>Líquido Maquinona:</strong> {fmt(editingLot.liq)}</div>
+                <div className="text-xs text-muted-foreground">
+                  Esperado D+1 (calendário SC): <strong>{fmtDate(nextBusinessDay(editingLot.sale_date))}</strong>
+                </div>
+              </div>
+
+              <Input
+                placeholder="Filtrar depósito por valor ou data (ex: 1.534 ou 26/02)"
+                value={editFilter}
+                onChange={(e) => setEditFilter(e.target.value)}
+                className="text-sm"
+              />
+
+              <div className="border rounded max-h-64 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/30 sticky top-0">
+                    <tr>
+                      <th className="text-left px-2 py-1">Cresol Data</th>
+                      <th className="text-right px-2 py-1">Valor</th>
+                      <th className="text-right px-2 py-1">Diff vs lote</th>
+                      <th className="text-right px-2 py-1">Status</th>
+                      <th className="text-right px-2 py-1"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allCresolDeps
+                      .filter(d => {
+                        if (!editFilter.trim()) return true;
+                        const f = editFilter.toLowerCase().replace(/[r$.]/g, '');
+                        const dateStr = fmtDate(d.date);
+                        return d.amount.toFixed(2).includes(f) || dateStr.includes(f) || d.date.includes(f);
+                      })
+                      .sort((a, b) => {
+                        // Ordena: primeiro o esperado (D+1), depois por proximidade de valor
+                        const expected = nextBusinessDay(editingLot.sale_date);
+                        if (a.date === expected && b.date !== expected) return -1;
+                        if (b.date === expected && a.date !== expected) return 1;
+                        return Math.abs(a.amount - editingLot.liq) - Math.abs(b.amount - editingLot.liq);
+                      })
+                      .slice(0, 50)
+                      .map(d => {
+                        const diff = d.amount - editingLot.liq;
+                        const pct = editingLot.liq > 0 ? Math.abs(diff) / editingLot.liq * 100 : 0;
+                        const isCurrent = d.id === editingLot.current_dep_id;
+                        const isExpectedDate = d.date === nextBusinessDay(editingLot.sale_date);
+                        return (
+                          <tr key={d.id} className={`border-b hover:bg-muted/20 ${isCurrent ? 'bg-blue-500/10' : ''} ${isExpectedDate ? 'font-medium' : ''}`}>
+                            <td className="px-2 py-1">{fmtDate(d.date)}{isExpectedDate && <span className="ml-1 text-[9px] text-blue-600">D+1</span>}</td>
+                            <td className="text-right px-2 py-1 font-mono">{fmt(d.amount)}</td>
+                            <td className={`text-right px-2 py-1 ${pct > 5 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                              {fmt(diff)} ({pct.toFixed(2)}%)
+                            </td>
+                            <td className="text-right px-2 py-1 text-[10px]">
+                              {isCurrent ? '✓ atual' : ''}
+                            </td>
+                            <td className="text-right px-2 py-1">
+                              <Button
+                                size="sm"
+                                variant={isCurrent ? 'secondary' : 'outline'}
+                                onClick={() => saveOverride(d.id)}
+                                disabled={savingOverride}
+                                className="h-6 text-[10px] px-2"
+                              >
+                                {isCurrent ? 'Manter' : 'Selecionar'}
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="text-[11px] text-muted-foreground italic">
+                Filtra também por descrição via SQL editor caso precise — a lista mostra os 50 depósitos mais próximos do lote.
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 flex-wrap">
+            <Button
+              variant="ghost"
+              onClick={removeOverride}
+              disabled={savingOverride || !editingLot}
+              className="mr-auto text-xs"
+            >
+              ↺ Remover override (volta ao automático)
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => saveOverride(null)}
+              disabled={savingOverride}
+              className="text-xs"
+            >
+              Marcar como sem match
+            </Button>
+            <Button variant="ghost" onClick={() => setEditingLot(null)} disabled={savingOverride}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }

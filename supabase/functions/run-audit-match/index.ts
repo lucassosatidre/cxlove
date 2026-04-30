@@ -95,31 +95,64 @@ Deno.serve(async (req) => {
     }
     const lots: Lot[] = Array.from(lotsMap.values()).sort((a, b) => a.sale_date.localeCompare(b.sale_date));
 
-    // Match: D+1 com calendário bancário SC (não usa "valor próximo em janela
-    // larga" — isso causava cross-day mismatch quando lotes de tamanhos similares
-    // existiam em dias diferentes).
+    // Match: D+1 com calendário bancário SC + overrides manuais.
     //
     // Regra:
-    // 1. Pra cada lote (sale_date × tipo), expected = nextBusinessDay(sale_date)
-    //    considerando feriados nacionais + estaduais SC + carnaval (banco fecha).
-    // 2. Busca depósito Cresol APENAS na data expected (data estrita).
-    // 3. Tolerance 15% pra absorver retenções PIX (1-3%) + antecipação variável.
-    // 4. Lotes maiores primeiro (CARD antes de PIX) — pra evitar PIX pegar dep CARD.
+    // 1. Carrega audit_lot_overrides do período. Pra cada (sale_date, tipo) com
+    //    override: aplica primeiro (consome o cresol_deposit_id ou marca sem match).
+    // 2. Pra lotes sem override, expected = nextBusinessDay(sale_date).
+    // 3. Match estrito por data; tolerance 15% pra absorver retenções.
+    // 4. Lotes maiores primeiro (CARD antes de PIX).
     type DepStatus = { id: string; date: string; amount: number; matched: boolean };
     const depPool: DepStatus[] = (deps ?? []).map(d => ({
       id: d.id, date: d.deposit_date, amount: Number(d.amount || 0), matched: false
     }));
+    const depById = new Map<string, DepStatus>();
+    for (const d of depPool) depById.set(d.id, d);
 
-    const lotsForMatch = [...lots].sort((a, b) => b.liq - a.liq);
-    const matchedLots: Array<Lot & { cresol_amount?: number; cresol_date?: string; diff?: number; matched: boolean }> = [];
+    // Carrega overrides
+    const { data: overrides } = await supabase
+      .from('audit_lot_overrides')
+      .select('sale_date, tipo, cresol_deposit_id, note')
+      .eq('audit_period_id', audit_period_id);
+    const overrideMap = new Map<string, { cresol_deposit_id: string | null; note: string | null }>();
+    for (const o of (overrides ?? [])) {
+      overrideMap.set(`${o.sale_date}|${o.tipo}`, {
+        cresol_deposit_id: o.cresol_deposit_id,
+        note: o.note,
+      });
+    }
 
-    for (const lot of lotsForMatch) {
+    const matchedLots: Array<Lot & { cresol_amount?: number; cresol_date?: string; diff?: number; matched: boolean; manual?: boolean }> = [];
+
+    // Aplica overrides primeiro
+    const overriddenKeys = new Set<string>();
+    for (const lot of lots) {
+      const key = `${lot.sale_date}|${lot.tipo}`;
+      if (!overrideMap.has(key)) continue;
+      overriddenKeys.add(key);
+      const ov = overrideMap.get(key)!;
+      if (ov.cresol_deposit_id) {
+        const dep = depById.get(ov.cresol_deposit_id);
+        if (dep) {
+          dep.matched = true;
+          matchedLots.push({ ...lot, cresol_amount: dep.amount, cresol_date: dep.date, diff: dep.amount - lot.liq, matched: true, manual: true });
+          continue;
+        }
+      }
+      // Override com cresol_deposit_id null OU dep não encontrado = sem match intencional
+      matchedLots.push({ ...lot, matched: false, manual: true });
+    }
+
+    // Match automático D+1 pros lotes sem override
+    const lotsForAuto = lots.filter(l => !overriddenKeys.has(`${l.sale_date}|${l.tipo}`)).sort((a, b) => b.liq - a.liq);
+    for (const lot of lotsForAuto) {
       const expectedDate = nextBusinessDay(lot.sale_date);
       let best: DepStatus | null = null;
       let bestPct = 999;
       for (const dep of depPool) {
         if (dep.matched) continue;
-        if (dep.date !== expectedDate) continue; // data estrita: D+1 útil bancário
+        if (dep.date !== expectedDate) continue;
         const diffPct = lot.liq > 0 ? Math.abs(dep.amount - lot.liq) / lot.liq : 999;
         if (diffPct < 0.15 && diffPct < bestPct) {
           best = dep;
