@@ -486,6 +486,7 @@ export type Database = {
         Row: {
           audit_period_id: string
           bb_deposit_id: string | null
+          bb_deposit_id_2: string | null
           created_at: string
           data_corte: string | null
           data_credito: string
@@ -506,6 +507,7 @@ export type Database = {
         Insert: {
           audit_period_id: string
           bb_deposit_id?: string | null
+          bb_deposit_id_2?: string | null
           created_at?: string
           data_corte?: string | null
           data_credito: string
@@ -526,6 +528,7 @@ export type Database = {
         Update: {
           audit_period_id?: string
           bb_deposit_id?: string | null
+          bb_deposit_id_2?: string | null
           created_at?: string
           data_corte?: string | null
           data_credito?: string
@@ -549,6 +552,13 @@ export type Database = {
             columns: ["audit_period_id"]
             isOneToOne: false
             referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_voucher_lots_bb_deposit_id_2_fkey"
+            columns: ["bb_deposit_id_2"]
+            isOneToOne: false
+            referencedRelation: "audit_bank_deposits"
             referencedColumns: ["id"]
           },
           {
