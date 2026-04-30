@@ -73,6 +73,7 @@ type MaquinonaSale = {
   gross_amount: number;
   net_amount: number;
   brand: string | null;
+  deposit_group: string;
 };
 
 type CompOverride = {
@@ -140,7 +141,7 @@ export default function AuditVouchers() {
   const [lots, setLots] = useState<Lot[]>([]);
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [deposits, setDeposits] = useState<BankDeposit[]>([]);
-  const [maquinonaTicket, setMaquinonaTicket] = useState<MaquinonaSale[]>([]);
+  const [maquinonaVouchers, setMaquinonaVouchers] = useState<MaquinonaSale[]>([]);
   const [overrides, setOverrides] = useState<CompOverride[]>([]);
   const [expandedLot, setExpandedLot] = useState<string | null>(null);
   const [matching, setMatching] = useState(false);
@@ -149,6 +150,7 @@ export default function AuditVouchers() {
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
   const [showAllLots, setShowAllLots] = useState(false);
+  const [selectedOperadora, setSelectedOperadora] = useState<string>('ticket');
 
   const refresh = async (periodId: string) => {
     const compIni = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -175,8 +177,8 @@ export default function AuditVouchers() {
         .order('deposit_date', { ascending: true }),
       supabase
         .from('audit_card_transactions')
-        .select('id, sale_date, gross_amount, net_amount, brand')
-        .eq('deposit_group', 'ticket')
+        .select('id, sale_date, gross_amount, net_amount, brand, deposit_group')
+        .in('deposit_group', ['ticket', 'alelo', 'pluxee', 'vr'])
         .gte('sale_date', compIni)
         .lt('sale_date', compFim),
       supabase
@@ -189,7 +191,7 @@ export default function AuditVouchers() {
     setLots(fetchedLots);
     setImports((importsRes.data ?? []) as AuditImport[]);
     setDeposits((depRes.data ?? []) as BankDeposit[]);
-    setMaquinonaTicket((maqRes.data ?? []) as MaquinonaSale[]);
+    setMaquinonaVouchers((maqRes.data ?? []) as MaquinonaSale[]);
     setOverrides((ovrRes.data ?? []) as CompOverride[]);
 
     // Carrega TODOS os items de TODOS os lotes (em batch) pra calcular competência
@@ -222,7 +224,7 @@ export default function AuditVouchers() {
       if (!active) return;
       setPeriod(p);
       if (p) await refresh(p.id);
-      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaTicket([]); setAllItemsByLot({}); setOverrides([]); }
+      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaVouchers([]); setAllItemsByLot({}); setOverrides([]); }
       setLoading(false);
     })();
     return () => { active = false; };
@@ -295,18 +297,26 @@ export default function AuditVouchers() {
     return map;
   }, [allItemsByLot, competenciaIni, competenciaFim]);
 
-  const allTicketLots = useMemo(() => lots.filter(l => l.operadora === 'ticket'), [lots]);
+  // Operadoras com lotes (pra mostrar seletor dinâmico)
+  const operadorasAtivas = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of lots) set.add(l.operadora);
+    return Array.from(set).sort();
+  }, [lots]);
 
-  // Lotes com pelo menos 1 venda na competência
-  const ticketLotsCompetencia = useMemo(
-    () => allTicketLots.filter(l => competenciaByLot[l.id]),
-    [allTicketLots, competenciaByLot],
+  const allOperadoraLots = useMemo(
+    () => lots.filter(l => l.operadora === selectedOperadora),
+    [lots, selectedOperadora],
   );
 
-  // Visíveis na tabela: ou todos (toggle on), ou só os de competência
-  const visibleTicketLots = useMemo(
-    () => showAllLots ? allTicketLots : ticketLotsCompetencia,
-    [showAllLots, allTicketLots, ticketLotsCompetencia],
+  const operadoraLotsCompetencia = useMemo(
+    () => allOperadoraLots.filter(l => competenciaByLot[l.id]),
+    [allOperadoraLots, competenciaByLot],
+  );
+
+  const visibleOperadoraLots = useMemo(
+    () => showAllLots ? allOperadoraLots : operadoraLotsCompetencia,
+    [showAllLots, allOperadoraLots, operadoraLotsCompetencia],
   );
 
   // Override de competência indexado por lot_id
@@ -321,7 +331,7 @@ export default function AuditVouchers() {
   // - Lote parcial COM override: usa override.taxa_competencia
   // - Lote parcial SEM override: NÃO contribui pro KPI (countAguardando) e
   //   precisa input manual; o usuário consulta portal Ticket pra digitar.
-  const ticketStats = useMemo(() => {
+  const operadoraStats = useMemo(() => {
     let count = 0;
     let countParcial = 0;
     let countAguardando = 0; // parciais sem override
@@ -330,7 +340,7 @@ export default function AuditVouchers() {
     let liquido = 0;
     let matched = 0;
     let salesCount = 0;
-    for (const l of allTicketLots) {
+    for (const l of allOperadoraLots) {
       const comp = competenciaByLot[l.id];
       if (!comp) continue;
       count++;
@@ -361,27 +371,29 @@ export default function AuditVouchers() {
     }
     const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
     return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, taxaPct };
-  }, [allTicketLots, competenciaByLot, allItemsByLot, overrideByLot]);
+  }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot]);
 
-  // Cross-check Maquinona × Ticket: vendas Maquinona no mês vs items de lote
-  // Ticket que caem no mês (por data_transacao). Devem bater em count e bruto.
+  // Cross-check Maquinona × operadora atual.
   const crossCheck = useMemo(() => {
-    const maqCount = maquinonaTicket.length;
-    const maqBruto = maquinonaTicket.reduce((s, m) => s + Number(m.gross_amount || 0), 0);
-    let ticketCount = 0;
-    let ticketBruto = 0;
-    for (const items of Object.values(allItemsByLot)) {
+    const maqFiltered = maquinonaVouchers.filter(m => m.deposit_group === selectedOperadora);
+    const maqCount = maqFiltered.length;
+    const maqBruto = maqFiltered.reduce((s, m) => s + Number(m.gross_amount || 0), 0);
+    const operadoraLotIds = new Set(allOperadoraLots.map(l => l.id));
+    let opCount = 0;
+    let opBruto = 0;
+    for (const [lotId, items] of Object.entries(allItemsByLot)) {
+      if (!operadoraLotIds.has(lotId)) continue;
       for (const it of items) {
         if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
-          ticketCount++;
-          ticketBruto += Number(it.valor || 0);
+          opCount++;
+          opBruto += Number(it.valor || 0);
         }
       }
     }
-    const diffCount = maqCount - ticketCount;
-    const diffBruto = Math.round((maqBruto - ticketBruto) * 100) / 100;
-    return { maqCount, maqBruto, ticketCount, ticketBruto, diffCount, diffBruto };
-  }, [maquinonaTicket, allItemsByLot, competenciaIni, competenciaFim]);
+    const diffCount = maqCount - opCount;
+    const diffBruto = Math.round((maqBruto - opBruto) * 100) / 100;
+    return { maqCount, maqBruto, opCount, opBruto, diffCount, diffBruto };
+  }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots]);
 
   // Depósitos BB filtrados pela janela do mês de competência (até +60 dias) e categoria.
   const filteredDeposits = useMemo(() => {
@@ -426,7 +438,7 @@ export default function AuditVouchers() {
     setMatching(true);
     try {
       const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        body: { audit_period_id: period.id, operadora: 'ticket', reset: false },
+        body: { audit_period_id: period.id, operadora: selectedOperadora, reset: false },
       });
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Falha no match');
@@ -538,7 +550,8 @@ export default function AuditVouchers() {
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="py-3 text-sm">
             <strong>Em construção (Estágio 2).</strong> Esta aba é independente da auditoria iFood/Cresol.
-            Por enquanto apenas <strong>Ticket</strong> está habilitado. Match BB ↔ lote ainda não conectado.
+            Operadoras habilitadas: <strong>Ticket, Alelo</strong> (Pluxee e VR ainda não).
+            Use o seletor abaixo pra alternar entre operadoras.
           </CardContent>
         </Card>
 
@@ -578,24 +591,28 @@ export default function AuditVouchers() {
         </Card>
 
         {/* Cards de upload */}
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-3">
           <UploadBBCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
           <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
+          <UploadAleloCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
         </div>
 
-        {/* Cross-check Maquinona × Ticket */}
+        {/* Cross-check Maquinona × operadora atual */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Cross-check Maquinona × Ticket — vendas em {MONTHS[month - 1]} {year}</CardTitle>
+            <CardTitle className="text-base">
+              Cross-check Maquinona × {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} — vendas em {MONTHS[month - 1]} {year}
+            </CardTitle>
             <p className="text-xs text-muted-foreground mt-1">
-              Vendas Ticket no extrato Maquinona devem ter o mesmo total das vendas listadas no PDF Ticket
-              (data_transacao no mês). Se diferir, falta importar Maquinona ou um lote do portal Ticket.
+              Vendas {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} no extrato Maquinona devem
+              bater com vendas do extrato da operadora (data_transacao no mês).
+              Diferença pequena pode ser "Valor da promoção" da Maquinona (não cobra do voucher).
             </p>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 grid-cols-2 md:grid-cols-5 text-sm">
-              <Stat label="Maquinona Ticket" value={fmt(crossCheck.maqBruto)} hint={`${crossCheck.maqCount} vendas`} />
-              <Stat label="Portal Ticket (lotes)" value={fmt(crossCheck.ticketBruto)} hint={`${crossCheck.ticketCount} vendas`} />
+              <Stat label={`Maquinona ${CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora}`} value={fmt(crossCheck.maqBruto)} hint={`${crossCheck.maqCount} vendas`} />
+              <Stat label={`Portal ${CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} (lotes)`} value={fmt(crossCheck.opBruto)} hint={`${crossCheck.opCount} vendas`} />
               <Stat
                 label="Diferença"
                 value={fmt(crossCheck.diffBruto)}
@@ -603,7 +620,7 @@ export default function AuditVouchers() {
                 className={Math.abs(crossCheck.diffBruto) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
               />
               <div className="md:col-span-2 flex items-center">
-                {crossCheck.maqCount === 0 && crossCheck.ticketCount === 0 ? (
+                {crossCheck.maqCount === 0 && crossCheck.opCount === 0 ? (
                   <Badge variant="outline" className="text-muted-foreground">Sem dados</Badge>
                 ) : Math.abs(crossCheck.diffBruto) < 0.05 && crossCheck.diffCount === 0 ? (
                   <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">✓ Vendas batem</Badge>
@@ -615,17 +632,33 @@ export default function AuditVouchers() {
           </CardContent>
         </Card>
 
-        {/* Stats Ticket */}
+        {/* Stats da operadora corrente */}
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
-            <div>
-              <CardTitle className="text-base">Ticket — Competência {MONTHS[month - 1]} {year}</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Vendas Ticket no mês selecionado. Lotes podem ter sido pagos no BB em meses seguintes.
-              </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Select value={selectedOperadora} onValueChange={v => { setSelectedOperadora(v); setExpandedLot(null); }}>
+                <SelectTrigger className="w-[160px] h-9 font-semibold">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ticket">Ticket</SelectItem>
+                  <SelectItem value="alelo">Alelo</SelectItem>
+                  <SelectItem value="pluxee">Pluxee</SelectItem>
+                  <SelectItem value="vr">VR</SelectItem>
+                </SelectContent>
+              </Select>
+              <div>
+                <CardTitle className="text-base">
+                  Competência {MONTHS[month - 1]} {year}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Vendas {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} no mês selecionado.
+                  Lotes podem ter sido pagos no BB em meses seguintes.
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
-              {allTicketLots.length > 0 && (
+              {allOperadoraLots.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -637,41 +670,41 @@ export default function AuditVouchers() {
                   Auto-match BB
                 </Button>
               )}
-              {allTicketLots.length > 0 && (
+              {allOperadoraLots.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setShowAllLots(s => !s)}
                 >
                   {showAllLots
-                    ? `Mostrar só competência (${ticketLotsCompetencia.length})`
-                    : `Ver todos os lotes (${allTicketLots.length})`}
+                    ? `Mostrar só competência (${operadoraLotsCompetencia.length})`
+                    : `Ver todos os lotes (${allOperadoraLots.length})`}
                 </Button>
               )}
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 grid-cols-2 md:grid-cols-6 mb-4 text-sm">
-              <Stat label="Lotes" value={`${ticketStats.count} (${ticketStats.salesCount} vendas)`}
-                hint={ticketStats.countParcial > 0 ? `${ticketStats.countParcial} parcial(is)` : undefined} />
-              <Stat label="Vendido (bruto)" value={fmt(ticketStats.subtotal)} />
+              <Stat label="Lotes" value={`${operadoraStats.count} (${operadoraStats.salesCount} vendas)`}
+                hint={operadoraStats.countParcial > 0 ? `${operadoraStats.countParcial} parcial(is)` : undefined} />
+              <Stat label="Vendido (bruto)" value={fmt(operadoraStats.subtotal)} />
               <Stat label="Descontos"
-                value={fmt(ticketStats.descontos)}
+                value={fmt(operadoraStats.descontos)}
                 className="text-amber-700 dark:text-amber-400"
-                hint={ticketStats.countAguardando > 0 ? `${ticketStats.countAguardando} aguardando manual` : undefined} />
-              <Stat label="Líquido" value={fmt(ticketStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+                hint={operadoraStats.countAguardando > 0 ? `${operadoraStats.countAguardando} aguardando manual` : undefined} />
+              <Stat label="Líquido" value={fmt(operadoraStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
               <Stat label="Taxa efetiva"
-                value={fmtPct(ticketStats.taxaPct)}
+                value={fmtPct(operadoraStats.taxaPct)}
                 className="text-rose-700 dark:text-rose-400"
-                hint={ticketStats.countAguardando > 0 ? 'parciais sem override fora do total' : undefined} />
-              <Stat label="Pareados c/ BB" value={`${ticketStats.matched} / ${ticketStats.count}`} />
+                hint={operadoraStats.countAguardando > 0 ? 'parciais sem override fora do total' : undefined} />
+              <Stat label="Pareados c/ BB" value={`${operadoraStats.matched} / ${operadoraStats.count}`} />
             </div>
 
-            {visibleTicketLots.length === 0 ? (
+            {visibleOperadoraLots.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">
-                {allTicketLots.length === 0
+                {allOperadoraLots.length === 0
                   ? 'Nenhum lote Ticket importado neste período.'
-                  : `Nenhum lote com vendas em ${MONTHS[month - 1]}/${year}. Use "Ver todos os lotes" pra inspecionar os ${allTicketLots.length} importados.`}
+                  : `Nenhum lote com vendas em ${MONTHS[month - 1]}/${year}. Use "Ver todos os lotes" pra inspecionar os ${allOperadoraLots.length} importados.`}
               </p>
             ) : (
               <Table>
@@ -690,7 +723,7 @@ export default function AuditVouchers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleTicketLots.map(l => {
+                  {visibleOperadoraLots.map(l => {
                     const expanded = expandedLot === l.id;
                     const comp = competenciaByLot[l.id];
                     const allItems = allItemsByLot[l.id] ?? [];
@@ -1514,6 +1547,114 @@ function UploadTicketCard({
           {uploading
             ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
             : 'Selecionar PDF (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function UploadAleloCard({
+  period, ensurePeriod, onAfter,
+}: {
+  period: AuditPeriod | null;
+  ensurePeriod: () => Promise<AuditPeriod | null>;
+  onAfter: () => Promise<void> | void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+    if (xlsx.length === 0) return;
+
+    setUploading(true);
+    setProgress({ current: 0, total: xlsx.length });
+    let totalLots = 0;
+    let totalItems = 0;
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < xlsx.length; i++) {
+        const file = xlsx[i];
+        setProgress({ current: i + 1, total: xlsx.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+          // Procura aba "Extrato" (Alelo) ou usa primeira disponível
+          const sheetName = workbook.SheetNames.find(
+            n => n.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase() === 'extrato',
+          ) ?? workbook.SheetNames[0];
+          if (!sheetName) throw new Error('Arquivo sem abas');
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+          if (!rows.length) throw new Error('Aba vazia');
+
+          const { data, error } = await supabase.functions.invoke('import-alelo-xlsx', {
+            body: { audit_period_id: p.id, rows, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Alelo');
+
+          totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
+          totalItems += Number(data.inserted_items ?? 0);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalLots} lotes / ${totalItems} vendas Alelo importadas`);
+      } else {
+        toast.error(`${failures.length} de ${xlsx.length} falharam`, {
+          description: failures.join(' | '),
+        });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileSpreadsheet className="h-5 w-5 text-orange-600" />
+        <CardTitle className="text-base">Extrato Alelo (.xlsx)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          XLSX exportado do portal Alelo (aba "Extrato"). Cada Data de Pagamento
+          única vira 1 lote = 1 crédito BB esperado. Taxa é por venda (não por lote).
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button
+          variant="default"
+          className="gap-2"
+          disabled={uploading}
+          onClick={() => inputRef.current?.click()}
+        >
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLSX (1 ou mais)'}
         </Button>
       </CardContent>
     </Card>
