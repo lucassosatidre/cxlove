@@ -308,6 +308,13 @@ export default function AuditVouchers() {
     [showAllLots, allTicketLots, ticketLotsCompetencia],
   );
 
+  // Override de competência indexado por lot_id
+  const overrideByLot = useMemo(() => {
+    const map = new Map<string, CompOverride>();
+    for (const o of overrides) map.set(o.lot_id, o);
+    return map;
+  }, [overrides]);
+
   // Stats refletem competência (vendas no mês X). Regras:
   // - Lote 100% no mês: usa total_descontos do lote inteiro
   // - Lote parcial COM override: usa override.taxa_competencia
@@ -400,12 +407,6 @@ export default function AuditVouchers() {
     return map;
   }, [deposits, competenciaIni, bbWindowFim]);
 
-  // Override de competência indexado por lot_id
-  const overrideByLot = useMemo(() => {
-    const map = new Map<string, CompOverride>();
-    for (const o of overrides) map.set(o.lot_id, o);
-    return map;
-  }, [overrides]);
 
   const handleAutoMatch = async () => {
     if (!period) return;
@@ -704,7 +705,7 @@ export default function AuditVouchers() {
                               const dep = depositNumberById.get(l.bb_deposit_id);
                               return (
                                 <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
-                                  ✓ {dep ? `#${dep.n} ${fmtDate(dep.deposit_date)}` : 'Pareado'}
+                                  ✓ {dep ? `#${dep.n} ${fmtDate(dep.deposit.deposit_date)}` : 'Pareado'}
                                   {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
                                 </Badge>
                               );
