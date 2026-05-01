@@ -75,6 +75,7 @@ type MaquinonaSale = {
   net_amount: number;
   brand: string | null;
   deposit_group: string;
+  promotion_amount: number | null;
 };
 
 type CompOverride = {
@@ -153,6 +154,7 @@ export default function AuditVouchers() {
   const [showAllLots, setShowAllLots] = useState(false);
   const [selectedOperadora, setSelectedOperadora] = useState<string>('ticket');
   const [showCrossDetail, setShowCrossDetail] = useState(false);
+  const [showAdjacentes, setShowAdjacentes] = useState(false);
 
   const refresh = async (periodId: string) => {
     const compIni = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -179,7 +181,7 @@ export default function AuditVouchers() {
         .order('deposit_date', { ascending: true }),
       supabase
         .from('audit_card_transactions')
-        .select('id, sale_date, gross_amount, net_amount, brand, deposit_group')
+        .select('id, sale_date, gross_amount, net_amount, brand, deposit_group, promotion_amount')
         .in('deposit_group', ['ticket', 'alelo', 'pluxee', 'vr'])
         .gte('sale_date', compIni)
         .lt('sale_date', compFim),
@@ -379,15 +381,18 @@ export default function AuditVouchers() {
   // Lista também as divergências individuais: vendas que estão só em um dos lados
   // (match por data exata + valor com tolerância R$0,01).
   const crossCheck = useMemo(() => {
-    type MaqV = { id: string; sale_date: string; gross_amount: number };
+    type MaqV = { id: string; sale_date: string; gross_amount: number; promotion_amount: number };
     type PortalV = { id: string; lot_id: string; data_transacao: string; valor: number; numero_documento: string | null };
 
     const maqFiltered = maquinonaVouchers.filter(m => m.deposit_group === selectedOperadora);
     const maqList: MaqV[] = maqFiltered.map(m => ({
-      id: m.id, sale_date: m.sale_date, gross_amount: Number(m.gross_amount || 0),
+      id: m.id, sale_date: m.sale_date,
+      gross_amount: Number(m.gross_amount || 0),
+      promotion_amount: Number(m.promotion_amount || 0),
     }));
     const maqCount = maqList.length;
     const maqBruto = maqList.reduce((s, m) => s + m.gross_amount, 0);
+    const maqPromo = maqList.reduce((s, m) => s + m.promotion_amount, 0);
 
     const operadoraLotIds = new Set(allOperadoraLots.map(l => l.id));
     const portalList: PortalV[] = [];
@@ -424,7 +429,7 @@ export default function AuditVouchers() {
 
     const diffCount = maqCount - opCount;
     const diffBruto = Math.round((maqBruto - opBruto) * 100) / 100;
-    return { maqCount, maqBruto, opCount, opBruto, diffCount, diffBruto, onlyMaq, onlyPortal };
+    return { maqCount, maqBruto, maqPromo, opCount, opBruto, diffCount, diffBruto, onlyMaq, onlyPortal };
   }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots]);
 
   const lotById = useMemo(() => {
@@ -439,6 +444,35 @@ export default function AuditVouchers() {
     if (categoryFilter !== 'todos') arr = arr.filter(d => d.category === categoryFilter);
     return arr;
   }, [deposits, categoryFilter, competenciaIni, bbWindowFim]);
+
+  // Separa depósitos em "competência" (paga vendas do mês) vs "adjacentes" (sem
+  // match com competência ou paga vendas de outro mês).
+  // - Competência: depósito pareado com lote que tem vendas no mês selecionado
+  // - Adjacentes: o resto (sem match, ou pareado com lote sem vendas no mês)
+  const competenciaLotIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const lotId of Object.keys(allItemsByLot)) {
+      const items = allItemsByLot[lotId];
+      if (items.some(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim)) {
+        set.add(lotId);
+      }
+    }
+    return set;
+  }, [allItemsByLot, competenciaIni, competenciaFim]);
+
+  const depositsGroups = useMemo(() => {
+    const competencia: BankDeposit[] = [];
+    const adjacentes: BankDeposit[] = [];
+    for (const d of filteredDeposits) {
+      const matchedLots = lots.filter(l =>
+        (l.bb_deposit_id === d.id || l.bb_deposit_id_2 === d.id)
+        && competenciaLotIds.has(l.id),
+      );
+      if (matchedLots.length > 0) competencia.push(d);
+      else adjacentes.push(d);
+    }
+    return { competencia, adjacentes };
+  }, [filteredDeposits, lots, competenciaLotIds]);
 
   // Numeração #N por depósito BB DENTRO da categoria (na janela do mês). Usado
   // pra exibir "operação N - data" no resumo do lote pareado.
@@ -673,15 +707,25 @@ export default function AuditVouchers() {
               <Stat
                 label="Diferença"
                 value={fmt(crossCheck.diffBruto)}
-                hint={`${crossCheck.diffCount > 0 ? '+' : ''}${crossCheck.diffCount} venda(s)`}
-                className={Math.abs(crossCheck.diffBruto) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
+                hint={`${crossCheck.diffCount > 0 ? '+' : ''}${crossCheck.diffCount} venda(s)${crossCheck.maqPromo > 0 ? ` · promo ${fmt(crossCheck.maqPromo)}` : ''}`}
+                className={Math.abs(crossCheck.diffBruto - crossCheck.maqPromo) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
               />
+              {crossCheck.maqPromo > 0 && (
+                <Stat
+                  label="Promoção concedida"
+                  value={fmt(crossCheck.maqPromo)}
+                  className="text-amber-700 dark:text-amber-400"
+                  hint="cashback/desconto pra cliente (custo da pizzaria)"
+                />
+              )}
               <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
                 {crossCheck.maqCount === 0 && crossCheck.opCount === 0 ? (
                   <Badge variant="outline" className="text-muted-foreground">Sem dados</Badge>
-                ) : Math.abs(crossCheck.diffBruto) < 0.05 && crossCheck.diffCount === 0
+                ) : Math.abs(crossCheck.diffBruto - crossCheck.maqPromo) < 0.05 && crossCheck.diffCount === 0
                     && crossCheck.onlyMaq.length === 0 && crossCheck.onlyPortal.length === 0 ? (
-                  <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">✓ Vendas batem</Badge>
+                  <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
+                    ✓ Vendas batem{crossCheck.maqPromo > 0 ? ' (após promoção)' : ''}
+                  </Badge>
                 ) : (
                   <>
                     <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400">⚠ Divergência</Badge>
@@ -906,7 +950,13 @@ export default function AuditVouchers() {
                               <span className="italic text-muted-foreground text-xs">manual</span>
                             ) : fmt(colDesc)}
                           </TableCell>
-                          <TableCell className="text-right font-medium">{fmt(liquido)}</TableCell>
+                          <TableCell className="text-right font-medium">
+                            {isParcial
+                              ? (ovr
+                                  ? fmt(Number(comp?.valor ?? 0) - Number(ovr.taxa_competencia))
+                                  : <span className="italic text-muted-foreground text-xs">manual</span>)
+                              : fmt(liquido)}
+                          </TableCell>
                           <TableCell>
                             {l.bb_deposit_id ? (() => {
                               const d1 = depositNumberById.get(l.bb_deposit_id);
@@ -981,6 +1031,10 @@ export default function AuditVouchers() {
             {filteredDeposits.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">Nenhum depósito BB nesta categoria.</p>
             ) : (
+              <>
+                <div className="text-xs uppercase text-muted-foreground mb-2">
+                  Pagamentos da competência ({depositsGroups.competencia.length}) — total {fmt(depositsGroups.competencia.reduce((s, d) => s + Number(d.amount), 0))}
+                </div>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -994,7 +1048,7 @@ export default function AuditVouchers() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDeposits.map(d => {
+                  {depositsGroups.competencia.map(d => {
                     const numbered = depositNumberById.get(d.id);
                     const matchedLots = lotsByDeposit.get(d.id) ?? [];
                     const sumLots = matchedLots.reduce((s, l) => s + Number(l.valor_liquido), 0);
@@ -1092,6 +1146,54 @@ export default function AuditVouchers() {
                   })}
                 </TableBody>
               </Table>
+              {depositsGroups.competencia.length === 0 && (
+                <p className="text-sm text-muted-foreground py-4">Nenhum depósito BB pagando vendas da competência.</p>
+              )}
+
+              {depositsGroups.adjacentes.length > 0 && (
+                <div className="mt-4 border-t pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdjacentes(s => !s)}
+                    className="flex items-center gap-2 text-xs uppercase text-muted-foreground hover:text-foreground"
+                  >
+                    {showAdjacentes ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    Adjacentes ({depositsGroups.adjacentes.length}) — depósitos sem match na competência
+                    <span className="font-mono ml-1">
+                      {fmt(depositsGroups.adjacentes.reduce((s, d) => s + Number(d.amount), 0))}
+                    </span>
+                  </button>
+                  {showAdjacentes && (
+                    <div className="mt-2 opacity-80">
+                      <Table>
+                        <TableBody>
+                          {depositsGroups.adjacentes.map(d => {
+                            const numbered = depositNumberById.get(d.id);
+                            const matched = lotsByDeposit.get(d.id) ?? [];
+                            return (
+                              <TableRow key={d.id}>
+                                <TableCell className="font-mono text-xs w-12">{numbered ? `#${numbered.n}` : '—'}</TableCell>
+                                <TableCell className="text-xs">{fmtDate(d.deposit_date)}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-[10px]">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
+                                </TableCell>
+                                <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">{d.description ?? '—'}</TableCell>
+                                <TableCell className="text-xs">
+                                  {matched.length === 0
+                                    ? <Badge variant="outline" className="text-[10px] text-muted-foreground">Sem match</Badge>
+                                    : <Badge variant="outline" className="text-[10px]">Outro mês</Badge>}
+                                </TableCell>
+                                <TableCell className="text-right text-xs font-mono">{fmt(Number(d.amount))}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
             )}
           </CardContent>
         </Card>
@@ -1178,8 +1280,6 @@ function LotDetail({
   month: number;
   year: number;
 }) {
-  const descontos = lot.descontos ?? {};
-  const descKeys = Object.keys(descontos);
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao)),
     [items],
@@ -1248,34 +1348,71 @@ function LotDetail({
         </div>
         <div className="space-y-3">
           <div>
-            <div className="text-xs uppercase text-muted-foreground mb-1">Resumo do lote</div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">
+              Resumo do lote{isParcial ? ' (visão competência)' : ''}
+            </div>
             <div className="rounded border bg-card divide-y">
-              <ResumoLine label="Total das vendas" value={fmt(subtotal)} />
-              <ResumoLine label="Total de descontos" value={fmt(totalDesc)} valueClass="text-amber-700 dark:text-amber-400" />
-              <ResumoLine label="Taxa efetiva" value={fmtPct(taxaPct)} valueClass="text-rose-700 dark:text-rose-400" />
-              <ResumoLine label="Líquido teórico" value={fmt(liquidoTeorico)} valueClass="text-emerald-700 dark:text-emerald-400" hint="subtotal − descontos" />
-              <ResumoLine
-                label="Líquido recebido"
-                value={matchedDep ? fmt(matchedSumAmount) : fmt(liquido)}
-                valueClass={
-                  matchedDep
-                    ? (Math.abs(matchedSumAmount - liquido) < 0.5 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
-                    : (Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
-                }
-                hint={matchedDep && matchedDep2
-                  ? `operações #${matchedDep.n} (${fmtDate(matchedDep.deposit.deposit_date)}) + #${matchedDep2.n} (${fmtDate(matchedDep2.deposit.deposit_date)})${lot.manual ? ' — manual' : ''}`
-                  : matchedDep
-                    ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
-                    : Math.abs(liquidoTeorico - liquido) < 0.05 ? '(extrato operadora) ✓ bate' : `(extrato operadora) ✗ diff ${fmt(liquido - liquidoTeorico)}`
-                }
-              />
-              {isParcial && (
-                <ResumoLine
-                  label="Taxa da competência"
-                  value={override ? fmt(Number(override.taxa_competencia)) : '— preencher'}
-                  valueClass={override ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground italic'}
-                  hint={`refere-se às ${itensComp.length} venda(s) de ${MONTHS[month - 1].toLowerCase()} (R$${compValor.toFixed(2)})`}
-                />
+              {isParcial ? (
+                <>
+                  <ResumoLine
+                    label="Total das vendas (competência)"
+                    value={fmt(compValor)}
+                    hint={`${itensComp.length} de ${sortedItems.length} vendas | lote inteiro: ${fmt(subtotal)}`}
+                  />
+                  <ResumoLine
+                    label="Taxa da competência"
+                    value={override ? fmt(Number(override.taxa_competencia)) : '— preencher'}
+                    valueClass={override ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground italic'}
+                    hint={`consulte portal pra obter taxa real | lote inteiro desc: ${fmt(totalDesc)}`}
+                  />
+                  <ResumoLine
+                    label="Taxa efetiva (competência)"
+                    value={override && compValor > 0
+                      ? fmtPct((Number(override.taxa_competencia) / compValor) * 100)
+                      : '—'}
+                    valueClass="text-rose-700 dark:text-rose-400"
+                  />
+                  <ResumoLine
+                    label="Líquido competência"
+                    value={override
+                      ? fmt(compValor - Number(override.taxa_competencia))
+                      : '— preencher'}
+                    valueClass={override ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground italic'}
+                    hint="vendas competência − taxa competência"
+                  />
+                  <ResumoLine
+                    label="Líquido recebido (lote inteiro)"
+                    value={matchedDep ? fmt(matchedSumAmount) : fmt(liquido)}
+                    valueClass="text-muted-foreground"
+                    hint={matchedDep && matchedDep2
+                      ? `operações #${matchedDep.n} + #${matchedDep2.n}${lot.manual ? ' — manual' : ''}`
+                      : matchedDep
+                        ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
+                        : 'lote completo (inclui vendas fora da competência)'}
+                  />
+                </>
+              ) : (
+                <>
+                  <ResumoLine label="Total das vendas" value={fmt(subtotal)} />
+                  <ResumoLine label="Total de descontos" value={fmt(totalDesc)} valueClass="text-amber-700 dark:text-amber-400" />
+                  <ResumoLine label="Taxa efetiva" value={fmtPct(taxaPct)} valueClass="text-rose-700 dark:text-rose-400" />
+                  <ResumoLine label="Líquido teórico" value={fmt(liquidoTeorico)} valueClass="text-emerald-700 dark:text-emerald-400" hint="subtotal − descontos" />
+                  <ResumoLine
+                    label="Líquido recebido"
+                    value={matchedDep ? fmt(matchedSumAmount) : fmt(liquido)}
+                    valueClass={
+                      matchedDep
+                        ? (Math.abs(matchedSumAmount - liquido) < 0.5 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
+                        : (Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
+                    }
+                    hint={matchedDep && matchedDep2
+                      ? `operações #${matchedDep.n} (${fmtDate(matchedDep.deposit.deposit_date)}) + #${matchedDep2.n} (${fmtDate(matchedDep2.deposit.deposit_date)})${lot.manual ? ' — manual' : ''}`
+                      : matchedDep
+                        ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
+                        : Math.abs(liquidoTeorico - liquido) < 0.05 ? '(extrato operadora) ✓ bate' : `(extrato operadora) ✗ diff ${fmt(liquido - liquidoTeorico)}`
+                    }
+                  />
+                </>
               )}
             </div>
           </div>
@@ -1326,24 +1463,6 @@ function LotDetail({
                 Consulte o portal Ticket pra obter a taxa real desta(s) venda(s). O sistema usa este
                 valor no KPI mensal em vez de ratear proporcional o desconto do lote inteiro.
               </p>
-            </div>
-          )}
-
-          {descKeys.length > 0 && (
-            <div>
-              <div className="text-xs uppercase text-muted-foreground mb-1">Quebra de descontos</div>
-              <Table>
-                <TableBody>
-                  {descKeys.map(k => (
-                    <TableRow key={k}>
-                      <TableCell className="text-xs py-1.5">{DISCOUNT_LABELS[k] ?? k}</TableCell>
-                      <TableCell className="text-right text-xs py-1.5 text-amber-700 dark:text-amber-400">
-                        {fmt(Number(descontos[k]))}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
             </div>
           )}
 
