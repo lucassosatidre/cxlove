@@ -213,25 +213,26 @@ export default function AuditImport() {
     let description = '';
     if (type === 'maquinona') {
       description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
-      // SEMPRE loga (log nível padrão, sempre visível) pra debug
       console.log('[import-maquinona] diagnostic:', data.diagnostic);
-      if (data.diagnostic && data.diagnostic.promotion_nonzero_count === 0) {
+      if (data.diagnostic) {
+        const promoCount = data.diagnostic.promotion_nonzero_count ?? 0;
+        const incCount = data.diagnostic.incentivo_nonzero_count ?? 0;
+        const promoRaw = data.diagnostic.first_row_promotion_raw;
+        const incRaw = data.diagnostic.first_row_incentivo_raw;
         const keys = data.diagnostic.first_row_keys ?? [];
-        // Toast visível com as colunas detectadas
-        toast.error('⚠ Promoção zerada após import', {
-          description: `Colunas no XLSX: ${keys.join(' | ')}`,
-          duration: 30000,
-        });
-        // Também mostra um alert no DOM pra garantir
+        // Sempre mostra alert resumido pra confirmar status
         alert(
-          'Promoção continua zerada após import.\n\n' +
-          'Colunas detectadas no XLSX:\n' +
-          keys.map((k: string, i: number) => `${i}: ${JSON.stringify(k)}`).join('\n') +
-          '\n\nPromotion raw capturado: ' + JSON.stringify(data.diagnostic.first_row_promotion_raw) +
-          '\nIncentivo raw capturado: ' + JSON.stringify(data.diagnostic.first_row_incentivo_raw) +
-          '\n\nMe envie esse texto pra eu ajustar o pick.',
+          `IMPORT MAQUINONA — diagnóstico\n\n` +
+          `Linhas com promoção > 0: ${promoCount}\n` +
+          `Linhas com incentivo > 0: ${incCount}\n\n` +
+          `Promotion raw (1ª linha): ${JSON.stringify(promoRaw)}\n` +
+          `Incentivo raw (1ª linha): ${JSON.stringify(incRaw)}\n\n` +
+          `Total de colunas: ${keys.length}\n` +
+          `Colunas detectadas:\n` +
+          keys.map((k: string, i: number) => `${i}: ${JSON.stringify(k)}`).join('\n')
         );
-        description += ' · ⚠ Promoção zerada (veja alerta)';
+      } else {
+        alert('SEM diagnostic na resposta — edge ainda não foi redeployada.');
       }
     } else if (type === 'cresol') {
       description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
