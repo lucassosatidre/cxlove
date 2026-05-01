@@ -200,6 +200,13 @@ Deno.serve(async (req) => {
     // Map JSON rows → DB shape, dedup by transaction_id
     const seen = new Set<string>();
     const txs: any[] = [];
+    // Diagnóstico: captura as keys do PRIMEIRO row pra retornar na resposta
+    // (ajuda debugar quando promotion_amount não está sendo populado).
+    const diagFirstRowKeys = rows.length > 0 && typeof rows[0] === 'object' ? Object.keys(rows[0] ?? {}) : [];
+    let diagFirstPromotion: any = null;
+    let diagFirstIncentivo: any = null;
+    let diagPromoCount = 0;
+    let diagIncentivoCount = 0;
     for (const r of rows) {
       const transactionId = String(pick(r, 'ID da transacao', 'ID da transação') ?? '').trim();
       if (!transactionId) continue;
@@ -223,8 +230,20 @@ Deno.serve(async (req) => {
         gross_amount: parseNumber(pick(r, 'Valor bruto da venda')),
         tax_rate: parseTaxRate(pick(r, 'Taxa de transacao', 'Taxa de transação')),
         tax_amount: parseNumber(pick(r, 'Valor da taxa de transacao', 'Valor da taxa de transação')),
-        promotion_amount: parseNumber(pick(r, 'Valor da promocao', 'Valor da promoção')),
-        incentivo_ifood: parseNumber(pick(r, 'Incentivo iFood')),
+        promotion_amount: (() => {
+          const v = pick(r, 'Valor da promocao', 'Valor da promoção');
+          if (diagFirstPromotion === null) diagFirstPromotion = v;
+          const n = parseNumber(v);
+          if (n > 0) diagPromoCount++;
+          return n;
+        })(),
+        incentivo_ifood: (() => {
+          const v = pick(r, 'Incentivo iFood');
+          if (diagFirstIncentivo === null) diagFirstIncentivo = v;
+          const n = parseNumber(v);
+          if (n > 0) diagIncentivoCount++;
+          return n;
+        })(),
         net_amount: parseNumber(pick(r, 'Valor liquido', 'Valor líquido')),
         transaction_id: transactionId,
         machine_serial: pick(r, 'Serial da Maquinona') ? String(pick(r, 'Serial da Maquinona')).trim() : null,
@@ -284,6 +303,17 @@ Deno.serve(async (req) => {
       imported_rows: inserted,
       duplicate_rows: duplicates,
       message: `${inserted} transações importadas, ${duplicates} duplicadas ignoradas`,
+      diagnostic: {
+        // Lista de keys do primeiro row (ajuda identificar nome real da coluna).
+        first_row_keys: diagFirstRowKeys,
+        // Valor capturado pra promotion (Valor da promoção). null = não achou key.
+        first_row_promotion_raw: diagFirstPromotion,
+        // Valor capturado pra incentivo iFood. null = não achou key.
+        first_row_incentivo_raw: diagFirstIncentivo,
+        // Quantos rows com promoção > 0 entre TODOS os rows processados.
+        promotion_nonzero_count: diagPromoCount,
+        incentivo_nonzero_count: diagIncentivoCount,
+      },
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-maquinona error', e);

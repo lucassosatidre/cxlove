@@ -213,6 +213,20 @@ export default function AuditImport() {
     let description = '';
     if (type === 'maquinona') {
       description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
+      // Logging do diagnóstico de Promoção/Incentivo pra debug
+      if (data.diagnostic) {
+        console.info('[import-maquinona] diagnostic:', data.diagnostic);
+        if (data.diagnostic.promotion_nonzero_count === 0 && data.diagnostic.first_row_keys) {
+          console.warn(
+            '[import-maquinona] Promotion não populada. Colunas detectadas no XLSX:',
+            data.diagnostic.first_row_keys,
+          );
+          console.warn(
+            'Esperava encontrar: "Valor da promocao" ou "Valor da promoção"',
+          );
+          description += ' · ⚠ Promoção zerada — veja console pra ver colunas detectadas';
+        }
+      }
     } else if (type === 'cresol') {
       description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
     }
