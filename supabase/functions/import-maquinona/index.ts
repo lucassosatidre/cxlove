@@ -254,43 +254,46 @@ Deno.serve(async (req) => {
       });
     }
 
-    // UPSERT in batches with global existence check (transaction_id is globally unique)
+    // UPSERT real (UPDATE quando existe) — antes usava ignoreDuplicates:true
+    // que pulava reimport. Pra reimport popular campos novos (ex: promotion_amount,
+    // incentivo_ifood) precisa atualizar de fato.
     let inserted = 0;
+    let updated = 0;
     const CHUNK = 500;
     for (let i = 0; i < txs.length; i += CHUNK) {
       const chunk = txs.slice(i, i + CHUNK);
       const ids = chunk.map(t => t.transaction_id);
+      // Conta antes pra distinguir insert vs update no relatório
       const { data: existingGlobal } = await supabase
         .from('audit_card_transactions')
         .select('transaction_id')
         .in('transaction_id', ids);
       const globalSet = new Set((existingGlobal ?? []).map((e: any) => e.transaction_id));
-      const toInsert = chunk.filter(t => !globalSet.has(t.transaction_id));
+      const newIds = chunk.filter(t => !globalSet.has(t.transaction_id)).length;
+      const updIds = chunk.length - newIds;
 
-      if (toInsert.length) {
-        const { error: insErr } = await supabase
-          .from('audit_card_transactions')
-          .upsert(toInsert, { onConflict: 'transaction_id', ignoreDuplicates: true });
-        if (insErr) {
-          await supabase.from('audit_imports').update({
-            status: 'failed', error_message: insErr.message,
-            imported_rows: inserted, duplicate_rows: txs.length - inserted - toInsert.length,
-          }).eq('id', importRec.id);
-          return new Response(JSON.stringify({ error: `Erro ao inserir: ${insErr.message}` }), {
-            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        inserted += toInsert.length;
+      // Upsert REAL (sem ignoreDuplicates) — UPDATE valores quando transaction_id já existe
+      const { error: upsertErr } = await supabase
+        .from('audit_card_transactions')
+        .upsert(chunk, { onConflict: 'transaction_id' });
+      if (upsertErr) {
+        await supabase.from('audit_imports').update({
+          status: 'failed', error_message: upsertErr.message,
+          imported_rows: inserted, duplicate_rows: 0,
+        }).eq('id', importRec.id);
+        return new Response(JSON.stringify({ error: `Erro ao upsert: ${upsertErr.message}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
-      console.log(`[import-maquinona] batch ${Math.floor(i / CHUNK) + 1}: ${toInsert.length} new, ${chunk.length - toInsert.length} dup`);
+      inserted += newIds;
+      updated += updIds;
+      console.log(`[import-maquinona] batch ${Math.floor(i / CHUNK) + 1}: ${newIds} new, ${updIds} updated`);
     }
-
-    const duplicates = txs.length - inserted;
 
     await supabase.from('audit_imports').update({
       status: 'completed',
-      imported_rows: inserted,
-      duplicate_rows: duplicates,
+      imported_rows: inserted + updated,
+      duplicate_rows: 0,
     }).eq('id', importRec.id);
 
     if (period.status === 'aberto') {
@@ -301,8 +304,9 @@ Deno.serve(async (req) => {
       success: true,
       total_rows: totalRows,
       imported_rows: inserted,
-      duplicate_rows: duplicates,
-      message: `${inserted} transações importadas, ${duplicates} duplicadas ignoradas`,
+      updated_rows: updated,
+      duplicate_rows: 0,
+      message: `${inserted} novas + ${updated} atualizadas`,
       diagnostic: {
         // Lista de keys do primeiro row (ajuda identificar nome real da coluna).
         first_row_keys: diagFirstRowKeys,

@@ -213,9 +213,11 @@ export default function AuditImport() {
 
     let description = '';
     if (type === 'maquinona') {
-      description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
+      const upd = Number(data.updated_rows ?? 0);
+      description = upd > 0
+        ? `${data.imported_rows} novas + ${upd} atualizadas`
+        : `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
       console.log('[import-maquinona] diagnostic:', data.diagnostic);
-      // Salva diagnostic no state pra renderizar Card visível na página
       setLastDiagnostic(data.diagnostic ?? { _missing: true });
     } else if (type === 'cresol') {
       description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
