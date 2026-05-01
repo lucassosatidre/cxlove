@@ -131,6 +131,7 @@ export default function AuditImport() {
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [imports, setImports] = useState<AuditImport[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastDiagnostic, setLastDiagnostic] = useState<any | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
   const backUrl = useMemo(() => {
@@ -214,26 +215,8 @@ export default function AuditImport() {
     if (type === 'maquinona') {
       description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
       console.log('[import-maquinona] diagnostic:', data.diagnostic);
-      if (data.diagnostic) {
-        const promoCount = data.diagnostic.promotion_nonzero_count ?? 0;
-        const incCount = data.diagnostic.incentivo_nonzero_count ?? 0;
-        const promoRaw = data.diagnostic.first_row_promotion_raw;
-        const incRaw = data.diagnostic.first_row_incentivo_raw;
-        const keys = data.diagnostic.first_row_keys ?? [];
-        // Sempre mostra alert resumido pra confirmar status
-        alert(
-          `IMPORT MAQUINONA — diagnóstico\n\n` +
-          `Linhas com promoção > 0: ${promoCount}\n` +
-          `Linhas com incentivo > 0: ${incCount}\n\n` +
-          `Promotion raw (1ª linha): ${JSON.stringify(promoRaw)}\n` +
-          `Incentivo raw (1ª linha): ${JSON.stringify(incRaw)}\n\n` +
-          `Total de colunas: ${keys.length}\n` +
-          `Colunas detectadas:\n` +
-          keys.map((k: string, i: number) => `${i}: ${JSON.stringify(k)}`).join('\n')
-        );
-      } else {
-        alert('SEM diagnostic na resposta — edge ainda não foi redeployada.');
-      }
+      // Salva diagnostic no state pra renderizar Card visível na página
+      setLastDiagnostic(data.diagnostic ?? { _missing: true });
     } else if (type === 'cresol') {
       description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
     }
@@ -269,6 +252,52 @@ export default function AuditImport() {
             <BreadcrumbItem><BreadcrumbPage>Importação</BreadcrumbPage></BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+
+        {lastDiagnostic && (
+          <Card className="border-amber-500/40 bg-amber-500/5">
+            <CardContent className="py-4 space-y-3 text-sm">
+              <div className="flex justify-between items-start">
+                <strong className="text-amber-700 dark:text-amber-400">🔍 Diagnóstico do último import Maquinona</strong>
+                <button
+                  onClick={() => setLastDiagnostic(null)}
+                  className="text-xs underline text-muted-foreground hover:text-foreground"
+                >fechar</button>
+              </div>
+              {lastDiagnostic._missing ? (
+                <p className="text-xs">SEM diagnostic na resposta — edge ainda não foi redeployada com o código novo.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>Linhas com promoção &gt; 0: <strong>{lastDiagnostic.promotion_nonzero_count ?? 0}</strong></div>
+                    <div>Linhas com incentivo &gt; 0: <strong>{lastDiagnostic.incentivo_nonzero_count ?? 0}</strong></div>
+                    <div>Promotion raw (1ª linha): <code className="font-mono">{JSON.stringify(lastDiagnostic.first_row_promotion_raw)}</code></div>
+                    <div>Incentivo raw (1ª linha): <code className="font-mono">{JSON.stringify(lastDiagnostic.first_row_incentivo_raw)}</code></div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Colunas detectadas no XLSX ({(lastDiagnostic.first_row_keys ?? []).length}):
+                    </div>
+                    <pre className="bg-muted text-xs p-2 rounded max-h-64 overflow-auto whitespace-pre-wrap break-all">
+{(lastDiagnostic.first_row_keys ?? []).map((k: string, i: number) => `${i}: ${JSON.stringify(k)}`).join('\n')}
+                    </pre>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const text = JSON.stringify(lastDiagnostic, null, 2);
+                      navigator.clipboard.writeText(text).then(
+                        () => toast.success('Diagnóstico copiado'),
+                        () => toast.error('Falha ao copiar'),
+                      );
+                    }}
+                    className="text-xs underline text-blue-600 hover:text-blue-800"
+                  >
+                    📋 Copiar JSON do diagnostic
+                  </button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {period ? (
           <p className="text-sm text-muted-foreground">
