@@ -213,19 +213,25 @@ export default function AuditImport() {
     let description = '';
     if (type === 'maquinona') {
       description = `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
-      // Logging do diagnóstico de Promoção/Incentivo pra debug
-      if (data.diagnostic) {
-        console.info('[import-maquinona] diagnostic:', data.diagnostic);
-        if (data.diagnostic.promotion_nonzero_count === 0 && data.diagnostic.first_row_keys) {
-          console.warn(
-            '[import-maquinona] Promotion não populada. Colunas detectadas no XLSX:',
-            data.diagnostic.first_row_keys,
-          );
-          console.warn(
-            'Esperava encontrar: "Valor da promocao" ou "Valor da promoção"',
-          );
-          description += ' · ⚠ Promoção zerada — veja console pra ver colunas detectadas';
-        }
+      // SEMPRE loga (log nível padrão, sempre visível) pra debug
+      console.log('[import-maquinona] diagnostic:', data.diagnostic);
+      if (data.diagnostic && data.diagnostic.promotion_nonzero_count === 0) {
+        const keys = data.diagnostic.first_row_keys ?? [];
+        // Toast visível com as colunas detectadas
+        toast.error('⚠ Promoção zerada após import', {
+          description: `Colunas no XLSX: ${keys.join(' | ')}`,
+          duration: 30000,
+        });
+        // Também mostra um alert no DOM pra garantir
+        alert(
+          'Promoção continua zerada após import.\n\n' +
+          'Colunas detectadas no XLSX:\n' +
+          keys.map((k: string, i: number) => `${i}: ${JSON.stringify(k)}`).join('\n') +
+          '\n\nPromotion raw capturado: ' + JSON.stringify(data.diagnostic.first_row_promotion_raw) +
+          '\nIncentivo raw capturado: ' + JSON.stringify(data.diagnostic.first_row_incentivo_raw) +
+          '\n\nMe envie esse texto pra eu ajustar o pick.',
+        );
+        description += ' · ⚠ Promoção zerada (veja alerta)';
       }
     } else if (type === 'cresol') {
       description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
