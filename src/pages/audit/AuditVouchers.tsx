@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
@@ -152,8 +153,16 @@ export default function AuditVouchers() {
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
   const [showAllLots, setShowAllLots] = useState(false);
-  const [selectedOperadora, setSelectedOperadora] = useState<string>('ticket');
+  const [selectedOperadora, setSelectedOperadora] = useState<string>(searchParams.get('aba') ?? 'overview');
   const [showCrossDetail, setShowCrossDetail] = useState(false);
+
+  // Sincroniza tab corrente com URL
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (selectedOperadora === 'overview') next.delete('aba');
+    else next.set('aba', selectedOperadora);
+    setSearchParams(next, { replace: true });
+  }, [selectedOperadora]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showAdjacentes, setShowAdjacentes] = useState(false);
 
   const refresh = async (periodId: string) => {
@@ -639,8 +648,7 @@ export default function AuditVouchers() {
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="py-3 text-sm">
             <strong>Em construção (Estágio 2).</strong> Esta aba é independente da auditoria iFood/Cresol.
-            Operadoras habilitadas: <strong>Ticket, Alelo, VR e Pluxee</strong>.
-            Use o seletor abaixo pra alternar entre operadoras.
+            4 operadoras habilitadas. Use as <strong>abas abaixo</strong> pra navegar entre Geral / Ticket / Alelo / VR / Pluxee.
           </CardContent>
         </Card>
 
@@ -688,6 +696,33 @@ export default function AuditVouchers() {
           <UploadPluxeeCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
         </div>
 
+        {/* Sub-abas por operadora — substitui o seletor inline */}
+        <Tabs value={selectedOperadora} onValueChange={(v) => { setSelectedOperadora(v); setExpandedLot(null); setCategoryFilter(v === 'overview' ? 'ticket' : v); }}>
+          <TabsList className="grid grid-cols-5 w-full md:w-auto">
+            <TabsTrigger value="overview">Geral</TabsTrigger>
+            <TabsTrigger value="ticket">Ticket</TabsTrigger>
+            <TabsTrigger value="alelo">Alelo</TabsTrigger>
+            <TabsTrigger value="vr">VR</TabsTrigger>
+            <TabsTrigger value="pluxee">Pluxee</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {/* OVERVIEW: KPIs comparativos lado a lado das 4 operadoras */}
+        {selectedOperadora === 'overview' && (
+          <OverviewGrid
+            lots={lots}
+            allItemsByLot={allItemsByLot}
+            overrides={overrides}
+            month={month}
+            year={year}
+            competenciaIni={competenciaIni}
+            competenciaFim={competenciaFim}
+            onSelectOperadora={(op) => { setSelectedOperadora(op); setCategoryFilter(op); }}
+          />
+        )}
+
+        {/* Cross-check Maquinona × operadora atual (só em tab de operadora) */}
+        {selectedOperadora !== 'overview' && (<>
         {/* Cross-check Maquinona × operadora atual */}
         <Card>
           <CardHeader className="pb-3">
@@ -818,27 +853,14 @@ export default function AuditVouchers() {
         {/* Stats da operadora corrente */}
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <Select value={selectedOperadora} onValueChange={v => { setSelectedOperadora(v); setExpandedLot(null); }}>
-                <SelectTrigger className="w-[160px] h-9 font-semibold">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ticket">Ticket</SelectItem>
-                  <SelectItem value="alelo">Alelo</SelectItem>
-                  <SelectItem value="pluxee">Pluxee</SelectItem>
-                  <SelectItem value="vr">VR</SelectItem>
-                </SelectContent>
-              </Select>
-              <div>
-                <CardTitle className="text-base">
-                  Competência {MONTHS[month - 1]} {year}
-                </CardTitle>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Vendas {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} no mês selecionado.
-                  Lotes podem ter sido pagos no BB em meses seguintes.
-                </p>
-              </div>
+            <div>
+              <CardTitle className="text-base">
+                {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} — Competência {MONTHS[month - 1]} {year}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Vendas {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} no mês selecionado.
+                Lotes podem ter sido pagos no BB em meses seguintes.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               {allOperadoraLots.length > 0 && (
@@ -1009,9 +1031,12 @@ export default function AuditVouchers() {
         <Card>
           <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
             <div>
-              <CardTitle className="text-base">Depósitos BB — janela {MONTHS[month - 1]} {year} + 60d</CardTitle>
+              <CardTitle className="text-base">
+                Depósitos BB ({CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora}) — janela {MONTHS[month - 1]} {year} + 60d
+              </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Inclui pagamentos de vendas do mês que cairam até 60 dias depois (defasagem Ticket).
+                Inclui pagamentos de vendas do mês que caíram até 60 dias depois (defasagem da operadora).
+                Use o seletor pra ver outras categorias.
               </p>
             </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -1197,6 +1222,7 @@ export default function AuditVouchers() {
             )}
           </CardContent>
         </Card>
+        </>)}
 
         {/* Histórico de imports */}
         <Card>
@@ -2198,5 +2224,158 @@ function UploadPluxeeCard({
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+// Overview: mini-cards comparativos por operadora pra visão consolidada do mês.
+// Cada card mostra lotes, bruto, descontos, taxa efetiva da operadora.
+function OverviewGrid({
+  lots, allItemsByLot, overrides, month, year, competenciaIni, competenciaFim, onSelectOperadora,
+}: {
+  lots: Lot[];
+  allItemsByLot: Record<string, LotItem[]>;
+  overrides: CompOverride[];
+  month: number;
+  year: number;
+  competenciaIni: string;
+  competenciaFim: string;
+  onSelectOperadora: (op: string) => void;
+}) {
+  const operadoras = ['ticket', 'alelo', 'vr', 'pluxee'];
+
+  const statsPorOperadora = useMemo(() => {
+    const result: Record<string, { count: number; salesCount: number; subtotal: number; descontos: number; liquido: number; taxaPct: number; matched: number; aguardando: number }> = {};
+    const overrideByLot = new Map<string, CompOverride>();
+    for (const o of overrides) overrideByLot.set(o.lot_id, o);
+
+    for (const op of operadoras) {
+      const opLots = lots.filter(l => l.operadora === op);
+      let count = 0, salesCount = 0, subtotal = 0, descontos = 0, liquido = 0, matched = 0, aguardando = 0;
+      for (const l of opLots) {
+        const items = allItemsByLot[l.id] ?? [];
+        const itemsComp = items.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
+        if (itemsComp.length === 0) continue;
+        count++;
+        salesCount += itemsComp.length;
+        const compValor = itemsComp.reduce((s, it) => s + Number(it.valor), 0);
+        subtotal += compValor;
+        const isParcial = items.length > itemsComp.length;
+        const lotSubtotal = Number(l.subtotal_vendas) > 0 ? Number(l.subtotal_vendas) : items.reduce((s, it) => s + Number(it.valor), 0);
+        const lotDesc = Number(l.total_descontos) > 0
+          ? Number(l.total_descontos)
+          : (lotSubtotal > 0 && Number(l.valor_liquido) > 0 ? lotSubtotal - Number(l.valor_liquido) : 0);
+        if (!isParcial) {
+          descontos += lotDesc;
+          liquido += Number(l.valor_liquido);
+        } else {
+          const ovr = overrideByLot.get(l.id);
+          if (ovr) {
+            descontos += Number(ovr.taxa_competencia);
+            liquido += compValor - Number(ovr.taxa_competencia);
+          } else {
+            aguardando++;
+          }
+        }
+        if (l.bb_deposit_id) matched++;
+      }
+      const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
+      result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando };
+    }
+    return result;
+  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim]);
+
+  // Totais consolidados das 4 operadoras
+  const totals = useMemo(() => {
+    let count = 0, salesCount = 0, subtotal = 0, descontos = 0, liquido = 0;
+    for (const op of operadoras) {
+      const s = statsPorOperadora[op];
+      if (!s) continue;
+      count += s.count;
+      salesCount += s.salesCount;
+      subtotal += s.subtotal;
+      descontos += s.descontos;
+      liquido += s.liquido;
+    }
+    return { count, salesCount, subtotal, descontos, liquido, taxaPct: subtotal > 0 ? (descontos / subtotal) * 100 : 0 };
+  }, [statsPorOperadora]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Geral — Vouchers em {MONTHS[month - 1]} {year}</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Visão consolidada das 4 operadoras. Clique no card pra ver detalhes.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-5 mb-4 text-sm">
+            <Stat label="Total lotes" value={`${totals.count} (${totals.salesCount} vendas)`} />
+            <Stat label="Vendido (bruto)" value={fmt(totals.subtotal)} />
+            <Stat label="Descontos" value={fmt(totals.descontos)} className="text-amber-700 dark:text-amber-400" />
+            <Stat label="Líquido" value={fmt(totals.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+            <Stat label="Taxa efetiva geral" value={fmtPct(totals.taxaPct)} className="text-rose-700 dark:text-rose-400" />
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {operadoras.map(op => {
+              const s = statsPorOperadora[op];
+              if (!s) return null;
+              return (
+                <button
+                  key={op}
+                  onClick={() => onSelectOperadora(op)}
+                  className="text-left rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm">{CATEGORY_LABELS[op] ?? op}</strong>
+                    {s.count === 0 ? (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">sem dados</Badge>
+                    ) : s.aguardando > 0 ? (
+                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px]">
+                        {s.aguardando} pendente
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 text-[10px]">✓ ok</Badge>
+                    )}
+                  </div>
+                  {s.count === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum lote nesta competência.</p>
+                  ) : (
+                    <>
+                      <div className="text-xs text-muted-foreground">
+                        {s.count} lote(s) · {s.salesCount} venda(s)
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Vendido</span>
+                          <span className="font-medium">{fmt(s.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Descontos</span>
+                          <span className="font-medium text-amber-700 dark:text-amber-400">{fmt(s.descontos)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Líquido</span>
+                          <span className="font-medium text-emerald-700 dark:text-emerald-400">{fmt(s.liquido)}</span>
+                        </div>
+                        <div className="flex justify-between border-t pt-1">
+                          <span className="text-muted-foreground">Taxa efetiva</span>
+                          <span className="font-semibold text-rose-700 dark:text-rose-400">{fmtPct(s.taxaPct)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Pareados c/ BB</span>
+                          <span>{s.matched} / {s.count}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
