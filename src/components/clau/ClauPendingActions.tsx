@@ -47,9 +47,10 @@ export default function ClauPendingActions({ conversationId }: { conversationId:
       if (action.action_type === 'mutation') {
         const { data, error } = await supabase.rpc('clau_exec_mutation', { p_action_id: action.id });
         if (error) throw error;
+        const result = data as { rows_affected?: number } | null;
         toast({
           title: '✓ Mutação executada',
-          description: `${data?.rows_affected ?? '?'} linhas afetadas`,
+          description: `${result?.rows_affected ?? '?'} linhas afetadas`,
         });
       } else {
         // invoke_function
