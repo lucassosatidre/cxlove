@@ -2097,9 +2097,11 @@ export type Database = {
           total_bruto: number
           total_bruto_ifood: number
           total_count: number
+          total_incentivo_ifood: number
           total_liquido_declarado: number
           total_liquido_ifood: number
           total_promocao: number
+          total_promocao_ifood: number
           total_taxa_declarada: number
         }[]
       }
