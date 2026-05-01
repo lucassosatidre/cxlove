@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MessageCircle, Send, Plus, Pin, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
+import ClauPendingActions from './ClauPendingActions';
 
 const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: 'Rápido/barato' },
@@ -261,6 +262,8 @@ export default function ClauChat() {
               </div>
             </div>
           )}
+
+          {activeConv && <ClauPendingActions conversationId={activeConv} />}
         </div>
 
         {/* Input */}

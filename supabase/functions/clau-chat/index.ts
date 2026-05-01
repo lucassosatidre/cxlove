@@ -62,7 +62,7 @@ const TOOLS = [
   },
   {
     name: 'run_query',
-    description: 'Executa SELECT customizado nas tabelas de auditoria. Use APENAS quando as tools específicas não cobrirem. Permitido apenas SELECT/WITH com LIMIT.',
+    description: 'Executa SELECT customizado em QUALQUER tabela do schema (Nível 1 — leitura completa). Apenas SELECT/WITH. Auto-LIMIT 500 quando faltante, timeout 15s.',
     input_schema: {
       type: 'object',
       properties: {
@@ -70,6 +70,33 @@ const TOOLS = [
         explanation: { type: 'string', description: 'Por que essa query é necessária' },
       },
       required: ['sql', 'explanation'],
+    },
+  },
+  {
+    name: 'propose_mutation',
+    description: 'PROPÕE uma mutação (UPDATE/INSERT/DELETE/WITH-RETURNING) que será executada APENAS após aprovação manual do user. Não executa direto. Use pra correções pontuais sugeridas após análise. Tabelas bloqueadas: user_roles, profiles, app_settings, schema auth.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        sql: { type: 'string', description: 'SQL da mutação completo (UPDATE/INSERT/DELETE/WITH). 1 statement só.' },
+        explanation: { type: 'string', description: 'Justificativa clara: o que vai mudar e por quê' },
+      },
+      required: ['sql', 'explanation'],
+    },
+  },
+  {
+    name: 'invoke_function',
+    description: 'Invoca uma edge function pré-aprovada (run-audit-match, match-vouchers, classify-ifood-deposits, import-bb, import-cresol, import-maquinona, import-ticket-pdf, import-alelo-xlsx, import-vr-xls, import-vr-vendas-xls, import-pluxee-csv). Cada chamada é logada em clau_actions_log. Usuário precisa aprovar antes da execução.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        function_name: { type: 'string', enum: [
+          'run-audit-match', 'match-vouchers', 'classify_ifood_deposits',
+        ] },
+        body: { type: 'object', description: 'Argumentos pra edge function (JSON)' },
+        explanation: { type: 'string', description: 'Justificativa' },
+      },
+      required: ['function_name', 'explanation'],
     },
   },
   {
@@ -140,7 +167,17 @@ Você tem ACESSO READ-ONLY ao banco de dados via 7 tools:
 - **extract_fact(fact, category)** — salva fato útil afirmado pelo usuário
 
 ## SQL livre (último recurso):
-- **run_query(sql, explanation)** — SELECT em tabelas audit_*, clau_extracted_facts, clau_conversation_summaries. Auto LIMIT 100, timeout 5s.
+- **run_query(sql, explanation)** — SELECT em QUALQUER tabela do schema. Auto LIMIT 500, timeout 15s. Nível 1 — leitura completa.
+
+## ⚠️ Ações que PROPÕEM mudanças (Nível 3 — exigem aprovação manual do user):
+- **propose_mutation(sql, explanation)** — propõe UPDATE/INSERT/DELETE. NÃO executa direto. Cria ação pendente, user aprova via UI antes. Use pra correções pontuais após análise (ex: corrigir 1 lote com taxa errada). SEMPRE explica o que vai mudar e por quê.
+- **invoke_function(function_name, body, explanation)** — propõe invocação de edge function (run-audit-match, match-vouchers, classify_ifood_deposits). Mesmo fluxo de aprovação.
+
+REGRAS pra propose_mutation:
+- Use só pra correções específicas e justificáveis
+- Nunca proponha mutação se o user não pediu explicitamente uma correção
+- Sempre prefira mutação cirúrgica (WHERE id = X) em vez de em massa
+- Justificativa deve ser CLARA: o user vai ler antes de aprovar
 
 # Esquema principal
 
@@ -271,41 +308,100 @@ async function executeTool(
       }
 
       case 'run_query': {
+        // Nível 1: SELECT em qualquer tabela do schema (sem allowlist).
+        // LIMIT 500 default, timeout 15s no banco.
         const { sql } = input;
-        const ALLOWED_TABLES = new Set([
-          'audit_periods', 'audit_card_transactions', 'audit_bank_deposits',
-          'audit_daily_matches', 'audit_imports', 'audit_period_log',
-          'audit_lot_overrides',
-          'audit_voucher_lots', 'audit_voucher_lot_items',
-          'ifood_ai_audits',
-          'clau_extracted_facts', 'clau_conversation_summaries',
-        ]);
-        const FORBIDDEN = /\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|EXECUTE|COPY|VACUUM)\b/i;
+        const FORBIDDEN = /\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|EXECUTE|COPY|VACUUM|MERGE)\b/i;
         const MULTI_STATEMENT = /;\s*\S/;
         const trimmed = sql.trim();
         if (!trimmed.match(/^SELECT\b/i) && !trimmed.match(/^WITH\b/i)) {
-          throw new Error('Apenas SELECT/WITH permitido');
+          throw new Error('Apenas SELECT/WITH permitido em run_query');
         }
         if (FORBIDDEN.test(trimmed)) {
-          throw new Error('SQL bloqueado: contém operações proibidas');
+          throw new Error('SQL bloqueado: contém operações de escrita (use propose_mutation)');
         }
         if (MULTI_STATEMENT.test(trimmed.replace(/;\s*$/, ''))) {
           throw new Error('Apenas 1 statement por chamada');
         }
-        const fromMatches = trimmed.match(/(?:FROM|JOIN)\s+([a-z_]+)/gi) || [];
-        const tablesUsed = new Set(fromMatches.map((m: string) => m.replace(/^.*\s/, '').toLowerCase()));
-        for (const t of tablesUsed) {
-          if (!ALLOWED_TABLES.has(t)) {
-            throw new Error(`Tabela "${t}" não permitida na allowlist`);
-          }
-        }
         let finalSql = trimmed;
         if (!/\bLIMIT\b/i.test(finalSql)) {
-          finalSql = finalSql.replace(/;?\s*$/, '') + ' LIMIT 100';
+          finalSql = finalSql.replace(/;?\s*$/, '') + ' LIMIT 500';
         }
         const { data, error } = await supabase.rpc('clau_safe_query', { p_sql: finalSql });
         if (error) throw error;
         result = data;
+        break;
+      }
+
+      case 'propose_mutation': {
+        // Nível 3: cria ação pendente em clau_actions_log. NÃO executa.
+        // User precisa aprovar via UI (botão Aprovar em ClauChat).
+        const { sql, explanation } = input;
+        const trimmed = String(sql ?? '').trim();
+        if (!trimmed) throw new Error('SQL obrigatório');
+        const upper = trimmed.toUpperCase();
+        if (/\b(DROP|TRUNCATE|ALTER|CREATE|GRANT|REVOKE|REINDEX|VACUUM|COPY|EXECUTE)\b/.test(upper)) {
+          throw new Error('SQL contém DDL/operação proibida');
+        }
+        if (/;\s*\S/.test(trimmed.replace(/;\s*$/, ''))) {
+          throw new Error('Apenas 1 statement por chamada');
+        }
+        if (!/^\s*(UPDATE|INSERT|DELETE|WITH)\b/i.test(trimmed)) {
+          throw new Error('Apenas UPDATE/INSERT/DELETE/WITH permitido em propose_mutation');
+        }
+        if (/\b(USER_ROLES|PROFILES|APP_SETTINGS)\b/i.test(trimmed) || /\bauth\./i.test(trimmed)) {
+          throw new Error('Tabela bloqueada (segurança)');
+        }
+        const { data: action, error } = await supabase
+          .from('clau_actions_log')
+          .insert({
+            user_id: userId,
+            conversation_id: conversationId,
+            action_type: 'mutation',
+            payload: trimmed,
+            explanation: explanation ?? null,
+            status: 'pending_approval',
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        result = {
+          action_id: action.id,
+          status: 'pending_approval',
+          message: 'Mutação proposta. User precisa aprovar via UI antes de executar.',
+        };
+        break;
+      }
+
+      case 'invoke_function': {
+        // Nível 3: cria ação pendente pra invoke_function.
+        const { function_name, body: fnBody, explanation } = input;
+        const ALLOWED_FNS = new Set([
+          'run-audit-match', 'match-vouchers', 'classify_ifood_deposits',
+        ]);
+        if (!ALLOWED_FNS.has(function_name)) {
+          throw new Error(`Função "${function_name}" não está na allowlist`);
+        }
+        const { data: action, error } = await supabase
+          .from('clau_actions_log')
+          .insert({
+            user_id: userId,
+            conversation_id: conversationId,
+            action_type: 'invoke_function',
+            payload: function_name,
+            args: fnBody ?? {},
+            explanation: explanation ?? null,
+            status: 'pending_approval',
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+        result = {
+          action_id: action.id,
+          status: 'pending_approval',
+          function_name,
+          message: 'Invocação proposta. User precisa aprovar via UI antes de executar.',
+        };
         break;
       }
 
