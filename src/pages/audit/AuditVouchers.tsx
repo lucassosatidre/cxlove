@@ -710,14 +710,14 @@ export default function AuditVouchers() {
                 hint={`${crossCheck.diffCount > 0 ? '+' : ''}${crossCheck.diffCount} venda(s)${crossCheck.maqPromo > 0 ? ` · promo ${fmt(crossCheck.maqPromo)}` : ''}`}
                 className={Math.abs(crossCheck.diffBruto - crossCheck.maqPromo) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
               />
-              {crossCheck.maqPromo > 0 && (
-                <Stat
-                  label="Promoção concedida"
-                  value={fmt(crossCheck.maqPromo)}
-                  className="text-amber-700 dark:text-amber-400"
-                  hint="cashback/desconto pra cliente (custo da pizzaria)"
-                />
-              )}
+              <Stat
+                label="Promoção concedida"
+                value={fmt(crossCheck.maqPromo)}
+                className={crossCheck.maqPromo > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}
+                hint={crossCheck.maqPromo > 0
+                  ? 'cashback/desconto ao cliente (custo da pizzaria)'
+                  : 'reimporte Maquinona após aplicar migration'}
+              />
               <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
                 {crossCheck.maqCount === 0 && crossCheck.opCount === 0 ? (
                   <Badge variant="outline" className="text-muted-foreground">Sem dados</Badge>
