@@ -99,9 +99,26 @@ function calcDepositGroup(method: string, brand: string): string {
   return 'ifood';
 }
 
+function normalizeKey(s: string): string {
+  return String(s ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // remove acentos
+    .replace(/\s+/g, ' ')
+    .toLowerCase()
+    .trim();
+}
+
 function pick(row: any, ...keys: string[]): any {
+  // 1) Tenta match exato
   for (const k of keys) {
     if (row[k] != null && row[k] !== '') return row[k];
+  }
+  // 2) Fallback: match normalizado (sem acento, lowercase) — pra casos onde o
+  //    XLSX traz "Valor da promoção" mas a key esperada era "Valor da promocao"
+  const wanted = keys.map(normalizeKey);
+  for (const k of Object.keys(row)) {
+    const nk = normalizeKey(k);
+    if (wanted.includes(nk) && row[k] != null && row[k] !== '') return row[k];
   }
   return null;
 }

@@ -180,6 +180,8 @@ export default function AuditDashboard() {
   const [custoDeclaradoIfood, setCustoDeclaradoIfood] = useState(0);
   const [custoOculto, setCustoOculto] = useState(0);
   const [ifoodNaoConciliado, setIfoodNaoConciliado] = useState(0);
+  const [promocaoIfood, setPromocaoIfood] = useState(0);
+  const [incentivoIfood, setIncentivoIfood] = useState(0);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -240,6 +242,8 @@ export default function AuditDashboard() {
     // total_taxa_declarada da RPC só pega a parte explícita (subestima ~30%).
     const taxa = Math.max(brutoIfood - liquidoIfood, 0);
     const promocao = Number(t.total_promocao ?? 0);
+    const promocaoIfood = Number((t as any).total_promocao_ifood ?? 0);
+    const incentivoIfood = Number((t as any).total_incentivo_ifood ?? 0);
     const txCount = Number(t.total_count ?? 0);
     const custoDeclarado = Math.max(bruto - liquidoDeclarado, 0);
 
@@ -306,6 +310,8 @@ export default function AuditDashboard() {
     });
     setCustoDeclaradoIfood(custoDeclaradoIfood);
     setCustoOculto(custoOculto);
+    setPromocaoIfood(promocaoIfood);
+    setIncentivoIfood(incentivoIfood);
     setDepositRows(depRows);
     
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
@@ -848,6 +854,16 @@ export default function AuditDashboard() {
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between"><span className="text-muted-foreground">Vendido (bruto Maq):</span><span className="font-medium">{formatCurrency(brutoFiel)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Custo declarado iFood:</span><span className="font-medium text-amber-700 dark:text-amber-500">{formatCurrency(custoDeclaradoIfood)}</span></div>
+                    <div className="flex justify-between" title="Cashback/desconto que VOCÊ deu ao cliente — custo da pizzaria">
+                      <span className="text-muted-foreground">Promoção concedida (cashback):</span>
+                      <span className={`font-medium ${promocaoIfood > 0 ? 'text-amber-700 dark:text-amber-500' : 'text-muted-foreground'}`}>{formatCurrency(promocaoIfood)}</span>
+                    </div>
+                    {incentivoIfood > 0 && (
+                      <div className="flex justify-between text-xs" title="Subsídio pago pelo iFood — não é seu custo">
+                        <span className="text-muted-foreground">↳ incentivo iFood (subsídio, não é custo):</span>
+                        <span className="text-muted-foreground">{formatCurrency(incentivoIfood)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between border-t border-border/50 pt-1"><span className="text-muted-foreground">Líquido reportado iFood:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol (fiel):</span><span className="font-medium">{formatCurrency(recebidoFiel)}</span></div>
                     <div className="flex justify-between">
