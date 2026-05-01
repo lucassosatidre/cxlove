@@ -1224,12 +1224,15 @@ export default function AuditVouchers() {
         </Card>
         </>)}
 
-        {/* Histórico de imports */}
-        <Card>
-          <CardHeader className="pb-3"><CardTitle className="text-base">Histórico de imports</CardTitle></CardHeader>
-          <CardContent>
+        {/* Histórico de imports — collapsible (fechado por padrão) */}
+        <details className="rounded-lg border bg-card">
+          <summary className="cursor-pointer select-none px-4 py-2 text-sm flex items-center justify-between hover:bg-muted/30">
+            <span>Histórico de imports {imports.length > 0 && <span className="text-muted-foreground">({imports.length})</span>}</span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </summary>
+          <div className="px-4 pb-3">
             {imports.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4">Sem imports voucher neste período.</p>
+              <p className="text-sm text-muted-foreground py-2">Sem imports voucher neste período.</p>
             ) : (
               <Table>
                 <TableHeader>
@@ -1244,16 +1247,16 @@ export default function AuditVouchers() {
                 <TableBody>
                   {imports.map(i => (
                     <TableRow key={i.id}>
-                      <TableCell>{fmtDateTime(i.created_at)}</TableCell>
-                      <TableCell><Badge variant="outline">{i.file_type}</Badge></TableCell>
-                      <TableCell className="max-w-[300px] truncate text-xs">{i.file_name}</TableCell>
+                      <TableCell className="text-xs">{fmtDateTime(i.created_at)}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-[10px]">{i.file_type}</Badge></TableCell>
+                      <TableCell className="max-w-[280px] truncate text-xs">{i.file_name}</TableCell>
                       <TableCell>
                         {i.status === 'completed' ? (
-                          <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">completed</Badge>
+                          <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 text-[10px]">completed</Badge>
                         ) : i.status === 'error' ? (
-                          <Badge variant="destructive">error</Badge>
+                          <Badge variant="destructive" className="text-[10px]">error</Badge>
                         ) : (
-                          <Badge variant="outline">{i.status}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{i.status}</Badge>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs">
@@ -1264,8 +1267,8 @@ export default function AuditVouchers() {
                 </TableBody>
               </Table>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </details>
 
         <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
           <ArrowLeft className="h-4 w-4" /> Voltar à Auditoria principal
