@@ -733,6 +733,57 @@ export type Database = {
           },
         ]
       }
+      clau_actions_log: {
+        Row: {
+          action_type: string
+          approved_at: string | null
+          approved_by: string | null
+          args: Json | null
+          conversation_id: string | null
+          created_at: string
+          error_message: string | null
+          explanation: string | null
+          id: string
+          output: Json | null
+          payload: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          approved_at?: string | null
+          approved_by?: string | null
+          args?: Json | null
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          explanation?: string | null
+          id?: string
+          output?: Json | null
+          payload: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          args?: Json | null
+          conversation_id?: string | null
+          created_at?: string
+          error_message?: string | null
+          explanation?: string | null
+          id?: string
+          output?: Json | null
+          payload?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       clau_conversation_summaries: {
         Row: {
           conversation_id: string
@@ -2004,6 +2055,9 @@ export type Database = {
         Args: { p_period_id: string }
         Returns: undefined
       }
+      clau_approve_action: { Args: { p_action_id: string }; Returns: undefined }
+      clau_exec_mutation: { Args: { p_action_id: string }; Returns: Json }
+      clau_reject_action: { Args: { p_action_id: string }; Returns: undefined }
       clau_safe_query: { Args: { p_sql: string }; Returns: Json }
       clau_search_messages: {
         Args: { p_limit?: number; p_query: string; p_user_id: string }
