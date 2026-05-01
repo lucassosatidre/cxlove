@@ -104,6 +104,7 @@ export type Database = {
           expected_deposit_date: string | null
           gross_amount: number
           id: string
+          incentivo_ifood: number
           is_competencia: boolean
           machine_serial: string | null
           matched: boolean
@@ -125,6 +126,7 @@ export type Database = {
           expected_deposit_date?: string | null
           gross_amount: number
           id?: string
+          incentivo_ifood?: number
           is_competencia?: boolean
           machine_serial?: string | null
           matched?: boolean
@@ -146,6 +148,7 @@ export type Database = {
           expected_deposit_date?: string | null
           gross_amount?: number
           id?: string
+          incentivo_ifood?: number
           is_competencia?: boolean
           machine_serial?: string | null
           matched?: boolean
