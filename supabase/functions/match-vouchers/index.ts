@@ -5,7 +5,7 @@
 // prioritário pra lotes com data_credito mais antiga.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { businessDayWindow } from '../_shared/calendar.ts';
+import { businessDayWindow, isBusinessDay, nextBusinessDay } from '../_shared/calendar.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -132,17 +132,25 @@ Deno.serve(async (req) => {
     for (const d of depPool) if (usedIds.has(d.id)) d.usedBy = 'preexisting';
 
     type PendingLot = { id: string; numero_reembolso: string; valor_liquido: number; data_credito: string };
+    // Normaliza data_credito: se cair em dia não-útil (sáb/dom/feriado), o
+    // crédito real entra no próximo dia útil. Caso real abr/26 Ticket: lote
+    // com data_credito 05/04 (dom) recebe no dep 06/04 (seg); lote com
+    // 11/04 (sáb) recebe no dep 13/04 (seg). Sem essa normalização o lote
+    // fica fora da janela ±2 úteis de qualquer dep.
     const pendingLots: PendingLot[] = lots
       .filter(l => !l.bb_deposit_id)
       .map(l => ({
         id: l.id,
         numero_reembolso: l.numero_reembolso,
         valor_liquido: Number(l.valor_liquido),
-        data_credito: l.data_credito,
+        data_credito: l.data_credito && !isBusinessDay(l.data_credito)
+          ? nextBusinessDay(l.data_credito)
+          : l.data_credito,
       }));
 
     let matchedSingle = 0;
-    let matchedPair = 0;        // 2 lotes → 1 dep
+    let matchedPair = 0;        // grupos de N lotes → 1 dep (N=2..MAX)
+    let matchedPairLots = 0;    // total de lotes em grupos N-pra-1
     let matchedSplit = 0;        // 1 lote → 2 deps somados
     const updates: Array<{ id: string; bb_deposit_id: string; bb_deposit_id_2?: string | null; diff: number }> = [];
     const ambiguous: string[] = [];
@@ -222,8 +230,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Pass C: 2 lotes → 1 depósito (par de lotes cuja soma == dep.amount).
-    // Empate por menor diff absoluto da soma (igual A/B).
+    // Pass C: N lotes → 1 depósito (até MAX_LOTS_PER_DEP). Caso real abr/26
+    // Ticket: 3 lotes credito 13/04 somam R$610,44 = dep 13/04; 5 lotes
+    // (datas 26-27/04 + carnaval) somam R$766,93 = dep 27/04.
+    // Estratégia: tenta tamanhos crescentes 2,3,4,5; aceita o menor tamanho
+    // com match único de menor diff. Tamanho menor = mais confiança.
+    const MAX_LOTS_PER_DEP = 5;
     for (const dep of depPool) {
       if (dep.usedBy) continue;
       const taken = new Set(updates.map(u => u.id));
@@ -231,29 +243,46 @@ Deno.serve(async (req) => {
       const window = new Set(businessDayWindow(dep.deposit_date, WINDOW_DAYS));
       const candidates = free.filter(l => window.has(l.data_credito));
 
-      const pairs: { a: PendingLot; b: PendingLot; diff: number }[] = [];
-      for (let i = 0; i < candidates.length; i++) {
-        for (let j = i + 1; j < candidates.length; j++) {
-          const a = candidates[i];
-          const b = candidates[j];
-          const diff = Math.abs((a.valor_liquido + b.valor_liquido) - dep.amount);
-          if (diff <= TOLERANCE) {
-            pairs.push({ a, b, diff });
+      // Subset sum: encontra todas combinações de tamanho [2..MAX] cuja soma
+      // está dentro de TOLERANCE de dep.amount. Para cada tamanho, prefere
+      // a combinação de menor diff se for única; senão marca ambíguo.
+      let matched = false;
+      for (let size = 2; size <= MAX_LOTS_PER_DEP && !matched; size++) {
+        const found: { combo: PendingLot[]; diff: number }[] = [];
+        const cur: PendingLot[] = [];
+        const recurse = (start: number, sum: number) => {
+          if (cur.length === size) {
+            const diff = Math.abs(sum - dep.amount);
+            if (diff <= TOLERANCE) found.push({ combo: [...cur], diff });
+            return;
           }
+          // Poda: se já passou do target + tolerance, não vale continuar
+          // (todos os valores são positivos, somar mais só aumenta)
+          if (sum - dep.amount > TOLERANCE) return;
+          for (let i = start; i < candidates.length; i++) {
+            cur.push(candidates[i]);
+            recurse(i + 1, sum + candidates[i].valor_liquido);
+            cur.pop();
+          }
+        };
+        recurse(0, 0);
+        if (found.length === 0) continue;
+        found.sort((x, y) => x.diff - y.diff);
+        const minDiff = found[0].diff;
+        const closest = found.filter(c => c.diff === minDiff);
+        if (closest.length === 1) {
+          const { combo } = closest[0];
+          dep.usedBy = combo.map(l => l.id).join(',');
+          for (const l of combo) {
+            updates.push({ id: l.id, bb_deposit_id: dep.id, diff: 0 });
+          }
+          matchedPair++;
+          matchedPairLots += combo.length;
+          matched = true;
+        } else {
+          ambiguous.push(`Depósito #${fmtBRDate(dep.deposit_date)} R$${dep.amount.toFixed(2)}: ${closest.length} combos de ${size} lotes empatam no menor diff (R$${minDiff.toFixed(2)})`);
+          matched = true; // marca como tratado (ambíguo) e não tenta tamanhos maiores
         }
-      }
-      if (pairs.length === 0) continue;
-      pairs.sort((x, y) => x.diff - y.diff);
-      const minDiff = pairs[0].diff;
-      const closest = pairs.filter(p => p.diff === minDiff);
-      if (closest.length === 1) {
-        const { a, b } = closest[0];
-        dep.usedBy = `${a.id},${b.id}`;
-        updates.push({ id: a.id, bb_deposit_id: dep.id, diff: 0 });
-        updates.push({ id: b.id, bb_deposit_id: dep.id, diff: 0 });
-        matchedPair++;
-      } else {
-        ambiguous.push(`Depósito #${fmtBRDate(dep.deposit_date)} R$${dep.amount.toFixed(2)}: ${closest.length} pares de lotes empatam no menor diff (R$${minDiff.toFixed(2)})`);
       }
     }
 
@@ -274,10 +303,11 @@ Deno.serve(async (req) => {
       total_lots: lots.length,
       matched_single: matchedSingle,
       matched_pair: matchedPair,
+      matched_pair_lots: matchedPairLots,
       matched_split: matchedSplit,
-      matched: matchedSingle + matchedPair * 2 + matchedSplit,
+      matched: matchedSingle + matchedPairLots + matchedSplit,
       ambiguous: ambiguous.slice(0, 20),
-      message: `${matchedSingle} 1-pra-1 + ${matchedPair} 2 lotes→1 dep + ${matchedSplit} 1 lote→2 deps${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
+      message: `${matchedSingle} 1-pra-1 + ${matchedPair} grupos N-pra-1 (${matchedPairLots} lotes) + ${matchedSplit} 1 lote→2 deps${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('match-vouchers error', e);
