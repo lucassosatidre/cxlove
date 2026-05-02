@@ -25,12 +25,14 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 // - Pluxee: credita valor exato no BB (igual Ticket, sem tarifa de transação).
 //   Tolerância larga (R$15) gerava ambiguidade quando lotes fora-de-competência
 //   no mesmo audit_period_id caíam na janela de outro depósito.
-// - VR: padrão R$15 até descobrirmos comportamento real.
+// - VR: também credita valor exato (líquido_lote = depósito BB confirmado em
+//   todos os lotes mar/26). Tolerância R$15 causava ambíguo no exactSingles
+//   e no pair search quando vários lotes ficavam dentro da janela.
 const TOLERANCE_BY_OPERADORA: Record<string, number> = {
   ticket: 0.02,
   alelo: 15,
   pluxee: 0.02,
-  vr: 15,
+  vr: 0.02,
 };
 const DEFAULT_TOLERANCE = 0.02;
 const WINDOW_DAYS = 2;  // ±2 dias úteis SC
