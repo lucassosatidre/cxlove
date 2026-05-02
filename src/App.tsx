@@ -31,7 +31,7 @@ import AuditImport from "./pages/audit/AuditImport";
 import AuditIfood from "./pages/audit/AuditIfood";
 import AuditMatch from "./pages/audit/AuditMatch";
 import AuditVouchers from "./pages/audit/AuditVouchers";
-import AuditarMes from "./pages/audit/AuditarMes";
+import AuditConciliacao from "./pages/audit/AuditConciliacao";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
 
@@ -119,7 +119,8 @@ const App = () => (
             <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfood /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/match" element={<ProtectedRoute><SectorGuard sector="tele"><AuditMatch /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/vouchers" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVouchers /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/auditar-mes" element={<ProtectedRoute><SectorGuard sector="tele"><AuditarMes /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/auditar-mes" element={<Navigate to="/admin/auditoria/conciliacao" replace />} />
+            <Route path="/admin/auditoria/conciliacao" element={<ProtectedRoute><SectorGuard sector="tele"><AuditConciliacao /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/clau/memoria" element={<ProtectedRoute><SectorGuard sector="tele"><ClauMemory /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
