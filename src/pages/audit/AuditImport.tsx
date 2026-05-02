@@ -341,7 +341,27 @@ export default function AuditImport() {
             onImport={(file) => doImport(t, file)}
             onRemove={removeImport}
             removingId={removingId}
-            onAfterImport={async () => { if (period) await refresh(period.id); }}
+            onAfterImport={async () => {
+              if (!period) return;
+              await refresh(period.id);
+              // Auto-dispatch run-audit-match (cross-check Maquinona × Cresol)
+              // após cada import bem-sucedido — elimina passo manual.
+              try {
+                const { data, error } = await supabase.functions.invoke('run-audit-match', {
+                  body: { audit_period_id: period.id },
+                });
+                if (error) {
+                  toast.error('Auto-match Maquinona×Cresol falhou', { description: error.message });
+                } else if (data?.success) {
+                  toast.success(`Auto-match: ${data.daily_matches_count ?? 0} dias casados`, {
+                    description: `Diff iFood R$ ${(data.total_difference_ifood ?? 0).toFixed(2)}`,
+                  });
+                }
+              } catch (e: any) {
+                toast.error('Auto-match erro', { description: e?.message ?? 'Erro inesperado' });
+              }
+              await refresh(period.id);
+            }}
           />
         ))}
 

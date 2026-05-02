@@ -115,6 +115,37 @@ const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigi
 const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
+// Dispara match-vouchers (com reset=true) sequencialmente pra cada operadora
+// passada. Usado pelos onAfter dos uploads pra eliminar o passo manual de
+// "Auto-match BB" — ao subir BB, automaticamente concilia as 4 operadoras;
+// ao subir voucher de uma operadora, concilia só ela.
+async function dispatchAutoMatch(periodId: string, operadoras: Array<'ticket' | 'alelo' | 'pluxee' | 'vr'>) {
+  for (const op of operadoras) {
+    try {
+      const { data, error } = await supabase.functions.invoke('match-vouchers', {
+        body: { audit_period_id: periodId, operadora: op, reset: true },
+      });
+      if (error) {
+        toast.error(`Match ${op} falhou`, { description: error.message });
+        continue;
+      }
+      if (!data?.success) {
+        toast.error(`Match ${op} falhou`, { description: data?.error || 'Erro desconhecido' });
+        continue;
+      }
+      const ambig = (data.ambiguous ?? []) as string[];
+      if (ambig.length > 0) {
+        toast.warning(`${op}: ${data.message ?? data.matched + ' pareados'}`, {
+          description: `${ambig.length} ambíguos`,
+        });
+        console.warn(`[match ${op}] ambíguos:`, ambig);
+      }
+    } catch (e: any) {
+      toast.error(`Match ${op} erro`, { description: e?.message ?? 'Erro inesperado' });
+    }
+  }
+}
+
 // Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
 // Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
 // `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
@@ -694,11 +725,38 @@ export default function AuditVouchers() {
 
         {/* Cards de upload */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <UploadBBCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
-          <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
-          <UploadAleloCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
-          <UploadVRCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
-          <UploadPluxeeCard period={period} ensurePeriod={ensurePeriod} onAfter={() => period && refresh(period.id)} />
+          <UploadBBCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
+            if (!period) return;
+            await refresh(period.id);
+            // Auto-dispatch match-vouchers pras 4 operadoras quando BB é importado.
+            // BB é a "ponte" — sem ele nenhuma operadora pode casar com depósito.
+            await dispatchAutoMatch(period.id, ['ticket', 'alelo', 'pluxee', 'vr']);
+            await refresh(period.id);
+          }} />
+          <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
+            if (!period) return;
+            await refresh(period.id);
+            await dispatchAutoMatch(period.id, ['ticket']);
+            await refresh(period.id);
+          }} />
+          <UploadAleloCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
+            if (!period) return;
+            await refresh(period.id);
+            await dispatchAutoMatch(period.id, ['alelo']);
+            await refresh(period.id);
+          }} />
+          <UploadVRCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
+            if (!period) return;
+            await refresh(period.id);
+            await dispatchAutoMatch(period.id, ['vr']);
+            await refresh(period.id);
+          }} />
+          <UploadPluxeeCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
+            if (!period) return;
+            await refresh(period.id);
+            await dispatchAutoMatch(period.id, ['pluxee']);
+            await refresh(period.id);
+          }} />
         </div>
 
         {/* Sub-abas por operadora — substitui o seletor inline */}
@@ -872,23 +930,24 @@ export default function AuditVouchers() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleAutoMatch}
-                  disabled={matching || !period}
-                  className="gap-2"
-                >
-                  {matching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  Auto-match BB
-                </Button>
-              )}
-              {allOperadoraLots.length > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
                   onClick={() => setShowAllLots(s => !s)}
                 >
                   {showAllLots
                     ? `Mostrar só competência (${operadoraLotsCompetencia.length})`
                     : `Ver todos os lotes (${allOperadoraLots.length})`}
+                </Button>
+              )}
+              {allOperadoraLots.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAutoMatch}
+                  disabled={matching || !period}
+                  className="gap-2 text-xs text-muted-foreground"
+                  title="Re-rodar auto-match (já roda automático ao subir extrato BB ou voucher — use só se algo ficou pendente)"
+                >
+                  {matching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  🔧 Re-rodar match
                 </Button>
               )}
             </div>
