@@ -10,7 +10,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, FileSpreadsheet, Loader2, Play, RefreshCw, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
+import { Plus, ArrowRight, Loader2, Play, RefreshCw, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
+import { UploadMaquinonaCard, UploadCresolCard } from '@/components/audit/UploadCards';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
 import {
@@ -26,7 +27,6 @@ import { fetchAllPaginated } from '@/lib/supabase-pagination';
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { FileText, ChevronDown } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 type AuditPeriod = {
   id: string;
@@ -101,50 +101,6 @@ const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   fechado: { label: 'Fechado', className: 'bg-green-500/15 text-green-700 dark:text-green-400' },
 };
 
-const FILE_LABELS: Record<ImportSource, string> = {
-  maquinona: 'Maquinona',
-  cresol: 'Cresol (iFood)',
-};
-
-const SOURCE_GROUPS: { label: string; sources: ImportSource[] }[] = [
-  { label: 'Vendas & banco', sources: ['maquinona', 'cresol'] },
-];
-
-const ACCEPT_BY_SOURCE: Record<ImportSource, string> = {
-  maquinona: '.xlsx',
-  cresol: '.xlsx',
-};
-
-const FUNCTION_BY_SOURCE: Record<ImportSource, string> = {
-  maquinona: 'import-maquinona',
-  cresol: 'import-cresol',
-};
-
-async function buildUploadPayload(src: ImportSource, periodId: string, file: File): Promise<any> {
-  const base = { audit_period_id: periodId, file_name: file.name };
-
-  if (src === 'maquinona') {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const sheetName = wb.SheetNames.find(
-      n => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'transacoes'
-    );
-    if (!sheetName) throw new Error('Aba "Transações" não encontrada no arquivo Maquinona.');
-    const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[sheetName], { defval: null, raw: false });
-    return { ...base, rows };
-  }
-
-  if (src === 'cresol') {
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
-    return { ...base, rows };
-  }
-
-  throw new Error(`Source desconhecido: ${src}`);
-}
-
 const formatCurrency = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -191,7 +147,6 @@ export default function AuditDashboard() {
   const [exportingContabil, setExportingContabil] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
-  const [uploadingSource, setUploadingSource] = useState<ImportSource | null>(null);
   const [aiAudits, setAiAudits] = useState<any>(null);
 
   // Persist month/year to sessionStorage + URL on every change
@@ -316,41 +271,6 @@ export default function AuditDashboard() {
     
     setDailyMatches((dMatches as DailyMatch[]) ?? []);
     setLogs((logRows as LogEntry[]) ?? []);
-  };
-
-  const handleUpload = async (src: ImportSource, files: FileList | null) => {
-    if (!files || files.length === 0 || !period) return;
-    setUploadingSource(src);
-    let okCount = 0;
-    let errCount = 0;
-    try {
-      for (const file of Array.from(files)) {
-        try {
-          const body = await buildUploadPayload(src, period.id, file);
-          const { data, error } = await supabase.functions.invoke(FUNCTION_BY_SOURCE[src], { body });
-          if (error) throw new Error(error.message);
-          if ((data as any)?.error) throw new Error((data as any).error);
-          if (data && (data as any).success === false) throw new Error((data as any).error || 'Falha na importação');
-          okCount++;
-        } catch (e: any) {
-          errCount++;
-          toast({
-            title: `Erro em "${file.name}"`,
-            description: e?.message ?? 'Erro inesperado',
-            variant: 'destructive',
-          });
-        }
-      }
-      if (okCount > 0) {
-        toast({
-          title: `✓ ${FILE_LABELS[src]}`,
-          description: `${okCount} arquivo(s) importado(s)${errCount > 0 ? ` · ${errCount} com erro` : ''}`,
-        });
-        await loadPeriodData(period.id);
-      }
-    } finally {
-      setUploadingSource(null);
-    }
   };
 
   useEffect(() => {
@@ -794,10 +714,11 @@ export default function AuditDashboard() {
               </Button>
               <Button
                 variant="default"
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={() => navigate(`/admin/auditoria/auditar-mes?month=${month}&year=${year}`)}
+                size="lg"
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                onClick={() => navigate(`/admin/auditoria/conciliacao?month=${month}&year=${year}`)}
               >
-                🚀 Auditar mês
+                <UploadCloud className="h-4 w-4" /> Iniciar Conciliação
               </Button>
               {period && isConciliated && !isClosed && (
                 <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
@@ -923,81 +844,60 @@ export default function AuditDashboard() {
 
         </div>
 
-        {/* Imports — bloco unificado v4 (vw_period_imports) */}
+        {/* Imports — usa cards shared do conciliacao */}
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Importações do período</CardTitle>
             <p className="text-xs text-muted-foreground">
-              2 fontes: Maquinona (vendas crédito/débito/PIX) + Cresol (depósitos correspondentes).
+              Maquinona (vendas crédito/débito/PIX) + Cresol (depósitos correspondentes).
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
-              Selecione múltiplos arquivos no botão "Importar" — eles são processados em sequência.
+              💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + COMPETÊNCIA + POSTERIOR.
+              Pode selecionar múltiplos arquivos de uma vez.
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {isClosed && (
               <p className="text-xs text-muted-foreground italic">Este período está fechado. Para importar novos arquivos, reabra o período.</p>
             )}
-            {SOURCE_GROUPS.map(group => (
-              <div key={group.label} className="space-y-2">
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{group.label}</p>
-                {group.sources.map(src => {
-                  const rowsForSource = allImports.filter(i => i.source === src && i.status === 'completed');
-                  const latest = rowsForSource[0];
-                  const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
-                  const fileCount = rowsForSource.length;
-                  const isCompleted = fileCount > 0;
-                  const isUploading = uploadingSource === src;
-                  const inputId = `upload-input-${src}`;
-
-                  return (
-                    <div key={src} className="flex items-center justify-between rounded-md border bg-card px-4 py-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <FileSpreadsheet className="h-4 w-4 text-primary shrink-0" />
-                        <span className="font-medium">{FILE_LABELS[src]}</span>
-                        {isCompleted && latest ? (
-                          <Badge variant="secondary" className="bg-green-500/15 text-green-700 dark:text-green-400 truncate">
-                            ✓ {fileCount} {fileCount === 1 ? 'arquivo' : 'arquivos'} · último {formatDateTime(latest.created_at)} ({totalRows} linhas)
-                          </Badge>
+            {!period ? (
+              <p className="text-xs text-muted-foreground">Crie o período acima antes de importar arquivos.</p>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['maquinona', 'cresol'] as const).map(src => {
+                    const rowsForSource = allImports.filter(i => i.source === src && i.status === 'completed');
+                    const fileCount = rowsForSource.length;
+                    const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
+                    const latest = rowsForSource[0];
+                    return (
+                      <div key={src} className="rounded-md border bg-card px-3 py-2 text-xs">
+                        <span className="font-medium capitalize">{src}: </span>
+                        {fileCount > 0 && latest ? (
+                          <span className="text-green-700 dark:text-green-400">
+                            ✓ {fileCount} arquivo(s) · {totalRows} linhas · último {formatDateTime(latest.created_at)}
+                          </span>
                         ) : (
-                          <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
+                          <span className="text-muted-foreground">não importado</span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          id={inputId}
-                          type="file"
-                          multiple
-                          accept={ACCEPT_BY_SOURCE[src]}
-                          className="hidden"
-                          onChange={(e) => {
-                            const files = e.target.files;
-                            handleUpload(src, files);
-                            e.currentTarget.value = '';
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={!period || isClosed || isUploading}
-                          className="gap-1.5"
-                          onClick={() => document.getElementById(inputId)?.click()}
-                        >
-                          {isUploading ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <UploadCloud className="h-3.5 w-3.5" />
-                          )}
-                          {isUploading ? 'Importando...' : (isCompleted ? 'Re-importar' : 'Importar')}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-            {!period && (<p className="text-xs text-muted-foreground pt-1">Crie o período acima antes de importar arquivos.</p>)}
+                    );
+                  })}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <UploadMaquinonaCard
+                    period={period}
+                    ensurePeriod={async () => period}
+                    onAfter={async () => { await loadPeriodData(period.id); }}
+                  />
+                  <UploadCresolCard
+                    period={period}
+                    ensurePeriod={async () => period}
+                    onAfter={async () => { await loadPeriodData(period.id); }}
+                  />
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
