@@ -89,7 +89,11 @@ const SALE_RE =
 const SUBTOTAL_RE = /(\d{8,9})\s+Subtotal[\s\S]{0,40}?(R\$[\d.,]+)/g;
 
 // Descontos: "<contrato> <data> <descrição até "R$"> R$X"
-const DISCOUNT_RE = /(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.]+?)\s+(R\$[\d.,]+)/g;
+// Bound o miolo da descrição em até 60 chars pra prevenir ReDoS
+// (catastrophic backtracking em PDFs grandes com muitos R$ na string).
+// Aceita também "-" e dígitos pra cobrir "Anuidade Cartao Tre Ref."
+// e "Taxa Manutencao Mensal - Tre".
+const DISCOUNT_RE = /(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s.\-]{0,60}?)\s+(R\$[\d.,]+)/g;
 
 // Total Descontos — flexível também (pdfjs pode separar "Total de" de "Descontos")
 const TOTAL_DESC_RE = /Total[\s\S]{0,20}?Descontos[\s\S]{0,30}?(R\$[\d.,]+)/g;
@@ -351,7 +355,22 @@ Deno.serve(async (req) => {
     }
     const wasConciliado = period.status === 'conciliado';
 
-    const { lots, warnings } = parseTicketRefund(raw_text);
+    console.log(`[import-ticket-pdf] starting parse — text length=${raw_text.length}`);
+
+    let lots: any[] = [];
+    let warnings: string[] = [];
+    try {
+      const result = parseTicketRefund(raw_text);
+      lots = result.lots;
+      warnings = result.warnings;
+      console.log(`[import-ticket-pdf] parse OK — ${lots.length} lots, ${warnings.length} warnings`);
+    } catch (parseErr: any) {
+      console.error('[import-ticket-pdf] parse threw', parseErr);
+      return new Response(JSON.stringify({
+        error: `Erro ao parsear PDF: ${parseErr?.message ?? 'erro desconhecido'}`,
+        diagnostic: { text_length: raw_text.length, sample: raw_text.substring(0, 500) },
+      }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
     if (lots.length === 0) {
       return new Response(JSON.stringify({
@@ -424,15 +443,15 @@ Deno.serve(async (req) => {
         const lotPayload = {
           audit_period_id,
           operadora: 'ticket',
-          numero_reembolso: l.numero_reembolso,
-          numero_contrato: l.numero_contrato,
-          produto: l.produto,
-          data_corte: l.data_corte,
+          numero_reembolso: String(l.numero_reembolso ?? ''),
+          numero_contrato: l.numero_contrato ?? null,
+          produto: l.produto ?? null,
+          data_corte: l.data_corte ?? null,
           data_credito: l.data_credito,
-          subtotal_vendas: l.subtotal_vendas,
-          total_descontos: l.total_descontos,
-          valor_liquido: l.valor_liquido,
-          descontos: l.descontos,
+          subtotal_vendas: Number(l.subtotal_vendas ?? 0),
+          total_descontos: Number(l.total_descontos ?? 0),
+          valor_liquido: Number(l.valor_liquido ?? 0),
+          descontos: l.descontos ?? {},
           import_id: importRec.id,
         };
 
