@@ -22,7 +22,10 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 //   valor_liquido das vendas), que reduz 1-3 reais por lote. Tolerância R$15
 //   absorve isso sem casar lotes errados (lotes Alelo distintos costumam diferir
 //   em dezenas/centenas de reais).
-// - Pluxee/VR: padrão R$15 até descobrirmos comportamento real.
+// - Pluxee: credita valor exato no BB (igual Ticket, sem tarifa de transação).
+//   Tolerância larga (R$15) gerava ambiguidade quando lotes fora-de-competência
+//   no mesmo audit_period_id caíam na janela de outro depósito.
+// - VR: padrão R$15 até descobrirmos comportamento real.
 const TOLERANCE_BY_OPERADORA: Record<string, number> = {
   ticket: 0.02,
   alelo: 15,
