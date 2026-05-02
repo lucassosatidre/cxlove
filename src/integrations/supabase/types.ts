@@ -95,6 +95,181 @@ export type Database = {
           },
         ]
       }
+      audit_brendi_daily: {
+        Row: {
+          audit_period_id: string
+          bb_deposit_ids: string[] | null
+          created_at: string
+          diff: number
+          diff_pct: number
+          expected_amount: number
+          expected_credit_date: string
+          id: string
+          note: string | null
+          pedidos_count: number
+          received_amount: number
+          sale_dates: string[]
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          audit_period_id: string
+          bb_deposit_ids?: string[] | null
+          created_at?: string
+          diff?: number
+          diff_pct?: number
+          expected_amount?: number
+          expected_credit_date: string
+          id?: string
+          note?: string | null
+          pedidos_count?: number
+          received_amount?: number
+          sale_dates: string[]
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          audit_period_id?: string
+          bb_deposit_ids?: string[] | null
+          created_at?: string
+          diff?: number
+          diff_pct?: number
+          expected_amount?: number
+          expected_credit_date?: string
+          id?: string
+          note?: string | null
+          pedidos_count?: number
+          received_amount?: number
+          sale_dates?: string[]
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_brendi_daily_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_brendi_daily_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          daily_id: string
+          id: string
+          motivo: string
+          note: string | null
+          valor_ajuste: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          daily_id: string
+          id?: string
+          motivo: string
+          note?: string | null
+          valor_ajuste: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          daily_id?: string
+          id?: string
+          motivo?: string
+          note?: string | null
+          valor_ajuste?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_brendi_daily_overrides_daily_id_fkey"
+            columns: ["daily_id"]
+            isOneToOne: false
+            referencedRelation: "audit_brendi_daily"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_brendi_orders: {
+        Row: {
+          audit_period_id: string
+          cashback_usado: number | null
+          cliente_nome: string | null
+          cliente_telefone: string | null
+          created_at: string
+          created_at_remote: string
+          cupom: boolean | null
+          desconto_entrega: number | null
+          endereco: string | null
+          forma_pagamento: string
+          id: string
+          import_id: string | null
+          order_id: string
+          payment_method: string | null
+          sale_date: string
+          status_remote: string | null
+          taxa_entrega: number | null
+          total: number
+        }
+        Insert: {
+          audit_period_id: string
+          cashback_usado?: number | null
+          cliente_nome?: string | null
+          cliente_telefone?: string | null
+          created_at?: string
+          created_at_remote: string
+          cupom?: boolean | null
+          desconto_entrega?: number | null
+          endereco?: string | null
+          forma_pagamento: string
+          id?: string
+          import_id?: string | null
+          order_id: string
+          payment_method?: string | null
+          sale_date: string
+          status_remote?: string | null
+          taxa_entrega?: number | null
+          total: number
+        }
+        Update: {
+          audit_period_id?: string
+          cashback_usado?: number | null
+          cliente_nome?: string | null
+          cliente_telefone?: string | null
+          created_at?: string
+          created_at_remote?: string
+          cupom?: boolean | null
+          desconto_entrega?: number | null
+          endereco?: string | null
+          forma_pagamento?: string
+          id?: string
+          import_id?: string | null
+          order_id?: string
+          payment_method?: string | null
+          sale_date?: string
+          status_remote?: string | null
+          taxa_entrega?: number | null
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_brendi_orders_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_brendi_orders_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "audit_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_card_transactions: {
         Row: {
           audit_period_id: string
@@ -390,6 +565,114 @@ export type Database = {
           year?: number
         }
         Relationships: []
+      }
+      audit_saipos_orders: {
+        Row: {
+          acrescimo: number | null
+          audit_period_id: string
+          bairro: string | null
+          canal_venda: string
+          cancelado: boolean
+          cep: string | null
+          consumidor: string | null
+          created_at: string
+          data_venda: string
+          desconto: number | null
+          entrega: number | null
+          entregador: string | null
+          id: string
+          import_id: string | null
+          itens: string | null
+          motivo_acrescimo: string | null
+          motivo_cancelamento: string | null
+          motivo_desconto: string | null
+          order_id_parceiro: string
+          pagamento: string
+          saipos_pedido: number | null
+          saipos_pedido_parceiro_num: string | null
+          sale_date: string
+          tipo_pedido: string | null
+          total: number
+          total_taxa_servico: number | null
+          turno: string | null
+          valor_entregador: number | null
+        }
+        Insert: {
+          acrescimo?: number | null
+          audit_period_id: string
+          bairro?: string | null
+          canal_venda: string
+          cancelado?: boolean
+          cep?: string | null
+          consumidor?: string | null
+          created_at?: string
+          data_venda: string
+          desconto?: number | null
+          entrega?: number | null
+          entregador?: string | null
+          id?: string
+          import_id?: string | null
+          itens?: string | null
+          motivo_acrescimo?: string | null
+          motivo_cancelamento?: string | null
+          motivo_desconto?: string | null
+          order_id_parceiro: string
+          pagamento: string
+          saipos_pedido?: number | null
+          saipos_pedido_parceiro_num?: string | null
+          sale_date: string
+          tipo_pedido?: string | null
+          total: number
+          total_taxa_servico?: number | null
+          turno?: string | null
+          valor_entregador?: number | null
+        }
+        Update: {
+          acrescimo?: number | null
+          audit_period_id?: string
+          bairro?: string | null
+          canal_venda?: string
+          cancelado?: boolean
+          cep?: string | null
+          consumidor?: string | null
+          created_at?: string
+          data_venda?: string
+          desconto?: number | null
+          entrega?: number | null
+          entregador?: string | null
+          id?: string
+          import_id?: string | null
+          itens?: string | null
+          motivo_acrescimo?: string | null
+          motivo_cancelamento?: string | null
+          motivo_desconto?: string | null
+          order_id_parceiro?: string
+          pagamento?: string
+          saipos_pedido?: number | null
+          saipos_pedido_parceiro_num?: string | null
+          sale_date?: string
+          tipo_pedido?: string | null
+          total?: number
+          total_taxa_servico?: number | null
+          turno?: string | null
+          valor_entregador?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_saipos_orders_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_saipos_orders_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "audit_imports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_voucher_lot_competencia_overrides: {
         Row: {
