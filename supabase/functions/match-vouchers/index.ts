@@ -153,7 +153,11 @@ Deno.serve(async (req) => {
     // dep #10 (R$198,81) + dep R$45,45, deixando lote 702400274 R$198,81
     // órfão sem que dep #10 fosse testado pra match exato.
 
-    // Pass A: 1-pra-1 single (confiança máxima — valor exato + janela)
+    // Pass A: 1-pra-1 single (confiança máxima — valor exato + janela).
+    // Empate por proximidade: se múltiplos lotes caem dentro da tolerância,
+    // o de menor diff vence quando é o ÚNICO no menor diff. Crítico pra
+    // Alelo (tolerância R$15 absorve tarifa de transação variável de R$1-3,
+    // mas o lote sem tarifa de transação fica com diff 0 e ganha do com R$3).
     for (const dep of depPool) {
       if (dep.usedBy) continue;
       const taken = new Set(updates.map(u => u.id));
@@ -161,36 +165,49 @@ Deno.serve(async (req) => {
       const window = new Set(businessDayWindow(dep.deposit_date, WINDOW_DAYS));
       const candidates = free.filter(l => window.has(l.data_credito));
 
-      const exactSingles = candidates.filter(l => Math.abs(l.valor_liquido - dep.amount) <= TOLERANCE);
-      if (exactSingles.length === 1) {
-        const l = exactSingles[0];
+      const exactSingles = candidates
+        .filter(l => Math.abs(l.valor_liquido - dep.amount) <= TOLERANCE)
+        .map(l => ({ lot: l, diff: Math.abs(l.valor_liquido - dep.amount) }))
+        .sort((a, b) => a.diff - b.diff);
+
+      if (exactSingles.length === 0) continue;
+      const minDiff = exactSingles[0].diff;
+      const closest = exactSingles.filter(e => e.diff === minDiff);
+      if (closest.length === 1) {
+        const l = closest[0].lot;
         dep.usedBy = l.id;
         updates.push({ id: l.id, bb_deposit_id: dep.id, diff: dep.amount - l.valor_liquido });
         matchedSingle++;
-      } else if (exactSingles.length > 1) {
-        ambiguous.push(`Depósito #${fmtBRDate(dep.deposit_date)} R$${dep.amount.toFixed(2)}: ${exactSingles.length} lotes com valor exato`);
+      } else {
+        ambiguous.push(`Depósito #${fmtBRDate(dep.deposit_date)} R$${dep.amount.toFixed(2)}: ${closest.length} lotes empatam no menor diff (R$${minDiff.toFixed(2)})`);
       }
     }
 
     // Pass B: 1 lote → 2 depósitos somados (Alelo divide um lote em 2 TEDs).
     // Caso real: ALELO-20260218 R$692,23 = #10 (R$530,95) + #11 (R$161,28).
+    // Empate por menor diff absoluto da soma (igual Pass A).
     for (const lot of pendingLots) {
       const taken = new Set(updates.map(u => u.id));
       if (taken.has(lot.id)) continue;
       const window = new Set(businessDayWindow(lot.data_credito, WINDOW_DAYS));
       const candidates = depPool.filter(d => !d.usedBy && window.has(d.deposit_date));
-      const pairs: [Dep, Dep][] = [];
+      const pairs: { a: Dep; b: Dep; diff: number }[] = [];
       for (let i = 0; i < candidates.length; i++) {
         for (let j = i + 1; j < candidates.length; j++) {
           const a = candidates[i];
           const b = candidates[j];
-          if (Math.abs((a.amount + b.amount) - lot.valor_liquido) <= TOLERANCE) {
-            pairs.push([a, b]);
+          const diff = Math.abs((a.amount + b.amount) - lot.valor_liquido);
+          if (diff <= TOLERANCE) {
+            pairs.push({ a, b, diff });
           }
         }
       }
-      if (pairs.length === 1) {
-        const [a, b] = pairs[0];
+      if (pairs.length === 0) continue;
+      pairs.sort((x, y) => x.diff - y.diff);
+      const minDiff = pairs[0].diff;
+      const closest = pairs.filter(p => p.diff === minDiff);
+      if (closest.length === 1) {
+        const { a, b } = closest[0];
         a.usedBy = lot.id;
         b.usedBy = lot.id;
         updates.push({
@@ -200,12 +217,13 @@ Deno.serve(async (req) => {
           diff: (a.amount + b.amount) - lot.valor_liquido,
         });
         matchedSplit++;
-      } else if (pairs.length > 1) {
-        ambiguous.push(`Lote ${lot.numero_reembolso} R$${lot.valor_liquido.toFixed(2)}: ${pairs.length} pares de depósitos possíveis`);
+      } else {
+        ambiguous.push(`Lote ${lot.numero_reembolso} R$${lot.valor_liquido.toFixed(2)}: ${closest.length} pares de depósitos empatam no menor diff (R$${minDiff.toFixed(2)})`);
       }
     }
 
-    // Pass C: 2 lotes → 1 depósito (par de lotes cuja soma == dep.amount)
+    // Pass C: 2 lotes → 1 depósito (par de lotes cuja soma == dep.amount).
+    // Empate por menor diff absoluto da soma (igual A/B).
     for (const dep of depPool) {
       if (dep.usedBy) continue;
       const taken = new Set(updates.map(u => u.id));
@@ -213,24 +231,29 @@ Deno.serve(async (req) => {
       const window = new Set(businessDayWindow(dep.deposit_date, WINDOW_DAYS));
       const candidates = free.filter(l => window.has(l.data_credito));
 
-      const pairs: [PendingLot, PendingLot][] = [];
+      const pairs: { a: PendingLot; b: PendingLot; diff: number }[] = [];
       for (let i = 0; i < candidates.length; i++) {
         for (let j = i + 1; j < candidates.length; j++) {
           const a = candidates[i];
           const b = candidates[j];
-          if (Math.abs((a.valor_liquido + b.valor_liquido) - dep.amount) <= TOLERANCE) {
-            pairs.push([a, b]);
+          const diff = Math.abs((a.valor_liquido + b.valor_liquido) - dep.amount);
+          if (diff <= TOLERANCE) {
+            pairs.push({ a, b, diff });
           }
         }
       }
-      if (pairs.length === 1) {
-        const [a, b] = pairs[0];
+      if (pairs.length === 0) continue;
+      pairs.sort((x, y) => x.diff - y.diff);
+      const minDiff = pairs[0].diff;
+      const closest = pairs.filter(p => p.diff === minDiff);
+      if (closest.length === 1) {
+        const { a, b } = closest[0];
         dep.usedBy = `${a.id},${b.id}`;
         updates.push({ id: a.id, bb_deposit_id: dep.id, diff: 0 });
         updates.push({ id: b.id, bb_deposit_id: dep.id, diff: 0 });
         matchedPair++;
-      } else if (pairs.length > 1) {
-        ambiguous.push(`Depósito #${fmtBRDate(dep.deposit_date)} R$${dep.amount.toFixed(2)}: ${pairs.length} pares de lotes possíveis`);
+      } else {
+        ambiguous.push(`Depósito #${fmtBRDate(dep.deposit_date)} R$${dep.amount.toFixed(2)}: ${closest.length} pares de lotes empatam no menor diff (R$${minDiff.toFixed(2)})`);
       }
     }
 
