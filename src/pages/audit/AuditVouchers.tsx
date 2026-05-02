@@ -115,18 +115,20 @@ const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigi
 const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
-// Fallback runtime: pdf parser pode ter salvo subtotal/total_descontos como 0
-// quando regex flexível não casou. Reconstroi a partir dos items+valor_liquido.
+// Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
+// Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
+// `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
+// Ticket importados antes do commit 738af54 gravavam total_descontos ==
+// valor_liquido por causa de regex frágil contra reorder do pdfjs).
 function computedLot(lot: Lot, items: LotItem[]) {
   const sumItems = items.reduce((s, i) => s + Number(i.valor || 0), 0);
   const subtotal = Number(lot.subtotal_vendas) > 0
     ? Number(lot.subtotal_vendas)
     : Math.round(sumItems * 100) / 100;
-  let totalDesc = Number(lot.total_descontos);
   const liquido = Number(lot.valor_liquido);
-  if (totalDesc === 0 && subtotal > 0 && liquido > 0 && subtotal > liquido) {
-    totalDesc = Math.round((subtotal - liquido) * 100) / 100;
-  }
+  const totalDesc = (subtotal > 0 && liquido > 0 && subtotal >= liquido)
+    ? Math.round((subtotal - liquido) * 100) / 100
+    : Number(lot.total_descontos);
   return { subtotal, totalDesc, liquido };
 }
 
@@ -2303,9 +2305,13 @@ function OverviewGrid({
         subtotal += compValor;
         const isParcial = items.length > itemsComp.length;
         const lotSubtotal = Number(l.subtotal_vendas) > 0 ? Number(l.subtotal_vendas) : items.reduce((s, it) => s + Number(it.valor), 0);
-        const lotDesc = Number(l.total_descontos) > 0
-          ? Number(l.total_descontos)
-          : (lotSubtotal > 0 && Number(l.valor_liquido) > 0 ? lotSubtotal - Number(l.valor_liquido) : 0);
+        // Sempre deriva via identidade liquido = subtotal - descontos (mesma
+        // razão do computedLot — DB pode ter total_descontos errado herdado
+        // de import-ticket-pdf antes do commit 738af54).
+        const lotLiquido = Number(l.valor_liquido);
+        const lotDesc = (lotSubtotal > 0 && lotLiquido > 0 && lotSubtotal >= lotLiquido)
+          ? lotSubtotal - lotLiquido
+          : Number(l.total_descontos);
         if (!isParcial) {
           descontos += lotDesc;
           liquido += Number(l.valor_liquido);
