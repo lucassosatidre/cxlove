@@ -713,6 +713,13 @@ export default function AuditDashboard() {
                 Vouchers (Estágio 2)
               </Button>
               <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => navigate(`/admin/auditoria/brendi?month=${month}&year=${year}`)}
+              >
+                Brendi (Estágio 3)
+              </Button>
+              <Button
                 variant="default"
                 size="lg"
                 className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-md"
