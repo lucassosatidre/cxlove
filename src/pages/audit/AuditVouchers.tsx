@@ -2187,8 +2187,25 @@ function UploadPluxeeCard({
           const { data, error } = await supabase.functions.invoke('import-pluxee-csv', {
             body: { audit_period_id: p.id, content, file_name: file.name },
           });
-          if (error) throw new Error(error.message);
-          if (!data?.success) throw new Error(data?.error || 'Falha no import Pluxee');
+          if (error) {
+            let detail = error.message ?? 'erro desconhecido';
+            try {
+              const ctx = (error as any).context;
+              if (ctx && typeof ctx.json === 'function') {
+                const bodyJson = await ctx.json();
+                if (bodyJson?.error) detail = bodyJson.error;
+              }
+            } catch { /* fallback pra error.message */ }
+            throw new Error(detail);
+          }
+          if (!data?.success) {
+            // skipped (arquivo de vendas) → toast.warn em vez de error fatal
+            if (data?.skipped) {
+              failures.push(`${file.name}: ${data.error}`);
+              continue;
+            }
+            throw new Error(data?.error || 'Falha no import Pluxee');
+          }
 
           totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
           totalItems += Number(data.inserted_items ?? 0);

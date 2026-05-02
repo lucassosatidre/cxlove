@@ -227,10 +227,14 @@ Deno.serve(async (req) => {
     const isReembolsos = /Status:\s*PAGO/i.test(content) && /Data de Pagamento:/i.test(content);
     const isVendas = /Filtro selecionado:/i.test(content) && !isReembolsos;
     if (isVendas) {
+      // 200 com success:false em vez de 400 — não é erro fatal, é orientação
+      // pra usuário escolher arquivo certo. Evita "Runtime Error" no Lovable
+      // preview.
       return new Response(JSON.stringify({
         success: false,
+        skipped: true,
         error: 'Este arquivo é de "vendas" (filtro por período). Importe os arquivos de REEMBOLSOS (com "1976928" no nome) que já contêm os lotes pagos com as vendas dentro.',
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     if (!isReembolsos) {
       return new Response(JSON.stringify({
