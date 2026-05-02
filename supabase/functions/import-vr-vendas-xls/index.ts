@@ -202,10 +202,11 @@ Deno.serve(async (req) => {
     }
 
     // Carrega TODOS os lotes VR do período (não só do mês de competência —
-    // venda de fev pode estar em lote com corte em mar)
+    // venda de fev pode estar em lote com corte em mar). Inclui subtotal_vendas
+    // pra respeitar capacidade do lote no binding.
     const { data: vrLots } = await supabase
       .from('audit_voucher_lots')
-      .select('id, numero_reembolso, produto, data_corte')
+      .select('id, numero_reembolso, produto, data_corte, subtotal_vendas')
       .eq('audit_period_id', audit_period_id)
       .eq('operadora', 'vr')
       .order('data_corte', { ascending: true });
@@ -217,34 +218,79 @@ Deno.serve(async (req) => {
     }
 
     // Index de lotes por produto (já mapeado pra normalizado)
-    type LotInfo = { id: string; numero_reembolso: string; produto: string; data_corte: string | null };
+    type LotInfo = {
+      id: string; numero_reembolso: string; produto: string;
+      data_corte: string | null; subtotal_vendas: number;
+    };
     const lotsByProduto = new Map<string, LotInfo[]>();
-    for (const l of (vrLots as LotInfo[])) {
-      const key = (l.produto ?? '').trim();
+    for (const l of (vrLots as any[])) {
+      const info: LotInfo = {
+        id: l.id,
+        numero_reembolso: l.numero_reembolso,
+        produto: l.produto,
+        data_corte: l.data_corte,
+        subtotal_vendas: Number(l.subtotal_vendas ?? 0),
+      };
+      const key = (info.produto ?? '').trim();
       if (!lotsByProduto.has(key)) lotsByProduto.set(key, []);
-      lotsByProduto.get(key)!.push(l);
+      lotsByProduto.get(key)!.push(info);
     }
 
-    // Pra cada venda, encontra lote: produto correspondente + menor data_corte >= data_venda
+    // Binding pelo bin-packing: cada lote tem capacidade = subtotal_vendas; cada
+    // venda consome capacidade do lote escolhido. Sem isso, múltiplos lotes
+    // com mesmo produto+data_corte recebiam TODAS as vendas no primeiro
+    // (caso real mar/26: lote 701982829 R$80,00 com 3 vendas linkadas
+    // somando R$343,90 — outras 2 vendas eram pra lotes irmãos com
+    // data_corte posterior que ficavam órfãos).
+    //
+    // Algoritmo: ordena vendas por (data_venda ASC, valor DESC) — vendas
+    // grandes primeiro pra evitar fragmentação que sobre só pra lotes
+    // pequenos. Pra cada venda escolhe o lote com data_corte mais cedo
+    // (≥ data_venda) que ainda tem capacidade pra acomodar; em empate de
+    // data_corte, prefere o lote com MENOR remaining (encaixe apertado).
     type Linked = { lot_id: string; sale: RawSale };
     const linked: Linked[] = [];
     const orphans: { sale: RawSale; reason: string }[] = [];
+    const usedByLot = new Map<string, number>();
 
-    for (const s of sales) {
+    const TOLERANCE = 0.05;
+    const sortedSales = [...sales].sort((a, b) => {
+      if (a.data_venda !== b.data_venda) return a.data_venda.localeCompare(b.data_venda);
+      return b.valor - a.valor;
+    });
+
+    for (const s of sortedSales) {
       const produtoLote = mapProdutoVendaToLote(s.produto);
       const candidates = lotsByProduto.get(produtoLote) ?? [];
       if (candidates.length === 0) {
         orphans.push({ sale: s, reason: `Produto "${produtoLote}" não tem lote correspondente` });
         continue;
       }
-      // Menor data_corte >= data_venda
-      const target = candidates
+
+      const fitting = candidates
         .filter(l => l.data_corte != null && l.data_corte >= s.data_venda)
-        .sort((a, b) => (a.data_corte ?? '').localeCompare(b.data_corte ?? ''))[0];
-      if (!target) {
-        orphans.push({ sale: s, reason: `Sem lote ${produtoLote} com data_corte >= ${s.data_venda}` });
+        .map(l => {
+          const used = usedByLot.get(l.id) ?? 0;
+          const remaining = l.subtotal_vendas - used;
+          return { lot: l, remaining };
+        })
+        .filter(c => c.remaining + TOLERANCE >= s.valor)
+        .sort((a, b) => {
+          const dc = (a.lot.data_corte ?? '').localeCompare(b.lot.data_corte ?? '');
+          if (dc !== 0) return dc;
+          return a.remaining - b.remaining;
+        });
+
+      if (fitting.length === 0) {
+        orphans.push({
+          sale: s,
+          reason: `Sem lote ${produtoLote} com capacidade pra venda R$${s.valor.toFixed(2)} (data_corte >= ${s.data_venda})`,
+        });
         continue;
       }
+
+      const target = fitting[0].lot;
+      usedByLot.set(target.id, (usedByLot.get(target.id) ?? 0) + s.valor);
       linked.push({ lot_id: target.id, sale: s });
     }
 
