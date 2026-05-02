@@ -64,7 +64,9 @@ const CARD_META: Record<FileType, { title: string; functionName: string; tip: Re
     functionName: 'import-cresol',
     tip: (
       <>
-        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        💡 <strong>Aceita .xlsx OU .pdf</strong> — o sistema detecta automaticamente.
+        <br />
+        <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
         <br />
         Ex: para auditar Março → importe Fevereiro + Março + Abril.
         <br />
@@ -202,6 +204,22 @@ export default function AuditImport() {
 
   const doImport = async (type: FileType, file: File) => {
     if (!period) throw new Error('Sem período ativo');
+
+    // Cresol: aceita .pdf via import-cresol-pdf (parser textual) ou .xlsx
+    // via import-cresol (parser de rows). Detecta pela extensão.
+    if (type === 'cresol' && /\.pdf$/i.test(file.name)) {
+      const { extractPdfText } = await import('@/lib/pdf-text-extract');
+      const raw_text = await extractPdfText(file);
+      const { data, error } = await supabase.functions.invoke('import-cresol-pdf', {
+        body: { audit_period_id: period.id, file_name: file.name, raw_text },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Falha na importação PDF');
+      return {
+        description: `${data.imported_rows} depósitos iFood importados (PDF). ${data.duplicate_rows} duplicados.`,
+      };
+    }
+
     const { rows, error: parseErr } = await parseXlsxFile(file, type);
     if (parseErr) throw new Error(parseErr);
 
@@ -364,10 +382,15 @@ function ImportCard({
   }, [highlight]);
 
   const handleSelect = (selected: File[]) => {
-    const xlsx = selected.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    // Cresol aceita .xlsx OU .pdf; outros tipos só .xlsx
+    const acceptPdf = type === 'cresol';
+    const xlsx = selected.filter(f => {
+      const lower = f.name.toLowerCase();
+      return lower.endsWith('.xlsx') || (acceptPdf && lower.endsWith('.pdf'));
+    });
     const invalid = selected.length - xlsx.length;
     if (invalid > 0) {
-      toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+      toast.error(`${invalid} arquivo(s) ignorado(s) — aceitos: ${acceptPdf ? '.xlsx ou .pdf' : '.xlsx'}`);
     }
     if (xlsx.length === 0) return;
     if (meta.multi) {
@@ -533,7 +556,7 @@ function ImportCard({
             <input
               ref={inputRef}
               type="file"
-              accept=".xlsx"
+              accept={type === 'cresol' ? '.xlsx,.pdf,application/pdf' : '.xlsx'}
               multiple={meta.multi}
               className="hidden"
               onChange={(e) => handleSelect(Array.from(e.target.files ?? []))}
