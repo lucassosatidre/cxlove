@@ -1797,13 +1797,32 @@ function UploadTicketCard({
           const { data, error } = await supabase.functions.invoke('import-ticket-pdf', {
             body: { audit_period_id: p.id, file_name: file.name, raw_text: rawText },
           });
-          if (error) throw new Error(error.message);
+          // supabase-js v2 retorna FunctionsHttpError em error quando edge
+          // retorna não-2xx. O body do erro fica em error.context (Response).
+          // Lê body pra mostrar mensagem real em vez de "non-2xx status".
+          if (error) {
+            let detail = error.message ?? 'erro desconhecido';
+            try {
+              const ctx = (error as any).context;
+              if (ctx && typeof ctx.json === 'function') {
+                const bodyJson = await ctx.json();
+                if (bodyJson?.error) detail = bodyJson.error;
+                if (bodyJson?.warnings?.length) {
+                  console.warn('[import-ticket-pdf] warnings:', bodyJson.warnings);
+                }
+              }
+            } catch { /* fallback pra error.message */ }
+            throw new Error(detail);
+          }
           if (!data?.success) throw new Error(data?.error || 'Falha no import Ticket');
 
           totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
           totalItems += Number(data.inserted_items ?? 0);
           for (const w of (data.warnings ?? []) as string[]) allWarnings.push(`${file.name}: ${w}`);
           for (const e of (data.integrity_errors ?? []) as string[]) allIntegrity.push(`${file.name}: ${e}`);
+          if (data.lot_errors?.length) {
+            console.warn(`[import-ticket-pdf] ${file.name} — ${data.lot_errors_count} lote(s) com erro:`, data.lot_errors);
+          }
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
         }
