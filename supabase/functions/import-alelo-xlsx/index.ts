@@ -10,6 +10,7 @@
 //   11=Status  12=Data Pagamento
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -123,7 +124,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: period, error: periodErr } = await supabase
-      .from('audit_periods').select('id,status').eq('id', audit_period_id).maybeSingle();
+      .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
     if (periodErr || !period) {
       return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -185,6 +186,20 @@ Deno.serve(async (req) => {
           skipped_invalid: skippedInvalid,
           sample_first_3: rows.slice(0, 3),
         },
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Validação de competência: usa data_venda (competência Alelo é por mês
+    // de venda, igual Pluxee). Bloqueia 100% mismatch.
+    const periodCheck = validatePeriodMatch(
+      sales.map(s => s.data_venda),
+      { month: period.month, year: period.year },
+      'Alelo',
+    );
+    if (!periodCheck.ok) {
+      return new Response(JSON.stringify({
+        error: periodCheck.error,
+        breakdown_by_month: periodCheck.breakdown,
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

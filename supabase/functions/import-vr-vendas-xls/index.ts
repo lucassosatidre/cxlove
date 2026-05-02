@@ -11,6 +11,7 @@
 //   Header com colunas: CNPJ, Produto, Data, Hora, Cartão, Número Autorização, Valor
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -109,7 +110,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: period } = await supabase
-      .from('audit_periods').select('id,status').eq('id', audit_period_id).maybeSingle();
+      .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
     if (!period) {
       return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -184,6 +185,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({
         error: 'Nenhuma venda VR encontrada.',
         diagnostic: { skipped_invalid: skippedInvalid },
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // Validação de competência: usa data_venda. Bloqueia 100% mismatch.
+    const periodCheck = validatePeriodMatch(
+      sales.map(s => s.data_venda),
+      { month: period.month, year: period.year },
+      'VR Vendas',
+    );
+    if (!periodCheck.ok) {
+      return new Response(JSON.stringify({
+        error: periodCheck.error,
+        breakdown_by_month: periodCheck.breakdown,
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

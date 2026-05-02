@@ -1,6 +1,7 @@
 // @ts-nocheck
 // Receives pre-parsed JSON rows from the frontend (array of arrays — header=1).
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,7 +101,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: period, error: periodErr } = await supabase
-      .from('audit_periods').select('id,status').eq('id', audit_period_id).maybeSingle();
+      .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
     if (periodErr || !period) {
       return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -235,6 +236,25 @@ Deno.serve(async (req) => {
         auto_categorized: true,
         doc_number: docNumber || null,
       });
+    }
+
+    // Validação de competência: bloqueia 100% mismatch (extrato BB de mês X
+    // sendo importado num período de mês Y). Lote misto (alguns créditos do
+    // mês passado entrando no início do mês alvo) passa.
+    const periodCheck = validatePeriodMatch(
+      deposits.map(d => d.deposit_date),
+      { month: period.month, year: period.year },
+      'BB',
+    );
+    if (!periodCheck.ok) {
+      // Marca import como failed antes de retornar (já foi inserido em audit_imports)
+      await supabase.from('audit_imports').update({
+        status: 'failed', error_message: periodCheck.error,
+      }).eq('id', importRec.id);
+      return new Response(JSON.stringify({
+        error: periodCheck.error,
+        breakdown_by_month: periodCheck.breakdown,
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // UPSERT por row_hash (calculado por trigger no banco). Permite reimportar
