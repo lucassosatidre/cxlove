@@ -522,7 +522,10 @@ export default function AuditVouchers() {
     setMatching(true);
     try {
       const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        body: { audit_period_id: period.id, operadora: selectedOperadora, reset: false },
+        // reset: true — limpa auto-matches anteriores (preserva manuais via
+        // eq manual=false) e re-roda do zero. Garante que mudanças de
+        // tolerância ou ordem de passes refletem na conciliação atual.
+        body: { audit_period_id: period.id, operadora: selectedOperadora, reset: true },
       });
       if (error) throw new Error(error.message);
       if (!data?.success) throw new Error(data?.error || 'Falha no match');
