@@ -16,7 +16,8 @@ import {
 } from 'lucide-react';
 import {
   UploadMaquinonaCard, UploadCresolCard, UploadBBCard, UploadTicketCard,
-  UploadAleloCard, UploadVRCard, UploadPluxeeCard, dispatchAutoMatchVouchers,
+  UploadAleloCard, UploadVRCard, UploadPluxeeCard, UploadBrendiCard, UploadSaiposCard,
+  dispatchAutoMatchVouchers, dispatchMatchBrendi,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
 
@@ -27,17 +28,18 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-type StepId = 'imports' | 'ifood' | 'vouchers';
+type StepId = 'imports' | 'ifood' | 'vouchers' | 'brendi';
 
 const STEPS: { id: StepId; label: string; subtitle: string }[] = [
-  { id: 'imports', label: '1. Importar', subtitle: 'Maquinona, Cresol, BB, vouchers' },
+  { id: 'imports', label: '1. Importar', subtitle: 'Maquinona, Cresol, BB, vouchers, Brendi, Saipos' },
   { id: 'ifood', label: '2. iFood', subtitle: 'Match Maquinona × Cresol' },
   { id: 'vouchers', label: '3. Vouchers', subtitle: 'Match Ticket / Alelo / VR / Pluxee × BB' },
+  { id: 'brendi', label: '4. Brendi', subtitle: 'Cross-check Saipos × Brendi + match BB' },
 ];
 
 // Fontes esperadas: cada item monta o card e o checklist do passo 1.
 // `expected` = nº de imports ideal pra cobertura (mês ant + comp + post).
-const FONTES: { file_type: string; label: string; expected: number; section: 'ifood' | 'voucher' }[] = [
+const FONTES: { file_type: string; label: string; expected: number; section: 'ifood' | 'voucher' | 'brendi' }[] = [
   { file_type: 'maquinona', label: 'Maquinona', expected: 3, section: 'ifood' },
   { file_type: 'cresol', label: 'Cresol', expected: 3, section: 'ifood' },
   { file_type: 'bb', label: 'BB', expected: 2, section: 'voucher' },
@@ -45,6 +47,8 @@ const FONTES: { file_type: string; label: string; expected: number; section: 'if
   { file_type: 'alelo', label: 'Alelo', expected: 1, section: 'voucher' },
   { file_type: 'vr', label: 'VR', expected: 2, section: 'voucher' },
   { file_type: 'pluxee', label: 'Pluxee', expected: 1, section: 'voucher' },
+  { file_type: 'brendi', label: 'Brendi', expected: 3, section: 'brendi' },
+  { file_type: 'saipos', label: 'Saipos', expected: 3, section: 'brendi' },
 ];
 
 export default function AuditConciliacao() {
@@ -65,6 +69,8 @@ export default function AuditConciliacao() {
   const [ifoodResult, setIfoodResult] = useState<string | null>(null);
   const [runningVouchers, setRunningVouchers] = useState(false);
   const [voucherResult, setVoucherResult] = useState<string | null>(null);
+  const [runningBrendi, setRunningBrendi] = useState(false);
+  const [brendiResult, setBrendiResult] = useState<string | null>(null);
 
   const refresh = async (periodId: string) => {
     const { data } = await supabase
@@ -110,6 +116,7 @@ export default function AuditConciliacao() {
 
   const ifoodReady = (importCounts['maquinona'] ?? 0) > 0 && (importCounts['cresol'] ?? 0) > 0;
   const vouchersReady = (importCounts['bb'] ?? 0) > 0;
+  const brendiReady = (importCounts['brendi'] ?? 0) > 0 && (importCounts['saipos'] ?? 0) > 0;
 
   const ensurePeriod = async (): Promise<AuditPeriodLite | null> => {
     if (period) return period;
@@ -172,6 +179,29 @@ export default function AuditConciliacao() {
     }
   };
 
+  const handleRunBrendi = async () => {
+    const p = await ensurePeriod();
+    if (!p) return;
+    setRunningBrendi(true);
+    setBrendiResult(null);
+    try {
+      const res = await dispatchMatchBrendi(p.id);
+      if (res) {
+        const cc = res.crosscheck;
+        const d = res.daily;
+        setBrendiResult(`${d.rows} dias · ${cc.ok} ok / ${cc.missing_in_brendi_count} só Saipos / ${cc.value_mismatch_count} valores divergentes · taxa ${d.taxa_efetiva_pct}%`);
+      } else {
+        setBrendiResult('Erro: ver toasts');
+      }
+    } catch (e: any) {
+      const msg = e?.message ?? 'Erro inesperado';
+      setBrendiResult(`Erro: ${msg}`);
+      toast.error('Erro no match Brendi', { description: msg });
+    } finally {
+      setRunningBrendi(false);
+    }
+  };
+
   if (roleLoading || loading) {
     return (
       <AppLayout title="Conciliação">
@@ -193,7 +223,7 @@ export default function AuditConciliacao() {
   const stepIndex = STEPS.findIndex(s => s.id === step);
 
   return (
-    <AppLayout title="Conciliação" subtitle="Importar → iFood → Vouchers">
+    <AppLayout title="Conciliação" subtitle="Importar → iFood → Vouchers → Brendi">
       <div className="space-y-4">
         <Breadcrumb>
           <BreadcrumbList>
@@ -302,6 +332,20 @@ export default function AuditConciliacao() {
             result={voucherResult}
             onRun={handleRunVouchers}
             onBack={() => setStep('ifood')}
+            onAdvance={() => setStep('brendi')}
+            period={period}
+            month={month}
+            year={year}
+          />
+        )}
+
+        {step === 'brendi' && (
+          <BrendiStep
+            ready={brendiReady}
+            running={runningBrendi}
+            result={brendiResult}
+            onRun={handleRunBrendi}
+            onBack={() => setStep('vouchers')}
             period={period}
             month={month}
             year={year}
@@ -398,6 +442,17 @@ function ImportsStep({
         </div>
       </div>
 
+      {/* Cards de upload — Brendi (estágio 3) */}
+      <div className="space-y-2">
+        <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium px-1">
+          Brendi (vendas online × BB)
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <UploadBrendiCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
+          <UploadSaiposCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
+        </div>
+      </div>
+
       <div className="flex justify-end">
         <Button onClick={onAdvance} disabled={!ifoodReady} className="gap-2">
           Avançar para iFood <ArrowRight className="h-4 w-4" />
@@ -488,13 +543,14 @@ function IfoodStep({
 // Step 3: Vouchers — match-vouchers pras 4 operadoras
 // ─────────────────────────────────────────────────────────────────────────────
 function VouchersStep({
-  ready, running, result, onRun, onBack, period, month, year,
+  ready, running, result, onRun, onBack, onAdvance, period, month, year,
 }: {
   ready: boolean;
   running: boolean;
   result: string | null;
   onRun: () => Promise<void>;
   onBack: () => void;
+  onAdvance: () => void;
   period: AuditPeriodLite | null;
   month: number;
   year: number;
@@ -544,6 +600,83 @@ function VouchersStep({
               onClick={() => navigate(`/admin/auditoria/vouchers?month=${month}&year=${year}&aba=overview`)}
             >
               Ver lotes, depósitos e cross-check no Vouchers <ArrowRight className="h-3.5 w-3.5 ml-1" />
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-between">
+        <Button variant="outline" onClick={onBack} className="gap-2">
+          <ArrowLeft className="h-4 w-4" /> Voltar
+        </Button>
+        <Button onClick={onAdvance} className="gap-2">
+          Avançar para Brendi <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 4: Brendi — match-brendi (cross-check Saipos × Brendi + daily BB)
+// ─────────────────────────────────────────────────────────────────────────────
+function BrendiStep({
+  ready, running, result, onRun, onBack, period, month, year,
+}: {
+  ready: boolean;
+  running: boolean;
+  result: string | null;
+  onRun: () => Promise<void>;
+  onBack: () => void;
+  period: AuditPeriodLite | null;
+  month: number;
+  year: number;
+}) {
+  const navigate = useNavigate();
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Conciliação Brendi</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Cross-check Saipos × Brendi (1-pra-1 por order_id, tolerância R$ 2,00) + match agregado
+            por dia útil de crédito (D+1) com PIX BB Brendi. Detecta mensalidade descontada e marca
+            divergências &gt; 5% pra preenchimento manual.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!ready && (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              ⚠ Importe Brendi + Saipos (passo 1) pra habilitar. Saipos é obrigatório pro cross-check.
+            </p>
+          )}
+          <Button
+            size="lg"
+            variant="default"
+            className="gap-2"
+            disabled={!ready || running}
+            onClick={onRun}
+          >
+            {running ? <Loader2 className="h-5 w-5 animate-spin" /> : <RefreshCw className="h-5 w-5" />}
+            {running ? 'Executando…' : (result ? 'Reexecutar match' : 'Executar match Brendi')}
+          </Button>
+          {result && (
+            <div className={`flex items-start gap-2 rounded border px-3 py-2 text-sm ${
+              result.startsWith('Erro') ? 'border-rose-500/40 bg-rose-500/5' : 'border-green-500/40 bg-green-500/5'
+            }`}>
+              {result.startsWith('Erro')
+                ? <AlertCircle className="h-4 w-4 text-rose-600 mt-0.5 shrink-0" />
+                : <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 shrink-0" />}
+              <span>{result}</span>
+            </div>
+          )}
+          {period && (
+            <Button
+              variant="link"
+              className="px-0 h-auto"
+              onClick={() => navigate(`/admin/auditoria/brendi?month=${month}&year=${year}`)}
+            >
+              Ver Resumo, cross-check e daily no Brendi <ArrowRight className="h-3.5 w-3.5 ml-1" />
             </Button>
           )}
         </CardContent>

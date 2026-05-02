@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  FileSpreadsheet, FileText, Landmark, Loader2, UploadCloud, CreditCard,
+  FileSpreadsheet, FileText, Landmark, Loader2, UploadCloud, CreditCard, Store, ShoppingBag,
 } from 'lucide-react';
 import { extractPdfText } from '@/lib/pdf-text-extract';
 
@@ -759,6 +759,204 @@ export function UploadPluxeeCard({ period, ensurePeriod, onAfter }: UploadCardPr
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Brendi — XLSX (report "Resultado da consulta")
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+    if (xlsx.length === 0) return;
+
+    setUploading(true);
+    setProgress({ current: 0, total: xlsx.length });
+    let totalImported = 0;
+    let totalIgnoredStatus = 0;
+    let totalIgnoredForma = 0;
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < xlsx.length; i++) {
+        const file = xlsx[i];
+        setProgress({ current: i + 1, total: xlsx.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          // Aba esperada: "Resultado da consulta" — fallback primeira aba
+          const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('resultado')) ?? wb.SheetNames[0];
+          const sheet = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: false });
+          if (!rows.length) throw new Error('Aba vazia');
+
+          const { data, error } = await supabase.functions.invoke('import-brendi-xlsx', {
+            body: { audit_period_id: p.id, rows, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Brendi');
+
+          totalImported += Number(data.imported_rows ?? 0);
+          totalIgnoredStatus += Number(data.ignored_status ?? 0);
+          totalIgnoredForma += Number(data.ignored_forma ?? 0);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalImported} pedidos online Brendi importados`, {
+          description: `${totalIgnoredStatus} não-entregue + ${totalIgnoredForma} fora de escopo (Pix/Crédito Online apenas)`,
+        });
+      } else {
+        toast.error(`${failures.length} de ${xlsx.length} falharam`, { description: failures.join(' | ') });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <ShoppingBag className="h-5 w-5 text-rose-600" />
+        <CardTitle className="text-base">Report Brendi (.xlsx)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Export "Pedidos" do portal Brendi (aba "Resultado da consulta"). Importa apenas
+          pedidos com status="Entregue" e Forma de pagamento ∈ ("Pix Online", "Crédito Online").
+          Importe os 3 meses (ant + competência + post) pra cobrir D+1 entre meses.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLSX (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saipos — XLSX (export "Vendas por período"), canal-agnóstica
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadSaiposCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+    if (xlsx.length === 0) return;
+
+    setUploading(true);
+    setProgress({ current: 0, total: xlsx.length });
+    let totalImported = 0;
+    const byCanal: Record<string, number> = {};
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < xlsx.length; i++) {
+        const file = xlsx[i];
+        setProgress({ current: i + 1, total: xlsx.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('vendas')) ?? wb.SheetNames[0];
+          const sheet = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: false });
+          if (!rows.length) throw new Error('Aba vazia');
+
+          const { data, error } = await supabase.functions.invoke('import-saipos-xlsx', {
+            body: { audit_period_id: p.id, rows, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Saipos');
+
+          totalImported += Number(data.imported_rows ?? 0);
+          for (const [k, n] of Object.entries(data.by_canal ?? {})) {
+            byCanal[k] = (byCanal[k] ?? 0) + Number(n);
+          }
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        const canalDesc = Object.entries(byCanal).map(([k, n]) => `${k}=${n}`).join(', ') || '—';
+        toast.success(`${totalImported} pedidos Saipos importados`, { description: `Canais: ${canalDesc}` });
+      } else {
+        toast.error(`${failures.length} de ${xlsx.length} falharam`, { description: failures.join(' | ') });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <Store className="h-5 w-5 text-cyan-600" />
+        <CardTitle className="text-base">Saipos — Vendas por período (.xlsx)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Export do PDV Saipos (aba "Vendas por período"). Importa <strong>todos os canais</strong> (Brendi,
+          iFood, balcão), serve como fonte da verdade pra cross-check Saipos × Brendi (e estágio 4 iFood Marketplace).
+          Obrigatório pra rodar match Brendi.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLSX (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Helper: dispara match-vouchers reset=true por operadora
 // ─────────────────────────────────────────────────────────────────────────────
 export async function dispatchAutoMatchVouchers(
@@ -788,5 +986,33 @@ export async function dispatchAutoMatchVouchers(
     } catch (e: any) {
       toast.error(`Match ${op} erro`, { description: e?.message ?? 'Erro inesperado' });
     }
+  }
+}
+
+// Dispara match-brendi (reset=true) — usado pelo onAfter dos uploads Brendi/Saipos
+// e pelo botão "Executar match Brendi" no /conciliacao.
+export async function dispatchMatchBrendi(periodId: string) {
+  try {
+    const { data, error } = await supabase.functions.invoke('match-brendi', {
+      body: { audit_period_id: periodId, reset: true },
+    });
+    if (error) {
+      toast.error('Match Brendi falhou', { description: error.message });
+      return null;
+    }
+    if (!data?.success) {
+      toast.error('Match Brendi falhou', { description: data?.error || 'Erro desconhecido' });
+      return null;
+    }
+    const cc = data.crosscheck;
+    if (cc?.missing_in_brendi_count > 0) {
+      toast.warning(`⚠ ${cc.missing_in_brendi_count} pedido(s) só no Saipos`, {
+        description: 'Brendi não declarou — possível repasse omisso',
+      });
+    }
+    return data;
+  } catch (e: any) {
+    toast.error('Match Brendi erro', { description: e?.message ?? 'Erro inesperado' });
+    return null;
   }
 }
