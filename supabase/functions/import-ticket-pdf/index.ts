@@ -37,6 +37,7 @@ function normalizeDiscountKey(descricao: string): string {
   if (d === 'tarifa por') return 'tarifa_transacao'; // fragmento da quebra de página (raro)
   if (d.includes('taxa tpe')) return 'taxa_tpe';
   if (d.includes('anuidade')) return 'anuidade';
+  if (d.includes('taxa manutencao') || d.includes('taxa manutenção')) return 'taxa_manutencao';
   return 'outros';
 }
 
@@ -394,89 +395,101 @@ Deno.serve(async (req) => {
     let insertedLots = 0;
     let updatedLots = 0;
     let insertedItems = 0;
+    const lotErrors: string[] = [];
 
     for (const l of lots) {
-      const { data: existing } = await supabase
-        .from('audit_voucher_lots')
-        .select('id')
-        .eq('audit_period_id', audit_period_id)
-        .eq('operadora', 'ticket')
-        .eq('numero_reembolso', l.numero_reembolso)
-        .maybeSingle();
-
-      const lotPayload = {
-        audit_period_id,
-        operadora: 'ticket',
-        numero_reembolso: l.numero_reembolso,
-        numero_contrato: l.numero_contrato,
-        produto: l.produto,
-        data_corte: l.data_corte,
-        data_credito: l.data_credito,
-        subtotal_vendas: l.subtotal_vendas,
-        total_descontos: l.total_descontos,
-        valor_liquido: l.valor_liquido,
-        descontos: l.descontos,
-        import_id: importRec.id,
-      };
-
-      let lotId: string;
-
-      if (existing) {
-        const { error: updErr } = await supabase
-          .from('audit_voucher_lots')
-          .update(lotPayload)
-          .eq('id', existing.id);
-        if (updErr) {
-          await supabase.from('audit_imports').update({
-            status: 'error',
-            error_message: `Erro ao atualizar lote ${l.numero_reembolso}: ${updErr.message}`,
-          }).eq('id', importRec.id);
-          throw updErr;
+      try {
+        // Fallback computacional: corrige campos zerados (regex pode ter falhado
+        // em fragmentação entre páginas). Idempotente.
+        const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
+        if (l.subtotal_vendas === 0 && sumItems > 0) {
+          l.subtotal_vendas = Math.round(sumItems * 100) / 100;
         }
-        await supabase.from('audit_voucher_lot_items').delete().eq('lot_id', existing.id);
-        lotId = existing.id;
-        updatedLots++;
-      } else {
-        const { data: inserted, error: insErr } = await supabase
+        if (l.total_descontos === 0 && l.subtotal_vendas > 0 && l.valor_liquido >= 0
+            && l.subtotal_vendas > l.valor_liquido) {
+          l.total_descontos = Math.round((l.subtotal_vendas - l.valor_liquido) * 100) / 100;
+        }
+        if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos === 0) {
+          l.valor_liquido = l.subtotal_vendas; // sem descontos detectados ainda
+        }
+
+        const { data: existing } = await supabase
           .from('audit_voucher_lots')
-          .insert(lotPayload)
           .select('id')
-          .single();
-        if (insErr || !inserted) {
-          await supabase.from('audit_imports').update({
-            status: 'error',
-            error_message: `Erro ao inserir lote ${l.numero_reembolso}: ${insErr?.message ?? 'sem dado'}`,
-          }).eq('id', importRec.id);
-          throw insErr ?? new Error('falha insert lote');
-        }
-        lotId = inserted.id;
-        insertedLots++;
-      }
+          .eq('audit_period_id', audit_period_id)
+          .eq('operadora', 'ticket')
+          .eq('numero_reembolso', l.numero_reembolso)
+          .maybeSingle();
 
-      const itemsPayload = l.items.map(it => ({
-        lot_id: lotId,
-        data_transacao: it.data_transacao,
-        data_postagem: it.data_postagem,
-        numero_documento: it.numero_documento,
-        numero_cartao_mascarado: it.numero_cartao_mascarado,
-        valor: it.valor,
-        estabelecimento: 'PIZZARIA ESTRELA',
-        cnpj: it.cnpj,
-      }));
+        const lotPayload = {
+          audit_period_id,
+          operadora: 'ticket',
+          numero_reembolso: l.numero_reembolso,
+          numero_contrato: l.numero_contrato,
+          produto: l.produto,
+          data_corte: l.data_corte,
+          data_credito: l.data_credito,
+          subtotal_vendas: l.subtotal_vendas,
+          total_descontos: l.total_descontos,
+          valor_liquido: l.valor_liquido,
+          descontos: l.descontos,
+          import_id: importRec.id,
+        };
 
-      if (itemsPayload.length) {
-        const { error: itErr } = await supabase
-          .from('audit_voucher_lot_items')
-          .insert(itemsPayload);
-        if (itErr) {
-          await supabase.from('audit_imports').update({
-            status: 'error',
-            error_message: `Erro ao inserir items do lote ${l.numero_reembolso}: ${itErr.message}`,
-          }).eq('id', importRec.id);
-          throw itErr;
+        let lotId: string;
+
+        if (existing) {
+          const { error: updErr } = await supabase
+            .from('audit_voucher_lots')
+            .update(lotPayload)
+            .eq('id', existing.id);
+          if (updErr) throw new Error(`update: ${updErr.message}`);
+          await supabase.from('audit_voucher_lot_items').delete().eq('lot_id', existing.id);
+          lotId = existing.id;
+          updatedLots++;
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from('audit_voucher_lots')
+            .insert(lotPayload)
+            .select('id')
+            .single();
+          if (insErr || !inserted) throw new Error(`insert: ${insErr?.message ?? 'sem dado'}`);
+          lotId = inserted.id;
+          insertedLots++;
         }
-        insertedItems += itemsPayload.length;
+
+        const itemsPayload = l.items.map(it => ({
+          lot_id: lotId,
+          data_transacao: it.data_transacao,
+          data_postagem: it.data_postagem,
+          numero_documento: it.numero_documento,
+          numero_cartao_mascarado: it.numero_cartao_mascarado,
+          valor: it.valor,
+          estabelecimento: 'PIZZARIA ESTRELA',
+          cnpj: it.cnpj,
+        }));
+
+        if (itemsPayload.length) {
+          const { error: itErr } = await supabase
+            .from('audit_voucher_lot_items')
+            .insert(itemsPayload);
+          if (itErr) throw new Error(`items: ${itErr.message}`);
+          insertedItems += itemsPayload.length;
+        }
+      } catch (e: any) {
+        // Erro no lote individual NÃO interrompe os demais — registra e continua
+        const msg = `Lote ${l.numero_reembolso}: ${e?.message ?? 'erro'}`;
+        lotErrors.push(msg);
+        console.error('[import-ticket-pdf]', msg);
       }
+    }
+
+    // Se TODOS os lotes falharam, marca import como erro
+    if (insertedLots === 0 && updatedLots === 0 && lotErrors.length > 0) {
+      await supabase.from('audit_imports').update({
+        status: 'error',
+        error_message: lotErrors.slice(0, 5).join(' | '),
+      }).eq('id', importRec.id);
     }
 
     await supabase.from('audit_imports').update({
@@ -501,8 +514,10 @@ Deno.serve(async (req) => {
       total_items: totalItems,
       inserted_items: insertedItems,
       integrity_errors: integrityErrors,
+      lot_errors: lotErrors.slice(0, 10),
+      lot_errors_count: lotErrors.length,
       warnings: warnings.slice(0, 20),
-      message: `${insertedLots} lotes novos + ${updatedLots} atualizados (${insertedItems} vendas)`,
+      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas)${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-ticket-pdf error', e);
