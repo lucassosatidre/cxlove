@@ -77,11 +77,17 @@ type ParsedLot = {
 //   <cod_estab> [PIZZARIA ESTRELA] <data_tx> <data_post> <num_doc> [TEF COMPRA]
 //   <****cartao> R$<valor> <cnpj>
 //
-// Ancoramos pelo cartão (`\*+\d+`) que é a âncora mais específica do registro.
-// Entre data_postagem e o cartão pode ter num_doc fragmentado e/ou "TEF COMPRA"
-// — capturamos como bloco "miolo" não-greedy de até 40 chars.
-const SALE_RE =
-  /(\d{8,9})\s+(\d{10,12})\s+(TRE|TAE|TF)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\d+)\s+(?:PIZZARIA\s+ESTRELA\s+)?(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+([\S\s]{1,60}?)\s+(\*+\d+)\s+(R\$[\d.,]+)\s+(\d+\.\d{3}\.\d+\/\d+-\d+)/g;
+// MUDANÇA (mai/2026): pdfjs em PDFs longos pode reordenar tokens. Em vez
+// de regex restrito do início ao fim do registro, usamos:
+//   1. SALE_START_RE — captura o INÍCIO (reembolso + contrato + produto)
+//   2. Pra cada match, navegamos até 350 chars buscando o cartão (\*+\d+)
+//      e o R$<valor>. Datas e num_doc são extraídos do miolo via regex
+//      independentes. Mais resiliente a reordenação de tokens.
+const SALE_START_RE = /(\d{8,9})\s+(\d{10,12})\s+(TRE|TAE|TF)\b/g;
+const CARD_RE = /\*+\d{4,}/;
+const VALOR_RE = /R\$\s*([\d.]+,\d{2}|[\d.,]+)/;
+const ALL_DATES_RE = /(\d{2}\/\d{2}\/\d{4})/g;
+const CNPJ_RE = /(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/;
 
 // Subtotal: "<reembolso> Subtotal de Vendas R$X". O pdfjs pode reordenar
 // "Subtotal de", "Vendas" e "R$X" em qualquer ordem (Y diferentes nas células).
@@ -115,38 +121,82 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
   const warnings: string[] = [];
   const events: Event[] = [];
 
-  // Coleta vendas
-  for (const m of text.matchAll(SALE_RE)) {
-    const valor = parseValor(m[11]);
-    const dataTx = parseDateBR(m[7]);
-    const dataCredito = parseDateBR(m[5]);
-    if (valor == null || !dataTx || !dataCredito) continue;
-    // Extrai num_doc do "miolo" (m[9]) que pode conter "TEF COMPRA" e números
-    // fragmentados. Junta tokens não-letra (números) que provavelmente são
-    // continuação do mesmo número de documento.
-    const miolo = m[9].replace(/TEF/gi, '').replace(/COMPRA/gi, '').trim();
+  // Coleta vendas — abordagem ancorada: pra cada início de venda
+  // (reembolso + contrato + produto), navega até 350 chars buscando cartão
+  // e R$ valor; datas extraídas do miolo (qualquer ordem).
+  for (const m of text.matchAll(SALE_START_RE)) {
+    const startPos = m.index!;
+    const numReembolso = m[1];
+    const numContrato = m[2];
+    const produto = m[3];
+
+    // Slice do registro: do início até 350 chars depois (cobre toda venda)
+    const slice = text.substring(startPos, startPos + 350);
+
+    // Cartão obrigatório
+    const cardMatch = slice.match(CARD_RE);
+    if (!cardMatch) continue;
+
+    // Valor APÓS o cartão
+    const afterCard = slice.substring((cardMatch.index ?? 0) + cardMatch[0].length);
+    const valorMatch = afterCard.match(VALOR_RE);
+    if (!valorMatch) continue;
+    const valor = parseValor('R$' + valorMatch[1]);
+    if (valor == null) continue;
+
+    // CNPJ (opcional, só pra registro)
+    const cnpjMatch = afterCard.match(CNPJ_RE);
+    const cnpj = cnpjMatch ? cnpjMatch[1] : null;
+
+    // Datas: até 4 esperadas (corte, credito, transacao, postagem)
+    // Usa só as que aparecem ANTES do cartão pra evitar capturar datas
+    // de outros registros que vieram depois.
+    const beforeCard = slice.substring(0, cardMatch.index ?? slice.length);
+    const datesIter = [...beforeCard.matchAll(ALL_DATES_RE)];
+    const dates = datesIter.map(d => d[1]);
+    // Heurística: dates[0]=data_corte, [1]=data_credito, [2]=data_tx, [3]=data_post
+    const dataCorte = parseDateBR(dates[0] ?? '');
+    const dataCredito = parseDateBR(dates[1] ?? '');
+    const dataTx = parseDateBR(dates[2] ?? dates[1] ?? '');
+    const dataPost = parseDateBR(dates[3] ?? '');
+    if (!dataTx || !dataCredito) continue;
+
+    // num_doc: tokens numéricos no miolo entre dates[3] (ou último date) e cartão
+    const lastDateEnd = datesIter.length > 0
+      ? (datesIter[datesIter.length - 1].index ?? 0) + datesIter[datesIter.length - 1][0].length
+      : 0;
+    const miolo = beforeCard
+      .substring(lastDateEnd)
+      .replace(/TEF/gi, '')
+      .replace(/COMPRA/gi, '')
+      .replace(/PIZZARIA/gi, '')
+      .replace(/ESTRELA/gi, '')
+      .trim();
     const mioloTokens = miolo.split(/\s+/).filter(t => t.length > 0);
-    // Concatena tokens numéricos consecutivos (caso "35926" tenha virado "359" "26")
-    const numericTokens: string[] = [];
-    for (const t of mioloTokens) {
-      if (/^\d+$/.test(t)) numericTokens.push(t);
-    }
+    const numericTokens = mioloTokens.filter(t => /^\d+$/.test(t));
     const numDoc = numericTokens.length > 0 ? numericTokens.join('') : (mioloTokens[0] ?? null);
+
+    // codEstab: primeiro número entre TRE/TAE/TF e a primeira data
+    const headerEnd = m.index! + m[0].length;
+    const headerToFirstDate = text.substring(headerEnd, headerEnd + 100);
+    const codEstabMatch = headerToFirstDate.match(/\s+(\d+)\s+/);
+    const codEstab = codEstabMatch ? codEstabMatch[1] : '';
+
     events.push({
       kind: 'sale',
-      pos: m.index!,
-      numReembolso: m[1],
-      numContrato: m[2],
-      produto: m[3],
-      dataCorte: parseDateBR(m[4]),
+      pos: startPos,
+      numReembolso,
+      numContrato,
+      produto,
+      dataCorte,
       dataCredito,
-      codEstab: m[6],
+      codEstab,
       dataTx,
-      dataPost: parseDateBR(m[8]),
+      dataPost,
       numDoc,
-      numCartao: m[10],
+      numCartao: cardMatch[0],
       valor,
-      cnpj: m[12],
+      cnpj: cnpj ?? '',
     });
   }
 
