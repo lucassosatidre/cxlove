@@ -338,11 +338,11 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
 
   // Diagnóstico se o parser não pegou nada de estrutura conhecida
   if (lots.length === 0) {
-    const sampleSale = text.match(SALE_RE);
+    const saleStartMatches = [...text.matchAll(SALE_START_RE)];
     const sampleSubtotal = text.match(/Subtotal/);
     const sampleLiq = text.match(/Líquido/);
-    warnings.push(`Diagnóstico: SALE matches=${[...text.matchAll(SALE_RE)].length}, sample Subtotal=${!!sampleSubtotal}, sample Líquido=${!!sampleLiq}`);
-    if (sampleSale) warnings.push(`Primeiro match venda: ${sampleSale[0].substring(0, 200)}`);
+    warnings.push(`Diagnóstico: SALE_START matches=${saleStartMatches.length}, sample Subtotal=${!!sampleSubtotal}, sample Líquido=${!!sampleLiq}`);
+    if (saleStartMatches[0]) warnings.push(`Primeiro match venda: ${saleStartMatches[0][0].substring(0, 200)}`);
     warnings.push(`Texto recebido (primeiros 500 chars): ${text.substring(0, 500)}`);
   }
 
@@ -468,18 +468,23 @@ Deno.serve(async (req) => {
 
     for (const l of lots) {
       try {
-        // Fallback computacional: corrige campos zerados (regex pode ter falhado
-        // em fragmentação entre páginas). Idempotente.
+        // Reconciliação aritmética. O TOTAL_DESC_RE é frágil — pdfjs reordena
+        // "Total Descontos" e "Valor Líquido" e a regex acaba capturando o R$
+        // do líquido (sintoma observado: total_descontos == valor_liquido em ~90%
+        // dos lotes). A identidade do extrato Ticket é
+        //   valor_liquido = subtotal_vendas - total_descontos
+        // então derivamos descontos sempre que tivermos subtotal e líquido.
         const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
         if (l.subtotal_vendas === 0 && sumItems > 0) {
           l.subtotal_vendas = Math.round(sumItems * 100) / 100;
         }
-        if (l.total_descontos === 0 && l.subtotal_vendas > 0 && l.valor_liquido >= 0
-            && l.subtotal_vendas > l.valor_liquido) {
+        if (l.subtotal_vendas > 0 && l.valor_liquido > 0 && l.subtotal_vendas >= l.valor_liquido) {
           l.total_descontos = Math.round((l.subtotal_vendas - l.valor_liquido) * 100) / 100;
-        }
-        if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos === 0) {
-          l.valor_liquido = l.subtotal_vendas; // sem descontos detectados ainda
+        } else if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos > 0
+                   && l.subtotal_vendas >= l.total_descontos) {
+          l.valor_liquido = Math.round((l.subtotal_vendas - l.total_descontos) * 100) / 100;
+        } else if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos === 0) {
+          l.valor_liquido = l.subtotal_vendas;
         }
 
         const { data: existing } = await supabase
