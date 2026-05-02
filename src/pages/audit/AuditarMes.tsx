@@ -135,7 +135,7 @@ const STEPS: Step[] = [
     label: 'Match Ticket × BB',
     run: async (periodId) => {
       const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        body: { audit_period_id: periodId, operadora: 'ticket' },
+        body: { audit_period_id: periodId, operadora: 'ticket', reset: true },
       });
       if (error) return { ok: false, message: error.message };
       if (!data?.success) return { ok: false, message: data?.error || 'Falha' };
@@ -147,7 +147,7 @@ const STEPS: Step[] = [
     label: 'Match Alelo × BB',
     run: async (periodId) => {
       const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        body: { audit_period_id: periodId, operadora: 'alelo' },
+        body: { audit_period_id: periodId, operadora: 'alelo', reset: true },
       });
       if (error) return { ok: false, message: error.message };
       if (!data?.success) return { ok: false, message: data?.error || 'Falha' };
@@ -159,7 +159,7 @@ const STEPS: Step[] = [
     label: 'Match VR × BB',
     run: async (periodId) => {
       const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        body: { audit_period_id: periodId, operadora: 'vr' },
+        body: { audit_period_id: periodId, operadora: 'vr', reset: true },
       });
       if (error) return { ok: false, message: error.message };
       if (!data?.success) return { ok: false, message: data?.error || 'Falha' };
@@ -171,7 +171,7 @@ const STEPS: Step[] = [
     label: 'Match Pluxee × BB',
     run: async (periodId) => {
       const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        body: { audit_period_id: periodId, operadora: 'pluxee' },
+        body: { audit_period_id: periodId, operadora: 'pluxee', reset: true },
       });
       if (error) return { ok: false, message: error.message };
       if (!data?.success) return { ok: false, message: data?.error || 'Falha' };
