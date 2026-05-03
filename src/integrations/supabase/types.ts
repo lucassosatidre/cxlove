@@ -394,6 +394,220 @@ export type Database = {
           },
         ]
       }
+      audit_ifood_marketplace_daily: {
+        Row: {
+          audit_period_id: string
+          bruto_calc: number | null
+          created_at: string
+          cresol_deposit_ids: string[] | null
+          cresol_received: number | null
+          diff: number | null
+          diff_pct: number | null
+          expected_credit_date: string | null
+          id: string
+          ifood_declarado_bruto: number | null
+          ifood_declarado_depositado: number | null
+          ifood_declarado_diferenca: number | null
+          ifood_declarado_liq_esperado: number | null
+          ifood_declarado_status: string | null
+          ifood_declarado_taxa: number | null
+          ifood_declarado_vendas: number | null
+          liquido_calc: number | null
+          note: string | null
+          pedidos_count: number | null
+          sale_date: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          audit_period_id: string
+          bruto_calc?: number | null
+          created_at?: string
+          cresol_deposit_ids?: string[] | null
+          cresol_received?: number | null
+          diff?: number | null
+          diff_pct?: number | null
+          expected_credit_date?: string | null
+          id?: string
+          ifood_declarado_bruto?: number | null
+          ifood_declarado_depositado?: number | null
+          ifood_declarado_diferenca?: number | null
+          ifood_declarado_liq_esperado?: number | null
+          ifood_declarado_status?: string | null
+          ifood_declarado_taxa?: number | null
+          ifood_declarado_vendas?: number | null
+          liquido_calc?: number | null
+          note?: string | null
+          pedidos_count?: number | null
+          sale_date: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          audit_period_id?: string
+          bruto_calc?: number | null
+          created_at?: string
+          cresol_deposit_ids?: string[] | null
+          cresol_received?: number | null
+          diff?: number | null
+          diff_pct?: number | null
+          expected_credit_date?: string | null
+          id?: string
+          ifood_declarado_bruto?: number | null
+          ifood_declarado_depositado?: number | null
+          ifood_declarado_diferenca?: number | null
+          ifood_declarado_liq_esperado?: number | null
+          ifood_declarado_status?: string | null
+          ifood_declarado_taxa?: number | null
+          ifood_declarado_vendas?: number | null
+          liquido_calc?: number | null
+          note?: string | null
+          pedidos_count?: number | null
+          sale_date?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_ifood_marketplace_daily_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_ifood_marketplace_daily_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          daily_id: string
+          id: string
+          motivo: string
+          note: string | null
+          valor_ajuste: number
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          daily_id: string
+          id?: string
+          motivo: string
+          note?: string | null
+          valor_ajuste: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          daily_id?: string
+          id?: string
+          motivo?: string
+          note?: string | null
+          valor_ajuste?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_ifood_marketplace_daily_overrides_daily_id_fkey"
+            columns: ["daily_id"]
+            isOneToOne: false
+            referencedRelation: "audit_ifood_marketplace_daily"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_ifood_marketplace_orders: {
+        Row: {
+          audit_period_id: string
+          canal_venda: string | null
+          created_at: string
+          data_pedido: string
+          forma_pagamento: string | null
+          id: string
+          import_id: string | null
+          incentivo_ifood: number | null
+          incentivo_loja: number | null
+          incentivo_rede: number | null
+          order_id: string
+          produto_logistico: string | null
+          sale_date: string
+          short_order_id: string | null
+          status_pedido: string
+          taxa_entrega_cliente: number | null
+          taxa_servico: number | null
+          taxas_comissoes: number | null
+          tipo_entrega: string | null
+          total_pago_cliente: number
+          turno: string | null
+          valor_itens: number | null
+          valor_liquido: number
+        }
+        Insert: {
+          audit_period_id: string
+          canal_venda?: string | null
+          created_at?: string
+          data_pedido: string
+          forma_pagamento?: string | null
+          id?: string
+          import_id?: string | null
+          incentivo_ifood?: number | null
+          incentivo_loja?: number | null
+          incentivo_rede?: number | null
+          order_id: string
+          produto_logistico?: string | null
+          sale_date: string
+          short_order_id?: string | null
+          status_pedido: string
+          taxa_entrega_cliente?: number | null
+          taxa_servico?: number | null
+          taxas_comissoes?: number | null
+          tipo_entrega?: string | null
+          total_pago_cliente: number
+          turno?: string | null
+          valor_itens?: number | null
+          valor_liquido: number
+        }
+        Update: {
+          audit_period_id?: string
+          canal_venda?: string | null
+          created_at?: string
+          data_pedido?: string
+          forma_pagamento?: string | null
+          id?: string
+          import_id?: string | null
+          incentivo_ifood?: number | null
+          incentivo_loja?: number | null
+          incentivo_rede?: number | null
+          order_id?: string
+          produto_logistico?: string | null
+          sale_date?: string
+          short_order_id?: string | null
+          status_pedido?: string
+          taxa_entrega_cliente?: number | null
+          taxa_servico?: number | null
+          taxas_comissoes?: number | null
+          tipo_entrega?: string | null
+          total_pago_cliente?: number
+          turno?: string | null
+          valor_itens?: number | null
+          valor_liquido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_ifood_marketplace_orders_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_ifood_marketplace_orders_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "audit_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_imports: {
         Row: {
           audit_period_id: string
