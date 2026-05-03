@@ -13,7 +13,6 @@
 // Y=Total, Z=Total taxa de serviço
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -230,16 +229,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validador competência (referência: sale_date)
-    const periodCheck = validatePeriodMatch(allDates, { month: period.month, year: period.year }, 'Saipos');
-    if (!periodCheck.ok) {
-      await supabase.from('audit_imports').update({
-        status: 'failed', error_message: periodCheck.error,
-      }).eq('id', importRec.id);
-      return new Response(JSON.stringify({
-        error: periodCheck.error,
-        breakdown_by_month: periodCheck.breakdown,
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Saipos é canal-agnóstica e cobre 3 meses (ant + comp + post) no mesmo período
+    // pra suportar D+1 entre meses no Brendi e janelas longas no iFood Marketplace.
+    // Não bloqueia por mês — sale_date é a chave de filtro downstream.
+    const breakdownByMonth: Record<string, number> = {};
+    for (const d of allDates) {
+      const ym = d?.slice(0, 7);
+      if (ym) breakdownByMonth[ym] = (breakdownByMonth[ym] ?? 0) + 1;
     }
 
     let inserted = 0;
@@ -271,6 +267,7 @@ Deno.serve(async (req) => {
       skipped_no_id: skippedNoId,
       by_canal: byCanal,
       by_pagamento: byPagamento,
+      breakdown_by_month: breakdownByMonth,
       message: `${inserted} pedidos Saipos importados`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
