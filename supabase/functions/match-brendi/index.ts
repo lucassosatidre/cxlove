@@ -202,11 +202,25 @@ Deno.serve(async (req) => {
       bbByDate.set(d.deposit_date, arr);
     }
 
+    // Filtra daily pra MÊS DE COMPETÊNCIA do período. Vendas dos 3 meses
+    // (ant + comp + post) ficam em audit_brendi_orders pra contexto, mas o KPI
+    // expected/received do period.month entra só no daily — a auditoria é
+    // mensal. Adjacentes ficam contados separadamente pra referência.
+    const periodYM = `${period.year}-${String(period.month).padStart(2, '0')}`;
+    const adjacent = { count: 0, expected: 0, received: 0 };
+
     // Match cada daily com depósito(s) do dia
     const dailyRows: any[] = [];
     for (const [expectedCredit, agg] of dailyMap.entries()) {
       const deps = bbByDate.get(expectedCredit) ?? [];
       const received = deps.reduce((s, d) => s + d.amount, 0);
+      // Se o crédito esperado cai fora do mês de competência, conta como adjacente
+      if (!expectedCredit.startsWith(periodYM)) {
+        adjacent.count++;
+        adjacent.expected += agg.expected_amount;
+        adjacent.received += received;
+        continue;
+      }
       const diff = received - agg.expected_amount;
       const diffPct = agg.expected_amount > 0 ? Math.abs(diff) / agg.expected_amount : 0;
 
@@ -276,6 +290,11 @@ Deno.serve(async (req) => {
         total_expected: Math.round(totalExpected * 100) / 100,
         total_received: Math.round(totalReceived * 100) / 100,
         taxa_efetiva_pct: Math.round(taxaEfetiva * 100) / 100,
+      },
+      adjacent: {
+        count: adjacent.count,
+        expected: Math.round(adjacent.expected * 100) / 100,
+        received: Math.round(adjacent.received * 100) / 100,
       },
       message: `${dailyRows.length} dias processados. ${crosscheck.ok} ok / ${crosscheck.missing_in_brendi.length} missing in brendi / ${crosscheck.value_mismatch.length} value mismatch.`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

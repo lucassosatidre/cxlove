@@ -182,12 +182,13 @@ export default function AuditBrendi() {
     const exp = daily.reduce((s, d) => s + Number(d.expected_amount || 0), 0);
     const rec = daily.reduce((s, d) => s + Number(d.received_amount || 0), 0);
     const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;
+    const pedidosMes = daily.reduce((s, d) => s + Number(d.pedidos_count || 0), 0);
     const pendingManualCount = daily.filter(d => d.status === 'pending_manual').length;
     const mensalidadeCount = daily.filter(d => d.status === 'mensalidade_descontada').length;
     const mensalidadeAmount = daily
       .filter(d => d.status === 'mensalidade_descontada')
       .reduce((s, d) => s + Math.abs(Number(d.diff || 0)), 0);
-    return { exp, rec, taxa, pendingManualCount, mensalidadeCount, mensalidadeAmount };
+    return { exp, rec, taxa, pedidosMes, pendingManualCount, mensalidadeCount, mensalidadeAmount };
   }, [daily]);
 
   if (roleLoading || loading) {
@@ -354,7 +355,11 @@ function ResumoTab({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard title="Vendido (Brendi online)" value={fmt(totals.exp)} hint={`${brendiOrdersCount} pedidos`} />
+        <KpiCard
+          title="Vendido (Brendi online)"
+          value={fmt(totals.exp)}
+          hint={`${totals.pedidosMes} pedidos no mês · ${brendiOrdersCount} importados (3 meses)`}
+        />
         <KpiCard title="Recebido BB (Brendi)" value={fmt(totals.rec)} hint={`${daily.length} dias úteis`} />
         <KpiCard
           title="Taxa efetiva"
