@@ -359,7 +359,7 @@ export default function AuditBrendi() {
 function ResumoTab({
   totals, brendiOrdersCount, saiposOrdersCount, cashbackTotal, cashbackOrdersCount, crosscheck, daily,
 }: {
-  totals: { exp: number; rec: number; taxa: number; pedidosMes: number; pendingManualCount: number; mensalidadeCount: number; mensalidadeAmount: number };
+  totals: { exp: number; expLiq: number; taxaDecl: number; rec: number; taxa: number; taxaDeclPct: number; custoOculto: number; pedidosMes: number; pendingManualCount: number; mensalidadeCount: number; mensalidadeAmount: number };
   brendiOrdersCount: number;
   saiposOrdersCount: number;
   cashbackTotal: number;
