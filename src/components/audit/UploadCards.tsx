@@ -805,7 +805,13 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
           totalIgnoredStatus += Number(data.ignored_status ?? 0);
           totalIgnoredForma += Number(data.ignored_forma ?? 0);
           if (Number(data.imported_rows ?? 0) === 0 && Number(data.total_rows ?? 0) > 0) {
-            console.warn(`[import-brendi-xlsx] ${file.name} importou 0. Status vistos:`, data.seen_statuses, 'Formas vistas:', data.seen_formas);
+            console.warn(
+              `[import-brendi-xlsx] ${file.name} importou 0/${data.total_rows}.`,
+              `\n  ignored_status=${data.ignored_status} ignored_forma=${data.ignored_forma} skipped_no_id=${data.skipped_no_id} skipped_no_date=${data.skipped_no_date}`,
+              '\n  Status vistos:', data.seen_statuses,
+              '\n  Formas vistas:', data.seen_formas,
+              '\n  Sample Created At (3):', data.sample_created_at,
+            );
           }
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
