@@ -11,8 +11,9 @@
 // 3. Adjacência: PIX BB com origem em mês ant ou post conta como adjacente
 //    (não entra no expected do mês corrente).
 //
-// Mensalidade Brendi (~R$ 250-300): detectada quando received < expected E
-// gap diff cai entre 200-350 e diff_pct > 5%. Marca status='mensalidade_descontada'.
+// Mensalidade Brendi (~R$ 250-300): UMA cobrança/mês embedada em algum PIX.
+// Detecta o dia com maior excedente além da taxa-base 2% (range 200-400).
+// Marca exatamente UM daily/mês como 'mensalidade_descontada'.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { nextBusinessDay, isBusinessDay } from '../_shared/calendar.ts';
@@ -30,8 +31,13 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const VALUE_TOLERANCE_CROSSCHECK = 2.00; // R$ 2 entre Saipos e Brendi
 const DIFF_PCT_THRESHOLD = 0.05;          // 5% pra marcar manual
-const MENSALIDADE_MIN = 200;
-const MENSALIDADE_MAX = 350;
+// Mensalidade Brendi: ~R$250-300 deduzida UMA vez por mês, embedada na
+// PIX de algum dia. Detecta como excedente além do fee-base (~2%): se um dia
+// tem diff = fee-base + algo entre R$200-R$400, esse algo é provavelmente
+// a mensalidade. Pegamos só o MAIOR excedente do mês — evita falsos positivos.
+const FEE_BASELINE_PCT = 0.02;            // 2% taxa-base estimada Brendi
+const MENSALIDADE_EXCESS_MIN = 200;
+const MENSALIDADE_EXCESS_MAX = 400;
 
 // Parse "DD/MM " no início do detail BB pra obter data origem do PIX
 function parseBBPixOrigin(detail: string, fallbackDate: string): string {
@@ -101,6 +107,12 @@ Deno.serve(async (req) => {
     // Filtra status_remote='Entregue' + forma in escopo como defesa em
     // profundidade — caso lixo de imports antigos (antes do fix de status)
     // tenha sobrado no DB, não polui o cross-check ou daily.
+    //
+    // Saipos exporta `pagamento` como string com múltiplos métodos separados
+    // por vírgula (ex: "Débito, Pix Online Brendi") quando o cliente paga em
+    // partes. Por isso usamos `ilike` em vez de `in` — captura a substring
+    // independente de método extra. Filtra Saipos com forma online no DB,
+    // depois revalida tudo no JS.
     // ─────────────────────────────────────────────────────────────────────
     const saiposRows = await fetchAllPaginated<any>(
       supabase
@@ -109,7 +121,7 @@ Deno.serve(async (req) => {
         .eq('audit_period_id', audit_period_id)
         .eq('canal_venda', 'Brendi')
         .eq('cancelado', false)
-        .in('pagamento', ['Pix Online Brendi', 'Pago Online - Cartão de crédito']),
+        .or('pagamento.ilike.%Pix Online Brendi%,pagamento.ilike.%Pago Online - Cartão de crédito%'),
     );
 
     const brendiRows = await fetchAllPaginated<any>(
@@ -158,10 +170,18 @@ Deno.serve(async (req) => {
           order_id: oid, brendi_total: b.total, forma: b.forma, created_at_remote: b.created_at_remote,
         });
       } else if (s && b) {
-        const diff = Math.abs(s.total - b.total);
-        if (diff > VALUE_TOLERANCE_CROSSCHECK) {
+        // Pagamento misto (ex: "Débito, Pix Online Brendi"): Saipos.total é o
+        // pedido inteiro, Brendi.total é só a parcela online — então só
+        // exigimos saipos >= brendi (com tolerância). Pagamento puro online:
+        // diff bilateral com tolerância simétrica.
+        const isMixedPayment = (s.pagamento || '').includes(',');
+        const diff = s.total - b.total;
+        const isOk = isMixedPayment
+          ? diff >= -VALUE_TOLERANCE_CROSSCHECK
+          : Math.abs(diff) <= VALUE_TOLERANCE_CROSSCHECK;
+        if (!isOk) {
           crosscheck.value_mismatch.push({
-            order_id: oid, saipos_total: s.total, brendi_total: b.total, diff,
+            order_id: oid, saipos_total: s.total, brendi_total: b.total, diff: Math.abs(diff),
             data: s.data_venda ?? b.created_at_remote,
           });
         } else {
@@ -261,12 +281,6 @@ Deno.serve(async (req) => {
         status = 'sem_deposito';
       } else if (diffPct <= DIFF_PCT_THRESHOLD) {
         status = 'matched';
-      } else if (
-        diff < 0 &&
-        Math.abs(diff) >= MENSALIDADE_MIN &&
-        Math.abs(diff) <= MENSALIDADE_MAX
-      ) {
-        status = 'mensalidade_descontada';
       } else {
         status = 'pending_manual';
       }
@@ -283,6 +297,32 @@ Deno.serve(async (req) => {
         diff_pct: Math.round(diffPct * 10000) / 10000,
         status,
       });
+    }
+
+    // Pass 3: detecta UMA mensalidade no mês inteiro. Pra cada daily com diff
+    // negativo, calcula o "excedente" além da taxa-base esperada (2% do
+    // expected). Se o maior excedente do mês cair em [200, 400], esse daily
+    // ganha status 'mensalidade_descontada' e os outros mantêm o status do
+    // pass 2 (matched/pending_manual). Antes esse rótulo era inline e gerava
+    // 4× falsos positivos no fev/26.
+    let mensalidadeIdx = -1;
+    let mensalidadeExcess = 0;
+    for (let i = 0; i < dailyRows.length; i++) {
+      const d = dailyRows[i];
+      if (d.diff >= 0 || d.expected_amount <= 0) continue;
+      const baselineFee = FEE_BASELINE_PCT * d.expected_amount;
+      const excess = Math.abs(d.diff) - baselineFee;
+      if (
+        excess >= MENSALIDADE_EXCESS_MIN &&
+        excess <= MENSALIDADE_EXCESS_MAX &&
+        excess > mensalidadeExcess
+      ) {
+        mensalidadeIdx = i;
+        mensalidadeExcess = excess;
+      }
+    }
+    if (mensalidadeIdx >= 0) {
+      dailyRows[mensalidadeIdx].status = 'mensalidade_descontada';
     }
 
     // Upsert dailyRows

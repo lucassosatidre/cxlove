@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  FileSpreadsheet, FileText, Landmark, Loader2, UploadCloud, CreditCard, Store, ShoppingBag,
+  FileSpreadsheet, FileText, Landmark, Loader2, UploadCloud, CreditCard, Store, ShoppingBag, UtensilsCrossed,
 } from 'lucide-react';
 import { extractPdfText } from '@/lib/pdf-text-extract';
 
@@ -1004,6 +1004,193 @@ export async function dispatchAutoMatchVouchers(
     } catch (e: any) {
       toast.error(`Match ${op} erro`, { description: e?.message ?? 'Erro inesperado' });
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// iFood Marketplace — Relatório Pedidos (.xlsx, per-pedido)
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadIfoodOrdersCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+    if (xlsx.length === 0) return;
+
+    setUploading(true);
+    setProgress({ current: 0, total: xlsx.length });
+    let totalImported = 0;
+    let totalIgnoredStatus = 0;
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < xlsx.length; i++) {
+        const file = xlsx[i];
+        setProgress({ current: i + 1, total: xlsx.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+          if (!rows.length) throw new Error('Aba vazia');
+
+          const { data, error } = await supabase.functions.invoke('import-ifood-orders', {
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import iFood Orders');
+
+          totalImported += Number(data.imported_rows ?? 0);
+          totalIgnoredStatus += Number(data.ignored_status ?? 0);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalImported} pedidos iFood Marketplace importados`, {
+          description: `${totalIgnoredStatus} fora de escopo (não-CONCLUIDO)`,
+        });
+      } else {
+        toast.error(`${failures.length} de ${xlsx.length} falharam`, { description: failures.join(' | ') });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <UtensilsCrossed className="h-5 w-5 text-red-600" />
+        <CardTitle className="text-base">iFood — Relatório Pedidos (.xlsx)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Export "Relatório de Pedidos" do Portal Parceiro iFood (20 colunas, per-pedido).
+          Importa apenas status="CONCLUIDO". Importe os 3 meses pra cobrir crédito entre meses.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLSX (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// iFood Marketplace — Auditoria Diária (.csv pré-conciliado pelo iFood)
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadIfoodDailyCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File) => {
+    setUploading(true);
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+      const buf = await file.arrayBuffer();
+      // xlsx.js lê CSV transparentemente (autodetecta separador)
+      const wb = XLSX.read(buf, { type: 'array', cellDates: false, FS: ';' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: false });
+      if (!rows.length) throw new Error('CSV vazio');
+
+      const { data, error } = await supabase.functions.invoke('import-ifood-daily', {
+        body: { audit_period_id: p.id, rows, file_name: file.name },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Falha no import iFood Auditoria');
+
+      toast.success(`${data.imported_rows} dias iFood Auditoria importados`);
+      await onAfter();
+    } catch (e: any) {
+      toast.error('Falha no upload', { description: e?.message ?? 'erro' });
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileSpreadsheet className="h-5 w-5 text-orange-600" />
+        <CardTitle className="text-base">iFood — Auditoria Diária (.csv)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Export "Auditoria" do Portal Parceiro iFood (CSV ;-separado per-dia: Vendas/Bruto/
+          Taxa/Liq Esperado/Depositado/Diferença/Status). Salva campos declarados pra cross-check.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
+          }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading ? 'Importando…' : 'Selecionar CSV'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Dispara match-ifood-marketplace (reset=true)
+export async function dispatchMatchIfoodMarketplace(periodId: string) {
+  try {
+    const { data, error } = await supabase.functions.invoke('match-ifood-marketplace', {
+      body: { audit_period_id: periodId, reset: true },
+    });
+    if (error) {
+      toast.error('Match iFood Marketplace falhou', { description: error.message });
+      return null;
+    }
+    if (!data?.success) {
+      toast.error('Match iFood Marketplace falhou', { description: data?.error || 'Erro desconhecido' });
+      return null;
+    }
+    const cc = data.crosscheck;
+    if (cc?.missing_in_ifood_count > 0) {
+      toast.warning(`⚠ ${cc.missing_in_ifood_count} pedido(s) só no Saipos`, {
+        description: 'iFood não declarou — possível repasse omisso',
+      });
+    }
+    return data;
+  } catch (e: any) {
+    toast.error('Match iFood Marketplace erro', { description: e?.message ?? 'Erro inesperado' });
+    return null;
   }
 }
 
