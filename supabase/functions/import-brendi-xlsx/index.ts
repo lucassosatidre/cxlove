@@ -35,6 +35,11 @@ const FORMAS_AUDITAVEIS_NORM = new Set([
 
 const STATUS_VALIDO_NORM = normForm('Entregue');
 
+// Excel serial date → JS Date (1900-based, com correção do bug de 1900)
+function excelSerialToDate(n: number): Date {
+  return new Date(Math.round((n - 25569) * 86400 * 1000));
+}
+
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
@@ -45,20 +50,44 @@ function toIsoDate(v: any): string | null {
     const d = String(brt.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
+  // Excel serial number (xlsx.js com cellDates=false retorna número)
+  if (typeof v === 'number' && isFinite(v) && v > 1 && v < 100000) {
+    return toIsoDate(excelSerialToDate(v));
+  }
   const s = String(v).trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  // ISO YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  const m2 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
-  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+  // BR DD/MM/YYYY (com ou sem hora)
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) {
+    const dd = m[1].padStart(2, '0');
+    const mm = m[2].padStart(2, '0');
+    return `${m[3]}-${mm}-${dd}`;
+  }
   return null;
 }
 
 function toIsoDateTime(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) return v.toISOString();
+  if (typeof v === 'number' && isFinite(v) && v > 1 && v < 100000) {
+    return excelSerialToDate(v).toISOString();
+  }
   const s = String(v).trim();
-  // ISO já vem
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s;
+  // BR DD/MM/YYYY HH:MM[:SS]
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const [, dd, mm, yyyy, h, min, sec] = m;
+    return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${h.padStart(2,'0')}:${min}:${sec ?? '00'}-03:00`;
+  }
+  // Date-only sem hora — meia-noite BRT
+  const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m2) {
+    const [, dd, mm, yyyy] = m2;
+    return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T00:00:00-03:00`;
+  }
   return null;
 }
 
@@ -180,25 +209,34 @@ Deno.serve(async (req) => {
     let ignoredStatus = 0;
     let ignoredForma = 0;
     let skippedNoId = 0;
+    let skippedNoDate = 0;
     const seenFormas = new Map<string, number>();
     const seenStatuses = new Map<string, number>();
+    const sampleCreatedAt: Array<{ value: any; type: string }> = [];
 
     for (const r of dataRows) {
       const orderId = toStr(r[COL.order_id]);
       const status = toStr(r[COL.status]);
       const forma = toStr(r[COL.forma_pagamento]);
+      const rawCreatedAt = r[COL.created_at];
 
-      // Diagnóstico: conta os valores únicos pra retornar caso 0 importado
+      // Diagnóstico
       if (status) seenStatuses.set(status, (seenStatuses.get(status) ?? 0) + 1);
       if (forma) seenFormas.set(forma, (seenFormas.get(forma) ?? 0) + 1);
+      if (sampleCreatedAt.length < 3) {
+        sampleCreatedAt.push({
+          value: rawCreatedAt instanceof Date ? rawCreatedAt.toISOString() : rawCreatedAt,
+          type: rawCreatedAt instanceof Date ? 'Date' : typeof rawCreatedAt,
+        });
+      }
 
       if (!orderId) { skippedNoId++; continue; }
       if (!status || normForm(status) !== STATUS_VALIDO_NORM) { ignoredStatus++; continue; }
       if (!forma || !FORMAS_AUDITAVEIS_NORM.has(normForm(forma))) { ignoredForma++; continue; }
 
-      const createdAt = toIsoDateTime(r[COL.created_at]);
-      const saleDate = toIsoDate(r[COL.created_at]);
-      if (!saleDate) { skippedNoId++; continue; }
+      const createdAt = toIsoDateTime(rawCreatedAt);
+      const saleDate = toIsoDate(rawCreatedAt);
+      if (!saleDate) { skippedNoDate++; continue; }
       allDates.push(saleDate);
 
       orders.push({
@@ -262,9 +300,11 @@ Deno.serve(async (req) => {
       ignored_status: ignoredStatus,
       ignored_forma: ignoredForma,
       skipped_no_id: skippedNoId,
+      skipped_no_date: skippedNoDate,
       seen_statuses: Object.fromEntries(seenStatuses),
       seen_formas: Object.fromEntries(seenFormas),
-      message: `${inserted} pedidos online Brendi importados (${ignoredStatus} não-entregue, ${ignoredForma} forma fora de escopo)`,
+      sample_created_at: sampleCreatedAt,
+      message: `${inserted} pedidos online Brendi importados (${ignoredStatus} não-entregue, ${ignoredForma} forma fora de escopo, ${skippedNoDate} sem data)`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-brendi-xlsx error', e);
