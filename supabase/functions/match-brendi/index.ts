@@ -16,6 +16,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 import { nextBusinessDay, isBusinessDay } from '../_shared/calendar.ts';
+import { fetchAllPaginated } from '../_shared/pagination.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -96,19 +97,26 @@ Deno.serve(async (req) => {
 
     // ─────────────────────────────────────────────────────────────────────
     // Pass 1: Cross-check Saipos × Brendi
+    // Usa fetchAllPaginated pra evitar limite default 1000 rows do PostgREST
+    // — em meses com Brendi/Saipos > 1000 pedidos, o cross-check truncava
+    // gerando falsos missing_in_brendi e missing_in_saipos.
     // ─────────────────────────────────────────────────────────────────────
-    const { data: saiposRows } = await supabase
-      .from('audit_saipos_orders')
-      .select('order_id_parceiro, pagamento, cancelado, total')
-      .eq('audit_period_id', audit_period_id)
-      .eq('canal_venda', 'Brendi')
-      .eq('cancelado', false)
-      .in('pagamento', ['Pix Online Brendi', 'Pago Online - Cartão de crédito']);
+    const saiposRows = await fetchAllPaginated<any>(
+      supabase
+        .from('audit_saipos_orders')
+        .select('order_id_parceiro, pagamento, cancelado, total')
+        .eq('audit_period_id', audit_period_id)
+        .eq('canal_venda', 'Brendi')
+        .eq('cancelado', false)
+        .in('pagamento', ['Pix Online Brendi', 'Pago Online - Cartão de crédito']),
+    );
 
-    const { data: brendiRows } = await supabase
-      .from('audit_brendi_orders')
-      .select('order_id, forma_pagamento, total')
-      .eq('audit_period_id', audit_period_id);
+    const brendiRows = await fetchAllPaginated<any>(
+      supabase
+        .from('audit_brendi_orders')
+        .select('order_id, forma_pagamento, total')
+        .eq('audit_period_id', audit_period_id),
+    );
 
     const saiposMap = new Map<string, { pagamento: string; total: number }>();
     for (const s of saiposRows ?? []) {
@@ -153,11 +161,13 @@ Deno.serve(async (req) => {
       const key = (b as any).sale_date ?? null;
       // sale_date não veio na select acima — refetch com sale_date
     }
-    // Refetch com sale_date
-    const { data: brendiFull } = await supabase
-      .from('audit_brendi_orders')
-      .select('sale_date, total')
-      .eq('audit_period_id', audit_period_id);
+    // Refetch com sale_date (paginado pra evitar limite 1000 do PostgREST)
+    const brendiFull = await fetchAllPaginated<any>(
+      supabase
+        .from('audit_brendi_orders')
+        .select('sale_date, total')
+        .eq('audit_period_id', audit_period_id),
+    );
 
     for (const b of brendiFull ?? []) {
       const key = b.sale_date;
