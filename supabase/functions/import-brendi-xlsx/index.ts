@@ -10,7 +10,6 @@
 // P=Endereço
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -259,16 +258,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validador competência (referência: sale_date)
-    const periodCheck = validatePeriodMatch(allDates, { month: period.month, year: period.year }, 'Brendi');
-    if (!periodCheck.ok) {
-      await supabase.from('audit_imports').update({
-        status: 'failed', error_message: periodCheck.error,
-      }).eq('id', importRec.id);
-      return new Response(JSON.stringify({
-        error: periodCheck.error,
-        breakdown_by_month: periodCheck.breakdown,
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    // Brendi precisa dos 3 meses (ant + comp + post) no mesmo período pra cobrir
+    // D+1 entre meses (ex: vendas 28/02 caem em 02/03; vendas 31/01 caem em 02/02).
+    // Não bloqueia por mês — confia no sale_date pra filtrar downstream.
+    const breakdownByMonth: Record<string, number> = {};
+    for (const d of allDates) {
+      const ym = d?.slice(0, 7);
+      if (ym) breakdownByMonth[ym] = (breakdownByMonth[ym] ?? 0) + 1;
     }
 
     let inserted = 0;
@@ -304,6 +300,7 @@ Deno.serve(async (req) => {
       seen_statuses: Object.fromEntries(seenStatuses),
       seen_formas: Object.fromEntries(seenFormas),
       sample_created_at: sampleCreatedAt,
+      breakdown_by_month: breakdownByMonth,
       message: `${inserted} pedidos online Brendi importados (${ignoredStatus} não-entregue, ${ignoredForma} forma fora de escopo, ${skippedNoDate} sem data)`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
