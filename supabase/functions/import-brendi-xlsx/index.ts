@@ -92,9 +92,24 @@ function toIsoDateTime(v: any): string | null {
 
 function toNum(v: any): number {
   if (v == null || v === '') return 0;
-  if (typeof v === 'number') return v;
-  const n = Number(String(v).replace(/\./g, '').replace(',', '.'));
-  return isFinite(n) ? n : 0;
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v).trim().replace(/[R$\s]/gi, '');
+  if (!s) return 0;
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  // Sem separador: número puro
+  if (lastDot === -1 && lastComma === -1) return Number(s) || 0;
+  // Decimal é o ÚLTIMO separador (vírgula em pt-BR, ponto em US)
+  const decimalSep = lastDot > lastComma ? '.' : ',';
+  const thousandSep = decimalSep === '.' ? ',' : '.';
+  // Heurística: se é "DD.DDD" (3 dígitos após ponto, sem vírgula), é separador
+  // de milhar pt-BR. "82.80" (2 dígitos) é decimal US.
+  const digitsAfter = s.length - 1 - Math.max(lastDot, lastComma);
+  if (decimalSep === '.' && digitsAfter === 3 && !s.includes(',') && s.length > 4) {
+    return Number(s.replace(/\./g, '')) || 0;
+  }
+  s = s.split(thousandSep).join('').replace(decimalSep, '.');
+  return Number(s) || 0;
 }
 
 function toStr(v: any): string | null {
