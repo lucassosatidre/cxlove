@@ -22,7 +22,18 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const FORMAS_AUDITAVEIS = new Set(['Pix Online', 'Crédito Online']);
+// Normaliza pra NFC + lowercase pra evitar mismatch quando o XLSX grava acentos
+// decompostos (NFD: "e" + combining acute) vs NFC ("é" um codepoint só).
+function normForm(s: string): string {
+  return (s || '').normalize('NFC').trim().toLowerCase();
+}
+
+const FORMAS_AUDITAVEIS_NORM = new Set([
+  normForm('Pix Online'),
+  normForm('Crédito Online'),
+]);
+
+const STATUS_VALIDO_NORM = normForm('Entregue');
 
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
@@ -169,15 +180,21 @@ Deno.serve(async (req) => {
     let ignoredStatus = 0;
     let ignoredForma = 0;
     let skippedNoId = 0;
+    const seenFormas = new Map<string, number>();
+    const seenStatuses = new Map<string, number>();
 
     for (const r of dataRows) {
       const orderId = toStr(r[COL.order_id]);
       const status = toStr(r[COL.status]);
       const forma = toStr(r[COL.forma_pagamento]);
 
+      // Diagnóstico: conta os valores únicos pra retornar caso 0 importado
+      if (status) seenStatuses.set(status, (seenStatuses.get(status) ?? 0) + 1);
+      if (forma) seenFormas.set(forma, (seenFormas.get(forma) ?? 0) + 1);
+
       if (!orderId) { skippedNoId++; continue; }
-      if (status !== 'Entregue') { ignoredStatus++; continue; }
-      if (!forma || !FORMAS_AUDITAVEIS.has(forma)) { ignoredForma++; continue; }
+      if (!status || normForm(status) !== STATUS_VALIDO_NORM) { ignoredStatus++; continue; }
+      if (!forma || !FORMAS_AUDITAVEIS_NORM.has(normForm(forma))) { ignoredForma++; continue; }
 
       const createdAt = toIsoDateTime(r[COL.created_at]);
       const saleDate = toIsoDate(r[COL.created_at]);
@@ -245,6 +262,8 @@ Deno.serve(async (req) => {
       ignored_status: ignoredStatus,
       ignored_forma: ignoredForma,
       skipped_no_id: skippedNoId,
+      seen_statuses: Object.fromEntries(seenStatuses),
+      seen_formas: Object.fromEntries(seenFormas),
       message: `${inserted} pedidos online Brendi importados (${ignoredStatus} não-entregue, ${ignoredForma} forma fora de escopo)`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {

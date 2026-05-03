@@ -804,6 +804,9 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
           totalImported += Number(data.imported_rows ?? 0);
           totalIgnoredStatus += Number(data.ignored_status ?? 0);
           totalIgnoredForma += Number(data.ignored_forma ?? 0);
+          if (Number(data.imported_rows ?? 0) === 0 && Number(data.total_rows ?? 0) > 0) {
+            console.warn(`[import-brendi-xlsx] ${file.name} importou 0. Status vistos:`, data.seen_statuses, 'Formas vistas:', data.seen_formas);
+          }
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
         }
@@ -811,7 +814,9 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
 
       if (failures.length === 0) {
         toast.success(`${totalImported} pedidos online Brendi importados`, {
-          description: `${totalIgnoredStatus} não-entregue + ${totalIgnoredForma} fora de escopo (Pix/Crédito Online apenas)`,
+          description: totalImported === 0
+            ? `0 importados — abra o Console (F12) pra ver status/formas vistos`
+            : `${totalIgnoredStatus} não-entregue + ${totalIgnoredForma} fora de escopo (Pix/Crédito Online apenas)`,
         });
       } else {
         toast.error(`${failures.length} de ${xlsx.length} falharam`, { description: failures.join(' | ') });
