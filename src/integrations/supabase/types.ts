@@ -104,12 +104,14 @@ export type Database = {
           diff_pct: number
           expected_amount: number
           expected_credit_date: string
+          expected_liquido: number
           id: string
           note: string | null
           pedidos_count: number
           received_amount: number
           sale_dates: string[]
           status: string
+          taxa_calculada: number
           updated_at: string
         }
         Insert: {
@@ -120,12 +122,14 @@ export type Database = {
           diff_pct?: number
           expected_amount?: number
           expected_credit_date: string
+          expected_liquido?: number
           id?: string
           note?: string | null
           pedidos_count?: number
           received_amount?: number
           sale_dates: string[]
           status?: string
+          taxa_calculada?: number
           updated_at?: string
         }
         Update: {
@@ -136,12 +140,14 @@ export type Database = {
           diff_pct?: number
           expected_amount?: number
           expected_credit_date?: string
+          expected_liquido?: number
           id?: string
           note?: string | null
           pedidos_count?: number
           received_amount?: number
           sale_dates?: string[]
           status?: string
+          taxa_calculada?: number
           updated_at?: string
         }
         Relationships: [
