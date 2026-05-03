@@ -97,14 +97,15 @@ Deno.serve(async (req) => {
 
     // ─────────────────────────────────────────────────────────────────────
     // Pass 1: Cross-check Saipos × Brendi
-    // Usa fetchAllPaginated pra evitar limite default 1000 rows do PostgREST
-    // — em meses com Brendi/Saipos > 1000 pedidos, o cross-check truncava
-    // gerando falsos missing_in_brendi e missing_in_saipos.
+    // Usa fetchAllPaginated pra evitar limite default 1000 rows do PostgREST.
+    // Filtra status_remote='Entregue' + forma in escopo como defesa em
+    // profundidade — caso lixo de imports antigos (antes do fix de status)
+    // tenha sobrado no DB, não polui o cross-check ou daily.
     // ─────────────────────────────────────────────────────────────────────
     const saiposRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_saipos_orders')
-        .select('order_id_parceiro, pagamento, cancelado, total')
+        .select('order_id_parceiro, pagamento, cancelado, total, data_venda')
         .eq('audit_period_id', audit_period_id)
         .eq('canal_venda', 'Brendi')
         .eq('cancelado', false)
@@ -114,24 +115,34 @@ Deno.serve(async (req) => {
     const brendiRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_brendi_orders')
-        .select('order_id, forma_pagamento, total')
-        .eq('audit_period_id', audit_period_id),
+        .select('order_id, forma_pagamento, total, status_remote, created_at_remote')
+        .eq('audit_period_id', audit_period_id)
+        .eq('status_remote', 'Entregue')
+        .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
-    const saiposMap = new Map<string, { pagamento: string; total: number }>();
+    const saiposMap = new Map<string, { pagamento: string; total: number; data_venda: string }>();
     for (const s of saiposRows ?? []) {
-      saiposMap.set(s.order_id_parceiro, { pagamento: s.pagamento, total: Number(s.total) });
+      saiposMap.set(s.order_id_parceiro, {
+        pagamento: s.pagamento,
+        total: Number(s.total),
+        data_venda: s.data_venda,
+      });
     }
-    const brendiMap = new Map<string, { forma: string; total: number }>();
+    const brendiMap = new Map<string, { forma: string; total: number; created_at_remote: string }>();
     for (const b of brendiRows ?? []) {
-      brendiMap.set(b.order_id, { forma: b.forma_pagamento, total: Number(b.total) });
+      brendiMap.set(b.order_id, {
+        forma: b.forma_pagamento,
+        total: Number(b.total),
+        created_at_remote: b.created_at_remote,
+      });
     }
 
     const crosscheck = {
       ok: 0,
-      missing_in_brendi: [] as Array<{ order_id: string; saipos_total: number; pagamento: string }>,
-      missing_in_saipos: [] as Array<{ order_id: string; brendi_total: number; forma: string }>,
-      value_mismatch: [] as Array<{ order_id: string; saipos_total: number; brendi_total: number; diff: number }>,
+      missing_in_brendi: [] as Array<{ order_id: string; saipos_total: number; pagamento: string; data_venda: string }>,
+      missing_in_saipos: [] as Array<{ order_id: string; brendi_total: number; forma: string; created_at_remote: string }>,
+      value_mismatch: [] as Array<{ order_id: string; saipos_total: number; brendi_total: number; diff: number; data: string }>,
     };
 
     const allOrderIds = new Set([...saiposMap.keys(), ...brendiMap.keys()]);
@@ -139,13 +150,20 @@ Deno.serve(async (req) => {
       const s = saiposMap.get(oid);
       const b = brendiMap.get(oid);
       if (s && !b) {
-        crosscheck.missing_in_brendi.push({ order_id: oid, saipos_total: s.total, pagamento: s.pagamento });
+        crosscheck.missing_in_brendi.push({
+          order_id: oid, saipos_total: s.total, pagamento: s.pagamento, data_venda: s.data_venda,
+        });
       } else if (!s && b) {
-        crosscheck.missing_in_saipos.push({ order_id: oid, brendi_total: b.total, forma: b.forma });
+        crosscheck.missing_in_saipos.push({
+          order_id: oid, brendi_total: b.total, forma: b.forma, created_at_remote: b.created_at_remote,
+        });
       } else if (s && b) {
         const diff = Math.abs(s.total - b.total);
         if (diff > VALUE_TOLERANCE_CROSSCHECK) {
-          crosscheck.value_mismatch.push({ order_id: oid, saipos_total: s.total, brendi_total: b.total, diff });
+          crosscheck.value_mismatch.push({
+            order_id: oid, saipos_total: s.total, brendi_total: b.total, diff,
+            data: s.data_venda ?? b.created_at_remote,
+          });
         } else {
           crosscheck.ok++;
         }
@@ -161,12 +179,16 @@ Deno.serve(async (req) => {
       const key = (b as any).sale_date ?? null;
       // sale_date não veio na select acima — refetch com sale_date
     }
-    // Refetch com sale_date (paginado pra evitar limite 1000 do PostgREST)
+    // Refetch com sale_date — filtro defensivo status_remote=Entregue + forma
+    // in escopo (mesmas regras do cross-check). Paginado pra evitar limite
+    // 1000 do PostgREST.
     const brendiFull = await fetchAllPaginated<any>(
       supabase
         .from('audit_brendi_orders')
         .select('sale_date, total')
-        .eq('audit_period_id', audit_period_id),
+        .eq('audit_period_id', audit_period_id)
+        .eq('status_remote', 'Entregue')
+        .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
     for (const b of brendiFull ?? []) {

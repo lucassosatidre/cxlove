@@ -783,19 +783,6 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
       const p = await ensurePeriod();
       if (!p) return;
 
-      // Limpa registros anteriores do período pra evitar lixo de imports antigos
-      // (ex: pedidos de abr/mai indevidamente importados, ou valores 100× inflados
-      // do bug do parser de string US-style). UPSERT por order_id sobrescreve só
-      // o que vier no novo upload — registros órfãos persistem e poluem o match.
-      const { error: delErr } = await supabase
-        .from('audit_brendi_orders')
-        .delete()
-        .eq('audit_period_id', p.id);
-      if (delErr) {
-        toast.error('Erro ao limpar dados anteriores', { description: delErr.message });
-        return;
-      }
-
       for (let i = 0; i < xlsx.length; i++) {
         const file = xlsx[i];
         setProgress({ current: i + 1, total: xlsx.length });
@@ -810,8 +797,11 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
+          // PRIMEIRO arquivo do batch: clear_existing=true. Limpa lixo no edge
+          // via SERVICE_ROLE (não depende de RLS do client). Demais arquivos
+          // só fazem upsert.
           const { data, error } = await supabase.functions.invoke('import-brendi-xlsx', {
-            body: { audit_period_id: p.id, rows, file_name: file.name },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Brendi');
@@ -908,16 +898,6 @@ export function UploadSaiposCard({ period, ensurePeriod, onAfter }: UploadCardPr
       const p = await ensurePeriod();
       if (!p) return;
 
-      // Limpa registros anteriores do período (ver UploadBrendiCard pra contexto)
-      const { error: delErr } = await supabase
-        .from('audit_saipos_orders')
-        .delete()
-        .eq('audit_period_id', p.id);
-      if (delErr) {
-        toast.error('Erro ao limpar dados anteriores', { description: delErr.message });
-        return;
-      }
-
       for (let i = 0; i < xlsx.length; i++) {
         const file = xlsx[i];
         setProgress({ current: i + 1, total: xlsx.length });
@@ -930,8 +910,9 @@ export function UploadSaiposCard({ period, ensurePeriod, onAfter }: UploadCardPr
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
+          // Primeiro arquivo: clear_existing=true (RLS bypass via SERVICE_ROLE)
           const { data, error } = await supabase.functions.invoke('import-saipos-xlsx', {
-            body: { audit_period_id: p.id, rows, file_name: file.name },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Saipos');

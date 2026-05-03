@@ -126,11 +126,24 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_name, rows } = body || {};
+    const { audit_period_id, file_name, rows, clear_existing } = body || {};
     if (!audit_period_id || !file_name || !Array.isArray(rows)) {
       return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, rows)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // clear_existing=true: limpa tudo do período via SERVICE_ROLE
+    if (clear_existing === true) {
+      const { error: delErr } = await supabase
+        .from('audit_saipos_orders')
+        .delete()
+        .eq('audit_period_id', audit_period_id);
+      if (delErr) {
+        return new Response(JSON.stringify({ error: `Erro ao limpar dados anteriores: ${delErr.message}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
     }
 
     const { data: period, error: periodErr } = await supabase

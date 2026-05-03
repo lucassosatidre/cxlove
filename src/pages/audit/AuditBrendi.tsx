@@ -34,12 +34,21 @@ type DailyRow = {
 
 type CrosscheckResult = {
   ok: number;
-  missing_in_brendi: Array<{ order_id: string; saipos_total: number; pagamento: string }>;
+  missing_in_brendi: Array<{ order_id: string; saipos_total: number; pagamento: string; data_venda?: string }>;
   missing_in_brendi_count: number;
-  missing_in_saipos: Array<{ order_id: string; brendi_total: number; forma: string }>;
+  missing_in_saipos: Array<{ order_id: string; brendi_total: number; forma: string; created_at_remote?: string }>;
   missing_in_saipos_count: number;
-  value_mismatch: Array<{ order_id: string; saipos_total: number; brendi_total: number; diff: number }>;
+  value_mismatch: Array<{ order_id: string; saipos_total: number; brendi_total: number; diff: number; data?: string }>;
   value_mismatch_count: number;
+};
+
+const fmtDateTime = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
 };
 
 const MONTHS = [
@@ -459,6 +468,7 @@ function CrosscheckTab({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Data/Hora</TableHead>
                   <TableHead>Order ID</TableHead>
                   <TableHead>Pagamento</TableHead>
                   <TableHead className="text-right">Total Saipos</TableHead>
@@ -467,6 +477,7 @@ function CrosscheckTab({
               <TableBody>
                 {crosscheck.missing_in_brendi.map(r => (
                   <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data_venda)}</TableCell>
                     <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{r.pagamento}</Badge></TableCell>
                     <TableCell className="text-right font-medium">{fmt(r.saipos_total)}</TableCell>
@@ -488,6 +499,7 @@ function CrosscheckTab({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Data/Hora</TableHead>
                   <TableHead>Order ID</TableHead>
                   <TableHead className="text-right">Saipos</TableHead>
                   <TableHead className="text-right">Brendi</TableHead>
@@ -497,6 +509,7 @@ function CrosscheckTab({
               <TableBody>
                 {crosscheck.value_mismatch.map(r => (
                   <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data)}</TableCell>
                     <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
                     <TableCell className="text-right">{fmt(r.saipos_total)}</TableCell>
                     <TableCell className="text-right">{fmt(r.brendi_total)}</TableCell>
@@ -519,6 +532,7 @@ function CrosscheckTab({
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Data/Hora</TableHead>
                   <TableHead>Order ID</TableHead>
                   <TableHead>Forma</TableHead>
                   <TableHead className="text-right">Total Brendi</TableHead>
@@ -527,6 +541,7 @@ function CrosscheckTab({
               <TableBody>
                 {crosscheck.missing_in_saipos.map(r => (
                   <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.created_at_remote)}</TableCell>
                     <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{r.forma}</Badge></TableCell>
                     <TableCell className="text-right font-medium">{fmt(r.brendi_total)}</TableCell>
