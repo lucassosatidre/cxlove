@@ -21,8 +21,9 @@ import {
 
 type DailyRow = {
   id: string;
-  expected_credit_date: string;
-  sale_dates: string[];
+  sale_date: string;             // dia da venda (chave primária do daily)
+  expected_credit_date: string | null;  // D+1 útil informativo
+  bb_credit_date: string | null;        // dia em que o BB efetivamente creditou
   pedidos_count: number;
   expected_amount: number;       // bruto
   expected_liquido: number;      // bruto - taxa declarada Brendi
@@ -106,9 +107,9 @@ export default function AuditBrendi() {
     const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }] = await Promise.all([
       supabase
         .from('audit_brendi_daily')
-        .select('id, expected_credit_date, sale_dates, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, status, note')
+        .select('id, sale_date, expected_credit_date, bb_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, status, note')
         .eq('audit_period_id', periodId)
-        .order('expected_credit_date'),
+        .order('sale_date'),
       supabase
         .from('audit_imports')
         .select('file_type, status, created_at, imported_rows')
@@ -594,8 +595,8 @@ function DiarioTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Data crédito esperada</TableHead>
-              <TableHead>Dias de venda</TableHead>
+              <TableHead>Dia da venda</TableHead>
+              <TableHead>BB creditou em</TableHead>
               <TableHead className="text-right">Pedidos</TableHead>
               <TableHead className="text-right">Bruto</TableHead>
               <TableHead className="text-right">Taxa Brendi</TableHead>
@@ -611,9 +612,9 @@ function DiarioTab({
               const variant = STATUS_VARIANTS[d.status] ?? STATUS_VARIANTS.pending;
               return (
                 <TableRow key={d.id}>
-                  <TableCell className="font-medium">{fmtDate(d.expected_credit_date)}</TableCell>
+                  <TableCell className="font-medium">{fmtDate(d.sale_date)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">
-                    {d.sale_dates.map(s => fmtDate(s)).join(', ')}
+                    {fmtDate(d.bb_credit_date)}
                   </TableCell>
                   <TableCell className="text-right">{d.pedidos_count}</TableCell>
                   <TableCell className="text-right">{fmt(d.expected_amount)}</TableCell>

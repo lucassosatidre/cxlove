@@ -2,14 +2,17 @@
 // Match Brendi (estágio 3). 3 passes:
 // 1. Cross-check Saipos × Brendi (1-pra-1 por order_id_parceiro). Detecta:
 //    - missing_in_brendi: Saipos viu pedido online mas Brendi não declarou (cobrável)
-//    - value_mismatch: |saipos.total - brendi.total| > 2,00
+//    - value_mismatch: |saipos.total - brendi.total| > 2,00 (tolera mixed-payment + cashback)
 //    - ok: caso restante
-// 2. Calcular audit_brendi_daily (agrega Brendi por sale_date, computa expected_credit_date
-//    via D+1 útil, agrupa dias consecutivos quando crédito cai no mesmo dia útil
-//    (sex+sáb+dom → seg). Match com PIX BB Brendi por valor, marca diff_pct>5% como
-//    pending_manual.
-// 3. Adjacência: PIX BB com origem em mês ant ou post conta como adjacente
-//    (não entra no expected do mês corrente).
+// 2. Calcular audit_brendi_daily KEYED POR SALE_DATE (não ECD): cada PIX BB
+//    Brendi tem detail "DD/MM" que é a data do batch (= sale_date + 1
+//    calendar). Agrega vendas por sale_date e PIX por sale_date_origin
+//    (= prefix - 1d). 1 sale_date = 1 daily row = 1 PIX → match limpo.
+//    Antes agregávamos por expected_credit_date (D+1 útil), o que misturava
+//    Sex+Sáb+Dom no daily Mon e gerava ruído (diff_pct estourava mesmo com
+//    cada PIX individual fechando direitinho).
+// 3. Mensalidade: max abs(diff_liquido) por mês em [R$150, R$500] → marca
+//    como mensalidade_descontada.
 //
 // Mensalidade Brendi (~R$ 250-300): UMA cobrança/mês embedada em algum PIX.
 // Detecta o dia com maior excedente além da taxa-base 2% (range 200-400).
@@ -54,15 +57,26 @@ function brendiFeePerPedido(forma: string, total: number): number {
 const MENSALIDADE_MIN = 150;
 const MENSALIDADE_MAX = 500;
 
-// Parse "DD/MM " no início do detail BB pra obter data origem do PIX
-function parseBBPixOrigin(detail: string, fallbackDate: string): string {
+// Parse "DD/MM " no início do detail BB → data do batch Brendi (= sale_date+1).
+// Ex: "31/01 06:01 BRENDI SERV" → "2026-01-31" (batch run em 31/01, contém
+// sales de 30/01). Sem ano explícito, usa ano do fallbackDate.
+function parseBatchDate(detail: string, fallbackDate: string): string | null {
   const m = (detail || '').match(/^(\d{2})\/(\d{2})\s/);
-  if (m) {
-    // Sem ano explícito — usa ano da fallbackDate
-    const year = fallbackDate.slice(0, 4);
-    return `${year}-${m[2]}-${m[1]}`;
-  }
-  return fallbackDate;
+  if (!m) return null;
+  // Wraparound jan/dez: se prefix é jan e fallback é dez, ano-1; vice-versa.
+  const prefMonth = Number(m[2]);
+  const fallbackMonth = Number(fallbackDate.slice(5, 7));
+  let year = Number(fallbackDate.slice(0, 4));
+  if (prefMonth === 12 && fallbackMonth === 1) year -= 1;
+  else if (prefMonth === 1 && fallbackMonth === 12) year += 1;
+  return `${year}-${m[2]}-${m[1]}`;
+}
+
+// Sale_date que originou aquele PIX = batch_date - 1 calendar day
+function batchDateToSaleDate(batchIso: string): string {
+  const d = new Date(batchIso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 Deno.serve(async (req) => {
@@ -227,6 +241,7 @@ Deno.serve(async (req) => {
         .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
+    // Aggrega vendas Brendi por sale_date, com fee por pedido (forma-dependente).
     const brendiBySaleDate = new Map<string, { count: number; total: number; taxa: number }>();
     for (const b of brendiFull ?? []) {
       const key = b.sale_date;
@@ -239,27 +254,7 @@ Deno.serve(async (req) => {
       brendiBySaleDate.set(key, cur);
     }
 
-    // Pra cada sale_date, calcula expected_credit_date via nextBusinessDay.
-    // Agrupa por expected_credit_date (sex+sáb+dom → seg).
-    const dailyMap = new Map<string, {
-      sale_dates: string[]; pedidos_count: number;
-      expected_amount: number; expected_liquido: number; taxa_calculada: number;
-    }>();
-    for (const [saleDate, agg] of brendiBySaleDate.entries()) {
-      const expectedCredit = nextBusinessDay(saleDate);
-      const cur = dailyMap.get(expectedCredit) ?? {
-        sale_dates: [], pedidos_count: 0,
-        expected_amount: 0, expected_liquido: 0, taxa_calculada: 0,
-      };
-      cur.sale_dates.push(saleDate);
-      cur.pedidos_count += agg.count;
-      cur.expected_amount += agg.total;
-      cur.taxa_calculada += agg.taxa;
-      cur.expected_liquido += agg.total - agg.taxa;
-      dailyMap.set(expectedCredit, cur);
-    }
-
-    // Pega depósitos BB Brendi pra fazer match
+    // Pega depósitos BB Brendi.
     const { data: bbDeps } = await supabase
       .from('audit_bank_deposits')
       .select('id, deposit_date, detail, amount')
@@ -268,61 +263,84 @@ Deno.serve(async (req) => {
       .eq('category', 'brendi')
       .order('deposit_date', { ascending: true });
 
-    // Indexa BB por deposit_date
-    const bbByDate = new Map<string, Array<{ id: string; amount: number; detail: string; pix_origin: string }>>();
+    // Re-indexa BB por SALE_DATE de origem (= prefix DD/MM - 1 calendar day).
+    // Cada PIX Brendi tem detail tipo "31/01 06:01 ..." — esse "31/01" é o dia
+    // em que o batch rodou (= sale_date + 1). O sale_date real é prefix - 1.
+    // Ex: PIX prefix "01/02" → batch Sun 01/02 → contém vendas Sat 31/01.
+    // Esse model elimina o problema de Sex+Sáb+Dom serem todos creditados na
+    // Mon e ficarem aglomerados num daily só (gerando ruído).
+    const bbBySaleDate = new Map<string, Array<{
+      id: string; amount: number; detail: string; deposit_date: string;
+    }>>();
+    const orphanPix: Array<{ id: string; amount: number; detail: string; deposit_date: string }> = [];
     for (const d of bbDeps ?? []) {
-      const arr = bbByDate.get(d.deposit_date) ?? [];
-      arr.push({
-        id: d.id,
-        amount: Number(d.amount),
-        detail: d.detail || '',
-        pix_origin: parseBBPixOrigin(d.detail || '', d.deposit_date),
-      });
-      bbByDate.set(d.deposit_date, arr);
+      const batchDate = parseBatchDate(d.detail || '', d.deposit_date);
+      if (!batchDate) {
+        orphanPix.push({ id: d.id, amount: Number(d.amount), detail: d.detail || '', deposit_date: d.deposit_date });
+        continue;
+      }
+      const sd = batchDateToSaleDate(batchDate);
+      const arr = bbBySaleDate.get(sd) ?? [];
+      arr.push({ id: d.id, amount: Number(d.amount), detail: d.detail || '', deposit_date: d.deposit_date });
+      bbBySaleDate.set(sd, arr);
     }
 
-    // Filtra daily pra MÊS DE COMPETÊNCIA do período. Vendas dos 3 meses
-    // (ant + comp + post) ficam em audit_brendi_orders pra contexto, mas o KPI
-    // expected/received do period.month entra só no daily — a auditoria é
-    // mensal. Adjacentes ficam contados separadamente pra referência.
+    // Daily = união de sale_dates (com vendas) + sale_dates derivadas de PIX.
+    const allSaleDates = new Set<string>([
+      ...brendiBySaleDate.keys(),
+      ...bbBySaleDate.keys(),
+    ]);
+
+    // Filtra pra mês de competência. Sale_dates dos meses adjacentes ficam
+    // contados separadamente.
     const periodYM = `${period.year}-${String(period.month).padStart(2, '0')}`;
     const adjacent = { count: 0, expected: 0, received: 0 };
-
-    // Match cada daily com depósito(s) do dia. Diff e diff_pct agora
-    // comparam received × expected_LIQUIDO (já líquido das taxas declaradas).
-    // Sem mensalidade nem ajuste, diff deve ficar próximo de zero.
     const dailyRows: any[] = [];
-    for (const [expectedCredit, agg] of dailyMap.entries()) {
-      const deps = bbByDate.get(expectedCredit) ?? [];
-      const received = deps.reduce((s, d) => s + d.amount, 0);
-      if (!expectedCredit.startsWith(periodYM)) {
+
+    for (const sd of allSaleDates) {
+      const sales = brendiBySaleDate.get(sd) ?? { count: 0, total: 0, taxa: 0 };
+      const pix = bbBySaleDate.get(sd) ?? [];
+      const received = pix.reduce((s, p) => s + p.amount, 0);
+      const expectedLiquido = sales.total - sales.taxa;
+
+      if (!sd.startsWith(periodYM)) {
         adjacent.count++;
-        adjacent.expected += agg.expected_liquido;
+        adjacent.expected += expectedLiquido;
         adjacent.received += received;
         continue;
       }
-      const diff = received - agg.expected_liquido;
-      const diffPct = agg.expected_liquido > 0 ? Math.abs(diff) / agg.expected_liquido : 0;
+
+      const diff = received - expectedLiquido;
+      const diffPct = expectedLiquido > 0 ? Math.abs(diff) / expectedLiquido : 0;
 
       let status: string;
-      if (deps.length === 0) {
+      if (pix.length === 0) {
         status = 'sem_deposito';
+      } else if (sales.count === 0) {
+        status = 'pending_manual'; // PIX órfão sem vendas (estorno?)
       } else if (diffPct <= DIFF_PCT_THRESHOLD) {
         status = 'matched';
       } else {
         status = 'pending_manual';
       }
 
+      // expected_credit_date = nextBusinessDay(sale_date) — informativo, NÃO
+      // mais usado pro match. bb_credit_date = data real em que o PIX caiu
+      // (deposit_date do PIX, primeiro se vários). Se não há PIX, fica null.
+      const ecd = nextBusinessDay(sd);
+      const bbCreditDate = pix.length > 0 ? pix[0].deposit_date : null;
+
       dailyRows.push({
         audit_period_id,
-        expected_credit_date: expectedCredit,
-        sale_dates: agg.sale_dates.sort(),
-        pedidos_count: agg.pedidos_count,
-        expected_amount: Math.round(agg.expected_amount * 100) / 100,
-        expected_liquido: Math.round(agg.expected_liquido * 100) / 100,
-        taxa_calculada: Math.round(agg.taxa_calculada * 100) / 100,
+        sale_date: sd,
+        expected_credit_date: ecd,
+        bb_credit_date: bbCreditDate,
+        pedidos_count: sales.count,
+        expected_amount: Math.round(sales.total * 100) / 100,
+        expected_liquido: Math.round(expectedLiquido * 100) / 100,
+        taxa_calculada: Math.round(sales.taxa * 100) / 100,
         received_amount: Math.round(received * 100) / 100,
-        bb_deposit_ids: deps.map(d => d.id),
+        bb_deposit_ids: pix.map(p => p.id),
         diff: Math.round(diff * 100) / 100,
         diff_pct: Math.round(diffPct * 10000) / 10000,
         status,
@@ -358,7 +376,7 @@ Deno.serve(async (req) => {
     if (dailyRows.length > 0) {
       const { error: upErr } = await supabase
         .from('audit_brendi_daily')
-        .upsert(dailyRows, { onConflict: 'audit_period_id,expected_credit_date' });
+        .upsert(dailyRows, { onConflict: 'audit_period_id,sale_date' });
       if (upErr) {
         console.error('upsert audit_brendi_daily error', upErr);
         return new Response(JSON.stringify({ error: `Erro ao gravar daily: ${upErr.message}` }), {
