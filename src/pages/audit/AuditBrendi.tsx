@@ -388,7 +388,7 @@ function ResumoTab({
         <KpiCard
           title="Custo oculto"
           value={fmt(Math.abs(totals.custoOculto))}
-          hint={`${totals.custoOculto < 0 ? 'Faltou' : 'Sobrou'} vs esperado · Mensalidade: ${fmt(totals.mensalidadeAmount)} (${totals.mensalidadeCount}x)`}
+          hint={`${totals.custoOculto > 0 ? 'Faltou' : 'Sobrou'} vs esperado · Mensalidade: ${fmt(totals.mensalidadeAmount)} (${totals.mensalidadeCount}x)`}
           className={Math.abs(totals.custoOculto) > 100 ? 'text-rose-700 dark:text-rose-400' : 'text-foreground'}
         />
       </div>
