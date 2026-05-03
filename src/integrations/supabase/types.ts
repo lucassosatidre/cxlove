@@ -98,54 +98,57 @@ export type Database = {
       audit_brendi_daily: {
         Row: {
           audit_period_id: string
+          bb_credit_date: string | null
           bb_deposit_ids: string[] | null
           created_at: string
           diff: number
           diff_pct: number
           expected_amount: number
-          expected_credit_date: string
+          expected_credit_date: string | null
           expected_liquido: number
           id: string
           note: string | null
           pedidos_count: number
           received_amount: number
-          sale_dates: string[]
+          sale_date: string
           status: string
           taxa_calculada: number
           updated_at: string
         }
         Insert: {
           audit_period_id: string
+          bb_credit_date?: string | null
           bb_deposit_ids?: string[] | null
           created_at?: string
           diff?: number
           diff_pct?: number
           expected_amount?: number
-          expected_credit_date: string
+          expected_credit_date?: string | null
           expected_liquido?: number
           id?: string
           note?: string | null
           pedidos_count?: number
           received_amount?: number
-          sale_dates: string[]
+          sale_date: string
           status?: string
           taxa_calculada?: number
           updated_at?: string
         }
         Update: {
           audit_period_id?: string
+          bb_credit_date?: string | null
           bb_deposit_ids?: string[] | null
           created_at?: string
           diff?: number
           diff_pct?: number
           expected_amount?: number
-          expected_credit_date?: string
+          expected_credit_date?: string | null
           expected_liquido?: number
           id?: string
           note?: string | null
           pedidos_count?: number
           received_amount?: number
-          sale_dates?: string[]
+          sale_date?: string
           status?: string
           taxa_calculada?: number
           updated_at?: string
