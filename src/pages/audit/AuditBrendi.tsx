@@ -24,9 +24,11 @@ type DailyRow = {
   expected_credit_date: string;
   sale_dates: string[];
   pedidos_count: number;
-  expected_amount: number;
+  expected_amount: number;       // bruto
+  expected_liquido: number;      // bruto - taxa declarada Brendi
+  taxa_calculada: number;        // sum fee_per_pedido (Pix 0.5%+R$0.40 / Cr.Online 5.69%)
   received_amount: number;
-  diff: number;
+  diff: number;                  // received - expected_liquido (próximo de 0 exceto mensalidade)
   diff_pct: number;
   status: string;
   note: string | null;
@@ -104,7 +106,7 @@ export default function AuditBrendi() {
     const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }] = await Promise.all([
       supabase
         .from('audit_brendi_daily')
-        .select('id, expected_credit_date, sale_dates, pedidos_count, expected_amount, received_amount, diff, diff_pct, status, note')
+        .select('id, expected_credit_date, sale_dates, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, status, note')
         .eq('audit_period_id', periodId)
         .order('expected_credit_date'),
       supabase
@@ -189,15 +191,19 @@ export default function AuditBrendi() {
 
   const totals = useMemo(() => {
     const exp = daily.reduce((s, d) => s + Number(d.expected_amount || 0), 0);
+    const expLiq = daily.reduce((s, d) => s + Number(d.expected_liquido || 0), 0);
+    const taxaDecl = daily.reduce((s, d) => s + Number(d.taxa_calculada || 0), 0);
     const rec = daily.reduce((s, d) => s + Number(d.received_amount || 0), 0);
-    const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;
+    const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;            // taxa efetiva total
+    const taxaDeclPct = exp > 0 ? (taxaDecl / exp) * 100 : 0;        // taxa declarada Brendi
+    const custoOculto = expLiq - rec;                                 // diff não explicado pelas taxas declaradas
     const pedidosMes = daily.reduce((s, d) => s + Number(d.pedidos_count || 0), 0);
     const pendingManualCount = daily.filter(d => d.status === 'pending_manual').length;
     const mensalidadeCount = daily.filter(d => d.status === 'mensalidade_descontada').length;
     const mensalidadeAmount = daily
       .filter(d => d.status === 'mensalidade_descontada')
       .reduce((s, d) => s + Math.abs(Number(d.diff || 0)), 0);
-    return { exp, rec, taxa, pedidosMes, pendingManualCount, mensalidadeCount, mensalidadeAmount };
+    return { exp, expLiq, taxaDecl, rec, taxa, taxaDeclPct, custoOculto, pedidosMes, pendingManualCount, mensalidadeCount, mensalidadeAmount };
   }, [daily]);
 
   if (roleLoading || loading) {
@@ -365,21 +371,25 @@ function ResumoTab({
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
-          title="Vendido (Brendi online)"
+          title="Vendido bruto (Brendi online)"
           value={fmt(totals.exp)}
           hint={`${totals.pedidosMes} pedidos no mês · ${brendiOrdersCount} importados (3 meses)`}
         />
-        <KpiCard title="Recebido BB (Brendi)" value={fmt(totals.rec)} hint={`${daily.length} dias úteis`} />
         <KpiCard
-          title="Taxa efetiva"
-          value={`${totals.taxa.toFixed(2).replace('.', ',')}%`}
-          hint={totals.taxa > 0 ? `Custo: ${fmt(totals.exp - totals.rec)}` : 'Sem custo aparente'}
-          className={totals.taxa > 5 ? 'text-rose-700 dark:text-rose-400' : 'text-foreground'}
+          title="Taxa declarada Brendi"
+          value={`${totals.taxaDeclPct.toFixed(2).replace('.', ',')}%`}
+          hint={`${fmt(totals.taxaDecl)} (Pix 0,5% + R$0,40 · Cr.Online 5,69%)`}
         />
         <KpiCard
-          title="Mensalidade detectada"
-          value={fmt(totals.mensalidadeAmount)}
-          hint={`${totals.mensalidadeCount} ocorrência(s)`}
+          title="Esperado líquido"
+          value={fmt(totals.expLiq)}
+          hint={`Recebido BB: ${fmt(totals.rec)} (${daily.length} dias úteis)`}
+        />
+        <KpiCard
+          title="Custo oculto"
+          value={fmt(Math.abs(totals.custoOculto))}
+          hint={`${totals.custoOculto < 0 ? 'Faltou' : 'Sobrou'} vs esperado · Mensalidade: ${fmt(totals.mensalidadeAmount)} (${totals.mensalidadeCount}x)`}
+          className={Math.abs(totals.custoOculto) > 100 ? 'text-rose-700 dark:text-rose-400' : 'text-foreground'}
         />
       </div>
 
@@ -587,7 +597,9 @@ function DiarioTab({
               <TableHead>Data crédito esperada</TableHead>
               <TableHead>Dias de venda</TableHead>
               <TableHead className="text-right">Pedidos</TableHead>
-              <TableHead className="text-right">Esperado</TableHead>
+              <TableHead className="text-right">Bruto</TableHead>
+              <TableHead className="text-right">Taxa Brendi</TableHead>
+              <TableHead className="text-right">Esperado líq</TableHead>
               <TableHead className="text-right">Recebido BB</TableHead>
               <TableHead className="text-right">Diff</TableHead>
               <TableHead className="text-right">Diff %</TableHead>
@@ -605,6 +617,8 @@ function DiarioTab({
                   </TableCell>
                   <TableCell className="text-right">{d.pedidos_count}</TableCell>
                   <TableCell className="text-right">{fmt(d.expected_amount)}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">−{fmt(d.taxa_calculada)}</TableCell>
+                  <TableCell className="text-right">{fmt(d.expected_liquido)}</TableCell>
                   <TableCell className="text-right">{fmt(d.received_amount)}</TableCell>
                   <TableCell className={`text-right font-medium ${d.diff < -0.5 ? 'text-rose-700 dark:text-rose-400' : d.diff > 0.5 ? 'text-amber-700 dark:text-amber-500' : ''}`}>
                     {fmt(d.diff)}
@@ -617,8 +631,9 @@ function DiarioTab({
           </TableBody>
         </Table>
         <div className="text-xs text-muted-foreground pt-3">
-          Total esperado: <strong>{fmt(totals.exp)}</strong> · Total recebido: <strong>{fmt(totals.rec)}</strong> ·
-          Taxa efetiva: <strong>{totals.taxa.toFixed(2).replace('.', ',')}%</strong>
+          Bruto: <strong>{fmt(totals.exp)}</strong> · Taxa Brendi declarada: <strong>{fmt(totals.taxaDecl)}</strong> ({totals.taxaDeclPct.toFixed(2).replace('.', ',')}%)
+          {' · '}Esperado líquido: <strong>{fmt(totals.expLiq)}</strong> · Recebido BB: <strong>{fmt(totals.rec)}</strong>
+          {' · '}Custo oculto: <strong className={Math.abs(totals.custoOculto) > 100 ? 'text-rose-700 dark:text-rose-400' : ''}>{fmt(totals.custoOculto)}</strong>
         </div>
       </CardContent>
     </Card>

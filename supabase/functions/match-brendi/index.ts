@@ -31,13 +31,28 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const VALUE_TOLERANCE_CROSSCHECK = 2.00; // R$ 2 entre Saipos e Brendi
 const DIFF_PCT_THRESHOLD = 0.05;          // 5% pra marcar manual
-// Mensalidade Brendi: ~R$250-300 deduzida UMA vez por mês, embedada na
-// PIX de algum dia. Detecta como excedente além do fee-base (~2%): se um dia
-// tem diff = fee-base + algo entre R$200-R$400, esse algo é provavelmente
-// a mensalidade. Pegamos só o MAIOR excedente do mês — evita falsos positivos.
-const FEE_BASELINE_PCT = 0.02;            // 2% taxa-base estimada Brendi
-const MENSALIDADE_EXCESS_MIN = 200;
-const MENSALIDADE_EXCESS_MAX = 400;
+
+// Modelo de taxa Brendi (declarado em https://brendi.com.br/configuracoes/pagamentos):
+// - Pix Online: 0,5% do total + R$ 0,40 fixo por pedido
+// - Crédito Online D+0 (mesmo dia útil): 3,99% + 1,7% adiantamento = 5,69%
+// - Crédito Online D+30: 3,99% (não usamos — repasses caem D+1 útil = D+0 efetivo)
+const FEE_PIX_PCT = 0.005;
+const FEE_PIX_FIXED = 0.40;
+const FEE_CREDITO_D0_PCT = 0.0569; // 3.99% + 1.7%
+
+function brendiFeePerPedido(forma: string, total: number): number {
+  const f = (forma || '').normalize('NFC').trim().toLowerCase();
+  if (f === 'pix online') return total * FEE_PIX_PCT + FEE_PIX_FIXED;
+  if (f === 'crédito online') return total * FEE_CREDITO_D0_PCT;
+  return 0;
+}
+
+// Mensalidade Brendi: ~R$250-300 deduzida UMA vez por mês de algum repasse
+// PIX. Como expected_liquido já desconta as taxas declaradas, o diff_liquido
+// fica próximo de zero exceto no dia da mensalidade. Pegamos a maior queda
+// do mês em [R$150, R$500] como mensalidade.
+const MENSALIDADE_MIN = 150;
+const MENSALIDADE_MAX = 500;
 
 // Parse "DD/MM " no início do detail BB pra obter data origem do PIX
 function parseBBPixOrigin(detail: string, fallbackDate: string): string {
@@ -127,7 +142,7 @@ Deno.serve(async (req) => {
     const brendiRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_brendi_orders')
-        .select('order_id, forma_pagamento, total, status_remote, created_at_remote')
+        .select('order_id, forma_pagamento, total, cashback_usado, status_remote, created_at_remote')
         .eq('audit_period_id', audit_period_id)
         .eq('status_remote', 'Entregue')
         .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
@@ -141,11 +156,12 @@ Deno.serve(async (req) => {
         data_venda: s.data_venda,
       });
     }
-    const brendiMap = new Map<string, { forma: string; total: number; created_at_remote: string }>();
+    const brendiMap = new Map<string, { forma: string; total: number; cashback: number; created_at_remote: string }>();
     for (const b of brendiRows ?? []) {
       brendiMap.set(b.order_id, {
         forma: b.forma_pagamento,
         total: Number(b.total),
+        cashback: Number(b.cashback_usado ?? 0),
         created_at_remote: b.created_at_remote,
       });
     }
@@ -170,15 +186,21 @@ Deno.serve(async (req) => {
           order_id: oid, brendi_total: b.total, forma: b.forma, created_at_remote: b.created_at_remote,
         });
       } else if (s && b) {
-        // Pagamento misto (ex: "Débito, Pix Online Brendi"): Saipos.total é o
-        // pedido inteiro, Brendi.total é só a parcela online — então só
-        // exigimos saipos >= brendi (com tolerância). Pagamento puro online:
-        // diff bilateral com tolerância simétrica.
+        // 3 fontes de divergência legítima (não flagar):
+        // 1. Pagamento misto Saipos ("Débito, Pix Online Brendi"): Saipos.total
+        //    é o pedido inteiro, Brendi.total só a parcela online — Saipos>=Brendi.
+        // 2. Cashback usado: cliente paga só uma fração com Pix Online; Brendi.total
+        //    já vem líquido de cashback (col L), Saipos.total é o pedido cheio.
+        //    Diff esperado ≈ b.cashback. Tolera diff dentro de cashback ± R$2.
+        // 3. Caso normal: tolerância simétrica R$2.
         const isMixedPayment = (s.pagamento || '').includes(',');
         const diff = s.total - b.total;
+        const cashbackExplains = b.cashback > 0 && Math.abs(diff - b.cashback) <= VALUE_TOLERANCE_CROSSCHECK;
         const isOk = isMixedPayment
           ? diff >= -VALUE_TOLERANCE_CROSSCHECK
-          : Math.abs(diff) <= VALUE_TOLERANCE_CROSSCHECK;
+          : cashbackExplains
+            ? true
+            : Math.abs(diff) <= VALUE_TOLERANCE_CROSSCHECK;
         if (!isOk) {
           crosscheck.value_mismatch.push({
             order_id: oid, saipos_total: s.total, brendi_total: b.total, diff: Math.abs(diff),
@@ -192,43 +214,48 @@ Deno.serve(async (req) => {
 
     // ─────────────────────────────────────────────────────────────────────
     // Pass 2: audit_brendi_daily — agregação D+1 útil
+    // Aplica modelo de taxa por pedido (forma-dependente) pra calcular
+    // expected_liquido. Antes usávamos só sum(total) (bruto) — agora também
+    // descontamos a taxa declarada Brendi (Pix 0.5%+R$0.40, Crédito Online 5.69%).
     // ─────────────────────────────────────────────────────────────────────
-    // Agrupa Brendi por sale_date
-    const brendiBySaleDate = new Map<string, { count: number; total: number }>();
-    for (const b of brendiRows ?? []) {
-      const key = (b as any).sale_date ?? null;
-      // sale_date não veio na select acima — refetch com sale_date
-    }
-    // Refetch com sale_date — filtro defensivo status_remote=Entregue + forma
-    // in escopo (mesmas regras do cross-check). Paginado pra evitar limite
-    // 1000 do PostgREST.
     const brendiFull = await fetchAllPaginated<any>(
       supabase
         .from('audit_brendi_orders')
-        .select('sale_date, total')
+        .select('sale_date, total, forma_pagamento')
         .eq('audit_period_id', audit_period_id)
         .eq('status_remote', 'Entregue')
         .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
+    const brendiBySaleDate = new Map<string, { count: number; total: number; taxa: number }>();
     for (const b of brendiFull ?? []) {
       const key = b.sale_date;
       if (!key) continue;
-      const cur = brendiBySaleDate.get(key) ?? { count: 0, total: 0 };
+      const total = Number(b.total);
+      const cur = brendiBySaleDate.get(key) ?? { count: 0, total: 0, taxa: 0 };
       cur.count++;
-      cur.total += Number(b.total);
+      cur.total += total;
+      cur.taxa += brendiFeePerPedido(b.forma_pagamento, total);
       brendiBySaleDate.set(key, cur);
     }
 
-    // Pra cada sale_date, calcula expected_credit_date via nextBusinessDay
-    // Agrupa por expected_credit_date (sex+sáb+dom → seg, todos com expected_credit = seg)
-    const dailyMap = new Map<string, { sale_dates: string[]; pedidos_count: number; expected_amount: number }>();
+    // Pra cada sale_date, calcula expected_credit_date via nextBusinessDay.
+    // Agrupa por expected_credit_date (sex+sáb+dom → seg).
+    const dailyMap = new Map<string, {
+      sale_dates: string[]; pedidos_count: number;
+      expected_amount: number; expected_liquido: number; taxa_calculada: number;
+    }>();
     for (const [saleDate, agg] of brendiBySaleDate.entries()) {
       const expectedCredit = nextBusinessDay(saleDate);
-      const cur = dailyMap.get(expectedCredit) ?? { sale_dates: [], pedidos_count: 0, expected_amount: 0 };
+      const cur = dailyMap.get(expectedCredit) ?? {
+        sale_dates: [], pedidos_count: 0,
+        expected_amount: 0, expected_liquido: 0, taxa_calculada: 0,
+      };
       cur.sale_dates.push(saleDate);
       cur.pedidos_count += agg.count;
       cur.expected_amount += agg.total;
+      cur.taxa_calculada += agg.taxa;
+      cur.expected_liquido += agg.total - agg.taxa;
       dailyMap.set(expectedCredit, cur);
     }
 
@@ -261,20 +288,21 @@ Deno.serve(async (req) => {
     const periodYM = `${period.year}-${String(period.month).padStart(2, '0')}`;
     const adjacent = { count: 0, expected: 0, received: 0 };
 
-    // Match cada daily com depósito(s) do dia
+    // Match cada daily com depósito(s) do dia. Diff e diff_pct agora
+    // comparam received × expected_LIQUIDO (já líquido das taxas declaradas).
+    // Sem mensalidade nem ajuste, diff deve ficar próximo de zero.
     const dailyRows: any[] = [];
     for (const [expectedCredit, agg] of dailyMap.entries()) {
       const deps = bbByDate.get(expectedCredit) ?? [];
       const received = deps.reduce((s, d) => s + d.amount, 0);
-      // Se o crédito esperado cai fora do mês de competência, conta como adjacente
       if (!expectedCredit.startsWith(periodYM)) {
         adjacent.count++;
-        adjacent.expected += agg.expected_amount;
+        adjacent.expected += agg.expected_liquido;
         adjacent.received += received;
         continue;
       }
-      const diff = received - agg.expected_amount;
-      const diffPct = agg.expected_amount > 0 ? Math.abs(diff) / agg.expected_amount : 0;
+      const diff = received - agg.expected_liquido;
+      const diffPct = agg.expected_liquido > 0 ? Math.abs(diff) / agg.expected_liquido : 0;
 
       let status: string;
       if (deps.length === 0) {
@@ -291,6 +319,8 @@ Deno.serve(async (req) => {
         sale_dates: agg.sale_dates.sort(),
         pedidos_count: agg.pedidos_count,
         expected_amount: Math.round(agg.expected_amount * 100) / 100,
+        expected_liquido: Math.round(agg.expected_liquido * 100) / 100,
+        taxa_calculada: Math.round(agg.taxa_calculada * 100) / 100,
         received_amount: Math.round(received * 100) / 100,
         bb_deposit_ids: deps.map(d => d.id),
         diff: Math.round(diff * 100) / 100,
@@ -303,22 +333,21 @@ Deno.serve(async (req) => {
     // negativo, calcula o "excedente" além da taxa-base esperada (2% do
     // expected). Se o maior excedente do mês cair em [200, 400], esse daily
     // ganha status 'mensalidade_descontada' e os outros mantêm o status do
-    // pass 2 (matched/pending_manual). Antes esse rótulo era inline e gerava
-    // 4× falsos positivos no fev/26.
+    // pass 2 (matched/pending_manual). Como diff é contra expected_LIQUIDO,
+    // usamos abs(diff) direto (sem subtrair baseline — taxa já descontada).
     let mensalidadeIdx = -1;
-    let mensalidadeExcess = 0;
+    let mensalidadeAmount = 0;
     for (let i = 0; i < dailyRows.length; i++) {
       const d = dailyRows[i];
-      if (d.diff >= 0 || d.expected_amount <= 0) continue;
-      const baselineFee = FEE_BASELINE_PCT * d.expected_amount;
-      const excess = Math.abs(d.diff) - baselineFee;
+      if (d.diff >= 0) continue;
+      const absDiff = Math.abs(d.diff);
       if (
-        excess >= MENSALIDADE_EXCESS_MIN &&
-        excess <= MENSALIDADE_EXCESS_MAX &&
-        excess > mensalidadeExcess
+        absDiff >= MENSALIDADE_MIN &&
+        absDiff <= MENSALIDADE_MAX &&
+        absDiff > mensalidadeAmount
       ) {
         mensalidadeIdx = i;
-        mensalidadeExcess = excess;
+        mensalidadeAmount = absDiff;
       }
     }
     if (mensalidadeIdx >= 0) {
@@ -339,9 +368,13 @@ Deno.serve(async (req) => {
     }
 
     // KPIs consolidados
-    const totalExpected = dailyRows.reduce((s, d) => s + d.expected_amount, 0);
+    const totalExpectedBruto = dailyRows.reduce((s, d) => s + d.expected_amount, 0);
+    const totalExpectedLiquido = dailyRows.reduce((s, d) => s + d.expected_liquido, 0);
+    const totalTaxa = dailyRows.reduce((s, d) => s + d.taxa_calculada, 0);
     const totalReceived = dailyRows.reduce((s, d) => s + d.received_amount, 0);
-    const taxaEfetiva = totalExpected > 0 ? ((totalExpected - totalReceived) / totalExpected) * 100 : 0;
+    const taxaEfetiva = totalExpectedBruto > 0 ? ((totalExpectedBruto - totalReceived) / totalExpectedBruto) * 100 : 0;
+    const taxaDeclarada = totalExpectedBruto > 0 ? (totalTaxa / totalExpectedBruto) * 100 : 0;
+    const custoOculto = totalExpectedLiquido - totalReceived; // diferença não explicada pelas taxas declaradas
     const byStatus: Record<string, number> = {};
     for (const d of dailyRows) byStatus[d.status] = (byStatus[d.status] ?? 0) + 1;
 
@@ -359,9 +392,13 @@ Deno.serve(async (req) => {
       daily: {
         rows: dailyRows.length,
         by_status: byStatus,
-        total_expected: Math.round(totalExpected * 100) / 100,
+        total_expected: Math.round(totalExpectedBruto * 100) / 100,
+        total_expected_liquido: Math.round(totalExpectedLiquido * 100) / 100,
+        total_taxa_declarada: Math.round(totalTaxa * 100) / 100,
         total_received: Math.round(totalReceived * 100) / 100,
         taxa_efetiva_pct: Math.round(taxaEfetiva * 100) / 100,
+        taxa_declarada_pct: Math.round(taxaDeclarada * 100) / 100,
+        custo_oculto: Math.round(custoOculto * 100) / 100,
       },
       adjacent: {
         count: adjacent.count,
