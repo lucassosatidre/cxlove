@@ -39,30 +39,39 @@ function excelSerialToDate(n: number): Date {
   return new Date(Math.round((n - 25569) * 86400 * 1000));
 }
 
-// Brendi exporta xlsx com BRT walltime gravado no Excel serial (sem TZ).
-// xlsx.js com cellDates:true entrega Date instance cujos campos UTC já trazem
-// o BRT walltime. Ex: pedido às 21:18 BRT 02/02 vira `2026-02-02T21:18Z` —
-// os componentes UTC representam BRT direto. Por isso NÃO subtrair 3h:
-// extraímos os componentes UTC as-is.
+// Brendi exporta timestamps UTC (verificado: row 1 mar/26 = `01/03 01:47Z`
+// que é Sat 28/02 22:47 BRT, real-world plausível pra restaurante operando
+// noite). Frontend lê com xlsx.js cellDates:true → Date instance, mas ao
+// enviar pra edge via supabase.functions.invoke, JSON.stringify converte
+// Date pra ISO string (`2026-02-02T21:18:22.394Z`).
 //
-// Versão antiga aplicava `utc - 3h` o que empurrava pedidos late-night BRT
-// (ex: 03/02 00:08) pro dia anterior (02/02), causando inflação do daily
-// anterior e perda no seguinte. Filtros Excel do Brendi report mostram a
-// data raw (sem TZ) então sale_date deve casar com o que aparece em Excel.
+// Aqui sempre aplicamos -3h pra converter UTC → BRT antes de extrair os
+// componentes da data. Sem isso, pedidos late-night BRT (UTC madrugada do
+// dia X) caem em sale_date X-1 errado: ex pedido às BRT 22:47 28/02 vira
+// UTC `01/03 01:47Z`, e sem shift seria sale_date 01/03 (errado, real é
+// 28/02).
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
-    const y = v.getUTCFullYear();
-    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(v.getUTCDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const brt = new Date(v.getTime() - 3 * 60 * 60 * 1000);
+    return `${brt.getUTCFullYear()}-${String(brt.getUTCMonth() + 1).padStart(2, '0')}-${String(brt.getUTCDate()).padStart(2, '0')}`;
   }
   if (typeof v === 'number' && isFinite(v) && v > 1 && v < 100000) {
     return toIsoDate(excelSerialToDate(v));
   }
   const s = String(v).trim();
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  // ISO COM hora (timestamp UTC vindo do JSON): aplica -3h
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+      return `${brt.getUTCFullYear()}-${String(brt.getUTCMonth() + 1).padStart(2, '0')}-${String(brt.getUTCDate()).padStart(2, '0')}`;
+    }
+  }
+  // ISO date-only (sem hora): assume já BRT, sem shift
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  // BR DD/MM/YYYY (já local BRT): sem shift
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) {
     const dd = m[1].padStart(2, '0');
@@ -72,21 +81,15 @@ function toIsoDate(v: any): string | null {
   return null;
 }
 
+// toIsoDateTime: para Date instance (raro) ou ISO string com Z (timestamp
+// UTC), passa adiante a string ISO direto — Postgres armazena instante UTC
+// e renderiza em qualquer TZ. Para BR strings (Saipos legacy), assume BRT
+// e adiciona offset -03:00.
 function toIsoDateTime(v: any): string | null {
   if (v == null || v === '') return null;
-  if (v instanceof Date) {
-    // Componentes UTC = BRT walltime. Re-serializa com offset -03:00 explícito
-    // pra Postgres armazenar o instante UTC correto (BRT + 3h = UTC real).
-    const y = v.getUTCFullYear();
-    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(v.getUTCDate()).padStart(2, '0');
-    const hh = String(v.getUTCHours()).padStart(2, '0');
-    const mm = String(v.getUTCMinutes()).padStart(2, '0');
-    const ss = String(v.getUTCSeconds()).padStart(2, '0');
-    return `${y}-${m}-${d}T${hh}:${mm}:${ss}-03:00`;
-  }
+  if (v instanceof Date) return v.toISOString();
   if (typeof v === 'number' && isFinite(v) && v > 1 && v < 100000) {
-    return toIsoDateTime(excelSerialToDate(v));
+    return excelSerialToDate(v).toISOString();
   }
   const s = String(v).trim();
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s;
