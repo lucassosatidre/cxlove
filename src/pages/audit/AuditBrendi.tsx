@@ -31,6 +31,8 @@ type DailyRow = {
   received_amount: number;
   diff: number;                  // received - expected_liquido
   diff_pct: number;
+  cumulative_diff: number;       // soma diffs até esse dia (deveria ficar ≤ 5%)
+  cumulative_diff_pct: number;
   status: string;
   note: string | null;
 };
@@ -61,6 +63,7 @@ const MONTHS = [
 
 const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   matched: { label: '✓ Matched', className: 'bg-green-500/15 text-green-700 dark:text-green-400' },
+  matched_window: { label: '✓ Janela', className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
   pending: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   pending_manual: { label: '⚠ Manual', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   mensalidade_descontada: { label: '💰 Mensalidade', className: 'bg-blue-500/15 text-blue-700 dark:text-blue-400' },
@@ -107,7 +110,7 @@ export default function AuditBrendi() {
     const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }] = await Promise.all([
       supabase
         .from('audit_brendi_daily')
-        .select('id, bb_credit_date, sale_dates, expected_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, status, note')
+        .select('id, bb_credit_date, sale_dates, expected_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, cumulative_diff, cumulative_diff_pct, status, note')
         .eq('audit_period_id', periodId)
         .order('bb_credit_date'),
       supabase
@@ -195,16 +198,17 @@ export default function AuditBrendi() {
     const expLiq = daily.reduce((s, d) => s + Number(d.expected_liquido || 0), 0);
     const taxaDecl = daily.reduce((s, d) => s + Number(d.taxa_calculada || 0), 0);
     const rec = daily.reduce((s, d) => s + Number(d.received_amount || 0), 0);
-    const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;            // taxa efetiva total
-    const taxaDeclPct = exp > 0 ? (taxaDecl / exp) * 100 : 0;        // taxa declarada Brendi
-    const custoOculto = expLiq - rec;                                 // diff não explicado pelas taxas declaradas
+    const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;
+    const taxaDeclPct = exp > 0 ? (taxaDecl / exp) * 100 : 0;
+    const custoOculto = expLiq - rec;
     const pedidosMes = daily.reduce((s, d) => s + Number(d.pedidos_count || 0), 0);
+    const matchedCount = daily.filter(d => d.status === 'matched' || d.status === 'matched_window').length;
     const pendingManualCount = daily.filter(d => d.status === 'pending_manual').length;
     const mensalidadeCount = daily.filter(d => d.status === 'mensalidade_descontada').length;
     const mensalidadeAmount = daily
       .filter(d => d.status === 'mensalidade_descontada')
       .reduce((s, d) => s + Math.abs(Number(d.diff || 0)), 0);
-    return { exp, expLiq, taxaDecl, rec, taxa, taxaDeclPct, custoOculto, pedidosMes, pendingManualCount, mensalidadeCount, mensalidadeAmount };
+    return { exp, expLiq, taxaDecl, rec, taxa, taxaDeclPct, custoOculto, pedidosMes, matchedCount, pendingManualCount, mensalidadeCount, mensalidadeAmount };
   }, [daily]);
 
   if (roleLoading || loading) {
@@ -428,8 +432,9 @@ function ResumoTab({
               <p className="text-muted-foreground">Execute o match pra ver o cross-check.</p>
             )}
             <hr className="my-2" />
-            <Row label="Dias matched" value={String(daily.filter(d => d.status === 'matched').length)} />
-            <Row label="Dias pending manual (>5%)" value={String(totals.pendingManualCount)}
+            <Row label="Dias matched (direto)" value={String(daily.filter(d => d.status === 'matched').length)} />
+            <Row label="Dias matched (janela cumulativa ≤5%)" value={String(daily.filter(d => d.status === 'matched_window').length)} />
+            <Row label="Dias pending manual" value={String(totals.pendingManualCount)}
               tone={totals.pendingManualCount > 0 ? 'amber' : 'normal'} />
             <Row label="Dias com mensalidade descontada" value={String(totals.mensalidadeCount)} />
             <Row label="Dias sem depósito" value={String(daily.filter(d => d.status === 'sem_deposito').length)}
@@ -604,6 +609,7 @@ function DiarioTab({
               <TableHead className="text-right">Recebido BB</TableHead>
               <TableHead className="text-right">Diff</TableHead>
               <TableHead className="text-right">Diff %</TableHead>
+              <TableHead className="text-right">Acumulado</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -625,6 +631,10 @@ function DiarioTab({
                     {fmt(d.diff)}
                   </TableCell>
                   <TableCell className="text-right">{fmtPct(d.diff_pct)}</TableCell>
+                  <TableCell className={`text-right text-xs font-medium ${Math.abs(Number(d.cumulative_diff_pct || 0)) <= 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-500'}`}>
+                    {fmt(Number(d.cumulative_diff || 0))}
+                    <div className="text-[10px] text-muted-foreground">{fmtPct(Number(d.cumulative_diff_pct || 0))}</div>
+                  </TableCell>
                   <TableCell><Badge variant="secondary" className={variant.className}>{variant.label}</Badge></TableCell>
                 </TableRow>
               );

@@ -36,6 +36,12 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const VALUE_TOLERANCE_CROSSCHECK = 2.00; // R$ 2 entre Saipos e Brendi
 const DIFF_PCT_THRESHOLD = 0.05;          // 5% pra marcar manual
+const DIFF_ABS_THRESHOLD = 150;           // R$ 150 absoluto (baixo volume)
+// Window cumulativa: se cumulative_diff_pct ≤ 5% até esse dia, promove
+// pending_manual → matched_window. Brendi tem cutoff ~horário não-meia-noite,
+// causa flutuação dia-a-dia (+R$500 num dia, -R$300 no seguinte). Cumulative
+// fecha — o "ruído" é apenas timing entre PIX consecutivos.
+const CUMULATIVE_DIFF_PCT_THRESHOLD = 0.05;
 
 // Modelo de taxa Brendi (declarado em https://brendi.com.br/configuracoes/pagamentos):
 // - Pix Online: 0,5% do total + R$ 0,40 fixo por pedido
@@ -385,7 +391,9 @@ Deno.serve(async (req) => {
         status = 'sem_deposito';
       } else if (agg.pedidos_count === 0) {
         status = 'pending_manual'; // PIX órfão sem vendas
-      } else if (diffPct <= DIFF_PCT_THRESHOLD) {
+      } else if (diffPct <= DIFF_PCT_THRESHOLD || Math.abs(diff) <= DIFF_ABS_THRESHOLD) {
+        // matched: pct OU absoluto baixo. Em dias de baixo volume (R$300),
+        // 5% = R$15 que é apertado demais — R$150 absoluto absorve flutuação.
         status = 'matched';
       } else {
         status = 'pending_manual';
@@ -431,6 +439,29 @@ Deno.serve(async (req) => {
     }
     if (mensalidadeIdx >= 0) {
       dailyRows[mensalidadeIdx].status = 'mensalidade_descontada';
+    }
+
+    // Pass 4: cumulative window matching. Brendi tem cutoff de batch ~horário
+    // não-meia-noite, causando flutuação dia-a-dia (+R$580 num dia, -R$237
+    // no seguinte) que se compensa em 1-2 dias. A SOMA cumulativa fecha. Se
+    // até o dia X o |cumulative_diff| / cumulative_expected ≤ 5%, marca rows
+    // pending_manual como matched_window — está dentro do esperado em janela.
+    // Pula linhas com mensalidade_descontada (já tratadas).
+    dailyRows.sort((a, b) => a.bb_credit_date.localeCompare(b.bb_credit_date));
+    let cumDiff = 0;
+    let cumExpected = 0;
+    for (const d of dailyRows) {
+      cumDiff += d.diff;
+      cumExpected += d.expected_liquido;
+      const cumPct = cumExpected > 0 ? Math.abs(cumDiff) / cumExpected : 0;
+      d.cumulative_diff = Math.round(cumDiff * 100) / 100;
+      d.cumulative_diff_pct = Math.round(cumPct * 10000) / 10000;
+      if (
+        d.status === 'pending_manual' &&
+        cumPct <= CUMULATIVE_DIFF_PCT_THRESHOLD
+      ) {
+        d.status = 'matched_window';
+      }
     }
 
     // Upsert dailyRows
