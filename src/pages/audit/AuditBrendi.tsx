@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -344,6 +344,7 @@ export default function AuditBrendi() {
           <DiarioTab
             daily={daily}
             totals={totals}
+            periodId={period?.id ?? null}
           />
         )}
 
@@ -572,12 +573,81 @@ function CrosscheckTab({
   );
 }
 
+type DailyDetailOrder = {
+  order_id: string;
+  sale_date: string;
+  created_at_remote: string;
+  status_remote: string;
+  forma_pagamento: string;
+  total: number;
+  cashback_usado: number;
+  cliente_nome: string | null;
+  saipos_cancelado: boolean | null;
+  saipos_motivo: string | null;
+  saipos_pagamento: string | null;
+  saipos_total: number | null;
+};
+
 function DiarioTab({
-  daily, totals,
+  daily, totals, periodId,
 }: {
   daily: DailyRow[];
-  totals: { exp: number; expLiq: number; taxaDecl: number; rec: number; taxa: number; taxaDeclPct: number; custoOculto: number; pedidosMes: number; pendingManualCount: number; mensalidadeCount: number; mensalidadeAmount: number };
+  totals: { exp: number; expLiq: number; taxaDecl: number; rec: number; taxa: number; taxaDeclPct: number; custoOculto: number; pedidosMes: number; matchedCount?: number; pendingManualCount: number; mensalidadeCount: number; mensalidadeAmount: number };
+  periodId: string | null;
 }) {
+  const [expandedDailyId, setExpandedDailyId] = useState<string | null>(null);
+  const [detailOrders, setDetailOrders] = useState<DailyDetailOrder[]>([]);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const toggleExpand = async (d: DailyRow) => {
+    if (expandedDailyId === d.id) {
+      setExpandedDailyId(null);
+      setDetailOrders([]);
+      return;
+    }
+    if (!periodId || !d.sale_dates?.length) return;
+    setExpandedDailyId(d.id);
+    setLoadingDetail(true);
+    try {
+      const { data: brendiOrders } = await supabase
+        .from('audit_brendi_orders')
+        .select('order_id, sale_date, created_at_remote, status_remote, forma_pagamento, total, cashback_usado, cliente_nome')
+        .eq('audit_period_id', periodId)
+        .in('sale_date', d.sale_dates)
+        .order('created_at_remote');
+      const orderIds = (brendiOrders ?? []).map(o => o.order_id);
+      const { data: saiposRows } = orderIds.length > 0
+        ? await supabase
+            .from('audit_saipos_orders')
+            .select('order_id_parceiro, cancelado, motivo_cancelamento, pagamento, total')
+            .eq('audit_period_id', periodId)
+            .in('order_id_parceiro', orderIds)
+        : { data: [] };
+      const saiposMap = new Map<string, any>();
+      for (const s of saiposRows ?? []) saiposMap.set(s.order_id_parceiro, s);
+      const merged: DailyDetailOrder[] = (brendiOrders ?? []).map(o => {
+        const s = saiposMap.get(o.order_id);
+        return {
+          order_id: o.order_id,
+          sale_date: o.sale_date,
+          created_at_remote: o.created_at_remote,
+          status_remote: o.status_remote,
+          forma_pagamento: o.forma_pagamento,
+          total: Number(o.total),
+          cashback_usado: Number(o.cashback_usado || 0),
+          cliente_nome: o.cliente_nome,
+          saipos_cancelado: s?.cancelado ?? null,
+          saipos_motivo: s?.motivo_cancelamento ?? null,
+          saipos_pagamento: s?.pagamento ?? null,
+          saipos_total: s ? Number(s.total) : null,
+        };
+      });
+      setDetailOrders(merged);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   if (daily.length === 0) {
     return (
       <Card>
@@ -616,27 +686,88 @@ function DiarioTab({
           <TableBody>
             {daily.map(d => {
               const variant = STATUS_VARIANTS[d.status] ?? STATUS_VARIANTS.pending;
+              const isExpanded = expandedDailyId === d.id;
               return (
-                <TableRow key={d.id}>
-                  <TableCell className="font-medium">{fmtDate(d.bb_credit_date)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {(d.sale_dates ?? []).map(s => fmtDate(s)).join(', ')}
-                  </TableCell>
-                  <TableCell className="text-right">{d.pedidos_count}</TableCell>
-                  <TableCell className="text-right">{fmt(d.expected_amount)}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">−{fmt(d.taxa_calculada)}</TableCell>
-                  <TableCell className="text-right">{fmt(d.expected_liquido)}</TableCell>
-                  <TableCell className="text-right">{fmt(d.received_amount)}</TableCell>
-                  <TableCell className={`text-right font-medium ${d.diff < -0.5 ? 'text-rose-700 dark:text-rose-400' : d.diff > 0.5 ? 'text-amber-700 dark:text-amber-500' : ''}`}>
-                    {fmt(d.diff)}
-                  </TableCell>
-                  <TableCell className="text-right">{fmtPct(d.diff_pct)}</TableCell>
-                  <TableCell className={`text-right text-xs font-medium ${Math.abs(Number(d.cumulative_diff_pct || 0)) <= 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-500'}`}>
-                    {fmt(Number(d.cumulative_diff || 0))}
-                    <div className="text-[10px] text-muted-foreground">{fmtPct(Number(d.cumulative_diff_pct || 0))}</div>
-                  </TableCell>
-                  <TableCell><Badge variant="secondary" className={variant.className}>{variant.label}</Badge></TableCell>
-                </TableRow>
+                <Fragment key={d.id}>
+                  <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => toggleExpand(d)}>
+                    <TableCell className="font-medium">
+                      <span className="mr-1 text-muted-foreground">{isExpanded ? '▼' : '▶'}</span>
+                      {fmtDate(d.bb_credit_date)}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {(d.sale_dates ?? []).map(s => fmtDate(s)).join(', ')}
+                    </TableCell>
+                    <TableCell className="text-right">{d.pedidos_count}</TableCell>
+                    <TableCell className="text-right">{fmt(d.expected_amount)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">−{fmt(d.taxa_calculada)}</TableCell>
+                    <TableCell className="text-right">{fmt(d.expected_liquido)}</TableCell>
+                    <TableCell className="text-right">{fmt(d.received_amount)}</TableCell>
+                    <TableCell className={`text-right font-medium ${d.diff < -0.5 ? 'text-rose-700 dark:text-rose-400' : d.diff > 0.5 ? 'text-amber-700 dark:text-amber-500' : ''}`}>
+                      {fmt(d.diff)}
+                    </TableCell>
+                    <TableCell className="text-right">{fmtPct(d.diff_pct)}</TableCell>
+                    <TableCell className={`text-right text-xs font-medium ${Math.abs(Number(d.cumulative_diff_pct || 0)) <= 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-500'}`}>
+                      {fmt(Number(d.cumulative_diff || 0))}
+                      <div className="text-[10px] text-muted-foreground">{fmtPct(Number(d.cumulative_diff_pct || 0))}</div>
+                    </TableCell>
+                    <TableCell><Badge variant="secondary" className={variant.className}>{variant.label}</Badge></TableCell>
+                  </TableRow>
+                  {isExpanded && (
+                    <TableRow className="bg-muted/20">
+                      <TableCell colSpan={11} className="p-0">
+                        {loadingDetail ? (
+                          <div className="text-xs text-muted-foreground p-3">Carregando pedidos…</div>
+                        ) : detailOrders.length === 0 ? (
+                          <div className="text-xs text-muted-foreground p-3">Sem pedidos nesse daily.</div>
+                        ) : (
+                          <div className="p-3">
+                            <div className="text-xs font-medium mb-2">{detailOrders.length} pedido(s) Brendi nesse crédito:</div>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="h-8 text-xs">Hora</TableHead>
+                                  <TableHead className="h-8 text-xs">Order ID</TableHead>
+                                  <TableHead className="h-8 text-xs">Cliente</TableHead>
+                                  <TableHead className="h-8 text-xs">Forma</TableHead>
+                                  <TableHead className="h-8 text-xs text-right">Total Brendi</TableHead>
+                                  <TableHead className="h-8 text-xs text-right">Cashback</TableHead>
+                                  <TableHead className="h-8 text-xs">Saipos status</TableHead>
+                                  <TableHead className="h-8 text-xs text-right">Saipos total</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {detailOrders.map(o => {
+                                  const cashbackHigh = o.cashback_usado > 0 && o.cashback_usado >= o.total;
+                                  const noSaipos = o.saipos_cancelado === null;
+                                  return (
+                                    <TableRow key={o.order_id} className={cashbackHigh || noSaipos ? 'bg-amber-500/10' : ''}>
+                                      <TableCell className="text-xs whitespace-nowrap py-1">{fmtDateTime(o.created_at_remote)}</TableCell>
+                                      <TableCell className="font-mono text-[10px] py-1">{o.order_id}</TableCell>
+                                      <TableCell className="text-xs py-1">{o.cliente_nome ?? '—'}</TableCell>
+                                      <TableCell className="text-xs py-1"><Badge variant="outline" className="text-[10px]">{o.forma_pagamento}</Badge></TableCell>
+                                      <TableCell className="text-right text-xs py-1">{fmt(o.total)}</TableCell>
+                                      <TableCell className="text-right text-xs text-muted-foreground py-1">
+                                        {o.cashback_usado > 0 ? fmt(o.cashback_usado) : '—'}
+                                      </TableCell>
+                                      <TableCell className="text-xs py-1">
+                                        {noSaipos
+                                          ? <span className="text-amber-700 dark:text-amber-500">⚠ não em Saipos</span>
+                                          : o.saipos_cancelado
+                                            ? <span className="text-rose-700 dark:text-rose-400">cancelado: {o.saipos_motivo ?? 'sem motivo'}</span>
+                                            : <span className="text-emerald-700 dark:text-emerald-400">OK</span>}
+                                      </TableCell>
+                                      <TableCell className="text-right text-xs py-1">{o.saipos_total != null ? fmt(o.saipos_total) : '—'}</TableCell>
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               );
             })}
           </TableBody>
