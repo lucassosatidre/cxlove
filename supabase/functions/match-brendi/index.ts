@@ -139,20 +139,38 @@ Deno.serve(async (req) => {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // CLEANUP DEFENSIVO: deleta TODA row de audit_brendi_orders que NÃO
-    // seja entregue (case-insensitive). Pedidos com status='expired',
-    // 'Recusado', 'Cancelado', etc não foram pagos pelo cliente — Brendi
-    // não repassa esses, mas eles podem ter sido importados antes do filtro
-    // de status estar consistente. Roda em cada match-brendi pra garantir
-    // higiene da base. Também limpa formas fora de escopo (Crédito offline,
-    // Débito, Dinheiro, VR, etc — não são repasses online Brendi).
+    // CLEANUP DEFENSIVO em 3 camadas. Pedidos que viraram lixo são removidos
+    // de audit_brendi_orders ANTES do match — Brendi não repassa eles.
+    //
+    // Camada 1: status_remote != 'entregue' (case-insensitive) — expired,
+    //   Recusado, Cancelado.
+    // Camada 2: forma_pagamento fora de [Pix Online, Crédito Online] —
+    //   pedidos offline (Crédito de máquina, Débito, Dinheiro, VR, etc) que
+    //   por engano vazaram aqui.
+    // Camada 3: order_id existe em Saipos com cancelado=true. Brendi report
+    //   marca como Entregue mesmo quando o PDV cancelou pós-fato (cliente
+    //   não pagou, expired, recusou no checkout). Saipos é fonte da verdade.
     // ─────────────────────────────────────────────────────────────────────
-    const { data: junkRows, error: junkErr } = await supabase
+    const { data: junkRows } = await supabase
       .from('audit_brendi_orders')
-      .select('id, status_remote, forma_pagamento')
+      .select('id, order_id, status_remote, forma_pagamento')
       .eq('audit_period_id', audit_period_id);
+
+    // Camada 3 prep: order_ids que Saipos diz que estão cancelados
+    const saiposCanceledRows = await fetchAllPaginated<any>(
+      supabase
+        .from('audit_saipos_orders')
+        .select('order_id_parceiro')
+        .eq('audit_period_id', audit_period_id)
+        .eq('canal_venda', 'Brendi')
+        .eq('cancelado', true),
+    );
+    const saiposCanceledIds = new Set(
+      (saiposCanceledRows ?? []).map(s => s.order_id_parceiro).filter(Boolean),
+    );
+
     let junkDeleted = 0;
-    const junkSamples: any = { statuses: {}, formas: {} };
+    const junkSamples: any = { statuses: {}, formas: {}, saipos_cancelados: 0 };
     if (junkRows && junkRows.length) {
       const idsToDelete: string[] = [];
       for (const r of junkRows) {
@@ -160,12 +178,14 @@ Deno.serve(async (req) => {
         const forma = (r.forma_pagamento ?? '').normalize('NFC').trim().toLowerCase();
         const isEntregue = stat === 'entregue';
         const isOnlineForma = forma === 'pix online' || forma === 'crédito online';
-        if (!isEntregue || !isOnlineForma) {
+        const isSaiposCanceled = saiposCanceledIds.has(r.order_id);
+        if (!isEntregue || !isOnlineForma || isSaiposCanceled) {
           idsToDelete.push(r.id);
           if (!isEntregue) junkSamples.statuses[r.status_remote ?? '<null>'] =
             (junkSamples.statuses[r.status_remote ?? '<null>'] ?? 0) + 1;
           if (!isOnlineForma) junkSamples.formas[r.forma_pagamento ?? '<null>'] =
             (junkSamples.formas[r.forma_pagamento ?? '<null>'] ?? 0) + 1;
+          if (isSaiposCanceled) junkSamples.saipos_cancelados++;
         }
       }
       if (idsToDelete.length > 0) {
