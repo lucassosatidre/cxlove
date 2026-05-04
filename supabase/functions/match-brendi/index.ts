@@ -139,6 +139,46 @@ Deno.serve(async (req) => {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // CLEANUP DEFENSIVO: deleta TODA row de audit_brendi_orders que NÃO
+    // seja entregue (case-insensitive). Pedidos com status='expired',
+    // 'Recusado', 'Cancelado', etc não foram pagos pelo cliente — Brendi
+    // não repassa esses, mas eles podem ter sido importados antes do filtro
+    // de status estar consistente. Roda em cada match-brendi pra garantir
+    // higiene da base. Também limpa formas fora de escopo (Crédito offline,
+    // Débito, Dinheiro, VR, etc — não são repasses online Brendi).
+    // ─────────────────────────────────────────────────────────────────────
+    const { data: junkRows, error: junkErr } = await supabase
+      .from('audit_brendi_orders')
+      .select('id, status_remote, forma_pagamento')
+      .eq('audit_period_id', audit_period_id);
+    let junkDeleted = 0;
+    const junkSamples: any = { statuses: {}, formas: {} };
+    if (junkRows && junkRows.length) {
+      const idsToDelete: string[] = [];
+      for (const r of junkRows) {
+        const stat = (r.status_remote ?? '').normalize('NFC').trim().toLowerCase();
+        const forma = (r.forma_pagamento ?? '').normalize('NFC').trim().toLowerCase();
+        const isEntregue = stat === 'entregue';
+        const isOnlineForma = forma === 'pix online' || forma === 'crédito online';
+        if (!isEntregue || !isOnlineForma) {
+          idsToDelete.push(r.id);
+          if (!isEntregue) junkSamples.statuses[r.status_remote ?? '<null>'] =
+            (junkSamples.statuses[r.status_remote ?? '<null>'] ?? 0) + 1;
+          if (!isOnlineForma) junkSamples.formas[r.forma_pagamento ?? '<null>'] =
+            (junkSamples.formas[r.forma_pagamento ?? '<null>'] ?? 0) + 1;
+        }
+      }
+      if (idsToDelete.length > 0) {
+        const CHUNK = 200;
+        for (let i = 0; i < idsToDelete.length; i += CHUNK) {
+          const chunk = idsToDelete.slice(i, i + CHUNK);
+          await supabase.from('audit_brendi_orders').delete().in('id', chunk);
+        }
+        junkDeleted = idsToDelete.length;
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Pass 1: Cross-check Saipos × Brendi
     // Usa fetchAllPaginated pra evitar limite default 1000 rows do PostgREST.
     // Filtra status_remote='Entregue' + forma in escopo como defesa em
@@ -166,7 +206,7 @@ Deno.serve(async (req) => {
         .from('audit_brendi_orders')
         .select('order_id, forma_pagamento, total, cashback_usado, status_remote, created_at_remote')
         .eq('audit_period_id', audit_period_id)
-        .eq('status_remote', 'Entregue')
+        .ilike('status_remote', 'entregue')
         .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
@@ -245,7 +285,7 @@ Deno.serve(async (req) => {
         .from('audit_brendi_orders')
         .select('sale_date, total, forma_pagamento')
         .eq('audit_period_id', audit_period_id)
-        .eq('status_remote', 'Entregue')
+        .ilike('status_remote', 'entregue')
         .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
@@ -515,7 +555,12 @@ Deno.serve(async (req) => {
         expected: Math.round(adjacent.expected * 100) / 100,
         received: Math.round(adjacent.received * 100) / 100,
       },
-      message: `${dailyRows.length} dias processados. ${crosscheck.ok} ok / ${crosscheck.missing_in_brendi.length} missing in brendi / ${crosscheck.value_mismatch.length} value mismatch.`,
+      cleanup: {
+        junk_deleted: junkDeleted,
+        statuses_dropped: junkSamples.statuses,
+        formas_dropped: junkSamples.formas,
+      },
+      message: `${dailyRows.length} dias · ${crosscheck.ok} ok / ${crosscheck.missing_in_brendi.length} sem Brendi / ${crosscheck.value_mismatch.length} valor diff${junkDeleted > 0 ? ` · 🧹 ${junkDeleted} pedido(s) lixo removido(s)` : ''}.`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('match-brendi error', e);
