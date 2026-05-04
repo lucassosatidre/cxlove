@@ -107,6 +107,13 @@ export default function AuditBrendi() {
   }, [month, year, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = async (periodId: string) => {
+    // Cashback KPI deve refletir só o mês de competência. Brendi importa 3
+    // meses (ant+comp+post) no mesmo audit_period_id pra cobrir D+1 entre
+    // meses, então filtra sale_date dentro do range do mês.
+    const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+    const nextMonthStart = month === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }] = await Promise.all([
       supabase
         .from('audit_brendi_daily')
@@ -131,6 +138,8 @@ export default function AuditBrendi() {
         .from('audit_brendi_orders')
         .select('cashback_usado')
         .eq('audit_period_id', periodId)
+        .gte('sale_date', monthStart)
+        .lt('sale_date', nextMonthStart)
         .gt('cashback_usado', 0),
     ]);
     setDaily((dailyRows ?? []) as DailyRow[]);
