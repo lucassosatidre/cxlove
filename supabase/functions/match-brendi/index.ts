@@ -211,22 +211,34 @@ Deno.serve(async (req) => {
     // independente de método extra. Filtra Saipos com forma online no DB,
     // depois revalida tudo no JS.
     // ─────────────────────────────────────────────────────────────────────
+    // Cross-check só do MÊS DE COMPETÊNCIA. Estágio 3 importa 3 meses
+    // (ant+comp+post) pra cobrir D+1 entre meses, mas o cross-check de
+    // jan/mar não importa pra auditoria de fev — polui a UI.
+    const periodMonthStart = `${period.year}-${String(period.month).padStart(2, '0')}-01`;
+    const periodNextMonthStart = period.month === 12
+      ? `${period.year + 1}-01-01`
+      : `${period.year}-${String(period.month + 1).padStart(2, '0')}-01`;
+
     const saiposRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_saipos_orders')
-        .select('order_id_parceiro, pagamento, cancelado, total, data_venda')
+        .select('order_id_parceiro, pagamento, cancelado, total, data_venda, sale_date')
         .eq('audit_period_id', audit_period_id)
         .eq('canal_venda', 'Brendi')
         .eq('cancelado', false)
+        .gte('sale_date', periodMonthStart)
+        .lt('sale_date', periodNextMonthStart)
         .or('pagamento.ilike.%Pix Online Brendi%,pagamento.ilike.%Pago Online - Cartão de crédito%'),
     );
 
     const brendiRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_brendi_orders')
-        .select('order_id, forma_pagamento, total, cashback_usado, status_remote, created_at_remote')
+        .select('order_id, forma_pagamento, total, cashback_usado, status_remote, created_at_remote, sale_date')
         .eq('audit_period_id', audit_period_id)
         .ilike('status_remote', 'entregue')
+        .gte('sale_date', periodMonthStart)
+        .lt('sale_date', periodNextMonthStart)
         .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
     );
 
