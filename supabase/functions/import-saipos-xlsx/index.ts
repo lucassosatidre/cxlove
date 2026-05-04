@@ -24,25 +24,22 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-// Aplica offset BRT (-3h) antes de extrair year/month/day. Saipos exporta
-// datetime no fuso BRT como string "DD/MM/YYYY HH:MM"; quando vira Date no
-// XLSX.js do browser, vira Date local que ao serializar pra JSON pode virar
-// UTC do dia seguinte se >= 21h BRT.
+// Saipos exporta como string "DD/MM/YYYY HH:MM" (path normal) — extrai date
+// direto. Se algum dia exportar como Date instance no xlsx, os campos UTC já
+// trazem BRT walltime (mesmo padrão Brendi) — extrair as-is, sem subtrair 3h.
+// A versão antiga subtraía 3h o que dava errado em pedidos late-night BRT.
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
-    const utc = v.getTime();
-    const brt = new Date(utc - 3 * 60 * 60 * 1000);
-    const y = brt.getUTCFullYear();
-    const m = String(brt.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(brt.getUTCDate()).padStart(2, '0');
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(v.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   const s = String(v).trim();
   // "DD/MM/YYYY HH:MM" ou "DD/MM/YYYY"
   const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  // ISO YYYY-MM-DD
   const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
   return null;
@@ -50,7 +47,16 @@ function toIsoDate(v: any): string | null {
 
 function toIsoDateTime(v: any): string | null {
   if (v == null || v === '') return null;
-  if (v instanceof Date) return v.toISOString();
+  if (v instanceof Date) {
+    // Componentes UTC = BRT walltime. Re-serializa com offset -03:00.
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(v.getUTCDate()).padStart(2, '0');
+    const hh = String(v.getUTCHours()).padStart(2, '0');
+    const mm = String(v.getUTCMinutes()).padStart(2, '0');
+    const ss = String(v.getUTCSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d}T${hh}:${mm}:${ss}-03:00`;
+  }
   const s = String(v).trim();
   // "DD/MM/YYYY HH:MM"
   const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?$/);

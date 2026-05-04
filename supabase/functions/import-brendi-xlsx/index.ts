@@ -39,25 +39,30 @@ function excelSerialToDate(n: number): Date {
   return new Date(Math.round((n - 25569) * 86400 * 1000));
 }
 
+// Brendi exporta xlsx com BRT walltime gravado no Excel serial (sem TZ).
+// xlsx.js com cellDates:true entrega Date instance cujos campos UTC já trazem
+// o BRT walltime. Ex: pedido às 21:18 BRT 02/02 vira `2026-02-02T21:18Z` —
+// os componentes UTC representam BRT direto. Por isso NÃO subtrair 3h:
+// extraímos os componentes UTC as-is.
+//
+// Versão antiga aplicava `utc - 3h` o que empurrava pedidos late-night BRT
+// (ex: 03/02 00:08) pro dia anterior (02/02), causando inflação do daily
+// anterior e perda no seguinte. Filtros Excel do Brendi report mostram a
+// data raw (sem TZ) então sale_date deve casar com o que aparece em Excel.
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
-    const utc = v.getTime();
-    const brt = new Date(utc - 3 * 60 * 60 * 1000);
-    const y = brt.getUTCFullYear();
-    const m = String(brt.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(brt.getUTCDate()).padStart(2, '0');
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(v.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
-  // Excel serial number (xlsx.js com cellDates=false retorna número)
   if (typeof v === 'number' && isFinite(v) && v > 1 && v < 100000) {
     return toIsoDate(excelSerialToDate(v));
   }
   const s = String(v).trim();
-  // ISO YYYY-MM-DD ou YYYY-MM-DDTHH:MM:SS
   let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  // BR DD/MM/YYYY (com ou sem hora)
   m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) {
     const dd = m[1].padStart(2, '0');
@@ -69,19 +74,27 @@ function toIsoDate(v: any): string | null {
 
 function toIsoDateTime(v: any): string | null {
   if (v == null || v === '') return null;
-  if (v instanceof Date) return v.toISOString();
+  if (v instanceof Date) {
+    // Componentes UTC = BRT walltime. Re-serializa com offset -03:00 explícito
+    // pra Postgres armazenar o instante UTC correto (BRT + 3h = UTC real).
+    const y = v.getUTCFullYear();
+    const m = String(v.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(v.getUTCDate()).padStart(2, '0');
+    const hh = String(v.getUTCHours()).padStart(2, '0');
+    const mm = String(v.getUTCMinutes()).padStart(2, '0');
+    const ss = String(v.getUTCSeconds()).padStart(2, '0');
+    return `${y}-${m}-${d}T${hh}:${mm}:${ss}-03:00`;
+  }
   if (typeof v === 'number' && isFinite(v) && v > 1 && v < 100000) {
-    return excelSerialToDate(v).toISOString();
+    return toIsoDateTime(excelSerialToDate(v));
   }
   const s = String(v).trim();
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s;
-  // BR DD/MM/YYYY HH:MM[:SS]
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?/);
   if (m) {
     const [, dd, mm, yyyy, h, min, sec] = m;
     return `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${h.padStart(2,'0')}:${min}:${sec ?? '00'}-03:00`;
   }
-  // Date-only sem hora — meia-noite BRT
   const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (m2) {
     const [, dd, mm, yyyy] = m2;
