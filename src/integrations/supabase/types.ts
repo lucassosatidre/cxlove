@@ -101,6 +101,8 @@ export type Database = {
           bb_credit_date: string
           bb_deposit_ids: string[] | null
           created_at: string
+          cumulative_diff: number
+          cumulative_diff_pct: number
           diff: number
           diff_pct: number
           expected_amount: number
@@ -120,6 +122,8 @@ export type Database = {
           bb_credit_date: string
           bb_deposit_ids?: string[] | null
           created_at?: string
+          cumulative_diff?: number
+          cumulative_diff_pct?: number
           diff?: number
           diff_pct?: number
           expected_amount?: number
@@ -139,6 +143,8 @@ export type Database = {
           bb_credit_date?: string
           bb_deposit_ids?: string[] | null
           created_at?: string
+          cumulative_diff?: number
+          cumulative_diff_pct?: number
           diff?: number
           diff_pct?: number
           expected_amount?: number
