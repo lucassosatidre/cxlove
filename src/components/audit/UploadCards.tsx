@@ -1073,12 +1073,13 @@ export function UploadIfoodOrdersCard({ period, ensurePeriod, onAfter }: UploadC
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
         <UtensilsCrossed className="h-5 w-5 text-red-600" />
-        <CardTitle className="text-base">iFood — Relatório Pedidos (.xlsx)</CardTitle>
+        <CardTitle className="text-base">iFood — Relatório de Pedidos (.xlsx)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Export "Relatório de Pedidos" do Portal Parceiro iFood (20 colunas, per-pedido).
-          Importa apenas status="CONCLUIDO". Importe os 3 meses pra cobrir crédito entre meses.
+          Portal Parceiro → Pedidos → Relatório de Pedidos → XLSX. <strong>1 arquivo por loja</strong>{' '}
+          (Pizzaria Estrela e Temx Pizza separadamente). Apenas o mês de competência.
+          Filtra status="CONCLUIDO".
         </p>
         <input
           ref={inputRef}
@@ -1103,36 +1104,64 @@ export function UploadIfoodOrdersCard({ period, ensurePeriod, onAfter }: UploadC
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// iFood Marketplace — Auditoria Diária (.csv pré-conciliado pelo iFood)
+// iFood Marketplace — Extrato Detalhado (.xlsx) — fonte da verdade do iFood v2
+// 1 arquivo por loja (Pizzaria Estrela e Temx Pizza separadamente).
 // ─────────────────────────────────────────────────────────────────────────────
-export function UploadIfoodDailyCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+export function UploadIfoodExtratoDetalhadoCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
-  const handleFile = async (file: File) => {
+  const handleFiles = async (files: File[]) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx é aceito`);
+    if (xlsx.length === 0) return;
+
     setUploading(true);
+    setProgress({ current: 0, total: xlsx.length });
+    let totalImported = 0;
+    const lojas: string[] = [];
+    const failures: string[] = [];
+
     try {
       const p = await ensurePeriod();
       if (!p) return;
-      const buf = await file.arrayBuffer();
-      // xlsx.js lê CSV transparentemente (autodetecta separador)
-      const wb = XLSX.read(buf, { type: 'array', cellDates: false, FS: ';' });
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: false });
-      if (!rows.length) throw new Error('CSV vazio');
 
-      const { data, error } = await supabase.functions.invoke('import-ifood-daily', {
-        body: { audit_period_id: p.id, rows, file_name: file.name },
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha no import iFood Auditoria');
+      for (let i = 0; i < xlsx.length; i++) {
+        const file = xlsx[i];
+        setProgress({ current: i + 1, total: xlsx.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+          if (!rows.length) throw new Error('Aba vazia');
 
-      toast.success(`${data.imported_rows} dias iFood Auditoria importados`);
+          const { data, error } = await supabase.functions.invoke('import-ifood-extrato-detalhado', {
+            body: { audit_period_id: p.id, rows, file_name: file.name },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Extrato Detalhado');
+
+          totalImported += Number(data.imported_rows ?? 0);
+          if (data.store_id_curto) lojas.push(data.store_id_curto);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalImported} lançamentos importados`, {
+          description: `Lojas: ${[...new Set(lojas)].join(', ')}`,
+        });
+      } else {
+        toast.error(`${failures.length} de ${xlsx.length} falharam`, { description: failures.join(' | ') });
+      }
       await onAfter();
-    } catch (e: any) {
-      toast.error('Falha no upload', { description: e?.message ?? 'erro' });
     } finally {
       setUploading(false);
+      setProgress(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -1140,27 +1169,123 @@ export function UploadIfoodDailyCard({ period, ensurePeriod, onAfter }: UploadCa
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
-        <FileSpreadsheet className="h-5 w-5 text-orange-600" />
-        <CardTitle className="text-base">iFood — Auditoria Diária (.csv)</CardTitle>
+        <FileSpreadsheet className="h-5 w-5 text-red-600" />
+        <CardTitle className="text-base">iFood — Extrato Detalhado (.xlsx)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Export "Auditoria" do Portal Parceiro iFood (CSV ;-separado per-dia: Vendas/Bruto/
-          Taxa/Liq Esperado/Depositado/Diferença/Status). Salva campos declarados pra cross-check.
+          Portal Parceiro → Financeiro → Extrato Detalhado → XLSX. <strong>1 arquivo por loja</strong>{' '}
+          (Pizzaria Estrela e Temx Pizza separadamente). Apenas o mês de competência.
+          A loja é detectada automaticamente.
+        </p>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".xlsx"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
+          }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar XLSX (Estrela + Temx)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// iFood Marketplace — Conta iFood Pago (.csv) — extrato bancário da conta
+// nativa do iFood. Importar mês comp + comp+1 (ciclos atravessam meses).
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const csvs = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
+    if (csvs.length === 0) {
+      toast.error('Apenas .csv é aceito');
+      return;
+    }
+    setUploading(true);
+    setProgress({ current: 0, total: csvs.length });
+    let totalImported = 0;
+    const failures: string[] = [];
+
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+
+      for (let i = 0; i < csvs.length; i++) {
+        const file = csvs[i];
+        setProgress({ current: i + 1, total: csvs.length });
+        try {
+          const buf = await file.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: false });
+          if (!rows.length) throw new Error('CSV vazio');
+
+          const { data, error } = await supabase.functions.invoke('import-ifood-conta-csv', {
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Falha no import Conta iFood Pago');
+          totalImported += Number(data.imported_rows ?? 0);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+
+      if (failures.length === 0) {
+        toast.success(`${totalImported} movimentos importados (conta iFood Pago)`);
+      } else {
+        toast.error(`${failures.length} de ${csvs.length} falharam`, { description: failures.join(' | ') });
+      }
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <Landmark className="h-5 w-5 text-orange-600" />
+        <CardTitle className="text-base">iFood — Conta iFood Pago (.csv)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Extrato CSV da <strong>conta iFood Pago</strong> (banco do iFood). <strong>Importe 2 arquivos</strong>:
+          o do mês de competência <em>e</em> o do mês seguinte (alguns ciclos antecipam no mês
+          posterior). Apenas linhas "Repasse iFood" e "Antecipação" são processadas.
         </p>
         <input
           ref={inputRef}
           type="file"
           accept=".csv"
+          multiple
           className="hidden"
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFile(file);
+            const files = Array.from(e.target.files ?? []);
+            if (files.length > 0) handleFiles(files);
           }}
         />
         <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-          {uploading ? 'Importando…' : 'Selecionar CSV'}
+          {uploading
+            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+            : 'Selecionar CSV (comp + comp+1)'}
         </Button>
       </CardContent>
     </Card>

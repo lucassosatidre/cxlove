@@ -1,12 +1,15 @@
 // @ts-nocheck
-// Importa CSV "Auditoria iFood" (per-dia, pré-conciliado pelo iFood Portal).
-// Formato ;-separado, 8 colunas:
-// Data;Vendas;Bruto;Taxa iFood;Liq Esperado;Depositado;Diferença;Status
+// import-ifood-conta-csv — extrato bancário da conta iFood Pago.
 //
-// O arquivo já vem com Depositado e Diferença calculados pelo iFood. Salvamos
-// como `ifood_declarado_*` no audit_ifood_marketplace_daily — o match-ifood
-// depois compara contra audit_bank_deposits (Cresol) e a agregação de
-// audit_ifood_marketplace_orders pra cross-check completo.
+// CSV exportado da conta iFood Pago (Banco do iFood). Header esperado:
+//   "data da transação","descrição","valor","categoria"
+// Colunas:
+//   0=data (YYYY-MM-DD), 1=descrição (texto), 2=valor (BR pt: vírgula decimal),
+//   3=categoria (Repasse iFood | Antecipação | Pix | Transferência)
+//
+// Filtra apenas linhas com categoria='Repasse iFood' ou 'Antecipação'.
+// As demais (Pix, Transferência) são fluxo de tesouraria, irrelevantes pra
+// reconciliação iFood Marketplace v2.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -20,26 +23,11 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-function toIsoDate(v: any): string | null {
-  if (v == null || v === '') return null;
-  if (v instanceof Date) {
-    const brt = new Date(v.getTime() - 3 * 60 * 60 * 1000);
-    return `${brt.getUTCFullYear()}-${String(brt.getUTCMonth() + 1).padStart(2, '0')}-${String(brt.getUTCDate()).padStart(2, '0')}`;
-  }
-  const s = String(v).trim();
-  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  return null;
-}
-
 function toNum(v: any): number {
   if (v == null || v === '') return 0;
   if (typeof v === 'number') return isFinite(v) ? v : 0;
   let s = String(v).trim().replace(/[R$\s]/gi, '');
   if (!s) return 0;
-  // Aceita "-32.04" (US), "-32,04" (BR), "1.385,00" (BR-thousands)
   const lastDot = s.lastIndexOf('.');
   const lastComma = s.lastIndexOf(',');
   if (lastDot === -1 && lastComma === -1) return Number(s) || 0;
@@ -49,15 +37,18 @@ function toNum(v: any): number {
   return Number(s) || 0;
 }
 
-function toStr(v: any): string | null {
+function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
-  return String(v).trim() || null;
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return s;
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  return null;
 }
 
-function toInt(v: any): number {
-  if (v == null || v === '') return 0;
-  const n = Number(String(v).replace(/[^\d-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
+function normLower(s: any): string {
+  return String(s ?? '').normalize('NFC').trim().toLowerCase();
 }
 
 Deno.serve(async (req) => {
@@ -91,16 +82,16 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_name, rows } = body || {};
+    const { audit_period_id, file_name, rows, clear_existing } = body || {};
     if (!audit_period_id || !file_name || !Array.isArray(rows)) {
-      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes' }), {
+      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, rows)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    const { data: period, error: periodErr } = await supabase
-      .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
-    if (periodErr || !period) {
+    const { data: period } = await supabase
+      .from('audit_periods').select('id,month,year,status').eq('id', audit_period_id).maybeSingle();
+    if (!period) {
       return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -111,36 +102,33 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Header detection: Data + Bruto + Depositado nas primeiras 5 linhas
+    if (clear_existing === true) {
+      await supabase.from('audit_ifood_conta_movimentos').delete().eq('audit_period_id', audit_period_id);
+    }
+
+    // Detect header. CSV header expected: "data da transação","descrição","valor","categoria"
     let headerIdx = -1;
-    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    for (let i = 0; i < Math.min(rows.length, 3); i++) {
       const r = rows[i];
       if (!r || !Array.isArray(r)) continue;
-      const cells = r.map((c: any) => String(c ?? '').toLowerCase().trim());
-      const hasData = cells.some(c => c === 'data' || c.includes('data'));
-      const hasDepositado = cells.some(c => c.includes('depositado'));
-      if (hasData && hasDepositado) { headerIdx = i; break; }
+      const cells = r.map((c: any) => normLower(c));
+      const hasData = cells.some(c => c.includes('data') && c.includes('transa'));
+      const hasCat = cells.some(c => c === 'categoria' || c.includes('categoria'));
+      if (hasData && hasCat) { headerIdx = i; break; }
     }
     if (headerIdx < 0) {
-      return new Response(JSON.stringify({
-        error: 'Header iFood Auditoria não encontrado. Esperado: "Data" e "Depositado".',
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Header CSV iFood Pago não encontrado. Esperado: "data da transação", "descrição", "valor", "categoria".' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const COL = {
-      data: 0, vendas: 1, bruto: 2, taxa: 3, liq_esperado: 4,
-      depositado: 5, diferenca: 6, status: 7,
-    };
-
     const dataRows = rows.slice(headerIdx + 1).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
-    const totalRows = dataRows.length;
 
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id,
-        file_type: 'ifood_daily',
+        file_type: 'ifood_conta_csv',
         file_name,
-        total_rows: totalRows,
+        total_rows: dataRows.length,
         status: 'pending',
         created_by: userId,
       }).select().single();
@@ -150,44 +138,54 @@ Deno.serve(async (req) => {
       });
     }
 
-    const dailies: any[] = [];
-    let skippedNoDate = 0;
+    const movimentos: any[] = [];
+    let ignoradosCategoria = 0;
+    let ignoradosSemData = 0;
+    const categoriasVistas: Record<string, number> = {};
+    let csvIdx = 0;
 
     for (const r of dataRows) {
-      const saleDate = toIsoDate(r[COL.data]);
-      if (!saleDate) { skippedNoDate++; continue; }
+      const dataStr = toIsoDate(r[0]);
+      const descricao = String(r[1] ?? '').trim();
+      const valor = toNum(r[2]);
+      const catCsv = String(r[3] ?? '').trim();
+      const catLow = normLower(catCsv);
+      categoriasVistas[catCsv] = (categoriasVistas[catCsv] ?? 0) + 1;
+      csvIdx++;
 
-      dailies.push({
+      if (!dataStr) { ignoradosSemData++; continue; }
+
+      let categoria: 'repasse' | 'taxa_antecip' | null = null;
+      if (catLow === 'repasse ifood') categoria = 'repasse';
+      else if (catLow === 'antecipação' || catLow === 'antecipacao') categoria = 'taxa_antecip';
+
+      if (!categoria) { ignoradosCategoria++; continue; }
+
+      movimentos.push({
         audit_period_id,
-        sale_date: saleDate,
-        ifood_declarado_vendas: toInt(r[COL.vendas]),
-        ifood_declarado_bruto: toNum(r[COL.bruto]),
-        ifood_declarado_taxa: toNum(r[COL.taxa]),
-        ifood_declarado_liq_esperado: toNum(r[COL.liq_esperado]),
-        ifood_declarado_depositado: toNum(r[COL.depositado]),
-        ifood_declarado_diferenca: toNum(r[COL.diferenca]),
-        ifood_declarado_status: toStr(r[COL.status]),
+        import_id: importRec.id,
+        csv_idx: csvIdx,
+        data: dataStr,
+        descricao,
+        valor,
+        categoria_csv: catCsv,
+        categoria,
+        status: 'pending',
       });
     }
 
     let inserted = 0;
     const CHUNK = 200;
-    for (let i = 0; i < dailies.length; i += CHUNK) {
-      const chunk = dailies.slice(i, i + CHUNK);
-      // Upsert preservando os campos calc/cresol já populados pelo match-ifood
-      // (não sobrescreve liquido_calc/bruto_calc/cresol_received). Inserimos
-      // só os campos ifood_declarado_*.
+    for (let i = 0; i < movimentos.length; i += CHUNK) {
+      const chunk = movimentos.slice(i, i + CHUNK);
       const { error: insErr } = await supabase
-        .from('audit_ifood_marketplace_daily')
-        .upsert(chunk, {
-          onConflict: 'audit_period_id,sale_date',
-          ignoreDuplicates: false,
-        });
+        .from('audit_ifood_conta_movimentos')
+        .upsert(chunk, { onConflict: 'audit_period_id,csv_idx,descricao' });
       if (insErr) {
         await supabase.from('audit_imports').update({
           status: 'failed', error_message: insErr.message, imported_rows: inserted,
         }).eq('id', importRec.id);
-        return new Response(JSON.stringify({ error: `Erro ao inserir: ${insErr.message}` }), {
+        return new Response(JSON.stringify({ error: `Erro ao inserir movimentos: ${insErr.message}` }), {
           status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
@@ -200,13 +198,15 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      total_rows: totalRows,
+      total_rows: dataRows.length,
       imported_rows: inserted,
-      skipped_no_date: skippedNoDate,
-      message: `${inserted} dias iFood Auditoria importados.`,
+      ignored_categoria: ignoradosCategoria,
+      ignored_no_data: ignoradosSemData,
+      categorias_vistas: categoriasVistas,
+      message: `${inserted} movimentos iFood Pago importados (${ignoradosCategoria} fora de escopo, ${ignoradosSemData} sem data).`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
-    console.error('import-ifood-daily error', e);
+    console.error('import-ifood-conta-csv error', e);
     return new Response(JSON.stringify({ error: e?.message ?? 'Erro inesperado' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

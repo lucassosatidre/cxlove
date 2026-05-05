@@ -33,8 +33,13 @@ function excelSerialToDate(n: number): Date {
   return new Date(Math.round((n - 25569) * 86400 * 1000));
 }
 
-// iFood exporta DATA E HORA como string "DD/MM/YYYY HH:MM:SS" (BRT). Aceita
-// também Date instance (caso o exporter mude) ou serial Excel.
+// iFood exporta DATA E HORA tipicamente como string "DD/MM/YYYY HH:MM:SS"
+// (BRT walltime). Mas se o exporter mudar pra Excel-date type, frontend lê
+// com cellDates:true → Date, e supabase.functions.invoke faz JSON.stringify
+// que vira ISO UTC string. Mesmo padrão do bug Brendi (commit 772b7bc): a
+// regex date-only (sem $) capturava o ISO timestamp e devolvia data UTC
+// as-is, jogando pedidos late-night BRT pro dia seguinte. Fix: ISO com T
+// recebe -3h, demais formatos (BR DD/MM ou ISO date-only) ficam as-is.
 function toIsoDate(v: any): string | null {
   if (v == null || v === '') return null;
   if (v instanceof Date) {
@@ -45,12 +50,18 @@ function toIsoDate(v: any): string | null {
     return toIsoDate(excelSerialToDate(v));
   }
   const s = String(v).trim();
-  // BR DD/MM/YYYY HH:MM:SS — wall-clock BRT, não precisa ajuste
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      const brt = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+      return `${brt.getUTCFullYear()}-${String(brt.getUTCMonth() + 1).padStart(2, '0')}-${String(brt.getUTCDate()).padStart(2, '0')}`;
+    }
+  }
   let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (m) {
     return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
   }
-  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   return null;
 }
@@ -135,7 +146,7 @@ Deno.serve(async (req) => {
 
     if (clear_existing === true) {
       const { error: delErr } = await supabase
-        .from('audit_ifood_marketplace_orders')
+        .from('audit_ifood_orders')
         .delete()
         .eq('audit_period_id', audit_period_id);
       if (delErr) {
@@ -226,6 +237,7 @@ Deno.serve(async (req) => {
         import_id: importRec.id,
         order_id: orderId,
         short_order_id: toStr(r[COL.short_id]),
+        store_id_curto: toStr(r[COL.store_id]),
         data_pedido: dataPedido ?? saleDate,
         sale_date: saleDate,
         turno: toStr(r[COL.turno]),
@@ -257,7 +269,7 @@ Deno.serve(async (req) => {
     for (let i = 0; i < orders.length; i += CHUNK) {
       const chunk = orders.slice(i, i + CHUNK);
       const { error: insErr } = await supabase
-        .from('audit_ifood_marketplace_orders')
+        .from('audit_ifood_orders')
         .upsert(chunk, { onConflict: 'audit_period_id,order_id' });
       if (insErr) {
         await supabase.from('audit_imports').update({

@@ -1,0 +1,784 @@
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import AppLayout from '@/components/AppLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { supabase } from '@/integrations/supabase/client';
+import { useUserRole } from '@/hooks/useUserRole';
+import { toast } from 'sonner';
+import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import {
+  UploadIfoodExtratoDetalhadoCard, UploadIfoodContaCsvCard, UploadIfoodOrdersCard,
+  dispatchMatchIfoodMarketplace,
+  type AuditPeriodLite,
+} from '@/components/audit/UploadCards';
+
+type Repasse = {
+  id: string;
+  store_id_curto: string;
+  data_repasse_esperada: string;
+  periodo_apuracao_inicio: string | null;
+  periodo_apuracao_fim: string | null;
+  bruto_venda: number;
+  pgto_direto_loja: number;
+  comissao: number;
+  taxa_transacao: number;
+  taxa_conveniencia: number;
+  taxa_entrega_ret: number;
+  taxa_servico_sob_demanda: number;
+  taxa_servico_cliente: number;
+  promo_ifood: number;
+  promo_loja: number;
+  frete_ifood: number;
+  cancel_frete: number;
+  cancel_total: number;
+  cancel_parcial: number;
+  ads: number;
+  ressarc: number;
+  ocor_venda: number;
+  reembolsos: number;
+  mensalidade: number;
+  outros: number;
+  liquido_esperado: number;
+  conta_recebido: number | null;
+  conta_data_recebimento: string | null;
+  conta_taxa_antecip: number | null;
+  liquido_efetivo: number | null;
+  status: string;
+  diff: number | null;
+};
+
+type CrosscheckResult = {
+  ok: number;
+  missing_in_ifood: Array<{ order_id: string; saipos_total: number; pagamento: string; data_venda?: string; nome_loja?: string }>;
+  missing_in_ifood_count: number;
+  missing_in_saipos: Array<{ order_id: string; ifood_total_pago: number; ifood_liquido: number; data_pedido?: string; store_id_curto?: string }>;
+  missing_in_saipos_count: number;
+  value_mismatch: Array<{ order_id: string; saipos_total: number; ifood_total_pago: number; diff: number; data?: string; nome_loja?: string }>;
+  value_mismatch_count: number;
+};
+
+const STORE_LABEL: Record<string, string> = {
+  '40566': 'Pizzaria Estrela',
+};
+
+const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtPct = (v: number) => `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+const fmtDateTime = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }); } catch { return iso; }
+};
+const storeName = (sid: string | null) => sid ? (STORE_LABEL[sid] ?? sid) : '—';
+
+const MONTHS = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
+  matched: { label: '✓ Matched', className: 'bg-green-500/15 text-green-700 dark:text-green-400' },
+  matched_aprox: { label: '✓ Aprox', className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
+  pending: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
+  unmatched: { label: '⚠ Manual', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
+  sem_repasse: { label: 'Sem repasse', className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
+};
+
+export default function AuditIfoodMarketplace() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isAdmin, loading: roleLoading } = useUserRole();
+  const now = new Date();
+
+  const [month, setMonth] = useState<number>(Number(searchParams.get('month')) || now.getMonth() + 1);
+  const [year, setYear] = useState<number>(Number(searchParams.get('year')) || now.getFullYear());
+  const [tab, setTab] = useState<string>(searchParams.get('aba') ?? 'resumo');
+  const [storeFilter, setStoreFilter] = useState<string>(searchParams.get('loja') ?? 'all');
+
+  const [period, setPeriod] = useState<AuditPeriodLite | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+
+  const [repasses, setRepasses] = useState<Repasse[]>([]);
+  const [crosscheck, setCrosscheck] = useState<CrosscheckResult | null>(null);
+  const [imports, setImports] = useState<Array<{ file_type: string; status: string; created_at: string; imported_rows: number; file_name: string }>>([]);
+  const [stores, setStores] = useState<string[]>([]);
+
+  // URL sync
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set('month', String(month));
+    next.set('year', String(year));
+    if (tab === 'resumo') next.delete('aba'); else next.set('aba', tab);
+    if (storeFilter === 'all') next.delete('loja'); else next.set('loja', storeFilter);
+    setSearchParams(next, { replace: true });
+  }, [month, year, tab, storeFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const refresh = async (periodId: string) => {
+    // cast pra any: tipos novos (audit_ifood_repasses/lancamentos) ainda não
+    // estão no types.ts até Lovable regenerar após aplicar a migration.
+    const sb: any = supabase;
+    const [{ data: repassesData }, { data: imps }, { data: lojasData }] = await Promise.all([
+      sb
+        .from('audit_ifood_repasses')
+        .select('*')
+        .eq('audit_period_id', periodId)
+        .order('data_repasse_esperada')
+        .order('store_id_curto'),
+      supabase
+        .from('audit_imports')
+        .select('file_type, status, created_at, imported_rows, file_name')
+        .eq('audit_period_id', periodId)
+        .in('file_type', ['ifood_extrato_detalhado', 'ifood_conta_csv', 'ifood_orders', 'saipos'])
+        .order('created_at', { ascending: false }),
+      sb
+        .from('audit_ifood_lancamentos')
+        .select('store_id_curto')
+        .eq('audit_period_id', periodId),
+    ]);
+    setRepasses(((repassesData ?? []) as unknown) as Repasse[]);
+    setImports((imps ?? []) as any);
+    setStores([...new Set((lojasData ?? []).map((r: any) => r.store_id_curto).filter(Boolean))] as string[]);
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+      const p = (data as AuditPeriodLite) ?? null;
+      if (!active) return;
+      setPeriod(p);
+      if (p) await refresh(p.id);
+      else { setRepasses([]); setImports([]); setStores([]); }
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [isAdmin, month, year]);
+
+  const ensurePeriod = async (): Promise<AuditPeriodLite | null> => {
+    if (period) return period;
+    const { data, error } = await supabase
+      .from('audit_periods').insert({ month, year, status: 'aberto' }).select().single();
+    if (error) {
+      toast.error('Erro ao criar período', { description: error.message });
+      return null;
+    }
+    const p = data as AuditPeriodLite;
+    setPeriod(p);
+    return p;
+  };
+
+  const handleMatch = async () => {
+    if (!period) return;
+    setRunning(true);
+    const result = await dispatchMatchIfoodMarketplace(period.id);
+    if (result) {
+      setCrosscheck(result.crosscheck);
+      toast.success(result.message);
+      await refresh(period.id);
+    }
+    setRunning(false);
+  };
+
+  const onUploadAfter = async () => {
+    if (period) await refresh(period.id);
+  };
+
+  // Filtra repasses pela loja escolhida
+  const repassesFiltrados = useMemo(() => {
+    if (storeFilter === 'all') return repasses;
+    return repasses.filter(r => r.store_id_curto === storeFilter);
+  }, [repasses, storeFilter]);
+
+  // Agregação consolidada (todas datas filtradas pela loja escolhida)
+  const totals = useMemo(() => {
+    const sum = (k: keyof Repasse) => repassesFiltrados.reduce((s, r) => s + Number(r[k] || 0), 0);
+    const bruto_venda = sum('bruto_venda');
+    const pgto_direto_loja = sum('pgto_direto_loja');
+    const comissao = sum('comissao');
+    const taxa_transacao = sum('taxa_transacao');
+    const taxa_conveniencia = sum('taxa_conveniencia');
+    const taxa_entrega_ret = sum('taxa_entrega_ret');
+    const taxa_servico_sob_demanda = sum('taxa_servico_sob_demanda');
+    const taxa_servico_cliente = sum('taxa_servico_cliente');
+    const promo_ifood = sum('promo_ifood');
+    const promo_loja = sum('promo_loja');
+    const frete_ifood = sum('frete_ifood');
+    const cancel_frete = sum('cancel_frete');
+    const cancel_total = sum('cancel_total');
+    const cancel_parcial = sum('cancel_parcial');
+    const ads = sum('ads');
+    const ressarc = sum('ressarc');
+    const ocor_venda = sum('ocor_venda');
+    const reembolsos = sum('reembolsos');
+    const mensalidade = sum('mensalidade');
+    const outros = sum('outros');
+    const liquido_esperado = sum('liquido_esperado');
+    const conta_recebido = sum('conta_recebido');
+    const conta_taxa_antecip = sum('conta_taxa_antecip');
+    const liquido_efetivo = sum('liquido_efetivo');
+    const vendido_total = bruto_venda + pgto_direto_loja;
+
+    // Custos que SOMAM no total (sinal negativo no DB → abs pra exibição)
+    const custos_taxas = Math.abs(comissao) + Math.abs(taxa_transacao) + Math.abs(taxa_conveniencia)
+      + Math.abs(mensalidade) + Math.abs(conta_taxa_antecip || 0);
+    const custos_logistica = Math.abs(frete_ifood) + Math.abs(taxa_entrega_ret) + Math.abs(taxa_servico_sob_demanda);
+    const custos_marketing = Math.abs(ads); // promo_loja é informativo
+    const custo_total = custos_taxas + custos_logistica + custos_marketing;
+
+    const taxa_efetiva = vendido_total > 0 ? (custo_total / vendido_total) * 100 : 0;
+    return {
+      bruto_venda, pgto_direto_loja, vendido_total,
+      comissao, taxa_transacao, taxa_conveniencia, taxa_entrega_ret,
+      taxa_servico_sob_demanda, taxa_servico_cliente,
+      promo_ifood, promo_loja,
+      frete_ifood, cancel_frete, cancel_total, cancel_parcial,
+      ads, ressarc, ocor_venda, reembolsos, mensalidade, outros,
+      liquido_esperado, conta_recebido, conta_taxa_antecip, liquido_efetivo,
+      custos_taxas, custos_logistica, custos_marketing, custo_total,
+      taxa_efetiva,
+    };
+  }, [repassesFiltrados]);
+
+  if (roleLoading || loading) {
+    return (
+      <AppLayout title="iFood Marketplace">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <AppLayout title="iFood Marketplace">
+        <Card><CardContent className="py-10 text-center text-muted-foreground">Acesso restrito a administradores.</CardContent></Card>
+      </AppLayout>
+    );
+  }
+
+  const importByType = (t: string) => imports.find(i => i.file_type === t && i.status === 'completed');
+  const extratoOk = imports.some(i => i.file_type === 'ifood_extrato_detalhado' && i.status === 'completed');
+  const extratoCount = imports.filter(i => i.file_type === 'ifood_extrato_detalhado' && i.status === 'completed').length;
+  const ordersOk = imports.some(i => i.file_type === 'ifood_orders' && i.status === 'completed');
+  const ordersCount = imports.filter(i => i.file_type === 'ifood_orders' && i.status === 'completed').length;
+  const contaOk = imports.some(i => i.file_type === 'ifood_conta_csv' && i.status === 'completed');
+  const contaCount = imports.filter(i => i.file_type === 'ifood_conta_csv' && i.status === 'completed').length;
+  const saiposOk = !!importByType('saipos');
+  const canMatch = extratoOk && ordersOk && contaOk;
+
+  return (
+    <AppLayout title="iFood Marketplace" subtitle="Auditoria das vendas online iFood (estrela + temx)">
+      <div className="space-y-4">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink onClick={() => navigate('/admin/auditoria')} className="cursor-pointer">Auditoria</BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem><BreadcrumbPage>iFood Marketplace</BreadcrumbPage></BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {/* Seletor mês + loja + match */}
+        <Card>
+          <CardContent className="py-4 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Mês</span>
+              <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Ano</span>
+              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+                <SelectTrigger className="w-[110px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[year - 1, year, year + 1].map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Loja</span>
+              <Select value={storeFilter} onValueChange={setStoreFilter}>
+                <SelectTrigger className="w-[180px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Consolidado</SelectItem>
+                  {stores.map(s => <SelectItem key={s} value={s}>{storeName(s)} ({s})</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {period ? (
+              <Badge variant="outline" className="font-medium">
+                Período {MONTHS[period.month - 1]} {period.year} — {period.status}
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Sem período (criado no upload)</Badge>
+            )}
+            <div className="ml-auto">
+              <Button onClick={handleMatch} disabled={!canMatch || running} className="gap-2">
+                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                {running ? 'Executando…' : 'Executar match iFood'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Checklist de uploads */}
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Documentos necessários</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            <Checklist label={`Extrato detalhado iFood (1 por loja: Estrela + Temx)`} done={extratoCount >= 2} count={extratoCount} target={2} />
+            <Checklist label={`Relatório de Pedidos iFood (1 por loja: Estrela + Temx)`} done={ordersCount >= 2} count={ordersCount} target={2} />
+            <Checklist label={`Conta iFood Pago — CSV (mês comp + comp+1)`} done={contaCount >= 2} count={contaCount} target={2} />
+            <Checklist label={`Vendas Saipos (compartilhado com Brendi)`} done={saiposOk} optional />
+          </CardContent>
+        </Card>
+
+        {/* Cards de upload */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <UploadIfoodExtratoDetalhadoCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
+          <UploadIfoodOrdersCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
+          <UploadIfoodContaCsvCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
+        </div>
+
+        {!canMatch && (
+          <Card className="border-amber-500/30 bg-amber-500/5">
+            <CardContent className="py-3 text-sm flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600" />
+              <span>
+                Importe Extrato Detalhado + Relatório Pedidos + Conta iFood Pago antes do match.
+                {!extratoOk && ' Falta extrato detalhado.'}
+                {!ordersOk && ' Falta relatório de pedidos.'}
+                {!contaOk && ' Falta conta iFood Pago.'}
+              </span>
+            </CardContent>
+          </Card>
+        )}
+
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="grid grid-cols-3 w-full md:w-auto">
+            <TabsTrigger value="resumo">Resumo</TabsTrigger>
+            <TabsTrigger value="repasses">Repasses semanais</TabsTrigger>
+            <TabsTrigger value="crosscheck">Cross-check Saipos × iFood</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {tab === 'resumo' && <ResumoTab totals={totals} repasses={repassesFiltrados} />}
+        {tab === 'repasses' && <RepassesTab repasses={repassesFiltrados} />}
+        {tab === 'crosscheck' && (
+          <CrosscheckTab crosscheck={crosscheck} onRefresh={handleMatch} running={running} canMatch={canMatch} />
+        )}
+
+        <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
+          <ArrowLeft className="h-4 w-4" /> Voltar à Auditoria
+        </Button>
+      </div>
+    </AppLayout>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function Checklist({ label, done, count, target, optional }: { label: string; done: boolean; count?: number; target?: number; optional?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      {done
+        ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+        : <span className="inline-block h-4 w-4 rounded border border-muted-foreground/40" />}
+      <span className={done ? 'text-muted-foreground line-through' : ''}>{label}</span>
+      {target != null && <span className="text-xs text-muted-foreground">({count ?? 0}/{target})</span>}
+      {optional && <Badge variant="outline" className="text-[10px]">opcional</Badge>}
+    </div>
+  );
+}
+
+function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard title="Vendido bruto iFood" value={fmt(totals.vendido_total)}
+          hint={`Online: ${fmt(totals.bruto_venda)} · Direto loja: ${fmt(totals.pgto_direto_loja)}`} />
+        <KpiCard title="Líquido esperado (repasse)" value={fmt(totals.liquido_esperado)}
+          hint={`${repasses.length} repasses · recebido R$ ${(totals.conta_recebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+        <KpiCard title="Custo total iFood" value={fmt(totals.custo_total)}
+          hint={`Taxa efetiva: ${totals.taxa_efetiva.toFixed(2).replace('.', ',')}% sobre o vendido`}
+          className={totals.custo_total > 0 ? 'text-rose-700 dark:text-rose-400' : ''} />
+        <KpiCard title="Recebido direto pela loja" value={fmt(totals.pgto_direto_loja)}
+          hint="Pgto na entrega + Dinheiro (não passa pelo iFood Pago)" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Taxas</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            <Row label="Comissão iFood" value={fmt(Math.abs(totals.comissao))} />
+            <Row label="Taxa de transação" value={fmt(Math.abs(totals.taxa_transacao))} />
+            <Row label="Taxa de antecipação" value={fmt(Math.abs(totals.conta_taxa_antecip || 0))} />
+            <Row label="Taxa conveniência parcelado" value={fmt(Math.abs(totals.taxa_conveniencia))} />
+            <Row label="Mensalidade" value={fmt(Math.abs(totals.mensalidade))} />
+            <hr className="my-1" />
+            <Row label="Subtotal" value={fmt(totals.custos_taxas)} bold />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Logística</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            <Row label="Frete iFood" value={fmt(Math.abs(totals.frete_ifood))} />
+            <Row label="Taxa entrega retenção" value={fmt(Math.abs(totals.taxa_entrega_ret))} />
+            <Row label="Taxa serviço Sob Demanda Off" value={fmt(Math.abs(totals.taxa_servico_sob_demanda))} />
+            <hr className="my-1" />
+            <Row label="Subtotal" value={fmt(totals.custos_logistica)} bold />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Marketing</CardTitle></CardHeader>
+          <CardContent className="text-sm space-y-1">
+            <Row label="ADS (anúncios)" value={fmt(Math.abs(totals.ads))} />
+            <Row label="Promoções loja (informativo)" value={fmt(Math.abs(totals.promo_loja))} muted />
+            <hr className="my-1" />
+            <Row label="Subtotal (sem promo)" value={fmt(totals.custos_marketing)} bold />
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Informativo</CardTitle></CardHeader>
+        <CardContent className="text-sm grid grid-cols-1 md:grid-cols-3 gap-2">
+          <Row label="Cancelamentos (total)" value={fmt(Math.abs(totals.cancel_total))} muted />
+          <Row label="Cancelamentos (parcial)" value={fmt(Math.abs(totals.cancel_parcial))} muted />
+          <Row label="Reembolsos pra loja" value={fmt(totals.reembolsos)} muted />
+          <Row label="Ressarcimentos" value={fmt(totals.ressarc)} muted />
+          <Row label="Promo iFood (devolução)" value={fmt(totals.promo_ifood)} muted />
+          <Row label="Taxa serviço cliente (retido pelo iFood)" value={fmt(Math.abs(totals.taxa_servico_cliente))} muted />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2"><CardTitle className="text-base">Verificação da equação</CardTitle></CardHeader>
+        <CardContent className="text-sm">
+          <div className="font-mono text-xs space-y-1">
+            <div>Vendido bruto pgto-app: <strong>{fmt(totals.bruto_venda)}</strong></div>
+            <div>− Custo total iFood (taxas + logística + marketing): <strong>{fmt(totals.custo_total)}</strong></div>
+            <div>= Esperado em conta iFood Pago: <strong>{fmt(totals.bruto_venda - totals.custo_total)}</strong></div>
+            <div className="text-muted-foreground">Líquido esperado real (extrato): {fmt(totals.liquido_esperado)} (diferença reflete taxas serviço cliente, promo iFood, cancelamentos, reembolsos, ressarc)</div>
+            <div>Recebido na conta iFood Pago: <strong>{fmt(totals.conta_recebido || 0)}</strong></div>
+            <div>− Taxa antecipação: <strong>{fmt(Math.abs(totals.conta_taxa_antecip || 0))}</strong></div>
+            <div>= Líquido efetivo final: <strong>{fmt(totals.liquido_efetivo || 0)}</strong></div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function RepassesTab({ repasses }: { repasses: Repasse[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (repasses.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-sm text-center text-muted-foreground">
+          Sem dados. Importe extrato detalhado e execute o match.
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Repasses semanais</CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Cada linha = 1 ciclo de repasse esperado. Ciclo: corte domingo (ou último dia do mês),
+          repasse na quarta D+24. Antecipação cai 21 dias antes do esperado.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Data esperada</TableHead>
+              <TableHead>Loja</TableHead>
+              <TableHead>Período apuração</TableHead>
+              <TableHead className="text-right">Subtotal (líq esperado)</TableHead>
+              <TableHead className="text-right">Tx antecip</TableHead>
+              <TableHead className="text-right">Recebido (data)</TableHead>
+              <TableHead className="text-right">Líq efetivo</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {repasses.map(r => {
+              const variant = STATUS_VARIANTS[r.status] ?? STATUS_VARIANTS.pending;
+              const isExpanded = expandedId === r.id;
+              return (
+                <Fragment key={r.id}>
+                  <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => setExpandedId(isExpanded ? null : r.id)}>
+                    <TableCell className="font-medium">
+                      <span className="mr-1 text-muted-foreground">{isExpanded ? '▼' : '▶'}</span>
+                      {fmtDate(r.data_repasse_esperada)}
+                    </TableCell>
+                    <TableCell className="text-xs">{storeName(r.store_id_curto)}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {r.periodo_apuracao_inicio && r.periodo_apuracao_fim
+                        ? `${fmtDate(r.periodo_apuracao_inicio)} a ${fmtDate(r.periodo_apuracao_fim)}`
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{fmt(r.liquido_esperado)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {r.conta_taxa_antecip != null ? `−${fmt(Math.abs(r.conta_taxa_antecip))}` : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.conta_recebido != null ? (
+                        <div>{fmt(r.conta_recebido)}<div className="text-[10px] text-muted-foreground">{fmtDate(r.conta_data_recebimento)}</div></div>
+                      ) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {r.liquido_efetivo != null ? fmt(r.liquido_efetivo) : '—'}
+                    </TableCell>
+                    <TableCell><Badge variant="secondary" className={variant.className}>{variant.label}</Badge></TableCell>
+                  </TableRow>
+                  {isExpanded && (
+                    <TableRow className="bg-muted/20">
+                      <TableCell colSpan={8} className="p-3">
+                        <RepasseDetalhe r={r} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RepasseDetalhe({ r }: { r: Repasse }) {
+  return (
+    <div className="text-xs space-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div>
+          <div className="font-semibold mb-1 text-muted-foreground">RECEITAS</div>
+          <DetailRow label="Bruto venda (pgto-app)" value={r.bruto_venda} />
+          <DetailRow label="Promo iFood (devolução)" value={r.promo_ifood} />
+          <DetailRow label="Reembolsos pra loja" value={r.reembolsos} />
+          <DetailRow label="Ressarcimentos" value={r.ressarc} />
+          <DetailRow label="Cancel. de frete (estorno)" value={r.cancel_frete} />
+          <DetailRow label="Outros (positivo)" value={r.outros > 0 ? r.outros : 0} />
+        </div>
+        <div>
+          <div className="font-semibold mb-1 text-muted-foreground">CUSTOS iFOOD</div>
+          <DetailRow label="Comissão iFood" value={r.comissao} />
+          <DetailRow label="Taxa de transação" value={r.taxa_transacao} />
+          <DetailRow label="Taxa conveniência" value={r.taxa_conveniencia} />
+          <DetailRow label="Frete iFood" value={r.frete_ifood} />
+          <DetailRow label="Taxa entrega retenção" value={r.taxa_entrega_ret} />
+          <DetailRow label="Taxa serviço Sob Demanda" value={r.taxa_servico_sob_demanda} />
+          <DetailRow label="ADS" value={r.ads} />
+          <DetailRow label="Mensalidade" value={r.mensalidade} />
+          <DetailRow label="Tx antecipação (banco)" value={-(r.conta_taxa_antecip ?? 0)} />
+        </div>
+        <div>
+          <div className="font-semibold mb-1 text-muted-foreground">AJUSTES / INFORMATIVO</div>
+          <DetailRow label="Tx serviço cliente (retido)" value={r.taxa_servico_cliente} />
+          <DetailRow label="Cancelamento total" value={r.cancel_total} />
+          <DetailRow label="Cancelamento parcial" value={r.cancel_parcial} />
+          <DetailRow label="Ocorrência venda" value={r.ocor_venda} />
+          <DetailRow label="Outros (negativo)" value={r.outros < 0 ? r.outros : 0} />
+          <hr className="my-1" />
+          <DetailRow label="Pgto-direto loja (informativo)" value={r.pgto_direto_loja} muted />
+          <DetailRow label="Promo loja (impacto=NÃO)" value={r.promo_loja} muted />
+        </div>
+      </div>
+      <hr />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="font-semibold">Líquido esperado: <span className="text-base">{fmt(r.liquido_esperado)}</span></div>
+        <div className="font-semibold">Conta recebido: <span className="text-base">{r.conta_recebido != null ? fmt(r.conta_recebido) : '—'}</span></div>
+        <div className="font-semibold">Diferença: <span className={`text-base ${r.diff != null && Math.abs(r.diff) > 0.5 ? 'text-rose-700 dark:text-rose-400' : ''}`}>
+          {r.diff != null ? fmt(r.diff) : '—'}
+        </span></div>
+      </div>
+    </div>
+  );
+}
+
+function CrosscheckTab({
+  crosscheck, onRefresh, running, canMatch,
+}: {
+  crosscheck: CrosscheckResult | null;
+  onRefresh: () => Promise<void>;
+  running: boolean;
+  canMatch: boolean;
+}) {
+  if (!crosscheck) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-sm text-center text-muted-foreground">
+          {canMatch
+            ? <Button onClick={onRefresh} disabled={running}>{running ? 'Executando…' : 'Executar cross-check agora'}</Button>
+            : 'Importe os documentos e execute o match pra ver o cross-check.'}
+        </CardContent>
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <Card className={crosscheck.missing_in_ifood_count > 0 ? 'border-rose-500/40 bg-rose-500/5' : ''}>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            {crosscheck.missing_in_ifood_count > 0
+              ? <AlertCircle className="h-4 w-4 text-rose-600" />
+              : <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            Saipos viu, iFood não declarou ({crosscheck.missing_in_ifood_count})
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Pedidos com canal iFood + pagamento "Online Ifood" no PDV que não constam no Relatório.
+          </p>
+        </CardHeader>
+        {crosscheck.missing_in_ifood.length > 0 && (
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data/Hora</TableHead>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Loja</TableHead>
+                  <TableHead>Pagamento</TableHead>
+                  <TableHead className="text-right">Total Saipos</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {crosscheck.missing_in_ifood.map(r => (
+                  <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data_venda)}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.nome_loja ?? '—'}</TableCell>
+                    <TableCell><Badge variant="outline" className="text-[10px]">{r.pagamento}</Badge></TableCell>
+                    <TableCell className="text-right font-medium">{fmt(r.saipos_total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        )}
+      </Card>
+
+      {crosscheck.value_mismatch_count > 0 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Diferença de valor entre Saipos e iFood ({crosscheck.value_mismatch_count})</CardTitle>
+            <p className="text-xs text-muted-foreground">Tolerância R$ 2,00. Pgto misto Saipos: ignora diff positivo.</p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data/Hora</TableHead>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Loja</TableHead>
+                  <TableHead className="text-right">Saipos</TableHead>
+                  <TableHead className="text-right">iFood</TableHead>
+                  <TableHead className="text-right">Diff</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {crosscheck.value_mismatch.map(r => (
+                  <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data)}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{r.nome_loja ?? '—'}</TableCell>
+                    <TableCell className="text-right">{fmt(r.saipos_total)}</TableCell>
+                    <TableCell className="text-right">{fmt(r.ifood_total_pago)}</TableCell>
+                    <TableCell className="text-right font-medium text-amber-700 dark:text-amber-500">{fmt(r.diff)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {crosscheck.missing_in_saipos_count > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">iFood declarou, Saipos não tem ({crosscheck.missing_in_saipos_count})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data/Hora</TableHead>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Loja iFood</TableHead>
+                  <TableHead className="text-right">Total pago</TableHead>
+                  <TableHead className="text-right">Líquido</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {crosscheck.missing_in_saipos.map(r => (
+                  <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data_pedido)}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{storeName(r.store_id_curto ?? null)}</TableCell>
+                    <TableCell className="text-right">{fmt(r.ifood_total_pago)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{fmt(r.ifood_liquido)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function KpiCard({ title, value, hint, className = '' }: { title: string; value: string; hint?: string; className?: string }) {
+  return (
+    <Card>
+      <CardContent className="py-4">
+        <p className="text-xs uppercase text-muted-foreground tracking-wide">{title}</p>
+        <p className={`text-2xl font-semibold mt-1 ${className}`}>{value}</p>
+        {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+function Row({ label, value, bold, muted }: { label: string; value: string; bold?: boolean; muted?: boolean }) {
+  return (
+    <div className={`flex justify-between ${muted ? 'text-muted-foreground' : ''}`}>
+      <span>{label}:</span>
+      <span className={bold ? 'font-semibold' : ''}>{value}</span>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, muted }: { label: string; value: number; muted?: boolean }) {
+  return (
+    <div className={`flex justify-between ${muted ? 'text-muted-foreground' : ''}`}>
+      <span className="text-[11px]">{label}:</span>
+      <span className={`font-mono text-[11px] ${value < 0 ? 'text-rose-700 dark:text-rose-400' : value > 0 ? 'text-emerald-700 dark:text-emerald-400' : ''}`}>
+        {fmt(value)}
+      </span>
+    </div>
+  );
+}
