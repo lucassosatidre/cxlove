@@ -11,6 +11,28 @@ import { extractPdfText } from '@/lib/pdf-text-extract';
 
 export type AuditPeriodLite = { id: string; month: number; year: number; status: string };
 
+// Parse CSV line respeitando aspas duplas. Padrão CSV simples: vírgula como
+// separador, aspas como delimitadores de string (com escape "" pra aspa interna).
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if (c === ',' && !inQuote) {
+      cells.push(cur);
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  cells.push(cur);
+  return cells;
+}
+
 export type UploadCardProps = {
   period: AuditPeriodLite | null;
   ensurePeriod: () => Promise<AuditPeriodLite | null>;
@@ -1228,10 +1250,13 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
         const file = csvs[i];
         setProgress({ current: i + 1, total: csvs.length });
         try {
-          const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: false });
-          const sheet = wb.Sheets[wb.SheetNames[0]];
-          const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: false });
+          // Lê texto cru — xlsx.js convertia datas ISO em formato americano
+          // M/D/YY e o edge descartava todas as antecipações por "sem data".
+          let text = await file.text();
+          // Remove BOM utf-8 se presente
+          if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+          const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+          const rows = lines.map(line => parseCsvLine(line));
           if (!rows.length) throw new Error('CSV vazio');
 
           const { data, error } = await supabase.functions.invoke('import-ifood-conta-csv', {

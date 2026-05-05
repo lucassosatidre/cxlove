@@ -232,7 +232,8 @@ Deno.serve(async (req) => {
     const antecipacoes = (conta ?? []).filter(c => c.categoria === 'repasse').sort((a, b) => a.data.localeCompare(b.data));
     const taxas = (conta ?? []).filter(c => c.categoria === 'taxa_antecip').sort((a, b) => a.data.localeCompare(b.data));
 
-    const matchedDataSet = new Set<string>(); // datas já matched
+    const matchedDataSet = new Set<string>(); // datas esperadas já matched
+    const matchedAntecipIds = new Set<string>(); // ids de antecipações que casaram (pra Pass 3)
     const repasseUpdates: Array<{ id: string; payload: any }> = [];
     const movimentoUpdates: Array<{ id: string; payload: any }> = [];
 
@@ -259,6 +260,7 @@ Deno.serve(async (req) => {
       }
 
       matchedDataSet.add(dataEsperada);
+      matchedAntecipIds.add(a.id);
       movimentoUpdates.push({
         id: a.id,
         payload: { status: 'matched', match_repasse_ids: exp.ids },
@@ -304,9 +306,13 @@ Deno.serve(async (req) => {
     const taxaPorRepasse = new Map<string, number>();
     for (const t of taxas) {
       const subtotalEsperado = Number(t.valor) / ANTECIP_RATE;
-      // procura antecipação matched do mesmo dia com valor próximo
+      // Procura antecipação MATCHED do mesmo dia com valor próximo. Filtrar
+      // por matched é crítico: se a antecipação é de outra competência (ex:
+      // jan/26 paga em fev/26 mas não importamos jan), a taxa associada não
+      // deve entrar no rateio do mês comp.
       const candidatos = antecipacoes.filter(a =>
         a.data === t.data &&
+        matchedAntecipIds.has(a.id) &&
         Math.abs(Number(a.valor) - subtotalEsperado) <= ANTECIP_TOLERANCE * 1.5
       );
       if (candidatos.length === 0) continue;
