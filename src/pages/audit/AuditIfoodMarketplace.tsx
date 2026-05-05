@@ -13,7 +13,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, Copy } from 'lucide-react';
 import {
   UploadIfoodExtratoDetalhadoCard, UploadIfoodContaCsvCard, UploadIfoodOrdersCard,
   dispatchMatchIfoodMarketplace,
@@ -110,6 +111,8 @@ export default function AuditIfoodMarketplace() {
   const [crosscheck, setCrosscheck] = useState<CrosscheckResult | null>(null);
   const [imports, setImports] = useState<Array<{ file_type: string; status: string; created_at: string; imported_rows: number; file_name: string }>>([]);
   const [stores, setStores] = useState<string[]>([]);
+  const [matchDebug, setMatchDebug] = useState<any>(null);
+  const [debugOpen, setDebugOpen] = useState(false);
 
   // URL sync
   useEffect(() => {
@@ -184,6 +187,7 @@ export default function AuditIfoodMarketplace() {
     const result = await dispatchMatchIfoodMarketplace(period.id);
     if (result) {
       setCrosscheck(result.crosscheck);
+      setMatchDebug(result);
       toast.success(result.message);
       await refresh(period.id);
     }
@@ -329,7 +333,12 @@ export default function AuditIfoodMarketplace() {
             ) : (
               <Badge variant="secondary">Sem período (criado no upload)</Badge>
             )}
-            <div className="ml-auto">
+            <div className="ml-auto flex gap-2">
+              {matchDebug && (
+                <Button variant="outline" size="sm" onClick={() => setDebugOpen(true)}>
+                  Diagnóstico
+                </Button>
+              )}
               <Button onClick={handleMatch} disabled={!canMatch || running} className="gap-2">
                 {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 {running ? 'Executando…' : 'Executar match iFood'}
@@ -388,6 +397,37 @@ export default function AuditIfoodMarketplace() {
           <ArrowLeft className="h-4 w-4" /> Voltar à Auditoria
         </Button>
       </div>
+
+      <Dialog open={debugOpen} onOpenChange={setDebugOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Diagnóstico do Match (resposta crua da edge)</DialogTitle>
+          </DialogHeader>
+          <div className="text-xs space-y-2">
+            <p className="text-muted-foreground">
+              Cole esse JSON para análise. Mostra antecipações encontradas, datas calculadas,
+              repasses esperados e contadores. Útil pra debugar quando o match não fecha.
+            </p>
+            <pre className="bg-muted/40 rounded p-3 overflow-x-auto text-[11px] font-mono">
+              {JSON.stringify(matchDebug, null, 2)}
+            </pre>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(JSON.stringify(matchDebug, null, 2));
+                toast.success('JSON copiado');
+              }}
+              className="gap-2"
+            >
+              <Copy className="h-3 w-3" /> Copiar JSON
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setDebugOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
