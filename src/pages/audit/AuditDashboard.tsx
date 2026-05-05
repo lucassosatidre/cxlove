@@ -429,29 +429,32 @@ export default function AuditDashboard() {
     if (!period) return;
     setExportingContabil(true);
     try {
-      // Maquinona (Crédito/Débito/Pix) — direto de audit_card_transactions
-      // Filtra por sale_date no mês comp (is_competencia pode estar false em
-      // transações ainda não matched).
-      const monthStartCard = `${year}-${String(month).padStart(2, '0')}-01`;
-      const nextMonthStartCard = month === 12
-        ? `${year + 1}-01-01`
-        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
-      const { data: cardTxs } = await fetchAllPaginated<any>(
+      // Maquinona (Crédito/Débito/Pix) — direto de audit_card_transactions.
+      // Sem filtro de data (usa só audit_period_id). Filtragem por mês comp
+      // será feita ao mapear pra categoria — alguns períodos têm transações
+      // com sale_date span além do mês (jan/mar pra cobrir adjacências).
+      const cardTxs: any[] = await fetchAllPaginated<any>(
         supabase
           .from('audit_card_transactions')
-          .select('payment_method, sale_date, gross_amount, net_amount, tax_amount')
-          .eq('audit_period_id', period.id)
-          .gte('sale_date', monthStartCard)
-          .lt('sale_date', nextMonthStartCard),
-      ).then(d => ({ data: d })).catch(() => ({ data: [] as any[] }));
+          .select('payment_method, sale_date, gross_amount, net_amount, tax_amount, is_competencia')
+          .eq('audit_period_id', period.id),
+      );
+      // Diagnóstico — útil pra detectar quando categoria não bate
+      const pmCounts: Record<string, number> = {};
+      for (const t of cardTxs ?? []) {
+        const k = String(t.payment_method ?? '');
+        pmCounts[k] = (pmCounts[k] ?? 0) + 1;
+      }
+      console.log('[Contabil] audit_card_transactions:', cardTxs?.length ?? 0, 'rows', pmCounts);
 
       // Vouchers — audit_voucher_lots agrupado por operadora
-      const { data: voucherLots } = await fetchAllPaginated<any>(
+      const voucherLots: any[] = await fetchAllPaginated<any>(
         supabase
           .from('audit_voucher_lots')
           .select('operadora, data_credito, data_corte, subtotal_vendas, valor_liquido, total_descontos')
           .eq('audit_period_id', period.id),
-      ).then(d => ({ data: d })).catch(() => ({ data: [] as any[] }));
+      );
+      console.log('[Contabil] audit_voucher_lots:', voucherLots?.length ?? 0, 'rows');
 
       // qtd vouchers = número de lotes (audit_voucher_items pode não existir)
 
@@ -488,17 +491,22 @@ export default function AuditDashboard() {
         return m.get(dia)!;
       };
 
-      // Agrega Maquinona
+      // Agrega Maquinona — filtra por mês comp via sale_date
+      const periodYM = `${year}-${String(month).padStart(2, '0')}`;
+      let cardTxsCompCount = 0;
+      let cardTxsCompUnmapped = 0;
       for (const t of (cardTxs ?? []) as any[]) {
+        if (!t.sale_date || !String(t.sale_date).startsWith(periodYM)) continue;
+        cardTxsCompCount++;
         const cat = mapMaquinonaCat(t.payment_method);
-        if (!cat) continue;
+        if (!cat) { cardTxsCompUnmapped++; continue; }
         const r = ensureAgg(resumoMap, cat);
         r.qtd += 1;
         r.bruto += Number(t.gross_amount ?? 0);
         r.liquido += Number(t.net_amount ?? 0);
         r.taxa += Math.abs(Number(t.tax_amount ?? 0));
-        if (mode === 'detalhado' && t.sale_date) {
-          const [, , dStr] = String(t.sale_date).slice(0, 10).split('-');
+        if (mode === 'detalhado') {
+          const dStr = String(t.sale_date).slice(0, 10).split('-')[2];
           const d = Number(dStr);
           if (d >= 1 && d <= monthDays) {
             const dr = ensureDayAgg(cat, d);
@@ -509,6 +517,7 @@ export default function AuditDashboard() {
           }
         }
       }
+      console.log('[Contabil] cardTxs do mês comp:', cardTxsCompCount, '· payment_method não mapeado:', cardTxsCompUnmapped);
 
       // Agrega Vouchers — qtd = número de lotes
       for (const l of (voucherLots ?? []) as any[]) {
@@ -657,7 +666,13 @@ export default function AuditDashboard() {
         brendi: brendiData,
         ifood: ifoodData,
       });
-      toast({ title: '✓ Relatório Contábil gerado' });
+      // Diagnóstico - aparece como toast pra ajudar a debugar zeros no PDF
+      const pmKeys = Object.keys(pmCounts);
+      const pmList = pmKeys.length > 0 ? pmKeys.join(', ') : '(nenhum)';
+      toast({
+        title: '✓ Relatório Contábil gerado',
+        description: `Maquinona: ${cardTxs?.length ?? 0} txs | mês: ${cardTxsCompCount} | não mapeado: ${cardTxsCompUnmapped} | pms: ${pmList}`,
+      });
     } catch (e: any) {
       toast({ title: 'Erro ao gerar relatório', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
     } finally {
