@@ -430,13 +430,19 @@ export default function AuditDashboard() {
     setExportingContabil(true);
     try {
       // Maquinona (Crédito/Débito/Pix) — direto de audit_card_transactions
-      // só is_competencia=true (transações do mês comp)
+      // Filtra por sale_date no mês comp (is_competencia pode estar false em
+      // transações ainda não matched).
+      const monthStartCard = `${year}-${String(month).padStart(2, '0')}-01`;
+      const nextMonthStartCard = month === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
       const { data: cardTxs } = await fetchAllPaginated<any>(
         supabase
           .from('audit_card_transactions')
-          .select('payment_method, sale_date, gross_amount, net_amount, tax_amount, is_competencia')
+          .select('payment_method, sale_date, gross_amount, net_amount, tax_amount')
           .eq('audit_period_id', period.id)
-          .eq('is_competencia', true),
+          .gte('sale_date', monthStartCard)
+          .lt('sale_date', nextMonthStartCard),
       ).then(d => ({ data: d })).catch(() => ({ data: [] as any[] }));
 
       // Vouchers — audit_voucher_lots agrupado por operadora
