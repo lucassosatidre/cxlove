@@ -1,4 +1,5 @@
 // @ts-nocheck
+// match-ifood-marketplace v2.2 (2026-05-05) — fix Pass 3 matchedAntecipIds
 // match-ifood-marketplace v2 — 3 passes:
 //
 // Pass 1: Cross-check Saipos × audit_ifood_orders por order_id
@@ -382,6 +383,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
+      edge_version: 'v2.2-2026-05-05-pass3-fix',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
