@@ -484,6 +484,95 @@ export default function AuditDashboard() {
           }));
       }
 
+      // Busca dados Brendi (estágio 3)
+      const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
+      const nextMonthStart = month === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const sb: any = supabase;
+      const [
+        { data: brendiDaily },
+        { count: brendiCountMes },
+        { count: brendiCount3m },
+        { data: ifoodRepasses },
+      ] = await Promise.all([
+        sb.from('audit_brendi_daily')
+          .select('expected_amount, expected_liquido, taxa_calculada, received_amount, diff, status')
+          .eq('audit_period_id', period.id),
+        sb.from('audit_brendi_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('audit_period_id', period.id)
+          .gte('sale_date', monthStart)
+          .lt('sale_date', nextMonthStart),
+        sb.from('audit_brendi_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('audit_period_id', period.id),
+        sb.from('audit_ifood_repasses')
+          .select('*')
+          .eq('audit_period_id', period.id),
+      ]);
+
+      const bd = (brendiDaily ?? []) as any[];
+      const sumB = (k: string) => bd.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+      const brendiData = bd.length > 0 ? {
+        vendido_bruto: sumB('expected_amount'),
+        pedidos_count_mes: brendiCountMes ?? 0,
+        pedidos_importados_3meses: brendiCount3m ?? 0,
+        taxa_declarada: sumB('taxa_calculada'),
+        taxa_pct: sumB('expected_amount') > 0 ? (sumB('taxa_calculada') / sumB('expected_amount')) * 100 : 0,
+        esperado_liquido: sumB('expected_liquido'),
+        recebido_bb: sumB('received_amount'),
+        dias_uteis: bd.length,
+        custo_oculto: sumB('expected_liquido') - sumB('received_amount'),
+        mensalidade: bd.filter(r => r.status === 'mensalidade_descontada')
+          .reduce((s, r) => s + Math.abs(Number(r.diff ?? 0)), 0),
+        mensalidade_count: bd.filter(r => r.status === 'mensalidade_descontada').length,
+      } : undefined;
+
+      const ifoodRows = (ifoodRepasses ?? []) as any[];
+      const sumI = (k: string) => ifoodRows.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+      const brutoVenda = sumI('bruto_venda');
+      const pgtoDireto = sumI('pgto_direto_loja');
+      const vendidoTotal = brutoVenda + pgtoDireto;
+      const comissao = Math.abs(sumI('comissao'));
+      const taxaTrans = Math.abs(sumI('taxa_transacao'));
+      const taxaAntecip = Math.abs(sumI('conta_taxa_antecip'));
+      const taxaConv = Math.abs(sumI('taxa_conveniencia'));
+      const mens = Math.abs(sumI('mensalidade'));
+      const frete = Math.abs(sumI('frete_ifood'));
+      const taxaEntrega = Math.abs(sumI('taxa_entrega_ret'));
+      const taxaSob = Math.abs(sumI('taxa_servico_sob_demanda'));
+      const ads = Math.abs(sumI('ads'));
+      const custoTotal = comissao + taxaTrans + taxaAntecip + taxaConv + mens
+        + frete + taxaEntrega + taxaSob + ads;
+
+      const ifoodData = ifoodRows.length > 0 ? {
+        vendido_bruto: vendidoTotal,
+        vendido_online: brutoVenda,
+        recebido_direto: pgtoDireto,
+        liquido_esperado: sumI('liquido_esperado'),
+        recebido_repasse: sumI('conta_recebido'),
+        repasses_count: ifoodRows.length,
+        custo_total: custoTotal,
+        taxa_efetiva_pct: vendidoTotal > 0 ? (custoTotal / vendidoTotal) * 100 : 0,
+        comissao,
+        taxa_transacao: taxaTrans,
+        taxa_antecipacao: taxaAntecip,
+        taxa_conveniencia: taxaConv,
+        mensalidade: mens,
+        frete,
+        taxa_entrega_ret: taxaEntrega,
+        taxa_servico_sob_demanda: taxaSob,
+        ads,
+        promocoes_loja: Math.abs(sumI('promo_loja')),
+        cancel_total: Math.abs(sumI('cancel_total')),
+        cancel_parcial: Math.abs(sumI('cancel_parcial')),
+        reembolsos: sumI('reembolsos'),
+        ressarc: sumI('ressarc'),
+        promo_ifood: sumI('promo_ifood'),
+        taxa_servico_cliente: Math.abs(sumI('taxa_servico_cliente')),
+      } : undefined;
+
       generateContabilPdf(mode, {
         periodLabel: makePeriodLabel(month, year),
         periodFileTag: periodFileTag(month, year),
@@ -491,6 +580,8 @@ export default function AuditDashboard() {
         emittedBy: user?.email ?? 'Admin',
         resumoPorCategoria,
         detalhamentoDiario,
+        brendi: brendiData,
+        ifood: ifoodData,
       });
       toast({ title: '✓ Relatório Contábil gerado' });
     } catch (e: any) {

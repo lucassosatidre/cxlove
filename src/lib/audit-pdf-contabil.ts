@@ -47,6 +47,52 @@ export type ContabilDetalhamento = {
   dias: ContabilDiaRow[];
 };
 
+export type ContabilBrendi = {
+  vendido_bruto: number;
+  pedidos_count_mes: number;
+  pedidos_importados_3meses: number;
+  taxa_declarada: number;          // valor R$
+  taxa_pct: number;                // % sobre bruto
+  esperado_liquido: number;
+  recebido_bb: number;
+  dias_uteis: number;
+  custo_oculto: number;            // pode ser negativo (sobrou) ou positivo (faltou)
+  mensalidade: number;
+  mensalidade_count: number;
+};
+
+export type ContabilIfood = {
+  // Header
+  vendido_bruto: number;            // online + direto
+  vendido_online: number;
+  recebido_direto: number;
+  liquido_esperado: number;
+  recebido_repasse: number;
+  repasses_count: number;
+  custo_total: number;
+  taxa_efetiva_pct: number;
+  // Taxas
+  comissao: number;
+  taxa_transacao: number;
+  taxa_antecipacao: number;
+  taxa_conveniencia: number;
+  mensalidade: number;
+  // Logística
+  frete: number;
+  taxa_entrega_ret: number;
+  taxa_servico_sob_demanda: number;
+  // Marketing
+  ads: number;
+  promocoes_loja: number;           // informativo
+  // Informativo
+  cancel_total: number;
+  cancel_parcial: number;
+  reembolsos: number;
+  ressarc: number;
+  promo_ifood: number;
+  taxa_servico_cliente: number;
+};
+
 export type ContabilPdfData = {
   periodLabel: string;
   periodFileTag: string;
@@ -54,6 +100,8 @@ export type ContabilPdfData = {
   emittedBy: string;
   resumoPorCategoria: ContabilResumoRow[];
   detalhamentoDiario?: ContabilDetalhamento[];
+  brendi?: ContabilBrendi;
+  ifood?: ContabilIfood;
 };
 
 const fmtBRL = (v: number) =>
@@ -193,16 +241,44 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   const taxaVoucher = ['alelo', 'ticket', 'vr', 'pluxee']
     .reduce((s, c) => s + (data.resumoPorCategoria.find(r => r.categoria === c as ContabilCategoria)?.taxa ?? 0), 0);
 
-  const totalApurado = Math.abs(taxaCredito) + Math.abs(taxaDebito) + Math.abs(taxaPix) + Math.abs(taxaVoucher);
+  // iFood Marketplace breakdown
+  const ifd = data.ifood;
+  const taxaComissaoIfood = ifd ? Math.abs(ifd.comissao) : 0;
+  const taxaTransacaoIfood = ifd ? Math.abs(ifd.taxa_transacao) : 0;
+  const taxaAntecipIfood = ifd ? Math.abs(ifd.taxa_antecipacao) : 0;
+  const taxaConvenienciaIfood = ifd ? Math.abs(ifd.taxa_conveniencia) : 0;
+  const mensalidadeIfood = ifd ? Math.abs(ifd.mensalidade) : 0;
+  const freteIfood = ifd ? Math.abs(ifd.frete) : 0;
+  const taxaEntregaIfood = ifd ? Math.abs(ifd.taxa_entrega_ret) : 0;
+  const taxaSobDemanda = ifd ? Math.abs(ifd.taxa_servico_sob_demanda) : 0;
+  const adsIfood = ifd ? Math.abs(ifd.ads) : 0;
+  const totalIfood = ifd ? Math.abs(ifd.custo_total) : 0;
+
+  // Brendi
+  const taxaBrendi = data.brendi ? Math.abs(data.brendi.taxa_declarada) : 0;
+  const custoOcultoBrendi = data.brendi ? Math.abs(data.brendi.custo_oculto) : 0;
+
+  const totalApurado = Math.abs(taxaCredito) + Math.abs(taxaDebito) + Math.abs(taxaPix)
+    + Math.abs(taxaVoucher) + totalIfood + taxaBrendi;
 
   const taxaRows: Array<[string, string]> = [
-    ['Taxa de Crédito', fmtBRL(Math.abs(taxaCredito))],
-    ['Taxa de Débito', fmtBRL(Math.abs(taxaDebito))],
-    ['Taxa de Pix', fmtBRL(Math.abs(taxaPix))],
-    ['Taxas de Voucher', fmtBRL(Math.abs(taxaVoucher))],
-    ['Total de comissão iFood', '— em breve (R$ 0,00)'],
-    ['Taxa de antecipação iFood', '— em breve (R$ 0,00)'],
-    ['Taxa Brendi (marketplace)', '— em breve (R$ 0,00)'],
+    ['Taxa de Crédito (Maquinona)', fmtBRL(Math.abs(taxaCredito))],
+    ['Taxa de Débito (Maquinona)', fmtBRL(Math.abs(taxaDebito))],
+    ['Taxa de Pix (Maquinona)', fmtBRL(Math.abs(taxaPix))],
+    ['Taxas de Voucher (Alelo + Ticket + VR + Pluxee)', fmtBRL(Math.abs(taxaVoucher))],
+    ['— iFood Marketplace —', ''],
+    ['Comissão iFood', fmtBRL(taxaComissaoIfood)],
+    ['Taxa de transação iFood', fmtBRL(taxaTransacaoIfood)],
+    ['Taxa de antecipação iFood', fmtBRL(taxaAntecipIfood)],
+    ['Taxa conveniência parcelado iFood', fmtBRL(taxaConvenienciaIfood)],
+    ['Mensalidade iFood', fmtBRL(mensalidadeIfood)],
+    ['Frete iFood', fmtBRL(freteIfood)],
+    ['Taxa entrega retenção iFood', fmtBRL(taxaEntregaIfood)],
+    ['Taxa serviço Sob Demanda Off iFood', fmtBRL(taxaSobDemanda)],
+    ['ADS iFood (anúncios)', fmtBRL(adsIfood)],
+    ['— Brendi —', ''],
+    ['Taxa Brendi (declarada)', fmtBRL(taxaBrendi)],
+    ['Custo oculto Brendi', fmtBRL(custoOcultoBrendi)],
   ];
 
   autoTable(doc, {
@@ -233,7 +309,7 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
   const obsLines = doc.splitTextToSize(
-    '⚠ Observação: Os campos marcados como "em breve" serão habilitados em versão futura do módulo. Este relatório cobre apenas as taxas declaradas pela maquinona iFood. Comissão iFood (marketplace), taxa de antecipação e Brendi serão adicionados posteriormente.',
+    'Cobertura: maquinona iFood (Crédito/Débito/Pix), vouchers (Alelo/Ticket/VR/Pluxee), iFood Marketplace (comissão + transação + antecipação + frete + ADS + mensalidade), Brendi (taxa declarada + custo oculto). Promoções subsidiadas pela loja são informativas e não somam no total apurado.',
     doc.internal.pageSize.getWidth() - 28,
   );
   doc.text(obsLines, 14, y);
@@ -326,31 +402,171 @@ function detalhamentoPages(doc: jsPDF, data: ContabilPdfData) {
     }
   }
 
-  // Brendi placeholder page
-  doc.addPage('a4', 'landscape');
+  // Brendi page (real data)
+  if (data.brendi) renderBrendiPage(doc, data);
+
+  // iFood Marketplace page (real data)
+  if (data.ifood) renderIfoodPage(doc, data);
+}
+
+function renderBrendiPage(doc: jsPDF, data: ContabilPdfData) {
+  const b = data.brendi!;
+  doc.addPage('a4', 'portrait');
   header(doc, data.periodLabel);
   const pageW = doc.internal.pageSize.getWidth();
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(13);
+  doc.setFontSize(14);
   doc.setTextColor(...ORANGE);
-  doc.text('BRENDI (marketplace)', 14, 32);
+  doc.text('BRENDI (vendas online)', 14, 28);
 
-  doc.setDrawColor(...ORANGE);
-  doc.setLineWidth(0.3);
-  doc.roundedRect(14, 40, pageW - 28, 40, 2, 2);
+  // KPIs
+  const kpis: Array<[string, string, string]> = [
+    ['Vendido bruto (Brendi online)', fmtBRL(b.vendido_bruto),
+      `${b.pedidos_count_mes} pedidos no mês · ${b.pedidos_importados_3meses} importados (3 meses)`],
+    ['Taxa declarada Brendi', `${fmtNum(b.taxa_pct)}%`,
+      `${fmtBRL(b.taxa_declarada)} (Pix 0,5% + R$0,40 · Cr.Online 5,69%)`],
+    ['Esperado líquido', fmtBRL(b.esperado_liquido),
+      `Recebido BB: ${fmtBRL(b.recebido_bb)} (${b.dias_uteis} dias úteis)`],
+    ['Custo oculto', fmtBRL(Math.abs(b.custo_oculto)),
+      `${b.custo_oculto > 0 ? 'Faltou' : 'Sobrou'} vs esperado · Mensalidade: ${fmtBRL(b.mensalidade)} (${b.mensalidade_count}x)`],
+  ];
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(11);
-  doc.setTextColor(...BLACK);
-  doc.text('Funcionalidade em desenvolvimento.', 20, 54);
-  doc.setFont('helvetica', 'italic');
-  doc.setFontSize(10);
-  doc.setTextColor(...GRAY);
-  const txt = doc.splitTextToSize(
-    'Quando implementada, esta seção exibirá o detalhamento diário dos depósitos Brendi e a taxa cobrada pela plataforma.',
-    pageW - 40,
-  );
-  doc.text(txt, 20, 64);
+  let y = 38;
+  for (const [title, value, hint] of kpis) {
+    doc.setDrawColor(220);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(14, y, pageW - 28, 18, 1.5, 1.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    doc.text(title.toUpperCase(), 18, y + 5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(...BLACK);
+    doc.text(value, 18, y + 12);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    doc.text(hint, 18, y + 16);
+    y += 22;
+  }
+}
+
+function renderIfoodPage(doc: jsPDF, data: ContabilPdfData) {
+  const i = data.ifood!;
+  doc.addPage('a4', 'portrait');
+  header(doc, data.periodLabel);
+  const pageW = doc.internal.pageSize.getWidth();
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(...ORANGE);
+  doc.text('iFOOD MARKETPLACE', 14, 28);
+
+  // KPI superiores (4 cards em grid)
+  const kpiData: Array<[string, string, string]> = [
+    ['Vendido bruto iFood', fmtBRL(i.vendido_bruto),
+      `Online: ${fmtBRL(i.vendido_online)} · Direto loja: ${fmtBRL(i.recebido_direto)}`],
+    ['Líquido esperado (repasse)', fmtBRL(i.liquido_esperado),
+      `${i.repasses_count} repasses · recebido ${fmtBRL(i.recebido_repasse)}`],
+    ['Custo total iFood', fmtBRL(i.custo_total),
+      `Taxa efetiva: ${fmtNum(i.taxa_efetiva_pct)}% sobre o vendido`],
+    ['Recebido direto pela loja', fmtBRL(i.recebido_direto),
+      'Pgto na entrega + Dinheiro (não passa pelo iFood Pago)'],
+  ];
+
+  let y = 32;
+  const colW = (pageW - 28 - 4) / 2;
+  for (let k = 0; k < kpiData.length; k++) {
+    const col = k % 2;
+    const row = Math.floor(k / 2);
+    const x = 14 + col * (colW + 4);
+    const yy = y + row * 22;
+    const [title, value, hint] = kpiData[k];
+    doc.setDrawColor(220);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(x, yy, colW, 19, 1.5, 1.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...GRAY);
+    doc.text(title.toUpperCase(), x + 3, yy + 5);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(...BLACK);
+    doc.text(value, x + 3, yy + 11);
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7);
+    doc.setTextColor(...GRAY);
+    const hintLines = doc.splitTextToSize(hint, colW - 6);
+    doc.text(hintLines, x + 3, yy + 16);
+  }
+  y += 48;
+
+  // Detalhamento Taxas / Logística / Marketing (3 grupos)
+  const taxasRows: Array<[string, string]> = [
+    ['Comissão iFood', fmtBRL(Math.abs(i.comissao))],
+    ['Taxa de transação', fmtBRL(Math.abs(i.taxa_transacao))],
+    ['Taxa de antecipação', fmtBRL(Math.abs(i.taxa_antecipacao))],
+    ['Taxa conveniência parcelado', fmtBRL(Math.abs(i.taxa_conveniencia))],
+    ['Mensalidade', fmtBRL(Math.abs(i.mensalidade))],
+  ];
+  const subtotalTaxas = Math.abs(i.comissao) + Math.abs(i.taxa_transacao)
+    + Math.abs(i.taxa_antecipacao) + Math.abs(i.taxa_conveniencia) + Math.abs(i.mensalidade);
+
+  const logisticaRows: Array<[string, string]> = [
+    ['Frete iFood', fmtBRL(Math.abs(i.frete))],
+    ['Taxa entrega retenção', fmtBRL(Math.abs(i.taxa_entrega_ret))],
+    ['Taxa serviço Sob Demanda Off', fmtBRL(Math.abs(i.taxa_servico_sob_demanda))],
+  ];
+  const subtotalLogistica = Math.abs(i.frete) + Math.abs(i.taxa_entrega_ret) + Math.abs(i.taxa_servico_sob_demanda);
+
+  const marketingRows: Array<[string, string]> = [
+    ['ADS (anúncios)', fmtBRL(Math.abs(i.ads))],
+    ['Promoções loja (informativo, não soma)', fmtBRL(Math.abs(i.promocoes_loja))],
+  ];
+  const subtotalMarketing = Math.abs(i.ads);
+
+  const informativoRows: Array<[string, string]> = [
+    ['Cancelamentos (total)', fmtBRL(Math.abs(i.cancel_total))],
+    ['Cancelamentos (parcial)', fmtBRL(Math.abs(i.cancel_parcial))],
+    ['Reembolsos pra loja', fmtBRL(i.reembolsos)],
+    ['Ressarcimentos', fmtBRL(i.ressarc)],
+    ['Promo iFood (devolução)', fmtBRL(i.promo_ifood)],
+    ['Taxa serviço cliente (retido pelo iFood)', fmtBRL(Math.abs(i.taxa_servico_cliente))],
+  ];
+
+  // Renderiza 4 boxes
+  const renderBox = (title: string, rows: Array<[string, string]>, subtotal: number | null, yStart: number) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(...ORANGE);
+    doc.text(title.toUpperCase(), 14, yStart);
+    autoTable(doc, {
+      startY: yStart + 2,
+      body: subtotal != null
+        ? [...rows, ['SUBTOTAL', fmtBRL(subtotal)]]
+        : rows,
+      theme: 'plain',
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 1.5, textColor: BLACK },
+      columnStyles: {
+        0: { cellWidth: 110 },
+        1: { halign: 'right' },
+      },
+      didParseCell: (h) => {
+        if (subtotal != null && h.section === 'body' && h.row.index === rows.length) {
+          h.cell.styles.fillColor = LIGHT_GRAY;
+          h.cell.styles.fontStyle = 'bold';
+        }
+      },
+    });
+    return (doc as any).lastAutoTable.finalY + 4;
+  };
+
+  y = renderBox('Taxas', taxasRows, subtotalTaxas, y);
+  y = renderBox('Logística', logisticaRows, subtotalLogistica, y);
+  y = renderBox('Marketing', marketingRows, subtotalMarketing, y);
+  y = renderBox('Informativo (não soma no custo)', informativoRows, null, y);
 }
 
 export function generateContabilPdf(
