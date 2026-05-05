@@ -57,11 +57,11 @@ type Repasse = {
 
 type CrosscheckResult = {
   ok: number;
-  missing_in_ifood: Array<{ order_id: string; saipos_total: number; pagamento: string; data_venda?: string; nome_loja?: string }>;
+  missing_in_ifood: Array<{ order_id: string; saipos_total: number; pagamento: string; data_venda?: string }>;
   missing_in_ifood_count: number;
   missing_in_saipos: Array<{ order_id: string; ifood_total_pago: number; ifood_liquido: number; data_pedido?: string; store_id_curto?: string }>;
   missing_in_saipos_count: number;
-  value_mismatch: Array<{ order_id: string; saipos_total: number; ifood_total_pago: number; diff: number; data?: string; nome_loja?: string }>;
+  value_mismatch: Array<{ order_id: string; saipos_total: number; ifood_total_pago: number; diff: number; data?: string; store_id_curto?: string }>;
   value_mismatch_count: number;
 };
 
@@ -660,7 +660,6 @@ function CrosscheckTab({
                 <TableRow>
                   <TableHead>Data/Hora</TableHead>
                   <TableHead>Order ID</TableHead>
-                  <TableHead>Loja</TableHead>
                   <TableHead>Pagamento</TableHead>
                   <TableHead className="text-right">Total Saipos</TableHead>
                 </TableRow>
@@ -670,7 +669,6 @@ function CrosscheckTab({
                   <TableRow key={r.order_id}>
                     <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data_venda)}</TableCell>
                     <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.nome_loja ?? '—'}</TableCell>
                     <TableCell><Badge variant="outline" className="text-[10px]">{r.pagamento}</Badge></TableCell>
                     <TableCell className="text-right font-medium">{fmt(r.saipos_total)}</TableCell>
                   </TableRow>
@@ -693,7 +691,7 @@ function CrosscheckTab({
                 <TableRow>
                   <TableHead>Data/Hora</TableHead>
                   <TableHead>Order ID</TableHead>
-                  <TableHead>Loja</TableHead>
+                  <TableHead>Loja iFood</TableHead>
                   <TableHead className="text-right">Saipos</TableHead>
                   <TableHead className="text-right">iFood</TableHead>
                   <TableHead className="text-right">Diff</TableHead>
@@ -704,7 +702,7 @@ function CrosscheckTab({
                   <TableRow key={r.order_id}>
                     <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data)}</TableCell>
                     <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.nome_loja ?? '—'}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{storeName(r.store_id_curto ?? null)}</TableCell>
                     <TableCell className="text-right">{fmt(r.saipos_total)}</TableCell>
                     <TableCell className="text-right">{fmt(r.ifood_total_pago)}</TableCell>
                     <TableCell className="text-right font-medium text-amber-700 dark:text-amber-500">{fmt(r.diff)}</TableCell>

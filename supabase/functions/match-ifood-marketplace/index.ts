@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
     const saiposRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_saipos_orders')
-        .select('order_id_parceiro, pagamento, cancelado, total, data_venda, nome_loja')
+        .select('order_id_parceiro, pagamento, cancelado, total, data_venda')
         .eq('audit_period_id', audit_period_id)
         .eq('canal_venda', 'iFood')
         .eq('cancelado', false)
@@ -131,13 +131,12 @@ Deno.serve(async (req) => {
         .eq('status_pedido', 'CONCLUIDO'),
     );
 
-    const saiposMap = new Map<string, { pagamento: string; total: number; data_venda: string; nome_loja: string }>();
+    const saiposMap = new Map<string, { pagamento: string; total: number; data_venda: string }>();
     for (const s of saiposRows ?? []) {
       saiposMap.set(s.order_id_parceiro, {
         pagamento: s.pagamento,
         total: Number(s.total),
         data_venda: s.data_venda,
-        nome_loja: s.nome_loja,
       });
     }
     const ifoodMap = new Map<string, { total_pago: number; liquido: number; data_pedido: string; sale_date: string; store_id_curto: string }>();
@@ -164,7 +163,7 @@ Deno.serve(async (req) => {
       const f = ifoodMap.get(oid);
       if (s && !f) {
         crosscheck.missing_in_ifood.push({
-          order_id: oid, saipos_total: s.total, pagamento: s.pagamento, data_venda: s.data_venda, nome_loja: s.nome_loja,
+          order_id: oid, saipos_total: s.total, pagamento: s.pagamento, data_venda: s.data_venda,
         });
       } else if (!s && f) {
         crosscheck.missing_in_saipos.push({
@@ -181,7 +180,7 @@ Deno.serve(async (req) => {
           crosscheck.value_mismatch.push({
             order_id: oid, saipos_total: s.total, ifood_total_pago: f.total_pago,
             diff: Math.abs(diff), data: s.data_venda ?? f.data_pedido,
-            nome_loja: s.nome_loja, store_id_curto: f.store_id_curto,
+            store_id_curto: f.store_id_curto,
           });
         } else {
           crosscheck.ok++;
