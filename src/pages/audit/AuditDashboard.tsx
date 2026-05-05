@@ -429,49 +429,117 @@ export default function AuditDashboard() {
     if (!period) return;
     setExportingContabil(true);
     try {
-      const { data: breakdown, error } = await supabase
-        .rpc('get_audit_contabil_breakdown' as any, { p_period_id: period.id });
-      if (error) throw error;
+      // Maquinona (Crédito/Débito/Pix) — direto de audit_card_transactions
+      // só is_competencia=true (transações do mês comp)
+      const { data: cardTxs } = await fetchAllPaginated<any>(
+        supabase
+          .from('audit_card_transactions')
+          .select('payment_method, sale_date, gross_amount, net_amount, tax_amount, is_competencia')
+          .eq('audit_period_id', period.id)
+          .eq('is_competencia', true),
+      ).then(d => ({ data: d })).catch(() => ({ data: [] as any[] }));
 
-      const rows = (breakdown as Array<{ categoria: string; dia: number; qtd: number; bruto: number; liquido: number; taxa: number }>) ?? [];
-      const validCats = new Set<ContabilCategoria>(CATEGORIAS_ORDEM);
+      // Vouchers — audit_voucher_lots agrupado por operadora
+      const { data: voucherLots } = await fetchAllPaginated<any>(
+        supabase
+          .from('audit_voucher_lots')
+          .select('operadora, data_credito, data_corte, subtotal_vendas, valor_liquido, total_descontos')
+          .eq('audit_period_id', period.id),
+      ).then(d => ({ data: d })).catch(() => ({ data: [] as any[] }));
 
-      // Aggregate per categoria
-      const resumoMap = new Map<ContabilCategoria, ContabilResumoRow>();
-      for (const r of rows) {
-        if (!validCats.has(r.categoria as ContabilCategoria)) continue;
-        const cat = r.categoria as ContabilCategoria;
-        const cur = resumoMap.get(cat) ?? {
-          categoria: cat, nome: CATEGORIA_LABELS[cat], qtd: 0, bruto: 0, liquido: 0, taxa: 0,
-        };
-        cur.qtd += Number(r.qtd ?? 0);
-        cur.bruto += Number(r.bruto ?? 0);
-        cur.liquido += Number(r.liquido ?? 0);
-        cur.taxa += Number(r.taxa ?? 0);
-        resumoMap.set(cat, cur);
-      }
-      const resumoPorCategoria: ContabilResumoRow[] = CATEGORIAS_ORDEM
-        .filter(c => c !== 'brendi')
-        .map(c => resumoMap.get(c) ?? {
-          categoria: c, nome: CATEGORIA_LABELS[c], qtd: 0, bruto: 0, liquido: 0, taxa: 0,
-        });
+      // qtd vouchers = número de lotes (audit_voucher_items pode não existir)
 
       const monthDays = new Date(year, month, 0).getDate();
 
+      // Mapeia payment_method → categoria
+      const mapMaquinonaCat = (pm: string): ContabilCategoria | null => {
+        const u = (pm || '').toUpperCase();
+        if (u.includes('CREDIT') || u === 'CREDITO') return 'credito';
+        if (u.includes('DEBIT') || u === 'DEBITO') return 'debito';
+        if (u === 'PIX') return 'pix';
+        return null;
+      };
+      const mapVoucherCat = (op: string): ContabilCategoria | null => {
+        const u = (op || '').toUpperCase();
+        if (u.includes('ALELO')) return 'alelo';
+        if (u.includes('TICKET')) return 'ticket';
+        if (u.includes('VR') || u.includes('VALE')) return 'vr';
+        if (u.includes('PLUXEE') || u.includes('SODEX')) return 'pluxee';
+        return null;
+      };
+
+      type Agg = { qtd: number; bruto: number; liquido: number; taxa: number };
+      const resumoMap = new Map<ContabilCategoria, Agg>();
+      const detMap = new Map<ContabilCategoria, Map<number, Agg>>();
+      const ensureAgg = (m: Map<ContabilCategoria, Agg>, k: ContabilCategoria): Agg => {
+        if (!m.has(k)) m.set(k, { qtd: 0, bruto: 0, liquido: 0, taxa: 0 });
+        return m.get(k)!;
+      };
+      const ensureDayAgg = (cat: ContabilCategoria, dia: number): Agg => {
+        if (!detMap.has(cat)) detMap.set(cat, new Map());
+        const m = detMap.get(cat)!;
+        if (!m.has(dia)) m.set(dia, { qtd: 0, bruto: 0, liquido: 0, taxa: 0 });
+        return m.get(dia)!;
+      };
+
+      // Agrega Maquinona
+      for (const t of (cardTxs ?? []) as any[]) {
+        const cat = mapMaquinonaCat(t.payment_method);
+        if (!cat) continue;
+        const r = ensureAgg(resumoMap, cat);
+        r.qtd += 1;
+        r.bruto += Number(t.gross_amount ?? 0);
+        r.liquido += Number(t.net_amount ?? 0);
+        r.taxa += Math.abs(Number(t.tax_amount ?? 0));
+        if (mode === 'detalhado' && t.sale_date) {
+          const [, , dStr] = String(t.sale_date).slice(0, 10).split('-');
+          const d = Number(dStr);
+          if (d >= 1 && d <= monthDays) {
+            const dr = ensureDayAgg(cat, d);
+            dr.qtd += 1;
+            dr.bruto += Number(t.gross_amount ?? 0);
+            dr.liquido += Number(t.net_amount ?? 0);
+            dr.taxa += Math.abs(Number(t.tax_amount ?? 0));
+          }
+        }
+      }
+
+      // Agrega Vouchers — qtd = número de lotes
+      for (const l of (voucherLots ?? []) as any[]) {
+        const cat = mapVoucherCat(l.operadora);
+        if (!cat) continue;
+        const r = ensureAgg(resumoMap, cat);
+        r.qtd += 1;
+        r.bruto += Number(l.subtotal_vendas ?? 0);
+        r.liquido += Number(l.valor_liquido ?? 0);
+        r.taxa += Math.abs(Number(l.total_descontos ?? 0));
+        if (mode === 'detalhado') {
+          const dateRef = String(l.data_corte ?? l.data_credito ?? '').slice(0, 10);
+          if (dateRef) {
+            const d = Number(dateRef.split('-')[2]);
+            if (d >= 1 && d <= monthDays) {
+              const dr = ensureDayAgg(cat, d);
+              dr.qtd += 1;
+              dr.bruto += Number(l.subtotal_vendas ?? 0);
+              dr.liquido += Number(l.valor_liquido ?? 0);
+              dr.taxa += Math.abs(Number(l.total_descontos ?? 0));
+            }
+          }
+        }
+      }
+
+      const resumoPorCategoria: ContabilResumoRow[] = CATEGORIAS_ORDEM
+        .filter(c => c !== 'brendi')
+        .map(c => {
+          const a = resumoMap.get(c);
+          return {
+            categoria: c, nome: CATEGORIA_LABELS[c],
+            qtd: a?.qtd ?? 0, bruto: a?.bruto ?? 0, liquido: a?.liquido ?? 0, taxa: a?.taxa ?? 0,
+          };
+        });
+
       let detalhamentoDiario: ContabilDetalhamento[] | undefined;
       if (mode === 'detalhado') {
-        const detMap = new Map<ContabilCategoria, Map<number, { qtd: number; bruto: number; liquido: number; taxa: number }>>();
-        for (const r of rows) {
-          if (!validCats.has(r.categoria as ContabilCategoria)) continue;
-          const cat = r.categoria as ContabilCategoria;
-          if (!detMap.has(cat)) detMap.set(cat, new Map());
-          detMap.get(cat)!.set(Number(r.dia), {
-            qtd: Number(r.qtd ?? 0),
-            bruto: Number(r.bruto ?? 0),
-            liquido: Number(r.liquido ?? 0),
-            taxa: Number(r.taxa ?? 0),
-          });
-        }
         detalhamentoDiario = CATEGORIAS_ORDEM
           .filter(c => c !== 'brendi')
           .map(cat => ({

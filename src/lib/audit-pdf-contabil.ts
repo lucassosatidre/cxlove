@@ -167,31 +167,79 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.setTextColor(...ORANGE);
   doc.text('RESUMO CONSOLIDADO', 14, 56);
 
-  // Build resumo body in fixed order
-  const rows = CATEGORIAS_ORDEM.map(cat => {
-    const r = data.resumoPorCategoria.find(x => x.categoria === cat);
-    if (!r || (cat === 'brendi')) {
-      // Brendi placeholder
-      if (cat === 'brendi') {
-        return ['Brendi', '—', '0,00', '0,00', '0,00', '— em breve'];
+  // Build resumo body — Brendi e iFood preenchidos com dados reais
+  const rows: any[] = [];
+  for (const cat of CATEGORIAS_ORDEM) {
+    if (cat === 'brendi') {
+      // Linha Brendi puxa do data.brendi
+      if (data.brendi) {
+        const b = data.brendi;
+        const pct = b.vendido_bruto > 0 ? (b.taxa_declarada / b.vendido_bruto) * 100 : 0;
+        rows.push([
+          'Brendi (online)',
+          String(b.pedidos_count_mes),
+          fmtNum(b.vendido_bruto),
+          fmtNum(b.esperado_liquido),
+          fmtNum(Math.abs(b.taxa_declarada)),
+          fmtPct(pct),
+        ]);
+      } else {
+        rows.push(['Brendi (online)', '0', '0,00', '0,00', '0,00', '0,00%']);
       }
-      return [CATEGORIA_LABELS[cat], '0', '0,00', '0,00', '0,00', '0,00%'];
+      continue;
+    }
+    const r = data.resumoPorCategoria.find(x => x.categoria === cat);
+    if (!r) {
+      rows.push([CATEGORIA_LABELS[cat], '0', '0,00', '0,00', '0,00', '0,00%']);
+      continue;
     }
     const pct = r.bruto > 0 ? (r.taxa / r.bruto) * 100 : 0;
-    return [
+    rows.push([
       CATEGORIA_LABELS[cat],
       String(r.qtd),
       fmtNum(r.bruto),
       fmtNum(r.liquido),
       fmtNum(Math.abs(r.taxa)),
       fmtPct(pct),
-    ];
-  });
+    ]);
+  }
 
-  const totQtd = data.resumoPorCategoria.reduce((s, r) => s + r.qtd, 0);
-  const totBruto = data.resumoPorCategoria.reduce((s, r) => s + r.bruto, 0);
-  const totLiq = data.resumoPorCategoria.reduce((s, r) => s + r.liquido, 0);
-  const totTaxa = data.resumoPorCategoria.reduce((s, r) => s + Math.abs(r.taxa), 0);
+  // Adiciona linha iFood Marketplace se temos dados
+  if (data.ifood) {
+    const i = data.ifood;
+    const pct = i.vendido_bruto > 0 ? (i.custo_total / i.vendido_bruto) * 100 : 0;
+    rows.push([
+      'iFood Marketplace',
+      '—',
+      fmtNum(i.vendido_bruto),
+      fmtNum(i.liquido_esperado),
+      fmtNum(i.custo_total),
+      fmtPct(pct),
+    ]);
+  }
+
+  const baseSum = data.resumoPorCategoria.reduce((acc, r) => ({
+    qtd: acc.qtd + r.qtd,
+    bruto: acc.bruto + r.bruto,
+    liq: acc.liq + r.liquido,
+    taxa: acc.taxa + Math.abs(r.taxa),
+  }), { qtd: 0, bruto: 0, liq: 0, taxa: 0 });
+  const brSum = data.brendi ? {
+    qtd: data.brendi.pedidos_count_mes,
+    bruto: data.brendi.vendido_bruto,
+    liq: data.brendi.esperado_liquido,
+    taxa: Math.abs(data.brendi.taxa_declarada),
+  } : { qtd: 0, bruto: 0, liq: 0, taxa: 0 };
+  const ifSum = data.ifood ? {
+    qtd: 0,
+    bruto: data.ifood.vendido_bruto,
+    liq: data.ifood.liquido_esperado,
+    taxa: data.ifood.custo_total,
+  } : { qtd: 0, bruto: 0, liq: 0, taxa: 0 };
+  const totQtd = baseSum.qtd + brSum.qtd + ifSum.qtd;
+  const totBruto = baseSum.bruto + brSum.bruto + ifSum.bruto;
+  const totLiq = baseSum.liq + brSum.liq + ifSum.liq;
+  const totTaxa = baseSum.taxa + brSum.taxa + ifSum.taxa;
   const totPct = totBruto > 0 ? (totTaxa / totBruto) * 100 : 0;
 
   rows.push([
