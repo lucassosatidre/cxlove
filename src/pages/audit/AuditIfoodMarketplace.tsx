@@ -62,7 +62,7 @@ type CrosscheckResult = {
   missing_in_ifood_count: number;
   missing_in_saipos: Array<{ order_id: string; ifood_total_pago: number; ifood_liquido: number; data_pedido?: string; store_id_curto?: string }>;
   missing_in_saipos_count: number;
-  value_mismatch: Array<{ order_id: string; saipos_total: number; ifood_total_pago: number; diff: number; data?: string; store_id_curto?: string }>;
+  value_mismatch: Array<{ order_id: string; saipos_total: number; ifood_total_pago: number; ifood_taxa_servico?: number; diff: number; diff_sem_taxa_servico?: number; data?: string; pagamento_saipos?: string; store_id_curto?: string }>;
   value_mismatch_count: number;
 };
 
@@ -723,7 +723,10 @@ function CrosscheckTab({
         <Card className="border-amber-500/40 bg-amber-500/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Diferença de valor entre Saipos e iFood ({crosscheck.value_mismatch_count})</CardTitle>
-            <p className="text-xs text-muted-foreground">Tolerância R$ 2,00. Pgto misto Saipos: ignora diff positivo.</p>
+            <p className="text-xs text-muted-foreground">
+              Tolerância R$ 2,00. iFood inclui taxa de serviço cliente; Saipos não.
+              "Diff sem tx" = (Saipos - iFood + tx_serviço). Restantes são divergências reais (taxa de entrega no Saipos, ajustes pós-fato).
+            </p>
           </CardHeader>
           <CardContent>
             <Table>
@@ -731,21 +734,27 @@ function CrosscheckTab({
                 <TableRow>
                   <TableHead>Data/Hora</TableHead>
                   <TableHead>Order ID</TableHead>
-                  <TableHead>Loja iFood</TableHead>
+                  <TableHead>Loja</TableHead>
+                  <TableHead>Pgto Saipos</TableHead>
                   <TableHead className="text-right">Saipos</TableHead>
                   <TableHead className="text-right">iFood</TableHead>
+                  <TableHead className="text-right">Tx serv.</TableHead>
                   <TableHead className="text-right">Diff</TableHead>
+                  <TableHead className="text-right">Diff sem tx</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {crosscheck.value_mismatch.map(r => (
                   <TableRow key={r.order_id}>
                     <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data)}</TableCell>
-                    <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
+                    <TableCell className="font-mono text-[10px]">{r.order_id}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{storeName(r.store_id_curto ?? null)}</TableCell>
+                    <TableCell className="text-[10px]">{r.pagamento_saipos ? <Badge variant="outline" className="text-[10px]">{r.pagamento_saipos}</Badge> : '—'}</TableCell>
                     <TableCell className="text-right">{fmt(r.saipos_total)}</TableCell>
                     <TableCell className="text-right">{fmt(r.ifood_total_pago)}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{r.ifood_taxa_servico != null ? fmt(r.ifood_taxa_servico) : '—'}</TableCell>
                     <TableCell className="text-right font-medium text-amber-700 dark:text-amber-500">{fmt(r.diff)}</TableCell>
+                    <TableCell className="text-right">{r.diff_sem_taxa_servico != null ? fmt(r.diff_sem_taxa_servico) : '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

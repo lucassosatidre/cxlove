@@ -1,5 +1,5 @@
 // @ts-nocheck
-// match-ifood-marketplace v2.2 (2026-05-05) — fix Pass 3 matchedAntecipIds
+// match-ifood-marketplace v2.3 (2026-05-05) — Pass 1: cross-check todos canal=iFood + diff_adj_taxa_servico
 // match-ifood-marketplace v2 — 3 passes:
 //
 // Pass 1: Cross-check Saipos × audit_ifood_orders por order_id
@@ -123,14 +123,17 @@ Deno.serve(async (req) => {
       ? `${period.year + 1}-01-01`
       : `${period.year}-${String(period.month + 1).padStart(2, '0')}-01`;
 
+    // Cruza TODOS pedidos canal=iFood do Saipos (não apenas "Online Ifood").
+    // O relatório iFood lista pedidos pgto-na-entrega/dinheiro/cartão físico
+    // também — sem este universo amplo, ~560 pedidos viram falsos positivos
+    // missing_in_saipos.
     const saiposRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_saipos_orders')
-        .select('order_id_parceiro, pagamento, cancelado, total, data_venda')
+        .select('order_id_parceiro, pagamento, cancelado, total, data_venda, total_taxa_servico')
         .eq('audit_period_id', audit_period_id)
         .eq('canal_venda', 'iFood')
         .eq('cancelado', false)
-        .ilike('pagamento', '%Online Ifood%')
         .gte('data_venda', monthStart)
         .lt('data_venda', nextMonthStart),
     );
@@ -138,24 +141,26 @@ Deno.serve(async (req) => {
     const ifoodRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_ifood_orders')
-        .select('order_id, status_pedido, total_pago_cliente, valor_liquido, sale_date, data_pedido, store_id_curto')
+        .select('order_id, status_pedido, total_pago_cliente, valor_liquido, taxa_servico, sale_date, data_pedido, store_id_curto')
         .eq('audit_period_id', audit_period_id)
         .eq('status_pedido', 'CONCLUIDO'),
     );
 
-    const saiposMap = new Map<string, { pagamento: string; total: number; data_venda: string }>();
+    const saiposMap = new Map<string, { pagamento: string; total: number; data_venda: string; total_taxa_servico: number }>();
     for (const s of saiposRows ?? []) {
       saiposMap.set(s.order_id_parceiro, {
         pagamento: s.pagamento,
         total: Number(s.total),
         data_venda: s.data_venda,
+        total_taxa_servico: Number(s.total_taxa_servico ?? 0),
       });
     }
-    const ifoodMap = new Map<string, { total_pago: number; liquido: number; data_pedido: string; sale_date: string; store_id_curto: string }>();
+    const ifoodMap = new Map<string, { total_pago: number; liquido: number; taxa_servico: number; data_pedido: string; sale_date: string; store_id_curto: string }>();
     for (const o of ifoodRows ?? []) {
       ifoodMap.set(o.order_id, {
         total_pago: Number(o.total_pago_cliente),
         liquido: Number(o.valor_liquido),
+        taxa_servico: Number(o.taxa_servico ?? 0),
         data_pedido: o.data_pedido,
         sale_date: o.sale_date,
         store_id_curto: o.store_id_curto,
@@ -183,15 +188,25 @@ Deno.serve(async (req) => {
           data_pedido: f.data_pedido, store_id_curto: f.store_id_curto,
         });
       } else if (s && f) {
+        // Diferença esperada Saipos × iFood é a taxa de serviço cliente que
+        // o iFood retém (não vai pra loja, fica com iFood). Saipos.total não
+        // inclui essa taxa; iFood.total_pago_cliente inclui. Logo:
+        //   iFood.total_pago_cliente - iFood.taxa_servico ≈ Saipos.total
+        // Tolerância: 2,00 absoluta + ajuste pgto misto Saipos.
         const isMixedPayment = (s.pagamento || '').includes(',');
-        const diff = s.total - f.total_pago;
+        const diffSimple = s.total - f.total_pago;
+        const diffAdjusted = s.total - (f.total_pago - f.taxa_servico);
         const isOk = isMixedPayment
-          ? diff >= -VALUE_TOLERANCE_CROSSCHECK
-          : Math.abs(diff) <= VALUE_TOLERANCE_CROSSCHECK;
+          ? (diffSimple >= -VALUE_TOLERANCE_CROSSCHECK || Math.abs(diffAdjusted) <= VALUE_TOLERANCE_CROSSCHECK)
+          : (Math.abs(diffSimple) <= VALUE_TOLERANCE_CROSSCHECK || Math.abs(diffAdjusted) <= VALUE_TOLERANCE_CROSSCHECK);
         if (!isOk) {
           crosscheck.value_mismatch.push({
             order_id: oid, saipos_total: s.total, ifood_total_pago: f.total_pago,
-            diff: Math.abs(diff), data: s.data_venda ?? f.data_pedido,
+            ifood_taxa_servico: f.taxa_servico,
+            diff: Math.abs(diffSimple),
+            diff_sem_taxa_servico: Math.abs(diffAdjusted),
+            data: s.data_venda ?? f.data_pedido,
+            pagamento_saipos: s.pagamento,
             store_id_curto: f.store_id_curto,
           });
         } else {
@@ -383,7 +398,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.2-2026-05-05-pass3-fix',
+      edge_version: 'v2.3-2026-05-05-crosscheck-todos-canal-ifood',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
