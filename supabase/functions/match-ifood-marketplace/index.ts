@@ -113,6 +113,15 @@ Deno.serve(async (req) => {
     // ─────────────────────────────────────────────────────────────────────
     // Pass 1: Cross-check Saipos × audit_ifood_orders
     // ─────────────────────────────────────────────────────────────────────
+    // Filtra Saipos por mês de competência. Saipos importa 3 meses (jan+fev+mar
+    // pra suportar cross-month do Brendi), mas o cross-check iFood deve casar
+    // só com o relatório de pedidos do mês comp. Sem o filtro, pedidos Saipos
+    // de jan/mar viram falsos positivos "missing_in_ifood".
+    const monthStart = `${period.year}-${String(period.month).padStart(2, '0')}-01`;
+    const nextMonthStart = period.month === 12
+      ? `${period.year + 1}-01-01`
+      : `${period.year}-${String(period.month + 1).padStart(2, '0')}-01`;
+
     const saiposRows = await fetchAllPaginated<any>(
       supabase
         .from('audit_saipos_orders')
@@ -120,7 +129,9 @@ Deno.serve(async (req) => {
         .eq('audit_period_id', audit_period_id)
         .eq('canal_venda', 'iFood')
         .eq('cancelado', false)
-        .ilike('pagamento', '%Online Ifood%'),
+        .ilike('pagamento', '%Online Ifood%')
+        .gte('data_venda', monthStart)
+        .lt('data_venda', nextMonthStart),
     );
 
     const ifoodRows = await fetchAllPaginated<any>(

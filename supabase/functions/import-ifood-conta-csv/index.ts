@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
       const chunk = movimentos.slice(i, i + CHUNK);
       const { error: insErr } = await supabase
         .from('audit_ifood_conta_movimentos')
-        .upsert(chunk, { onConflict: 'audit_period_id,csv_idx,descricao' });
+        .upsert(chunk, { onConflict: 'audit_period_id,data,descricao,valor' });
       if (insErr) {
         await supabase.from('audit_imports').update({
           status: 'failed', error_message: insErr.message, imported_rows: inserted,
