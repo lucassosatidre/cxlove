@@ -1,24 +1,9 @@
-# Redeploy + Rebuild
+## Redeploy `match-ifood-marketplace` e verificar versão
 
-## O que vai acontecer ao aprovar
+1. Disparar deploy da edge function `match-ifood-marketplace` via `supabase--deploy_edge_functions(["match-ifood-marketplace"])`. O deploy usa o código atualmente sincronizado no projeto Lovable (que está em sync bidirecional com o GitHub, então reflete o commit `c4e8d80` se já foi mergeado).
+2. Após deploy bem-sucedido, chamar a função via `supabase--curl_edge_functions` (POST com `audit_period_id` do período Feb/2026 atual da rota) para capturar o JSON de resposta.
+3. Validar que `edge_version` no payload retornado é exatamente `v2.2-2026-05-05-pass3-fix` e reportar o resultado.
 
-1. **Redeploy edge function** `run-audit-match` via `supabase--deploy_edge_functions(["run-audit-match"])` — sobe a versão atual em `supabase/functions/run-audit-match/index.ts` (com a lógica de carry-forward e `classify_ifood_deposits`).
+Se o deploy falhar, checar logs com `supabase--edge_function_logs` e, se for problema de lockfile, remover `deno.lock` e re-tentar (ver edge-function-deploy-errors).
 
-2. **Rebuild do frontend** — o build roda automaticamente no fim do loop e publica o último commit, incluindo:
-   - `src/pages/audit/AuditDashboard.tsx`
-   - `src/pages/audit/AuditIfood.tsx`
-   - `src/lib/audit-pdf.ts`
-
-3. **Verificação pós-deploy**:
-   - Checar `supabase--edge_function_logs` em `run-audit-match` pra confirmar que subiu sem erro de boot.
-   - Confirmar que o Lovable build não falhou.
-
-## O que NÃO vai mudar
-
-- Nenhum código. É só redeploy do que já está commitado.
-- Sem migrations, sem mudança de schema, sem mexer em outras functions (`import-maquinona`, `import-cresol` ficam como estão — você pediu só `run-audit-match` desta vez).
-- Sem reset de dados de auditoria.
-
-## Observação
-
-Lembrando que mudanças de **frontend** só vão pro domínio público (`cxlove.lovable.app`) depois de você clicar **Publish → Update** no editor. O preview (`id-preview--...lovable.app`) atualiza automaticamente assim que o build terminar.
+Observação: Lovable não tem comando explícito de "puxar commit X do GitHub" — o sync é automático. Se o commit `c4e8d80` ainda não apareceu no workspace, é necessário aguardar a sincronização antes do deploy. Posso confirmar lendo o header `// match-ifood-marketplace v2.2 (2026-05-05)` no `index.ts` antes de deployar.
