@@ -409,128 +409,196 @@ export type Database = {
           },
         ]
       }
-      audit_ifood_marketplace_daily: {
+      audit_ifood_conta_movimentos: {
         Row: {
           audit_period_id: string
-          bruto_calc: number | null
+          categoria: string
+          categoria_csv: string
           created_at: string
-          cresol_deposit_ids: string[] | null
-          cresol_received: number | null
-          diff: number | null
-          diff_pct: number | null
-          expected_credit_date: string | null
+          csv_idx: number
+          data: string
+          descricao: string
           id: string
-          ifood_declarado_bruto: number | null
-          ifood_declarado_depositado: number | null
-          ifood_declarado_diferenca: number | null
-          ifood_declarado_liq_esperado: number | null
-          ifood_declarado_status: string | null
-          ifood_declarado_taxa: number | null
-          ifood_declarado_vendas: number | null
-          liquido_calc: number | null
-          note: string | null
-          pedidos_count: number | null
-          sale_date: string
+          import_id: string | null
+          match_repasse_ids: string[] | null
           status: string
-          updated_at: string
+          valor: number
         }
         Insert: {
           audit_period_id: string
-          bruto_calc?: number | null
+          categoria: string
+          categoria_csv: string
           created_at?: string
-          cresol_deposit_ids?: string[] | null
-          cresol_received?: number | null
-          diff?: number | null
-          diff_pct?: number | null
-          expected_credit_date?: string | null
+          csv_idx: number
+          data: string
+          descricao: string
           id?: string
-          ifood_declarado_bruto?: number | null
-          ifood_declarado_depositado?: number | null
-          ifood_declarado_diferenca?: number | null
-          ifood_declarado_liq_esperado?: number | null
-          ifood_declarado_status?: string | null
-          ifood_declarado_taxa?: number | null
-          ifood_declarado_vendas?: number | null
-          liquido_calc?: number | null
-          note?: string | null
-          pedidos_count?: number | null
-          sale_date: string
+          import_id?: string | null
+          match_repasse_ids?: string[] | null
           status?: string
-          updated_at?: string
+          valor: number
         }
         Update: {
           audit_period_id?: string
-          bruto_calc?: number | null
+          categoria?: string
+          categoria_csv?: string
           created_at?: string
-          cresol_deposit_ids?: string[] | null
-          cresol_received?: number | null
-          diff?: number | null
-          diff_pct?: number | null
-          expected_credit_date?: string | null
+          csv_idx?: number
+          data?: string
+          descricao?: string
           id?: string
-          ifood_declarado_bruto?: number | null
-          ifood_declarado_depositado?: number | null
-          ifood_declarado_diferenca?: number | null
-          ifood_declarado_liq_esperado?: number | null
-          ifood_declarado_status?: string | null
-          ifood_declarado_taxa?: number | null
-          ifood_declarado_vendas?: number | null
-          liquido_calc?: number | null
-          note?: string | null
-          pedidos_count?: number | null
-          sale_date?: string
+          import_id?: string | null
+          match_repasse_ids?: string[] | null
           status?: string
-          updated_at?: string
+          valor?: number
         }
         Relationships: [
           {
-            foreignKeyName: "audit_ifood_marketplace_daily_audit_period_id_fkey"
+            foreignKeyName: "audit_ifood_conta_movimentos_audit_period_id_fkey"
             columns: ["audit_period_id"]
             isOneToOne: false
             referencedRelation: "audit_periods"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      audit_ifood_marketplace_daily_overrides: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          daily_id: string
-          id: string
-          motivo: string
-          note: string | null
-          valor_ajuste: number
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          daily_id: string
-          id?: string
-          motivo: string
-          note?: string | null
-          valor_ajuste: number
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          daily_id?: string
-          id?: string
-          motivo?: string
-          note?: string | null
-          valor_ajuste?: number
-        }
-        Relationships: [
           {
-            foreignKeyName: "audit_ifood_marketplace_daily_overrides_daily_id_fkey"
-            columns: ["daily_id"]
+            foreignKeyName: "audit_ifood_conta_movimentos_import_id_fkey"
+            columns: ["import_id"]
             isOneToOne: false
-            referencedRelation: "audit_ifood_marketplace_daily"
+            referencedRelation: "audit_imports"
             referencedColumns: ["id"]
           },
         ]
       }
-      audit_ifood_marketplace_orders: {
+      audit_ifood_lancamentos: {
+        Row: {
+          audit_period_id: string
+          bandeira_pagamento: string | null
+          base_calculo: number | null
+          canal_vendas: string | null
+          categoria_calc: string
+          cnpj: string | null
+          competencia: string | null
+          created_at: string
+          data_apuracao_fim: string | null
+          data_apuracao_inicio: string | null
+          data_criacao_pedido_associado: string | null
+          data_faturamento: string | null
+          data_repasse_esperada: string | null
+          descricao_lancamento: string | null
+          descricao_ocorrencia: string | null
+          fato_gerador: string | null
+          id: string
+          id_saldo: string | null
+          idx_arquivo: number
+          impacto_no_repasse: string | null
+          import_id: string | null
+          loja_id: string | null
+          loja_id_curto: string | null
+          metodo_pagamento: string | null
+          motivo_cancelamento: string | null
+          pedido_associado_ifood: string | null
+          pedido_associado_ifood_curto: string | null
+          pedido_detalhes: string | null
+          percentual_taxa: number | null
+          responsavel_transacao: string | null
+          store_id_curto: string
+          tipo_lancamento: string | null
+          valor: number | null
+          valor_cesta_final: number | null
+          valor_transacao: number | null
+        }
+        Insert: {
+          audit_period_id: string
+          bandeira_pagamento?: string | null
+          base_calculo?: number | null
+          canal_vendas?: string | null
+          categoria_calc: string
+          cnpj?: string | null
+          competencia?: string | null
+          created_at?: string
+          data_apuracao_fim?: string | null
+          data_apuracao_inicio?: string | null
+          data_criacao_pedido_associado?: string | null
+          data_faturamento?: string | null
+          data_repasse_esperada?: string | null
+          descricao_lancamento?: string | null
+          descricao_ocorrencia?: string | null
+          fato_gerador?: string | null
+          id?: string
+          id_saldo?: string | null
+          idx_arquivo: number
+          impacto_no_repasse?: string | null
+          import_id?: string | null
+          loja_id?: string | null
+          loja_id_curto?: string | null
+          metodo_pagamento?: string | null
+          motivo_cancelamento?: string | null
+          pedido_associado_ifood?: string | null
+          pedido_associado_ifood_curto?: string | null
+          pedido_detalhes?: string | null
+          percentual_taxa?: number | null
+          responsavel_transacao?: string | null
+          store_id_curto: string
+          tipo_lancamento?: string | null
+          valor?: number | null
+          valor_cesta_final?: number | null
+          valor_transacao?: number | null
+        }
+        Update: {
+          audit_period_id?: string
+          bandeira_pagamento?: string | null
+          base_calculo?: number | null
+          canal_vendas?: string | null
+          categoria_calc?: string
+          cnpj?: string | null
+          competencia?: string | null
+          created_at?: string
+          data_apuracao_fim?: string | null
+          data_apuracao_inicio?: string | null
+          data_criacao_pedido_associado?: string | null
+          data_faturamento?: string | null
+          data_repasse_esperada?: string | null
+          descricao_lancamento?: string | null
+          descricao_ocorrencia?: string | null
+          fato_gerador?: string | null
+          id?: string
+          id_saldo?: string | null
+          idx_arquivo?: number
+          impacto_no_repasse?: string | null
+          import_id?: string | null
+          loja_id?: string | null
+          loja_id_curto?: string | null
+          metodo_pagamento?: string | null
+          motivo_cancelamento?: string | null
+          pedido_associado_ifood?: string | null
+          pedido_associado_ifood_curto?: string | null
+          pedido_detalhes?: string | null
+          percentual_taxa?: number | null
+          responsavel_transacao?: string | null
+          store_id_curto?: string
+          tipo_lancamento?: string | null
+          valor?: number | null
+          valor_cesta_final?: number | null
+          valor_transacao?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_ifood_lancamentos_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_ifood_lancamentos_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "audit_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_ifood_orders: {
         Row: {
           audit_period_id: string
           canal_venda: string | null
@@ -547,6 +615,7 @@ export type Database = {
           sale_date: string
           short_order_id: string | null
           status_pedido: string
+          store_id_curto: string | null
           taxa_entrega_cliente: number | null
           taxa_servico: number | null
           taxas_comissoes: number | null
@@ -572,6 +641,7 @@ export type Database = {
           sale_date: string
           short_order_id?: string | null
           status_pedido: string
+          store_id_curto?: string | null
           taxa_entrega_cliente?: number | null
           taxa_servico?: number | null
           taxas_comissoes?: number | null
@@ -597,6 +667,7 @@ export type Database = {
           sale_date?: string
           short_order_id?: string | null
           status_pedido?: string
+          store_id_curto?: string | null
           taxa_entrega_cliente?: number | null
           taxa_servico?: number | null
           taxas_comissoes?: number | null
@@ -619,6 +690,134 @@ export type Database = {
             columns: ["import_id"]
             isOneToOne: false
             referencedRelation: "audit_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      audit_ifood_repasses: {
+        Row: {
+          ads: number | null
+          audit_period_id: string
+          bruto_venda: number | null
+          cancel_frete: number | null
+          cancel_parcial: number | null
+          cancel_total: number | null
+          comissao: number | null
+          conta_data_recebimento: string | null
+          conta_movimento_id: string | null
+          conta_recebido: number | null
+          conta_taxa_antecip: number | null
+          created_at: string
+          data_repasse_esperada: string
+          diff: number | null
+          frete_ifood: number | null
+          id: string
+          liquido_efetivo: number | null
+          liquido_esperado: number | null
+          mensalidade: number | null
+          note: string | null
+          ocor_venda: number | null
+          outros: number | null
+          periodo_apuracao_fim: string | null
+          periodo_apuracao_inicio: string | null
+          pgto_direto_loja: number | null
+          promo_ifood: number | null
+          promo_loja: number | null
+          reembolsos: number | null
+          ressarc: number | null
+          status: string
+          store_id_curto: string
+          taxa_conveniencia: number | null
+          taxa_entrega_ret: number | null
+          taxa_servico_cliente: number | null
+          taxa_servico_sob_demanda: number | null
+          taxa_transacao: number | null
+          updated_at: string
+        }
+        Insert: {
+          ads?: number | null
+          audit_period_id: string
+          bruto_venda?: number | null
+          cancel_frete?: number | null
+          cancel_parcial?: number | null
+          cancel_total?: number | null
+          comissao?: number | null
+          conta_data_recebimento?: string | null
+          conta_movimento_id?: string | null
+          conta_recebido?: number | null
+          conta_taxa_antecip?: number | null
+          created_at?: string
+          data_repasse_esperada: string
+          diff?: number | null
+          frete_ifood?: number | null
+          id?: string
+          liquido_efetivo?: number | null
+          liquido_esperado?: number | null
+          mensalidade?: number | null
+          note?: string | null
+          ocor_venda?: number | null
+          outros?: number | null
+          periodo_apuracao_fim?: string | null
+          periodo_apuracao_inicio?: string | null
+          pgto_direto_loja?: number | null
+          promo_ifood?: number | null
+          promo_loja?: number | null
+          reembolsos?: number | null
+          ressarc?: number | null
+          status?: string
+          store_id_curto: string
+          taxa_conveniencia?: number | null
+          taxa_entrega_ret?: number | null
+          taxa_servico_cliente?: number | null
+          taxa_servico_sob_demanda?: number | null
+          taxa_transacao?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ads?: number | null
+          audit_period_id?: string
+          bruto_venda?: number | null
+          cancel_frete?: number | null
+          cancel_parcial?: number | null
+          cancel_total?: number | null
+          comissao?: number | null
+          conta_data_recebimento?: string | null
+          conta_movimento_id?: string | null
+          conta_recebido?: number | null
+          conta_taxa_antecip?: number | null
+          created_at?: string
+          data_repasse_esperada?: string
+          diff?: number | null
+          frete_ifood?: number | null
+          id?: string
+          liquido_efetivo?: number | null
+          liquido_esperado?: number | null
+          mensalidade?: number | null
+          note?: string | null
+          ocor_venda?: number | null
+          outros?: number | null
+          periodo_apuracao_fim?: string | null
+          periodo_apuracao_inicio?: string | null
+          pgto_direto_loja?: number | null
+          promo_ifood?: number | null
+          promo_loja?: number | null
+          reembolsos?: number | null
+          ressarc?: number | null
+          status?: string
+          store_id_curto?: string
+          taxa_conveniencia?: number | null
+          taxa_entrega_ret?: number | null
+          taxa_servico_cliente?: number | null
+          taxa_servico_sob_demanda?: number | null
+          taxa_transacao?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_ifood_repasses_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
             referencedColumns: ["id"]
           },
         ]
