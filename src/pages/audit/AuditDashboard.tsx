@@ -720,6 +720,13 @@ export default function AuditDashboard() {
                 Brendi (Estágio 3)
               </Button>
               <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => navigate(`/admin/auditoria/ifood-marketplace?month=${month}&year=${year}`)}
+              >
+                iFood Marketplace (Estágio 4)
+              </Button>
+              <Button
                 variant="default"
                 size="lg"
                 className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-md"
