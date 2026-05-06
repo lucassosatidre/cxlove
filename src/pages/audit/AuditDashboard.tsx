@@ -441,13 +441,17 @@ export default function AuditDashboard() {
       );
       // Diagnóstico — útil pra detectar quando categoria não bate
       const pmCounts: Record<string, number> = {};
+      const ymCounts: Record<string, number> = {};
       const sampleSaleDates: string[] = [];
       for (const t of cardTxs ?? []) {
         const k = String(t.payment_method ?? '');
         pmCounts[k] = (pmCounts[k] ?? 0) + 1;
-        if (sampleSaleDates.length < 3) sampleSaleDates.push(String(t.sale_date));
+        const sd = String(t.sale_date ?? '');
+        const ym = sd.slice(0, 7) || '(vazio)';
+        ymCounts[ym] = (ymCounts[ym] ?? 0) + 1;
+        if (sampleSaleDates.length < 5) sampleSaleDates.push(sd);
       }
-      console.log('[Contabil] audit_card_transactions:', cardTxs?.length ?? 0, 'rows', pmCounts, 'sample sale_date:', sampleSaleDates);
+      console.log('[Contabil] audit_card_transactions:', cardTxs?.length ?? 0, 'rows', pmCounts, 'ymCounts:', ymCounts, 'sample sale_date:', sampleSaleDates);
 
       // Vouchers — audit_voucher_lots agrupado por operadora
       const voucherLots: any[] = await fetchAllPaginated<any>(
@@ -683,9 +687,15 @@ export default function AuditDashboard() {
       // Diagnóstico - aparece como toast pra ajudar a debugar zeros no PDF
       const pmKeys = Object.keys(pmCounts);
       const pmList = pmKeys.length > 0 ? pmKeys.join(', ') : '(nenhum)';
+      const topYM = Object.entries(ymCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([k, v]) => `${k}=${v}`)
+        .join(' ');
+      const samples = sampleSaleDates.slice(0, 5).join(', ');
       toast({
         title: '✓ Relatório Contábil gerado',
-        description: `Maquinona: ${cardTxs?.length ?? 0} txs | mês: ${cardTxsCompCount} | não mapeado: ${cardTxsCompUnmapped} | sample: ${sampleSaleDates[0] ?? '?'} | pms: ${pmList}`,
+        description: `Maquinona: ${cardTxs?.length ?? 0} txs | mês ${periodYM}: ${cardTxsCompCount} | n.map: ${cardTxsCompUnmapped} | dist: ${topYM} | s: ${samples} | pms: ${pmList}`,
       });
     } catch (e: any) {
       toast({ title: 'Erro ao gerar relatório', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
