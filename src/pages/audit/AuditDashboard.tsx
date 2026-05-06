@@ -441,11 +441,13 @@ export default function AuditDashboard() {
       );
       // Diagnóstico — útil pra detectar quando categoria não bate
       const pmCounts: Record<string, number> = {};
+      const sampleSaleDates: string[] = [];
       for (const t of cardTxs ?? []) {
         const k = String(t.payment_method ?? '');
         pmCounts[k] = (pmCounts[k] ?? 0) + 1;
+        if (sampleSaleDates.length < 3) sampleSaleDates.push(String(t.sale_date));
       }
-      console.log('[Contabil] audit_card_transactions:', cardTxs?.length ?? 0, 'rows', pmCounts);
+      console.log('[Contabil] audit_card_transactions:', cardTxs?.length ?? 0, 'rows', pmCounts, 'sample sale_date:', sampleSaleDates);
 
       // Vouchers — audit_voucher_lots agrupado por operadora
       const voucherLots: any[] = await fetchAllPaginated<any>(
@@ -491,12 +493,24 @@ export default function AuditDashboard() {
         return m.get(dia)!;
       };
 
-      // Agrega Maquinona — filtra por mês comp via sale_date
+      // Agrega Maquinona — filtra por mês comp via sale_date.
+      // sale_date pode vir como 'YYYY-MM-DD', 'YYYY-MM-DDTHH...' ou Date.
+      // Tenta slice(0,7) primeiro; se não bate, parseia como Date.
       const periodYM = `${year}-${String(month).padStart(2, '0')}`;
       let cardTxsCompCount = 0;
       let cardTxsCompUnmapped = 0;
+      const txMonth = (sd: any): string | null => {
+        if (sd == null) return null;
+        const s = String(sd);
+        const slice = s.slice(0, 7);
+        if (/^\d{4}-\d{2}$/.test(slice)) return slice;
+        const d = new Date(s);
+        if (isNaN(d.getTime())) return null;
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      };
       for (const t of (cardTxs ?? []) as any[]) {
-        if (!t.sale_date || !String(t.sale_date).startsWith(periodYM)) continue;
+        const ym = txMonth(t.sale_date);
+        if (ym !== periodYM) continue;
         cardTxsCompCount++;
         const cat = mapMaquinonaCat(t.payment_method);
         if (!cat) { cardTxsCompUnmapped++; continue; }
@@ -671,7 +685,7 @@ export default function AuditDashboard() {
       const pmList = pmKeys.length > 0 ? pmKeys.join(', ') : '(nenhum)';
       toast({
         title: '✓ Relatório Contábil gerado',
-        description: `Maquinona: ${cardTxs?.length ?? 0} txs | mês: ${cardTxsCompCount} | não mapeado: ${cardTxsCompUnmapped} | pms: ${pmList}`,
+        description: `Maquinona: ${cardTxs?.length ?? 0} txs | mês: ${cardTxsCompCount} | não mapeado: ${cardTxsCompUnmapped} | sample: ${sampleSaleDates[0] ?? '?'} | pms: ${pmList}`,
       });
     } catch (e: any) {
       toast({ title: 'Erro ao gerar relatório', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
