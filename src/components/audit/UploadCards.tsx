@@ -56,7 +56,9 @@ export function UploadMaquinonaCard({ period, ensurePeriod, onAfter }: UploadCar
     setUploading(true);
     setProgress({ current: 0, total: xlsx.length });
     let totalImported = 0;
+    let totalSkippedNoDate = 0;
     const failures: string[] = [];
+    let lastSampleNoDate: any[] | null = null;
 
     try {
       const p = await ensurePeriod();
@@ -81,13 +83,30 @@ export function UploadMaquinonaCard({ period, ensurePeriod, onAfter }: UploadCar
           if ((data as any)?.error) throw new Error((data as any).error);
           if (data && (data as any).success === false) throw new Error((data as any).error || 'Falha na importação');
           totalImported += Number((data as any)?.imported_rows ?? 0);
+          const diag = (data as any)?.diagnostic;
+          if (diag?.skipped_no_date) {
+            totalSkippedNoDate += Number(diag.skipped_no_date);
+            if (Array.isArray(diag.sample_no_date) && diag.sample_no_date.length > 0) {
+              lastSampleNoDate = diag.sample_no_date;
+            }
+          }
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
         }
       }
 
       if (failures.length === 0) {
-        toast.success(`${totalImported} transações de ${xlsx.length} arquivo(s) Maquinona`);
+        if (totalSkippedNoDate > 0) {
+          const sampleStr = lastSampleNoDate
+            ? lastSampleNoDate.map(s => `${s.type}:${JSON.stringify(s.raw)}`).join(' | ')
+            : '';
+          toast.warning(
+            `${totalImported} importadas, ${totalSkippedNoDate} rejeitadas (sem Data da venda)`,
+            { description: `Sample bruto: ${sampleStr}` },
+          );
+        } else {
+          toast.success(`${totalImported} transações de ${xlsx.length} arquivo(s) Maquinona`);
+        }
       } else {
         toast.error(`${failures.length} de ${xlsx.length} falharam`, { description: failures.join(' | ') });
       }

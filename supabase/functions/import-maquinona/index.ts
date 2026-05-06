@@ -207,16 +207,28 @@ Deno.serve(async (req) => {
     let diagFirstIncentivo: any = null;
     let diagPromoCount = 0;
     let diagIncentivoCount = 0;
+    let skippedNoDate = 0;
+    let skippedNoTxId = 0;
+    let skippedDuplicate = 0;
+    const diagSampleNoDate: any[] = [];
     for (const r of rows) {
       const transactionId = String(pick(r, 'ID da transacao', 'ID da transação') ?? '').trim();
-      if (!transactionId) continue;
-      if (seen.has(transactionId)) continue;
+      if (!transactionId) { skippedNoTxId++; continue; }
+      if (seen.has(transactionId)) { skippedDuplicate++; continue; }
       seen.add(transactionId);
 
       const payment = String(pick(r, 'Metodo de pagamento', 'Método de pagamento') ?? '').trim();
       const brand = String(pick(r, 'Bandeira') ?? '').trim().toUpperCase();
 
-      const saleDateStr = parseDateBR(pick(r, 'Data da venda')) ?? new Date().toISOString().slice(0, 10);
+      const rawSaleDate = pick(r, 'Data da venda');
+      const saleDateStr = parseDateBR(rawSaleDate);
+      if (!saleDateStr) {
+        skippedNoDate++;
+        if (diagSampleNoDate.length < 3) {
+          diagSampleNoDate.push({ tx: transactionId, raw: rawSaleDate, type: typeof rawSaleDate });
+        }
+        continue;
+      }
       // Calcula se a venda pertence ao mês de competência do período
       const [yStr, mStr] = saleDateStr.split('-');
       const isCompetencia = Number(mStr) === period.month && Number(yStr) === period.year;
@@ -317,6 +329,11 @@ Deno.serve(async (req) => {
         // Quantos rows com promoção > 0 entre TODOS os rows processados.
         promotion_nonzero_count: diagPromoCount,
         incentivo_nonzero_count: diagIncentivoCount,
+        // Rejeições — antes caíam num fallback silencioso (data atual).
+        skipped_no_date: skippedNoDate,
+        skipped_no_tx_id: skippedNoTxId,
+        skipped_duplicate: skippedDuplicate,
+        sample_no_date: diagSampleNoDate,
       },
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
