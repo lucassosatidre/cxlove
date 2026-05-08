@@ -666,16 +666,27 @@ function styledTable(
   headers: string[],
   rows: any[][],
   widths: number[],
+  compact: boolean = false,
 ) {
+  // Modo compacto: usado nas tabelas diárias (até 31+1 linhas) pra caber em
+  // uma página A4 portrait sem quebra. Reduz fonte e padding mantendo legibilidade.
+  const styles = compact
+    ? { fontSize: 7, cellPadding: { top: 0.9, right: 2.5, bottom: 0.9, left: 2.5 } }
+    : { fontSize: 9.5, cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 } };
+  const headStylesPad = compact
+    ? { top: 1.2, right: 2.5, bottom: 1.6, left: 2.5 }
+    : { top: 2, right: 3, bottom: 3, left: 3 };
+
   autoTable(doc, {
     startY,
     head: [headers],
     body: rows,
     theme: 'plain',
+    pageBreak: 'avoid' as any,
     styles: {
       font: FONT,
-      fontSize: 9.5,
-      cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 },
+      fontSize: styles.fontSize,
+      cellPadding: styles.cellPadding,
       textColor: INK,
       lineColor: RULE,
       lineWidth: 0,
@@ -684,8 +695,8 @@ function styledTable(
       fillColor: WHITE,
       textColor: INK_MUTED,
       fontStyle: 'bold',
-      fontSize: 7.5,
-      cellPadding: { top: 2, right: 3, bottom: 3, left: 3 },
+      fontSize: compact ? 6.5 : 7.5,
+      cellPadding: headStylesPad,
       lineWidth: { bottom: 0.4 },
       lineColor: RULE_DARK,
     },
@@ -698,19 +709,16 @@ function styledTable(
       },
     ])),
     didParseCell: (h) => {
-      // Header: alinhamento igual da coluna (left col 0, right resto)
       if (h.section === 'head') {
         h.cell.styles.halign = h.column.index === 0 ? 'left' : 'right';
         return;
       }
-      // Linha TOTAL com fundo cinza e bordas top/bottom
       if (h.section === 'body' && h.row.index === rows.length - 1) {
         h.cell.styles.fillColor = TOTAL_BG;
         h.cell.styles.fontStyle = 'bold';
         h.cell.styles.lineWidth = { top: 0.4, bottom: 0.4 };
         h.cell.styles.lineColor = INK;
       } else if (h.section === 'body') {
-        // Linhas alternadas (zebra sutil)
         if (h.row.index % 2 === 1) {
           h.cell.styles.fillColor = SUBTLE_BG;
         }
@@ -772,7 +780,7 @@ function pageDetalheCategoria(
   const sectionNum = SECTION_INDEX[categoria];
   let y = sectionTitle(doc, `Seção ${sectionNum}`, `${CATEGORIA_LABELS[categoria]} — diário`, 22);
 
-  // 3 KPIs
+  // 3 KPIs no padrão das outras seções
   const pageW = doc.internal.pageSize.getWidth();
   const kpiW = (pageW - PAGE_MARGIN * 2 - 8) / 3;
   kpiBox(doc, PAGE_MARGIN, y, kpiW, 24, 'Total vendido', fmtBRL(totVendido), `${fmtInt(totQtd)} transações`);
@@ -780,9 +788,9 @@ function pageDetalheCategoria(
   kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(totCusto)}  ·  ${fmtPct(totPct)}`, '', NEGATIVE);
   y += 32;
 
-  // Tabela diária
+  // Tabela diária — compacta pra caber em 1 página A4 (até ~32 linhas)
   y = subTitle(doc, 'Movimento dia a dia', y);
-  styledTable(doc, y, ['Dia', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [22, 22, 35, 35, 32, 22]);
+  styledTable(doc, y, ['Dia', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [22, 22, 35, 35, 32, 22], true);
 }
 
 function detalhamentoPages(doc: jsPDF, data: ContabilPdfData, pageStart: number) {

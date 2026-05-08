@@ -162,6 +162,21 @@ export async function generateContabilReport(params: GenerateContabilParams): Pr
     const pix = ensureAgg(resumoMap, 'pix');
     pix.recebido -= ajustePix;
     pix.custo += ajustePix;
+
+    // Modo detalhado: distribui o ajuste pelos dias proporcionalmente ao vendido
+    // de cada dia. Mantém a tabela diária fidedigna ao consolidado e ao extrato
+    // bancário Cresol (sem o ajuste, o detalhado mostraria custo Pix < real).
+    if (mode === 'detalhado') {
+      const pixDays = detMap.get('pix');
+      if (pixDays && pix.vendido > 0) {
+        for (const dayAgg of pixDays.values()) {
+          const proporcao = dayAgg.vendido / pix.vendido;
+          const ajusteDia = ajustePix * proporcao;
+          dayAgg.recebido -= ajusteDia;
+          dayAgg.custo += ajusteDia;
+        }
+      }
+    }
   }
 
   // Agrega Vouchers (espelha lógica de competência do AuditVouchers)
