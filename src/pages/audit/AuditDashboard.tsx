@@ -440,24 +440,30 @@ export default function AuditDashboard() {
           .eq('audit_period_id', period.id),
       );
 
-      // ─── Cresol — depósitos Maquinona iFood efetivamente recebidos ──────────
-      // O sum(net_amount) das TXs é o que a Maquinona DECLARA como líquido,
-      // mas a Cresol entrega valores ligeiramente diferentes (custos extras
-      // como diferenças de conciliação, que a Maquinona não detalha por TX).
-      // Vamos usar o real recebido pra calcular um custo extra que aloca
-      // no Pix (categoria com menor custo nominal).
-      const cresolDeps: any[] = await fetchAllPaginated<any>(
+      // ─── Custo oculto Maquinona ─ audit_daily_matches.difference ────────────
+      // O run-audit-match grava em audit_daily_matches a diferença entre o que
+      // a Maquinona declarou como líquido (sum(net_amount) dos lotes pareados)
+      // e o que efetivamente caiu na Cresol no dia útil seguinte. Diferença
+      // negativa = custo oculto (taxa não detalhada por TX). Filtra por
+      // match_date no mês comp para evitar dias adjacentes.
+      const periodYM_pre = `${year}-${String(month).padStart(2, '0')}`;
+      const monthStart_pre = `${periodYM_pre}-01`;
+      const nextMonth_pre = month === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const dailyMatches: any[] = await fetchAllPaginated<any>(
         (supabase as any)
-          .from('audit_bank_deposits')
-          .select('matched_competencia_amount')
+          .from('audit_daily_matches')
+          .select('match_date, difference, status')
           .eq('audit_period_id', period.id)
-          .eq('bank', 'cresol')
-          .eq('category', 'ifood'),
+          .gte('match_date', monthStart_pre)
+          .lt('match_date', nextMonth_pre),
       );
-      const cresolRecebidoComp = (cresolDeps ?? []).reduce(
-        (s: number, d: any) => s + Number(d.matched_competencia_amount ?? 0),
-        0,
-      );
+      // Soma só linhas matched (não conta unmatched, que distorcem). Negativo
+      // → custo oculto real (Cresol pagou MENOS que esperado).
+      const custoOcultoMaquinona = (dailyMatches ?? [])
+        .filter((d: any) => d.status === 'matched' || d.status === 'partial')
+        .reduce((s: number, d: any) => s + Number(d.difference ?? 0), 0);
 
       // ─── Vouchers — audit_voucher_lots + audit_voucher_items + overrides ────
       // Replica a lógica do AuditVouchers ("Geral" tab): filtra items por
@@ -562,18 +568,15 @@ export default function AuditDashboard() {
         }
       }
 
-      // Ajuste Cresol → Pix: a Maquinona declara sum(net) como recebido, mas o
-      // que cai na Cresol pode divergir (custos de conciliação não detalhados
-      // por TX). A diferença vai pro Pix como custo extra.
-      const maquinonaNetTotal =
-        (resumoMap.get('credito')?.recebido ?? 0)
-        + (resumoMap.get('debito')?.recebido ?? 0)
-        + (resumoMap.get('pix')?.recebido ?? 0);
-      const cresolDiff = maquinonaNetTotal - cresolRecebidoComp; // positivo = Cresol entregou MENOS
-      if (Math.abs(cresolDiff) > 0.01 && cresolRecebidoComp > 0) {
+      // Ajuste Cresol → Pix: a diferença Maquinona declarou × Cresol entregou
+      // (custoOcultoMaquinona) vai pro Pix como custo extra. Pix = categoria
+      // de menor custo nominal, escolhida por convenção.
+      // custoOcultoMaquinona é negativo quando Cresol pagou menos → vira custo +
+      const ajustePix = -custoOcultoMaquinona; // inverte sinal pra ficar positivo
+      if (Math.abs(ajustePix) > 0.01) {
         const pix = ensureAgg(resumoMap, 'pix');
-        pix.recebido -= cresolDiff;
-        pix.custo += cresolDiff;
+        pix.recebido -= ajustePix;
+        pix.custo += ajustePix;
       }
 
       // Agrega Vouchers — espelha lógica de competência do AuditVouchers.
