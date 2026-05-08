@@ -532,7 +532,41 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
 }
 
 function RepassesTab({ repasses }: { repasses: Repasse[] }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+
+  // Agrupa repasses por data esperada — iFood faz UM PIX por ciclo somando todas
+  // as lojas. A tabela mostra 1 linha por data com os valores consolidados.
+  const grupos = useMemo(() => {
+    const byDate = new Map<string, Repasse[]>();
+    for (const r of repasses) {
+      const arr = byDate.get(r.data_repasse_esperada) ?? [];
+      arr.push(r);
+      byDate.set(r.data_repasse_esperada, arr);
+    }
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([data, items]) => {
+        const totalBruto = items.reduce((s, r) => s + Number(r.liquido_esperado || 0), 0);
+        const totalLiquido = items.reduce((s, r) => s + Number(r.liquido_efetivo ?? r.conta_recebido ?? 0), 0);
+        const taxaAntecip = items.reduce((s, r) => s + Math.abs(Number(r.conta_taxa_antecip || 0)), 0);
+        const dataRecebimento = items.find(r => r.conta_data_recebimento)?.conta_data_recebimento ?? null;
+        // periodo: min(inicio) a max(fim) entre lojas
+        const inicios = items.map(r => r.periodo_apuracao_inicio).filter(Boolean) as string[];
+        const fins = items.map(r => r.periodo_apuracao_fim).filter(Boolean) as string[];
+        const periodoIni = inicios.length ? inicios.sort()[0] : null;
+        const periodoFim = fins.length ? fins.sort().slice(-1)[0] : null;
+        // status agregado: se algum matched_aprox vira aprox, se algum sem_repasse vira sem_repasse, senao matched
+        const statuses = new Set(items.map(r => r.status));
+        const status = statuses.has('sem_repasse')
+          ? 'sem_repasse'
+          : statuses.has('unmatched')
+          ? 'unmatched'
+          : statuses.has('matched_aprox')
+          ? 'matched_aprox'
+          : 'matched';
+        return { data, items, totalBruto, totalLiquido, taxaAntecip, dataRecebimento, periodoIni, periodoFim, status };
+      });
+  }, [repasses]);
 
   if (repasses.length === 0) {
     return (
@@ -548,8 +582,8 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Repasses semanais</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Cada linha = 1 ciclo de repasse esperado. Ciclo: corte domingo (ou último dia do mês),
-          repasse na primeira quarta-feira seguinte (D+3 se domingo, D+4 se sábado).
+          Cada linha = 1 ciclo de repasse (PIX único do iFood somando as lojas). Ciclo: corte
+          domingo (ou último dia do mês), repasse na primeira quarta-feira seguinte (D+3 dom, D+4 sáb).
         </p>
       </CardHeader>
       <CardContent>
@@ -557,50 +591,53 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
           <TableHeader>
             <TableRow>
               <TableHead>Data esperada</TableHead>
-              <TableHead>Loja</TableHead>
               <TableHead>Período apuração</TableHead>
-              <TableHead className="text-right">Subtotal (líq esperado)</TableHead>
-              <TableHead className="text-right">Tx antecip</TableHead>
-              <TableHead className="text-right">Recebido (data)</TableHead>
-              <TableHead className="text-right">Líq efetivo</TableHead>
+              <TableHead className="text-right">Total Bruto</TableHead>
+              <TableHead className="text-right">Total Líquido</TableHead>
+              <TableHead className="text-right">Taxa de antecipação</TableHead>
               <TableHead>Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {repasses.map(r => {
-              const variant = STATUS_VARIANTS[r.status] ?? STATUS_VARIANTS.pending;
-              const isExpanded = expandedId === r.id;
+            {grupos.map(g => {
+              const variant = STATUS_VARIANTS[g.status] ?? STATUS_VARIANTS.pending;
+              const isExpanded = expandedDate === g.data;
               return (
-                <Fragment key={r.id}>
-                  <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => setExpandedId(isExpanded ? null : r.id)}>
+                <Fragment key={g.data}>
+                  <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => setExpandedDate(isExpanded ? null : g.data)}>
                     <TableCell className="font-medium">
                       <span className="mr-1 text-muted-foreground">{isExpanded ? '▼' : '▶'}</span>
-                      {fmtDate(r.data_repasse_esperada)}
+                      {fmtDate(g.data)}
                     </TableCell>
-                    <TableCell className="text-xs">{storeName(r.store_id_curto)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {r.periodo_apuracao_inicio && r.periodo_apuracao_fim
-                        ? `${fmtDate(r.periodo_apuracao_inicio)} a ${fmtDate(r.periodo_apuracao_fim)}`
+                      {g.periodoIni && g.periodoFim
+                        ? `${fmtDate(g.periodoIni)} a ${fmtDate(g.periodoFim)}`
                         : '—'}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{fmt(r.liquido_esperado)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {r.conta_taxa_antecip != null ? `−${fmt(Math.abs(r.conta_taxa_antecip))}` : '—'}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {r.conta_recebido != null ? (
-                        <div>{fmt(r.conta_recebido)}<div className="text-[10px] text-muted-foreground">{fmtDate(r.conta_data_recebimento)}</div></div>
+                    <TableCell className="text-right font-medium">{fmt(g.totalBruto)}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {g.totalLiquido > 0 ? (
+                        <div>{fmt(g.totalLiquido)}<div className="text-[10px] text-muted-foreground">{g.dataRecebimento ? fmtDate(g.dataRecebimento) : ''}</div></div>
                       ) : '—'}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {r.liquido_efetivo != null ? fmt(r.liquido_efetivo) : '—'}
+                    <TableCell className="text-right text-muted-foreground">
+                      {g.taxaAntecip > 0 ? `−${fmt(g.taxaAntecip)}` : '—'}
                     </TableCell>
                     <TableCell><Badge variant="secondary" className={variant.className}>{variant.label}</Badge></TableCell>
                   </TableRow>
                   {isExpanded && (
                     <TableRow className="bg-muted/20">
-                      <TableCell colSpan={8} className="p-3">
-                        <RepasseDetalhe r={r} />
+                      <TableCell colSpan={6} className="p-3 space-y-4">
+                        {g.items.map(r => (
+                          <div key={r.id}>
+                            <div className="text-xs font-semibold mb-2 text-muted-foreground">
+                              {storeName(r.store_id_curto)} · {r.periodo_apuracao_inicio && r.periodo_apuracao_fim
+                                ? `${fmtDate(r.periodo_apuracao_inicio)} a ${fmtDate(r.periodo_apuracao_fim)}`
+                                : '—'} · Bruto {fmt(Number(r.liquido_esperado))} · Líq {fmt(Number(r.liquido_efetivo ?? r.conta_recebido ?? 0))}
+                            </div>
+                            <RepasseDetalhe r={r} />
+                          </div>
+                        ))}
                       </TableCell>
                     </TableRow>
                   )}
