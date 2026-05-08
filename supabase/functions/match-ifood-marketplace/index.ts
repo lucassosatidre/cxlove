@@ -1,5 +1,5 @@
 // @ts-nocheck
-// match-ifood-marketplace v2.4 (2026-05-08) — alinhado com data_repasse_esperada D+3
+// match-ifood-marketplace v2.5 (2026-05-08) — tolerancia R$10 + diagnostico detalhado
 // match-ifood-marketplace v2 — 3 passes:
 //
 // Pass 1: Cross-check Saipos × audit_ifood_orders por order_id
@@ -40,9 +40,15 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const VALUE_TOLERANCE_CROSSCHECK = 2.00;
 const ANTECIP_RATE = 0.0199;
-const ANTECIP_TOLERANCE = 1.0;
+const ANTECIP_TOLERANCE = 5.0;
 const REPASSE_TOLERANCE_EXATO = 0.10;
-const REPASSE_TOLERANCE_APROX = 1.0;
+// Tolerância "aproximada" subiu de R$1 → R$10 porque há diferenças naturais
+// entre o liquido_esperado (extrato detalhado iFood) e o PIX que cai na conta:
+//   - reembolsos/ressarcimentos pós-fechamento que entram em outro ciclo
+//   - taxa serviço cliente retida que ajusta o líquido
+//   - arredondamentos de centavos somados em centenas de pedidos
+// Diff > R$10 ainda vira unmatched_outra_comp (provavelmente outra comp).
+const REPASSE_TOLERANCE_APROX = 10.0;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -247,6 +253,11 @@ Deno.serve(async (req) => {
     const matchedAntecipIds = new Set<string>(); // ids de antecipações que casaram (pra Pass 3)
     const repasseUpdates: Array<{ id: string; payload: any }> = [];
     const movimentoUpdates: Array<{ id: string; payload: any }> = [];
+    // Diagnóstico: registro por antecipação do que aconteceu
+    const antecipDiag: Array<{
+      data: string; valor: number; status: string;
+      esperado_soma: number; diff: number; razao: string;
+    }> = [];
 
     for (const a of antecipacoes) {
       // data_repasse_esperada agora é a data EFETIVA do recebimento (D+3/D+4),
@@ -255,11 +266,12 @@ Deno.serve(async (req) => {
       const exp = expectedByDate.get(dataEsperada);
       if (!exp) {
         movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
+        antecipDiag.push({ data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp', esperado_soma: 0, diff: 0, razao: 'sem repasse esperado nesta data' });
         continue;
       }
       if (matchedDataSet.has(dataEsperada)) {
-        // Já matched por outra antecipação (raro). Ignora.
         movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
+        antecipDiag.push({ data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp', esperado_soma: exp.soma, diff: 0, razao: 'data ja matched por outra antecipacao' });
         continue;
       }
       const diff = Math.abs(Number(a.valor) - exp.soma);
@@ -269,8 +281,10 @@ Deno.serve(async (req) => {
 
       if (!matchType) {
         movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
+        antecipDiag.push({ data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp', esperado_soma: exp.soma, diff: Math.round(diff * 100) / 100, razao: `diff > tolerancia ${REPASSE_TOLERANCE_APROX}` });
         continue;
       }
+      antecipDiag.push({ data: a.data, valor: Number(a.valor), status: matchType, esperado_soma: exp.soma, diff: Math.round(diff * 100) / 100, razao: 'ok' });
 
       matchedDataSet.add(dataEsperada);
       matchedAntecipIds.add(a.id);
@@ -395,7 +409,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.4-2026-05-08-d3-alinhado',
+      edge_version: 'v2.5-2026-05-08-tolerancia-10-diagnostico',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
@@ -417,6 +431,15 @@ Deno.serve(async (req) => {
         matched: antecipacoes.length - movimentoUpdates.filter(m => m.payload.status === 'unmatched_outra_comp').length,
         unmatched_outra_comp: movimentoUpdates.filter(m => m.payload.status === 'unmatched_outra_comp').length,
       },
+      // Diagnóstico: pra cada antecipação do CSV, o que aconteceu
+      antecip_details: antecipDiag,
+      // Diagnóstico: pra cada data esperada, soma + status
+      esperado_details: Array.from(expectedByDate.entries()).map(([data, e]) => ({
+        data,
+        esperado_soma: Math.round(e.soma * 100) / 100,
+        repasses_count: e.ids.length,
+        matched: matchedDataSet.has(data),
+      })),
       message: `${crosscheck.ok} cross-check OK · ${finalRepasses?.length} repasses · esperado R$ ${totalEsperado.toFixed(2)} · recebido R$ ${totalRecebido.toFixed(2)} · taxa antecip R$ ${totalTaxa.toFixed(2)}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
