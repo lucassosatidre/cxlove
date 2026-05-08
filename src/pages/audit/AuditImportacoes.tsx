@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, CheckCircle2, Circle, Play } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Play, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import {
@@ -28,6 +28,8 @@ const MONTHS = [
 
 type ImportRow = { file_type: string; status: string; imported_rows: number; created_at: string; file_name: string };
 
+type MonthSlot = 'anterior' | 'comp' | 'posterior';
+
 type DocSpec = {
   id: string;
   /** Indicador na UI (ex: "Maquinona", "Cresol") */
@@ -36,8 +38,10 @@ type DocSpec = {
   description: string;
   /** Formato aceito (.xlsx, .pdf, .csv) */
   format: string;
-  /** Quantidade ideal de arquivos pra estar "completo" */
-  target: number;
+  /** Slots de mês esperados. Cada slot vira uma linha de checkbox/upload. */
+  monthSlots: MonthSlot[];
+  /** Pra docs que precisam de N arquivos no MESMO mês (ex: iFood × 2 lojas) */
+  filesPerSlot?: number;
   /** file_types correspondentes em audit_imports pra contar progresso */
   fileTypes: string[];
   /** Categoria pra agrupamento visual */
@@ -196,141 +200,122 @@ export default function AuditImportacoes() {
   };
 
   // Especificação dos documentos. Ordem reflete a ordem visual.
+  // monthSlots: meses requeridos relativos ao mês de competência.
+  // 'anterior' = mês ANT, 'comp' = COMP, 'posterior' = mês POST.
   const DOCS: DocSpec[] = useMemo(() => [
-    // ─── Maquinona ─────────────────────────────────────────────────────────
+    // ─── Maquinona — 3 meses (cross-month coverage) ────────────────────────
     {
-      id: 'maquinona',
-      label: 'Maquinona iFood',
-      description: 'XLSX exportado da Maquinona (aba "Transações"). Importe 3 meses: anterior + competência + posterior.',
+      id: 'maquinona', label: 'Maquinona iFood',
+      description: 'XLSX exportado da Maquinona (aba "Transações") — vendas crédito/débito/Pix/voucher.',
       format: '.xlsx',
-      target: 3,
+      monthSlots: ['anterior', 'comp', 'posterior'],
       fileTypes: ['maquinona'],
-      group: 'maquinona',
-      Component: UploadMaquinonaCard,
+      group: 'maquinona', Component: UploadMaquinonaCard,
     },
     {
-      id: 'cresol',
-      label: 'Extrato Cresol',
-      description: 'XLSX do banco Cresol — depósitos da Maquinona iFood. Importe 3 meses (mesma janela da Maquinona).',
+      id: 'cresol', label: 'Extrato Cresol',
+      description: 'XLSX do banco Cresol — depósitos da Maquinona iFood.',
       format: '.xlsx',
-      target: 3,
+      monthSlots: ['anterior', 'comp', 'posterior'],
       fileTypes: ['cresol'],
-      group: 'maquinona',
-      Component: UploadCresolCard,
+      group: 'maquinona', Component: UploadCresolCard,
     },
     // ─── Vouchers ──────────────────────────────────────────────────────────
     {
-      id: 'bb',
-      label: 'Extrato Banco do Brasil',
-      description: 'XLSX do BB com depósitos voucher (alelo/ticket/pluxee/vr/brendi). Importe 2 meses: competência + posterior.',
+      id: 'bb', label: 'Extrato Banco do Brasil',
+      description: 'XLSX do BB com depósitos voucher (alelo/ticket/pluxee/vr/brendi).',
       format: '.xlsx',
-      target: 2,
+      monthSlots: ['comp', 'posterior'],
       fileTypes: ['bb'],
-      group: 'vouchers',
-      Component: UploadBBCard,
+      group: 'vouchers', Component: UploadBBCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket', 'alelo', 'pluxee', 'vr']); },
     },
     {
-      id: 'ticket',
-      label: 'Reembolsos Ticket',
+      id: 'ticket', label: 'Reembolsos Ticket',
       description: 'PDF "Extrato de Reembolsos Detalhado" do portal Ticket Edenred.',
       format: '.pdf',
-      target: 1,
+      monthSlots: ['comp'],
       fileTypes: ['ticket'],
-      group: 'vouchers',
-      Component: UploadTicketCard,
+      group: 'vouchers', Component: UploadTicketCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket']); },
     },
     {
-      id: 'alelo',
-      label: 'Extrato Alelo',
-      description: 'XLSX exportado do portal Alelo (aba "Extrato"). Taxa por venda (não por lote).',
+      id: 'alelo', label: 'Extrato Alelo',
+      description: 'XLSX exportado do portal Alelo (aba "Extrato").',
       format: '.xlsx',
-      target: 1,
+      monthSlots: ['comp'],
       fileTypes: ['alelo'],
-      group: 'vouchers',
-      Component: UploadAleloCard,
+      group: 'vouchers', Component: UploadAleloCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['alelo']); },
     },
     {
-      id: 'vr',
-      label: 'Vale Refeição (VR)',
-      description: 'XLS do portal VR — Guias de Reembolso + Relatório de Transação (importe os 2).',
+      id: 'vr', label: 'Vale Refeição (VR)',
+      description: 'XLS do portal VR — Guias de Reembolso + Relatório de Transação.',
       format: '.xls',
-      target: 1,
+      monthSlots: ['comp'],
       fileTypes: ['vr', 'vr_vendas'],
-      group: 'vouchers',
-      Component: UploadVRCard,
+      group: 'vouchers', Component: UploadVRCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['vr']); },
     },
     {
-      id: 'pluxee',
-      label: 'Reembolsos Pluxee',
+      id: 'pluxee', label: 'Reembolsos Pluxee',
       description: 'CSV de reembolsos Pluxee/Sodexo (arquivo com prefixo "1976928").',
       format: '.csv',
-      target: 1,
+      monthSlots: ['comp'],
       fileTypes: ['pluxee'],
-      group: 'vouchers',
-      Component: UploadPluxeeCard,
+      group: 'vouchers', Component: UploadPluxeeCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
     },
     // ─── Brendi ─────────────────────────────────────────────────────────────
     {
-      id: 'brendi',
-      label: 'Pedidos Brendi',
-      description: 'XLSX "Pedidos" do portal Brendi (aba "Resultado da consulta"). Importe 3 meses.',
+      id: 'brendi', label: 'Pedidos Brendi',
+      description: 'XLSX "Pedidos" do portal Brendi (aba "Resultado da consulta").',
       format: '.xlsx',
-      target: 3,
+      monthSlots: ['anterior', 'comp', 'posterior'],
       fileTypes: ['brendi'],
-      group: 'brendi',
-      Component: UploadBrendiCard,
+      group: 'brendi', Component: UploadBrendiCard,
     },
     {
-      id: 'saipos',
-      label: 'Vendas Saipos',
-      description: 'XLSX "Vendas por período" do PDV Saipos. Importe 3 meses (compartilhado com iFood Marketplace).',
+      id: 'saipos', label: 'Vendas Saipos',
+      description: 'XLSX "Vendas por período" do PDV Saipos (compartilhado com iFood Marketplace).',
       format: '.xlsx',
-      target: 3,
+      monthSlots: ['anterior', 'comp', 'posterior'],
       fileTypes: ['saipos'],
-      group: 'brendi',
-      Component: UploadSaiposCard,
+      group: 'brendi', Component: UploadSaiposCard,
     },
     // ─── iFood Marketplace ─────────────────────────────────────────────────
+    // Extrato/Pedidos: 2 arquivos no MESMO mês (1 por loja: Estrela + TEMX)
     {
-      id: 'ifood_extrato',
-      label: 'Extrato Detalhado iFood',
+      id: 'ifood_extrato', label: 'Extrato Detalhado iFood',
       description: 'XLSX do Portal Parceiro → Financeiro → Extrato Detalhado. 1 arquivo por loja (Estrela + TEMX).',
       format: '.xlsx',
-      target: 2,
+      monthSlots: ['comp'], filesPerSlot: 2,
       fileTypes: ['ifood_extrato_detalhado'],
-      group: 'ifood',
-      Component: UploadIfoodExtratoDetalhadoCard,
+      group: 'ifood', Component: UploadIfoodExtratoDetalhadoCard,
     },
     {
-      id: 'ifood_orders',
-      label: 'Relatório de Pedidos iFood',
-      description: 'XLSX do Portal Parceiro → Pedidos → Relatório de Pedidos. 1 por loja (Estrela + TEMX), filtre status="CONCLUIDO".',
+      id: 'ifood_orders', label: 'Relatório de Pedidos iFood',
+      description: 'XLSX do Portal Parceiro → Pedidos → Relatório de Pedidos. 1 por loja (Estrela + TEMX).',
       format: '.xlsx',
-      target: 2,
+      monthSlots: ['comp'], filesPerSlot: 2,
       fileTypes: ['ifood_orders'],
-      group: 'ifood',
-      Component: UploadIfoodOrdersCard,
+      group: 'ifood', Component: UploadIfoodOrdersCard,
     },
     {
-      id: 'ifood_conta',
-      label: 'Conta iFood Pago (CSV)',
-      description: 'Extrato CSV da conta iFood Pago. Importe 2 arquivos: mês de competência + mês seguinte (alguns ciclos antecipam pro mês posterior).',
+      id: 'ifood_conta', label: 'Conta iFood Pago (CSV)',
+      description: 'Extrato CSV da conta iFood Pago — 2 meses (alguns ciclos antecipam no mês posterior).',
       format: '.csv',
-      target: 2,
+      monthSlots: ['comp', 'posterior'],
       fileTypes: ['ifood_conta_csv'],
-      group: 'ifood',
-      Component: UploadIfoodContaCsvCard,
+      group: 'ifood', Component: UploadIfoodContaCsvCard,
     },
   ], []);
 
+  const targetCount = (doc: DocSpec) => doc.monthSlots.length * (doc.filesPerSlot ?? 1);
+
   const docProgress = (doc: DocSpec) => {
     const completed = imports.filter(i => doc.fileTypes.includes(i.file_type) && i.status === 'completed').length;
-    return { completed, isDone: completed >= doc.target };
+    return { completed, isDone: completed >= targetCount(doc) };
   };
 
   const groupProgress = (group: DocSpec['group']) => {
@@ -423,50 +408,77 @@ export default function AuditImportacoes() {
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {/* Checklist */}
-                <div className="space-y-1.5 text-sm">
-                  {docsInGroup.map(doc => {
-                    const { completed, isDone } = docProgress(doc);
-                    return (
-                      <div key={doc.id} className="flex items-start gap-2">
+              <CardContent className="space-y-4">
+                {docsInGroup.map(doc => {
+                  const docImports = imports.filter(
+                    i => doc.fileTypes.includes(i.file_type) && i.status === 'completed',
+                  );
+                  const target = targetCount(doc);
+                  const isDone = docImports.length >= target;
+                  const Component = doc.Component;
+
+                  return (
+                    <div key={doc.id} className="rounded-md border bg-card/50 p-3 space-y-3">
+                      {/* Header do documento */}
+                      <div className="flex items-start gap-2">
                         {isDone
                           ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
                           : <Circle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />}
                         <div className="flex-1 min-w-0">
-                          <span className={isDone ? 'line-through text-muted-foreground' : 'font-medium'}>
-                            {doc.label}
-                          </span>
-                          <span className="text-muted-foreground"> · {doc.format}</span>
-                          {doc.target > 1 && (
-                            <span className="text-muted-foreground"> · {completed}/{doc.target} arquivos</span>
-                          )}
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className={isDone ? 'line-through text-muted-foreground font-medium' : 'font-medium'}>
+                              {doc.label}
+                            </span>
+                            <span className="text-xs text-muted-foreground">{doc.format}</span>
+                            <Badge variant={isDone ? 'default' : 'outline'} className="text-[10px]">
+                              {docImports.length}/{target} arquivos
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {doc.description}
+                            {' · '}
+                            <span className="italic">
+                              {monthSlotsLabel(doc.monthSlots, doc.filesPerSlot, month)}
+                            </span>
+                          </p>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
 
-                {/* Cards de upload (1 por documento) */}
-                <div className={`grid gap-3 ${docsInGroup.length >= 3 ? 'md:grid-cols-2 lg:grid-cols-3' : 'md:grid-cols-2'}`}>
-                  {docsInGroup.map(doc => {
-                    const Component = doc.Component;
-                    return (
-                      <Component
-                        key={doc.id}
-                        period={period}
-                        ensurePeriod={ensurePeriod}
-                        onAfter={async () => {
-                          await onUploadAfter();
-                          if (doc.postUpload && period) {
-                            await doc.postUpload(period.id);
+                      {/* Lista de arquivos já importados */}
+                      {docImports.length > 0 && (
+                        <div className="text-xs space-y-1 pl-6">
+                          {docImports.slice(0, 10).map((imp, idx) => (
+                            <div key={idx} className="flex items-baseline gap-2 text-muted-foreground">
+                              <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0 self-center" />
+                              <span className="font-mono text-foreground truncate" title={imp.file_name}>
+                                {imp.file_name}
+                              </span>
+                              <span className="shrink-0">·</span>
+                              <span className="shrink-0">{fmtInt(Number(imp.imported_rows ?? 0))} linhas</span>
+                              <span className="shrink-0">·</span>
+                              <span className="shrink-0">{new Date(imp.created_at).toLocaleDateString('pt-BR')}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Card de upload */}
+                      <div className="pl-6">
+                        <Component
+                          period={period}
+                          ensurePeriod={ensurePeriod}
+                          onAfter={async () => {
                             await onUploadAfter();
-                          }
-                        }}
-                      />
-                    );
-                  })}
-                </div>
+                            if (doc.postUpload && period) {
+                              await doc.postUpload(period.id);
+                              await onUploadAfter();
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           );
@@ -474,4 +486,19 @@ export default function AuditImportacoes() {
       </div>
     </AppLayout>
   );
+}
+
+// Helper: gera label "Janeiro + Fevereiro + Março" baseado no mês comp e slots
+function monthSlotsLabel(slots: MonthSlot[], filesPerSlot: number | undefined, compMonth: number): string {
+  const monthName = (m: number) => MONTHS[((m - 1) % 12 + 12) % 12];
+  const labels = slots.map(s => {
+    if (s === 'anterior') return monthName(compMonth - 1);
+    if (s === 'comp') return monthName(compMonth);
+    return monthName(compMonth + 1);
+  });
+  const joined = labels.join(' + ');
+  if (filesPerSlot && filesPerSlot > 1) {
+    return `${joined} · ${filesPerSlot} arquivos por mês (1 por loja)`;
+  }
+  return joined;
 }

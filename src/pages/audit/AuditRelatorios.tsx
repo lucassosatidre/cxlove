@@ -236,7 +236,7 @@ export default function AuditRelatorios() {
           </CardContent>
         </Card>
 
-        {/* Relatórios — collapsibles com visualização inline */}
+        {/* Relatórios — KPIs do mês + collapsibles com visualização inline */}
         {canGenerate && (
           <>
             {loadingData && (
@@ -246,6 +246,54 @@ export default function AuditRelatorios() {
                 </CardContent>
               </Card>
             )}
+
+            {resumidoData && (() => {
+              const data = resumidoData;
+              const baseSum = data.resumoPorCategoria.reduce((acc, r) => ({
+                qtd: acc.qtd + r.qtd,
+                vendido: acc.vendido + r.vendido,
+                recebido: acc.recebido + r.recebido,
+                custo: acc.custo + r.custo,
+              }), { qtd: 0, vendido: 0, recebido: 0, custo: 0 });
+              const brSum = data.brendi ? {
+                qtd: data.brendi.pedidos_count_mes,
+                vendido: data.brendi.vendido_bruto,
+                recebido: data.brendi.recebido_bb,
+                custo: data.brendi.custo_total,
+              } : { qtd: 0, vendido: 0, recebido: 0, custo: 0 };
+              const ifSum = data.ifood ? {
+                qtd: data.ifood.pedidos_count,
+                vendido: data.ifood.vendido_bruto,
+                recebido: data.ifood.liquido_efetivo,
+                custo: data.ifood.custo_total,
+              } : { qtd: 0, vendido: 0, recebido: 0, custo: 0 };
+              const totQtd = baseSum.qtd + brSum.qtd + ifSum.qtd;
+              const totVendido = baseSum.vendido + brSum.vendido + ifSum.vendido;
+              const totRecebido = baseSum.recebido + brSum.recebido + ifSum.recebido;
+              const totCusto = baseSum.custo + brSum.custo + ifSum.custo;
+              const totPct = totVendido > 0 ? (totCusto / totVendido) * 100 : 0;
+              const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+              const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="rounded-md border bg-card pl-3 pr-3 py-3 border-l-[3px] border-l-primary">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Faturamento bruto</div>
+                    <div className="text-lg font-bold mt-1">{fmt(totVendido)}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{totQtd.toLocaleString('pt-BR')} transações no período</div>
+                  </div>
+                  <div className="rounded-md border bg-card pl-3 pr-3 py-3 border-l-[3px] border-l-green-600 dark:border-l-green-400">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Líquido efetivo</div>
+                    <div className="text-lg font-bold mt-1">{fmt(totRecebido)}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Após custos e antecipações</div>
+                  </div>
+                  <div className="rounded-md border bg-card pl-3 pr-3 py-3 border-l-[3px] border-l-rose-600 dark:border-l-rose-400">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Custo total</div>
+                    <div className="text-lg font-bold mt-1">{fmt(totCusto)} · {fmtPct(totPct)}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Taxa efetiva sobre faturamento bruto</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Resumido */}
             <Collapsible open={expandedResumido} onOpenChange={setExpandedResumido}>

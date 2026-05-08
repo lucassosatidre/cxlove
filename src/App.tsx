@@ -27,6 +27,7 @@ import Etiquetas from "./pages/Etiquetas";
 import MachineRegistry from "./pages/MachineRegistry";
 import CheckinAudit from "./pages/CheckinAudit";
 import AuditDashboard from "./pages/audit/AuditDashboard";
+import AuditEntry from "./pages/audit/AuditEntry";
 import AuditImport from "./pages/audit/AuditImport";
 import AuditIfood from "./pages/audit/AuditIfood";
 import AuditVouchers from "./pages/audit/AuditVouchers";
@@ -116,7 +117,8 @@ const App = () => (
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             <Route path="/admin/maquininhas" element={<ProtectedRoute><SectorGuard sector="tele"><MachineRegistry /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/audit" element={<ProtectedRoute><SectorGuard sector="tele"><CheckinAudit /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboard /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria" element={<ProtectedRoute><SectorGuard sector="tele"><AuditEntry /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria/maquinona" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboard /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfood /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/vouchers" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVouchers /></SectorGuard></ProtectedRoute>} />
