@@ -231,7 +231,10 @@ export default function AuditIfoodMarketplace() {
     const conta_recebido = sum('conta_recebido');
     const conta_taxa_antecip = sum('conta_taxa_antecip');
     const liquido_efetivo = sum('liquido_efetivo');
-    const vendido_total = bruto_venda + pgto_direto_loja;
+    // Vendido pelo iFood = SOMENTE online (transacionado pela plataforma).
+    // pgto_direto_loja é dinheiro/Pix/maquinininha, já contabilizado em outras
+    // categorias do relatório contábil.
+    const vendido_total = bruto_venda;
 
     // Custos que SOMAM no total (sinal negativo no DB → abs pra exibição)
     const custos_taxas = Math.abs(comissao) + Math.abs(taxa_transacao) + Math.abs(taxa_conveniencia)
@@ -451,8 +454,8 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard title="Vendido bruto iFood" value={fmt(totals.vendido_total)}
-          hint={`Online: ${fmt(totals.bruto_venda)} · Direto loja: ${fmt(totals.pgto_direto_loja)}`} />
+        <KpiCard title="Vendido pelo iFood (online)" value={fmt(totals.vendido_total)}
+          hint={`Transacionado pela plataforma · pgto direto loja ${fmt(totals.pgto_direto_loja)} (não soma)`} />
         <KpiCard title="Líquido esperado (repasse)" value={fmt(totals.liquido_esperado)}
           hint={`${repasses.length} repasses · recebido R$ ${(totals.conta_recebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
         <KpiCard title="Custo total iFood" value={fmt(totals.custo_total)}
