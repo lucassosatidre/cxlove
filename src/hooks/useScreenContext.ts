@@ -9,7 +9,6 @@ export function useScreenContext() {
     let pageName = 'Desconhecida';
 
     if (path === '/') pageName = 'Painel principal';
-    else if (path.startsWith('/admin/auditoria/match')) pageName = 'Auditoria do Match';
     else if (path.startsWith('/admin/auditoria/ifood')) pageName = 'Auditoria iFood (Cresol)';
     else if (path.startsWith('/admin/auditoria/importar')) pageName = 'Importação de extratos';
     else if (path.startsWith('/admin/auditoria')) pageName = 'Dashboard Auditoria de Taxas';

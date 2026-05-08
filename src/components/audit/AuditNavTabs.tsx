@@ -14,6 +14,7 @@ const TABS: Tab[] = [
   { id: 'vouchers', label: 'Vouchers', path: '/admin/auditoria/vouchers' },
   { id: 'brendi', label: 'Brendi', path: '/admin/auditoria/brendi' },
   { id: 'ifood', label: 'iFood Marketplace', path: '/admin/auditoria/ifood-marketplace' },
+  { id: 'relatorios', label: 'Relatórios', path: '/admin/auditoria/relatorios' },
 ];
 
 type Props = {

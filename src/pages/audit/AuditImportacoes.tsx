@@ -6,7 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, CheckCircle2, Circle } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import {
   UploadMaquinonaCard, UploadCresolCard,
@@ -14,8 +15,11 @@ import {
   UploadBrendiCard, UploadSaiposCard,
   UploadIfoodExtratoDetalhadoCard, UploadIfoodOrdersCard, UploadIfoodContaCsvCard,
   dispatchAutoMatchVouchers,
+  dispatchMatchBrendi,
+  dispatchMatchIfoodMarketplace,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
+import { toast } from 'sonner';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -73,6 +77,7 @@ export default function AuditImportacoes() {
   const [period, setPeriod] = useState<AuditPeriodLite | null>(null);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [runningAudit, setRunningAudit] = useState(false);
 
   // URL sync
   useEffect(() => {
@@ -120,6 +125,74 @@ export default function AuditImportacoes() {
 
   const onUploadAfter = async () => {
     if (period) await refresh(period.id);
+  };
+
+  // Executa os 4 matches em sequência: Maquinona×Cresol, Vouchers, Brendi, iFood Marketplace.
+  // Cada um roda só com os dados que tem disponíveis. Logs vão como toasts.
+  const runFullAudit = async () => {
+    const p = await ensurePeriod();
+    if (!p) return;
+    setRunningAudit(true);
+    const results: string[] = [];
+    try {
+      // 1) Maquinona × Cresol (run-audit-match)
+      try {
+        const { data, error } = await supabase.functions.invoke('run-audit-match', {
+          body: { audit_period_id: p.id },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.success) {
+          results.push(`Maquinona × Cresol: ${data.daily_matches_count ?? 0} dias casados`);
+        } else {
+          results.push(`Maquinona × Cresol: ${data?.error || 'falha'}`);
+        }
+      } catch (e: any) {
+        results.push(`Maquinona × Cresol: erro — ${e?.message ?? 'desconhecido'}`);
+      }
+
+      // 2) Vouchers (4 operadoras)
+      try {
+        await dispatchAutoMatchVouchers(p.id, ['ticket', 'alelo', 'vr', 'pluxee']);
+        results.push('Vouchers (Ticket/Alelo/VR/Pluxee): match disparado');
+      } catch (e: any) {
+        results.push(`Vouchers: erro — ${e?.message ?? 'desconhecido'}`);
+      }
+
+      // 3) Brendi
+      try {
+        const res = await dispatchMatchBrendi(p.id);
+        if (res) {
+          const cc = res.crosscheck;
+          const d = res.daily;
+          results.push(`Brendi: ${d.rows} dias · ${cc.ok} ok · taxa ${d.taxa_efetiva_pct}%`);
+        } else {
+          results.push('Brendi: erro (ver toasts)');
+        }
+      } catch (e: any) {
+        results.push(`Brendi: erro — ${e?.message ?? 'desconhecido'}`);
+      }
+
+      // 4) iFood Marketplace
+      try {
+        const res = await dispatchMatchIfoodMarketplace(p.id);
+        if (res) {
+          const r = res.repasses;
+          results.push(`iFood Marketplace: ${r.total} repasses · recebido R$ ${r.total_conta_recebido}`);
+        } else {
+          results.push('iFood Marketplace: erro (ver toasts)');
+        }
+      } catch (e: any) {
+        results.push(`iFood Marketplace: erro — ${e?.message ?? 'desconhecido'}`);
+      }
+
+      await refresh(p.id);
+      toast.success('✓ Auditoria concluída', {
+        description: results.join(' · '),
+        duration: 8000,
+      });
+    } finally {
+      setRunningAudit(false);
+    }
   };
 
   // Especificação dos documentos. Ordem reflete a ordem visual.
@@ -291,7 +364,7 @@ export default function AuditImportacoes() {
       <div className="space-y-4">
         <AuditNavTabs />
 
-        {/* Seletor de período */}
+        {/* Seletor de período + botão Executar Auditoria */}
         <Card>
           <CardContent className="py-4 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
@@ -313,10 +386,23 @@ export default function AuditImportacoes() {
               </Select>
             </div>
             {period && (
-              <span className="text-xs text-muted-foreground">
-                Período <strong>{MONTHS[month - 1]} {year}</strong> — {period.status}
-              </span>
+              <Badge variant="secondary">
+                {MONTHS[month - 1]} {year} · {period.status}
+              </Badge>
             )}
+            <div className="ml-auto">
+              <Button
+                onClick={runFullAudit}
+                disabled={!period || runningAudit}
+                size="lg"
+                className="gap-2"
+              >
+                {runningAudit
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Play className="h-4 w-4" />}
+                {runningAudit ? 'Executando auditoria...' : 'Executar Auditoria'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
