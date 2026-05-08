@@ -423,15 +423,25 @@ function Checklist({ label, done, count, target, optional }: { label: string; do
 }
 
 function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
+  // Conta de ciclos = datas únicas de repasse (não linhas/lojas)
+  const ciclosCount = new Set(repasses.map(r => r.data_repasse_esperada)).size;
+  // Faturamento total iFood = online + direto loja (universo da plataforma)
+  const faturamentoTotalIfood = totals.bruto_venda + totals.pgto_direto_loja;
+  const taxaEfetivaSobreTotal = faturamentoTotalIfood > 0
+    ? (totals.custo_total / faturamentoTotalIfood) * 100
+    : 0;
+
+  // Subtotal único (Taxas + Marketing fundidos)
+  const subtotalTaxas = totals.custos_taxas + totals.custos_marketing;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard title="Vendido pelo iFood (online)" value={fmt(totals.vendido_total)}
-          hint={`Transacionado pela plataforma · pgto direto loja ${fmt(totals.pgto_direto_loja)} (não soma)`} />
-        <KpiCard title="Líquido esperado (repasse)" value={fmt(totals.liquido_esperado)}
-          hint={`${repasses.length} repasses · recebido R$ ${(totals.conta_recebido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
+        <KpiCard title="Vendido pelo iFood (online)" value={fmt(totals.vendido_total)} />
+        <KpiCard title="Líquido esperado" value={fmt(totals.liquido_esperado)}
+          hint={`${ciclosCount} repasses · valor bruto sem antecipação`} />
         <KpiCard title="Custo total iFood" value={fmt(totals.custo_total)}
-          hint={`Taxa efetiva: ${totals.taxa_efetiva.toFixed(2).replace('.', ',')}% sobre o vendido`}
+          hint={`Taxa efetiva: ${taxaEfetivaSobreTotal.toFixed(2).replace('.', ',')}% sobre o faturamento total iFood`}
           className={totals.custo_total > 0 ? 'text-rose-700 dark:text-rose-400' : ''} />
         <KpiCard title="Recebido direto pela loja" value={fmt(totals.pgto_direto_loja)}
           hint="Pgto na entrega + Dinheiro (não passa pelo iFood Pago)" />
@@ -446,8 +456,9 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
             <Row label="Taxa de antecipação" value={fmt(Math.abs(totals.conta_taxa_antecip || 0))} />
             <Row label="Taxa conveniência parcelado" value={fmt(Math.abs(totals.taxa_conveniencia))} />
             <Row label="Mensalidade" value={fmt(Math.abs(totals.mensalidade))} />
+            <Row label="ADS" value={fmt(Math.abs(totals.ads))} />
             <hr className="my-1" />
-            <Row label="Subtotal" value={fmt(totals.custos_taxas)} bold />
+            <Row label="Subtotal" value={fmt(subtotalTaxas)} bold />
           </CardContent>
         </Card>
 
@@ -463,42 +474,18 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
         </Card>
 
         <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Marketing</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-base">Informativo</CardTitle></CardHeader>
           <CardContent className="text-sm space-y-1">
-            <Row label="ADS (anúncios)" value={fmt(Math.abs(totals.ads))} />
-            <Row label="Promoções loja (informativo)" value={fmt(Math.abs(totals.promo_loja))} muted />
-            <hr className="my-1" />
-            <Row label="Subtotal (sem promo)" value={fmt(totals.custos_marketing)} bold />
+            <Row label="Cancelamentos (total)" value={fmt(Math.abs(totals.cancel_total))} muted />
+            <Row label="Cancelamentos (parcial)" value={fmt(Math.abs(totals.cancel_parcial))} muted />
+            <Row label="Reembolsos pra loja" value={fmt(totals.reembolsos)} muted />
+            <Row label="Ressarcimentos" value={fmt(totals.ressarc)} muted />
+            <Row label="Promo iFood (devolução)" value={fmt(totals.promo_ifood)} muted />
+            <Row label="Taxa serviço cliente (retido)" value={fmt(Math.abs(totals.taxa_servico_cliente))} muted />
+            <Row label="Promoções loja" value={fmt(Math.abs(totals.promo_loja))} muted />
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Informativo</CardTitle></CardHeader>
-        <CardContent className="text-sm grid grid-cols-1 md:grid-cols-3 gap-2">
-          <Row label="Cancelamentos (total)" value={fmt(Math.abs(totals.cancel_total))} muted />
-          <Row label="Cancelamentos (parcial)" value={fmt(Math.abs(totals.cancel_parcial))} muted />
-          <Row label="Reembolsos pra loja" value={fmt(totals.reembolsos)} muted />
-          <Row label="Ressarcimentos" value={fmt(totals.ressarc)} muted />
-          <Row label="Promo iFood (devolução)" value={fmt(totals.promo_ifood)} muted />
-          <Row label="Taxa serviço cliente (retido pelo iFood)" value={fmt(Math.abs(totals.taxa_servico_cliente))} muted />
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2"><CardTitle className="text-base">Verificação da equação</CardTitle></CardHeader>
-        <CardContent className="text-sm">
-          <div className="font-mono text-xs space-y-1">
-            <div>Vendido bruto pgto-app: <strong>{fmt(totals.bruto_venda)}</strong></div>
-            <div>− Custo total iFood (taxas + logística + marketing): <strong>{fmt(totals.custo_total)}</strong></div>
-            <div>= Esperado em conta iFood Pago: <strong>{fmt(totals.bruto_venda - totals.custo_total)}</strong></div>
-            <div className="text-muted-foreground">Líquido esperado real (extrato): {fmt(totals.liquido_esperado)} (diferença reflete taxas serviço cliente, promo iFood, cancelamentos, reembolsos, ressarc)</div>
-            <div>Recebido na conta iFood Pago: <strong>{fmt(totals.conta_recebido || 0)}</strong></div>
-            <div>− Taxa antecipação: <strong>{fmt(Math.abs(totals.conta_taxa_antecip || 0))}</strong></div>
-            <div>= Líquido efetivo final: <strong>{fmt(totals.liquido_efetivo || 0)}</strong></div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
