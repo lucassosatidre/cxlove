@@ -20,6 +20,7 @@ import {
   UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard, UploadPluxeeCard,
   dispatchAutoMatchVouchers,
 } from '@/components/audit/UploadCards';
+import AuditNavTabs from '@/components/audit/AuditNavTabs';
 
 type AuditPeriod = { id: string; month: number; year: number; status: string };
 
@@ -638,26 +639,9 @@ export default function AuditVouchers() {
   }
 
   return (
-    <AppLayout title="Vouchers" subtitle="Auditoria de Taxas (Estágio 2)">
+    <AppLayout title="Vouchers" subtitle="Auditoria de Taxas">
       <div className="space-y-4">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink onClick={() => navigate('/admin/auditoria')} className="cursor-pointer">
-                Auditoria
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem><BreadcrumbPage>Vouchers</BreadcrumbPage></BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <CardContent className="py-3 text-sm">
-            <strong>Em construção (Estágio 2).</strong> Esta aba é independente da auditoria iFood/Cresol.
-            4 operadoras habilitadas. Use as <strong>abas abaixo</strong> pra navegar entre Geral / Ticket / Alelo / VR / Pluxee.
-          </CardContent>
-        </Card>
+        <AuditNavTabs />
 
         {/* Seletor de período */}
         <Card>
@@ -693,42 +677,6 @@ export default function AuditVouchers() {
             )}
           </CardContent>
         </Card>
-
-        {/* Cards de upload */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <UploadBBCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
-            if (!period) return;
-            await refresh(period.id);
-            // Auto-dispatch match-vouchers pras 4 operadoras quando BB é importado.
-            // BB é a "ponte" — sem ele nenhuma operadora pode casar com depósito.
-            await dispatchAutoMatchVouchers(period.id, ['ticket', 'alelo', 'pluxee', 'vr']);
-            await refresh(period.id);
-          }} />
-          <UploadTicketCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
-            if (!period) return;
-            await refresh(period.id);
-            await dispatchAutoMatchVouchers(period.id, ['ticket']);
-            await refresh(period.id);
-          }} />
-          <UploadAleloCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
-            if (!period) return;
-            await refresh(period.id);
-            await dispatchAutoMatchVouchers(period.id, ['alelo']);
-            await refresh(period.id);
-          }} />
-          <UploadVRCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
-            if (!period) return;
-            await refresh(period.id);
-            await dispatchAutoMatchVouchers(period.id, ['vr']);
-            await refresh(period.id);
-          }} />
-          <UploadPluxeeCard period={period} ensurePeriod={ensurePeriod} onAfter={async () => {
-            if (!period) return;
-            await refresh(period.id);
-            await dispatchAutoMatchVouchers(period.id, ['pluxee']);
-            await refresh(period.id);
-          }} />
-        </div>
 
         {/* Sub-abas por operadora — substitui o seletor inline */}
         <Tabs value={selectedOperadora} onValueChange={(v) => { setSelectedOperadora(v); setExpandedLot(null); setCategoryFilter(v === 'overview' ? 'ticket' : v); }}>

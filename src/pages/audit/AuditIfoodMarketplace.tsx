@@ -20,6 +20,7 @@ import {
   dispatchMatchIfoodMarketplace,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
+import AuditNavTabs from '@/components/audit/AuditNavTabs';
 
 type Repasse = {
   id: string;
@@ -286,17 +287,9 @@ export default function AuditIfoodMarketplace() {
   const canMatch = extratoOk && ordersOk && contaOk;
 
   return (
-    <AppLayout title="iFood Marketplace" subtitle="Auditoria das vendas online iFood (estrela + temx)">
+    <AppLayout title="iFood Marketplace" subtitle="Auditoria das vendas online iFood (Estrela + TEMX)">
       <div className="space-y-4">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink onClick={() => navigate('/admin/auditoria')} className="cursor-pointer">Auditoria</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem><BreadcrumbPage>iFood Marketplace</BreadcrumbPage></BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <AuditNavTabs />
 
         {/* Seletor mês + loja + match */}
         <Card>
@@ -350,33 +343,12 @@ export default function AuditIfoodMarketplace() {
           </CardContent>
         </Card>
 
-        {/* Checklist de uploads */}
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base">Documentos necessários</CardTitle></CardHeader>
-          <CardContent className="text-sm space-y-1">
-            <Checklist label={`Extrato detalhado iFood (1 por loja: Estrela + Temx)`} done={extratoCount >= 2} count={extratoCount} target={2} />
-            <Checklist label={`Relatório de Pedidos iFood (1 por loja: Estrela + Temx)`} done={ordersCount >= 2} count={ordersCount} target={2} />
-            <Checklist label={`Conta iFood Pago — CSV (mês comp + comp+1)`} done={contaCount >= 2} count={contaCount} target={2} />
-            <Checklist label={`Vendas Saipos (compartilhado com Brendi)`} done={saiposOk} optional />
-          </CardContent>
-        </Card>
-
-        {/* Cards de upload */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <UploadIfoodExtratoDetalhadoCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
-          <UploadIfoodOrdersCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
-          <UploadIfoodContaCsvCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
-        </div>
-
         {!canMatch && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="py-3 text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <span>
-                Importe Extrato Detalhado + Relatório Pedidos + Conta iFood Pago antes do match.
-                {!extratoOk && ' Falta extrato detalhado.'}
-                {!ordersOk && ' Falta relatório de pedidos.'}
-                {!contaOk && ' Falta conta iFood Pago.'}
+                Importe Extrato Detalhado + Relatório de Pedidos + Conta iFood Pago em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> antes do match.
               </span>
             </CardContent>
           </Card>

@@ -12,6 +12,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
 import { Plus, ArrowRight, Loader2, Play, RefreshCw, Download, Lock, LockOpen, History, Search, UploadCloud } from 'lucide-react';
 import { UploadMaquinonaCard, UploadCresolCard } from '@/components/audit/UploadCards';
+import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { generateAuditPdf, periodFileTag, periodLabel as makePeriodLabel, type AuditPdfData } from '@/lib/audit-pdf';
 import {
@@ -950,8 +951,10 @@ export default function AuditDashboard() {
   );
 
   return (
-    <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Bancos">
-      <div className="space-y-6">
+    <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Cresol (iFood físico)">
+      <div className="space-y-4">
+        <AuditNavTabs />
+
         {/* Closed banner */}
         {isClosed && period && (
           <Card className="border-slate-400/60 bg-slate-500/5">
@@ -1076,149 +1079,57 @@ export default function AuditDashboard() {
         )}
 
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <SummaryCard title="Vendido" value={formatCurrency(totals.vendido)} />
-          <SummaryCard title="Recebido" value={formatCurrency(totals.recebido)} />
-          <SummaryCard title="Custo" value={formatCurrency(custoReal)} />
-          <SummaryCard title="Taxa efetiva" value={`${totals.taxaPct.toFixed(2).replace('.', ',')}%`} />
-        </div>
+        {/* KPIs principais — Maquinona iFood */}
+        {(() => {
+          const recebidoCresol = ifoodCompetencia || totals.recebido;
+          const vendido = totals.vendido;
+          const custoTotal = vendido - recebidoCresol;
+          return (
+            <>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <SummaryCard title="Total vendido bruto" value={formatCurrency(vendido)} />
+                <SummaryCard title="Custo declarado" value={formatCurrency(custoDeclaradoIfood)} />
+                <SummaryCard title="Total recebido" value={formatCurrency(recebidoCresol)} />
+                <SummaryCard title="Custo total" value={formatCurrency(custoTotal)} />
+              </div>
 
-        {/* iFood detail */}
-        <div className="grid grid-cols-1 gap-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-base">iFood</CardTitle></CardHeader>
-            <CardContent className="space-y-2">
-              {totals.liquidoIfood === 0 && depositRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Importe a Maquinona para ver o líquido esperado.</p>
-              ) : (() => {
-                const liquidoEsperado = totals.liquidoIfood;
-                const recebidoFiel = ifoodCompetencia;
-                const gap = recebidoFiel - liquidoEsperado;
-                const brutoFiel = totals.brutoIfood;
-                return (
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Vendido (bruto Maq):</span><span className="font-medium">{formatCurrency(brutoFiel)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Custo declarado iFood:</span><span className="font-medium text-amber-700 dark:text-amber-500">{formatCurrency(custoDeclaradoIfood)}</span></div>
-                    <div className="flex justify-between" title="Cashback/desconto que VOCÊ deu ao cliente — custo da pizzaria">
-                      <span className="text-muted-foreground">Promoção concedida (cashback):</span>
-                      <span className={`font-medium ${promocaoIfood > 0 ? 'text-amber-700 dark:text-amber-500' : 'text-muted-foreground'}`}>{formatCurrency(promocaoIfood)}</span>
+              {/* Informativos compactos */}
+              {(promocaoIfood > 0 || custoOculto > 0.5) && (
+                <Card>
+                  <CardContent className="py-3">
+                    <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Informativo</div>
+                    <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+                      {promocaoIfood > 0 && (
+                        <div>
+                          <span className="text-muted-foreground">Cashback:</span>{' '}
+                          <span className="font-medium">{formatCurrency(promocaoIfood)}</span>
+                        </div>
+                      )}
+                      {custoOculto > 0.5 && (
+                        <div>
+                          <span className="text-muted-foreground">Custo não declarado:</span>{' '}
+                          <span className="font-medium text-amber-700 dark:text-amber-500">{formatCurrency(custoOculto)}</span>
+                        </div>
+                      )}
                     </div>
-                    {incentivoIfood > 0 && (
-                      <div className="flex justify-between text-xs" title="Subsídio pago pelo iFood — não é seu custo">
-                        <span className="text-muted-foreground">↳ incentivo iFood (subsídio, não é custo):</span>
-                        <span className="text-muted-foreground">{formatCurrency(incentivoIfood)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between border-t border-border/50 pt-1"><span className="text-muted-foreground">Líquido reportado iFood:</span><span className="font-medium">{formatCurrency(liquidoEsperado)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Recebido Cresol (fiel):</span><span className="font-medium">{formatCurrency(recebidoFiel)}</span></div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground font-medium">⚠ Custo OCULTO (cobrável):</span>
-                      <span className={`font-semibold ${custoOculto > 0.5 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>{formatCurrency(custoOculto)}</span>
-                    </div>
-                    {ifoodNaoConciliado > 0.5 && (
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground text-xs">↳ não conciliado (lotes sem cresol identificado):</span>
-                        <span className="text-xs text-amber-600 dark:text-amber-500">{formatCurrency(ifoodNaoConciliado)}</span>
-                      </div>
-                    )}
-                    {(ifoodAdjacente > 0 || ifoodNaoId > 0) && (
-                      <div className="pt-2 mt-1 border-t border-border/50 space-y-0.5 text-xs text-muted-foreground">
-                        {ifoodAdjacente > 0 && (
-                          <div className="flex justify-between">
-                            <span>ℹ Recebido outras comp.:</span>
-                            <span>{formatCurrency(ifoodAdjacente)}</span>
-                          </div>
-                        )}
-                        {ifoodNaoId > 0 && (
-                          <div className="flex justify-between">
-                            <span>⚠ Não identificado:</span>
-                            <span className="text-red-600 dark:text-red-400">{formatCurrency(ifoodNaoId)}</span>
-                          </div>
-                        )}
-                        {ifoodAdjacente > 0 && (() => {
-                          const prevMonth = month === 1 ? 12 : month - 1;
-                          const nextMonth = month === 12 ? 1 : month + 1;
-                          const monthShort = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-                          return (
-                            <p className="italic pt-1">
-                              Parcelas de meses adjacentes ({monthShort[prevMonth - 1]}/{monthShort[nextMonth - 1]}) recebidas neste mês.
-                            </p>
-                          );
-                        })()}
-                      </div>
-                    )}
-                    {gap < -0.5 && (
-                      <p className="text-xs text-muted-foreground italic pt-1">⚠ Gap negativo indica custo oculto (ex: taxa de antecipação iFood).</p>
-                    )}
-                  </div>
-                );
-              })()}
-              <Button variant="ghost" size="sm" className="gap-1 text-primary" disabled={!canExport} onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}>
-                Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </CardContent>
-          </Card>
+                  </CardContent>
+                </Card>
+              )}
 
-        </div>
-
-        {/* Imports — usa cards shared do conciliacao */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Importações do período</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Maquinona (vendas crédito/débito/PIX) + Cresol (depósitos correspondentes).
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              💡 <strong>Para auditoria precisa, importe 3 meses</strong> de cada fonte: mês ANTERIOR + COMPETÊNCIA + POSTERIOR.
-              Pode selecionar múltiplos arquivos de uma vez.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {isClosed && (
-              <p className="text-xs text-muted-foreground italic">Este período está fechado. Para importar novos arquivos, reabra o período.</p>
-            )}
-            {!period ? (
-              <p className="text-xs text-muted-foreground">Crie o período acima antes de importar arquivos.</p>
-            ) : (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['maquinona', 'cresol'] as const).map(src => {
-                    const rowsForSource = allImports.filter(i => i.source === src && i.status === 'completed');
-                    const fileCount = rowsForSource.length;
-                    const totalRows = rowsForSource.reduce((s, i) => s + Number(i.imported_rows || 0), 0);
-                    const latest = rowsForSource[0];
-                    return (
-                      <div key={src} className="rounded-md border bg-card px-3 py-2 text-xs">
-                        <span className="font-medium capitalize">{src}: </span>
-                        {fileCount > 0 && latest ? (
-                          <span className="text-green-700 dark:text-green-400">
-                            ✓ {fileCount} arquivo(s) · {totalRows} linhas · último {formatDateTime(latest.created_at)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">não importado</span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <UploadMaquinonaCard
-                    period={period}
-                    ensurePeriod={async () => period}
-                    onAfter={async () => { await loadPeriodData(period.id); }}
-                  />
-                  <UploadCresolCard
-                    period={period}
-                    ensurePeriod={async () => period}
-                    onAfter={async () => { await loadPeriodData(period.id); }}
-                  />
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-1 text-primary"
+                  disabled={!canExport}
+                  onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}
+                >
+                  Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </>
+          );
+        })()}
 
         {/* History */}
         {logs.length > 0 && (

@@ -18,6 +18,7 @@ import {
   UploadBrendiCard, UploadSaiposCard, dispatchMatchBrendi,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
+import AuditNavTabs from '@/components/audit/AuditNavTabs';
 
 type DailyRow = {
   id: string;
@@ -246,17 +247,7 @@ export default function AuditBrendi() {
   return (
     <AppLayout title="Brendi" subtitle="Custo Brendi (vendas online)">
       <div className="space-y-4">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink onClick={() => navigate('/admin/auditoria')} className="cursor-pointer">
-                Auditoria
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem><BreadcrumbPage>Brendi</BreadcrumbPage></BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <AuditNavTabs />
 
         {/* Seletor mês */}
         <Card>
@@ -299,20 +290,12 @@ export default function AuditBrendi() {
           </CardContent>
         </Card>
 
-        {/* Cards de upload */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <UploadBrendiCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
-          <UploadSaiposCard period={period} ensurePeriod={ensurePeriod} onAfter={onUploadAfter} />
-        </div>
-
         {!canMatch && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="py-3 text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <span>
-                Importe <strong>Brendi</strong> e <strong>Saipos</strong> antes de executar o match.
-                {!brendiOk && ' Falta Brendi.'}
-                {!saiposOk && ' Falta Saipos.'}
+                Importe <strong>Brendi</strong> e <strong>Saipos</strong> em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> antes de executar o match.
               </span>
             </CardContent>
           </Card>
