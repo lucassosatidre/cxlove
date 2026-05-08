@@ -9,10 +9,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
-import { Plus, ArrowRight, Loader2, Play, RefreshCw, Lock, LockOpen, History } from 'lucide-react';
+import { Plus, ArrowRight, Loader2, Lock, LockOpen, History } from 'lucide-react';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import { periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
-import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import { ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 import { fetchAllPaginated } from '@/lib/supabase-pagination';
 
 type AuditPeriod = {
@@ -129,8 +129,6 @@ export default function AuditDashboard() {
   const [userNamesById, setUserNamesById] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
-  const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
   const [aiAudits, setAiAudits] = useState<any>(null);
 
@@ -325,51 +323,7 @@ export default function AuditDashboard() {
   const isClosed = period?.status === 'fechado';
   const canExport = isConciliated || isClosed;
 
-  const handleRunMatch = async () => {
-    if (!period) return;
-    setReconciling(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('run-audit-match', {
-        body: { audit_period_id: period.id },
-      });
-      if (error) throw error;
-      if ((data as any)?.error) throw new Error((data as any).error);
-      if ((data as any)?.ai_audits) setAiAudits((data as any).ai_audits);
-      toast({
-        title: '✓ Conciliação concluída',
-        description: `${(data as any).daily_matches_count ?? 0} matches diários processados`,
-      });
-      const { data: p } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
-      if (p) setPeriod(p as AuditPeriod);
-      await loadPeriodData(period.id);
-    } catch (e: any) {
-      toast({ title: 'Erro na conciliação', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
-    } finally {
-      setReconciling(false);
-    }
-  };
 
-
-  const handleClose = async () => {
-    if (!period || !user) return;
-    const nowIso = new Date().toISOString();
-    const { error } = await supabase
-      .from('audit_periods')
-      .update({ status: 'fechado', closed_at: nowIso, closed_by: user.id, updated_at: nowIso })
-      .eq('id', period.id);
-    if (error) {
-      toast({ title: 'Erro ao fechar', description: error.message, variant: 'destructive' });
-      return;
-    }
-    await supabase.from('audit_period_log').insert({
-      audit_period_id: period.id, action: 'fechado', user_id: user.id, reason: null,
-    });
-    toast({ title: '✓ Período fechado', description: `${MONTHS[month - 1]}/${year} fechado com sucesso` });
-    setCloseOpen(false);
-    const { data: p } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
-    if (p) setPeriod(p as AuditPeriod);
-    await loadPeriodData(period.id);
-  };
 
   const handleReopen = async (reason: string) => {
     if (!period || !user) return;
@@ -477,49 +431,20 @@ export default function AuditDashboard() {
               </Select>
             </div>
 
-            <div className="ml-auto flex items-center gap-3 flex-wrap">
-              {period && statusBadge && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Status:</span>
-                  <Badge className={statusBadge.className} variant="secondary">{statusBadge.label}</Badge>
-                </div>
-              )}
-              {period && isConciliated && !isClosed && (
-                <Button variant="default" onClick={() => setCloseOpen(true)} className="gap-2">
-                  <Lock className="h-4 w-4" /> Fechar Período
-                </Button>
-              )}
-              {!period && !loading && (
-                <Button onClick={handleCreatePeriod} disabled={creating} className="gap-2">
+            {period ? (
+              <Badge variant="secondary" className="ml-auto">
+                Período {MONTHS[month - 1]} {year} — {period.status}
+              </Badge>
+            ) : (
+              !loading && (
+                <Button onClick={handleCreatePeriod} disabled={creating} className="gap-2 ml-auto">
                   {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   Novo Período
                 </Button>
-              )}
-            </div>
+              )
+            )}
           </CardContent>
         </Card>
-
-        {/* Reconcile button */}
-        {period && !isClosed && (
-          <Card>
-            <CardContent className="py-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm">
-                {!allImported && <span className="text-muted-foreground">Importe os 3 arquivos para habilitar a conciliação.</span>}
-                {allImported && !isConciliated && <span className="text-muted-foreground">Os 3 arquivos foram importados. Pronto para conciliar.</span>}
-                {isConciliated && <span className="text-muted-foreground">Última conciliação: {formatDateTime(period.updated_at)}</span>}
-              </div>
-              <Button
-                onClick={handleRunMatch}
-                disabled={!allImported || reconciling}
-                variant={isConciliated ? 'outline' : 'default'}
-                className="gap-2"
-              >
-                {reconciling ? <Loader2 className="h-4 w-4 animate-spin" /> : isConciliated ? <RefreshCw className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {reconciling ? 'Conciliando...' : isConciliated ? 'Reexecutar Conciliação' : 'Executar Conciliação'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
 
         {/* KPIs principais — Maquinona iFood */}
@@ -600,20 +525,12 @@ export default function AuditDashboard() {
       </div>
 
       {period && (
-        <>
-          <CloseConfirmDialog
-            open={closeOpen}
-            onOpenChange={setCloseOpen}
-            periodLabel={periodLabelStr}
-            onConfirm={handleClose}
-          />
-          <ReopenDialog
-            open={reopenOpen}
-            onOpenChange={setReopenOpen}
-            periodLabel={periodLabelStr}
-            onConfirm={handleReopen}
-          />
-        </>
+        <ReopenDialog
+          open={reopenOpen}
+          onOpenChange={setReopenOpen}
+          periodLabel={periodLabelStr}
+          onConfirm={handleReopen}
+        />
       )}
     </AppLayout>
   );

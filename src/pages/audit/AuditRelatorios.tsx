@@ -9,9 +9,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
-import { Loader2, FileText, Download } from 'lucide-react';
+import { Loader2, FileText, Download, Lock, LockOpen } from 'lucide-react';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import { generateContabilReport } from '@/lib/contabil-data-builder';
+import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -31,6 +32,51 @@ export default function AuditRelatorios() {
   const [period, setPeriod] = useState<AuditPeriod | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState<'resumido' | 'detalhado' | null>(null);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [reopenOpen, setReopenOpen] = useState(false);
+
+  const reloadPeriod = async () => {
+    if (!period) return;
+    const { data } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
+    if (data) setPeriod(data as AuditPeriod);
+  };
+
+  const handleClose = async () => {
+    if (!period || !user) return;
+    const nowIso = new Date().toISOString();
+    const { error } = await supabase
+      .from('audit_periods')
+      .update({ status: 'fechado', closed_at: nowIso, closed_by: user.id, updated_at: nowIso })
+      .eq('id', period.id);
+    if (error) {
+      toast.error('Erro ao fechar', { description: error.message });
+      return;
+    }
+    await supabase.from('audit_period_log').insert({
+      audit_period_id: period.id, action: 'fechado', user_id: user.id, reason: null,
+    });
+    toast.success(`✓ Período ${MONTHS[month - 1]}/${year} fechado`);
+    setCloseOpen(false);
+    await reloadPeriod();
+  };
+
+  const handleReopen = async (reason: string) => {
+    if (!period || !user) return;
+    const { error } = await supabase
+      .from('audit_periods')
+      .update({ status: 'conciliado', closed_at: null, closed_by: null, updated_at: new Date().toISOString() })
+      .eq('id', period.id);
+    if (error) {
+      toast.error('Erro ao reabrir', { description: error.message });
+      return;
+    }
+    await supabase.from('audit_period_log').insert({
+      audit_period_id: period.id, action: 'reaberto', user_id: user.id, reason,
+    });
+    toast.success('✓ Período reaberto');
+    setReopenOpen(false);
+    await reloadPeriod();
+  };
 
   // URL sync
   useEffect(() => {
@@ -95,6 +141,9 @@ export default function AuditRelatorios() {
   }
 
   const canGenerate = !!period && period.status !== 'aberto';
+  const isClosed = period?.status === 'fechado';
+  const isConciliated = period?.status === 'conciliado';
+  const periodLabelStr = `${MONTHS[month - 1]} / ${year}`;
 
   return (
     <AppLayout title="Relatórios" subtitle="Geração de relatórios contábeis do período">
@@ -124,11 +173,23 @@ export default function AuditRelatorios() {
             </div>
             {period ? (
               <Badge variant="secondary" className="ml-2">
-                {MONTHS[month - 1]} {year} · {period.status}
+                Período {MONTHS[month - 1]} {year} — {period.status}
               </Badge>
             ) : (
               <Badge variant="outline" className="ml-2">Período não criado</Badge>
             )}
+            <div className="ml-auto flex items-center gap-2">
+              {period && isConciliated && !isClosed && (
+                <Button onClick={() => setCloseOpen(true)} className="gap-2">
+                  <Lock className="h-4 w-4" /> Fechar Período
+                </Button>
+              )}
+              {period && isClosed && (
+                <Button variant="outline" onClick={() => setReopenOpen(true)} className="gap-2">
+                  <LockOpen className="h-4 w-4" /> Reabrir Período
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -199,6 +260,23 @@ export default function AuditRelatorios() {
               ⚠ Período {MONTHS[month - 1]}/{year} não foi criado. Vá em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> e importe os arquivos do mês.
             </CardContent>
           </Card>
+        )}
+
+        {period && (
+          <>
+            <CloseConfirmDialog
+              open={closeOpen}
+              onOpenChange={setCloseOpen}
+              periodLabel={periodLabelStr}
+              onConfirm={handleClose}
+            />
+            <ReopenDialog
+              open={reopenOpen}
+              onOpenChange={setReopenOpen}
+              periodLabel={periodLabelStr}
+              onConfirm={handleReopen}
+            />
+          </>
         )}
       </div>
     </AppLayout>
