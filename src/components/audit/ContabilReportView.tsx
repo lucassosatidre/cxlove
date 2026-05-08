@@ -323,8 +323,8 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
   ];
   if (ajustesPositivos > 0.01) {
     breakdown.push([
-      '(−) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',
-      `−${fmtNum(ajustesPositivos)}`,
+      '(-) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',
+      `-${fmtNum(ajustesPositivos)}`,
     ]);
   }
   breakdown.push(['TOTAL', fmtNum(i.custo_total)]);

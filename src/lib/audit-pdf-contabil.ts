@@ -657,9 +657,11 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
     ['ADS (anúncios)', fmtNum(Math.abs(i.ads))],
   ];
   if (ajustesPositivos > 0.01) {
+    // Helvetica do jsPDF não suporta U+2212 (minus matemático) — vira `("`
+    // no rendering. Usar hífen ASCII U+002D que sempre renderiza.
     breakdown.push([
-      '(−) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',
-      `−${fmtNum(ajustesPositivos)}`,
+      '(-) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',
+      `-${fmtNum(ajustesPositivos)}`,
     ]);
   }
   breakdown.push(['TOTAL', fmtNum(i.custo_total)]);
