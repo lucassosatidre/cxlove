@@ -1,5 +1,5 @@
 // @ts-nocheck
-// match-ifood-marketplace v2.3 (2026-05-05) — Pass 1: cross-check todos canal=iFood + diff_adj_taxa_servico
+// match-ifood-marketplace v2.4 (2026-05-08) — alinhado com data_repasse_esperada D+3
 // match-ifood-marketplace v2 — 3 passes:
 //
 // Pass 1: Cross-check Saipos × audit_ifood_orders por order_id
@@ -10,16 +10,18 @@
 //
 // Pass 2: Match repasse esperado × antecipação CSV (conta iFood Pago)
 //   Soma audit_ifood_repasses por (period, data_repasse_esperada) das 2 lojas.
+//   data_repasse_esperada agora é a data EFETIVA (D+3 quarta após corte
+//   domingo, ou D+4 após sábado fim do mês), não mais o nominal D+24.
 //   Pra cada audit_ifood_conta_movimentos[categoria='repasse']:
 //     procura data_esperada onde:
-//       data_csv + 21d == data_esperada AND
+//       data_csv == data_esperada AND
 //       valor_csv ≈ soma_repasses_esperados_dessa_data (±R$1 tolerance)
 //   Match exato → status='matched'. Aprox → 'matched_aprox'.
 //   Antecipação sem match (provavelmente outra comp) → 'unmatched_outra_comp'.
 //   Repasse esperado sem antecipação → 'sem_repasse'.
 //
 // Pass 3: Calcula taxa de antecipação por repasse matched
-//   Pra cada repasse matched, busca taxa_antecip do mesmo dia onde
+//   Pra cada taxa_antecip do CSV, busca antecipação MATCHED do mesmo dia onde
 //     valor_taxa ≈ subtotal × 1,99% (±R$1).
 //   Se 2 lojas matched no mesmo dia, rateia taxa por proporção do subtotal.
 
@@ -41,13 +43,6 @@ const ANTECIP_RATE = 0.0199;
 const ANTECIP_TOLERANCE = 1.0;
 const REPASSE_TOLERANCE_EXATO = 0.10;
 const REPASSE_TOLERANCE_APROX = 1.0;
-
-function addDays(iso: string, days: number): string {
-  const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
-}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -254,7 +249,9 @@ Deno.serve(async (req) => {
     const movimentoUpdates: Array<{ id: string; payload: any }> = [];
 
     for (const a of antecipacoes) {
-      const dataEsperada = addDays(a.data, 21);
+      // data_repasse_esperada agora é a data EFETIVA do recebimento (D+3/D+4),
+      // que é a mesma data em que cai a antecipação no CSV iFood Pago.
+      const dataEsperada = a.data;
       const exp = expectedByDate.get(dataEsperada);
       if (!exp) {
         movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
@@ -338,7 +335,7 @@ Deno.serve(async (req) => {
       if (taxasUsadas.has(t.id)) continue;
       taxasUsadas.add(t.id);
 
-      const dataEsperada = addDays(a.data, 21);
+      const dataEsperada = a.data;
       const exp = expectedByDate.get(dataEsperada);
       if (!exp) continue;
       // rateia taxa por proporção do subtotal de cada loja
