@@ -1,5 +1,5 @@
 // @ts-nocheck
-// match-ifood-marketplace v2.5 (2026-05-08) — tolerancia R$10 + diagnostico detalhado
+// match-ifood-marketplace v2.6 (2026-05-08) — tolerancia R$100 (cobre realocacao de ciclo)
 // match-ifood-marketplace v2 — 3 passes:
 //
 // Pass 1: Cross-check Saipos × audit_ifood_orders por order_id
@@ -42,13 +42,16 @@ const VALUE_TOLERANCE_CROSSCHECK = 2.00;
 const ANTECIP_RATE = 0.0199;
 const ANTECIP_TOLERANCE = 5.0;
 const REPASSE_TOLERANCE_EXATO = 0.10;
-// Tolerância "aproximada" subiu de R$1 → R$10 porque há diferenças naturais
+// Tolerância "aproximada" subiu pra R$100 porque há diferenças naturais
 // entre o liquido_esperado (extrato detalhado iFood) e o PIX que cai na conta:
+//   - pedido em domingo de corte cuja contabilização iFood realocou pro
+//     ciclo seguinte (constatado fev/26: R$59,57 entre 25/02 e 04/03)
 //   - reembolsos/ressarcimentos pós-fechamento que entram em outro ciclo
 //   - taxa serviço cliente retida que ajusta o líquido
-//   - arredondamentos de centavos somados em centenas de pedidos
-// Diff > R$10 ainda vira unmatched_outra_comp (provavelmente outra comp).
-const REPASSE_TOLERANCE_APROX = 10.0;
+//   - arredondamentos somados em centenas de pedidos
+// R$100 ainda é segurança boa: PIX de outra comp difere em MILHARES,
+// não centenas — false positive é improvável.
+const REPASSE_TOLERANCE_APROX = 100.0;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -409,7 +412,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.5-2026-05-08-tolerancia-10-diagnostico',
+      edge_version: 'v2.6-2026-05-08-tolerancia-100',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
