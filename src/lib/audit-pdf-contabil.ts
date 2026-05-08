@@ -28,18 +28,18 @@ export const CATEGORIA_LABELS: Record<ContabilCategoria, string> = {
 export type ContabilResumoRow = {
   categoria: ContabilCategoria;
   nome: string;
-  qtd: number;
-  bruto: number;
-  liquido: number;
-  taxa: number;
+  qtd: number;          // Maquinona: nº txs · Vouchers: nº vendas · Brendi: pedidos
+  vendido: number;      // bruto vendido na competência
+  recebido: number;     // efetivamente creditado
+  custo: number;        // vendido - recebido (engloba taxa + antecip + promo + desconto oculto)
 };
 
 export type ContabilDiaRow = {
   dia: number;
   qtd: number;
-  bruto: number;
-  liquido: number;
-  taxa: number;
+  vendido: number;
+  recebido: number;
+  custo: number;
 };
 
 export type ContabilDetalhamento = {
@@ -51,24 +51,26 @@ export type ContabilBrendi = {
   vendido_bruto: number;
   pedidos_count_mes: number;
   pedidos_importados_3meses: number;
-  taxa_declarada: number;          // valor R$
+  taxa_declarada: number;          // valor R$ (taxa Brendi)
   taxa_pct: number;                // % sobre bruto
   esperado_liquido: number;
-  recebido_bb: number;
+  recebido_bb: number;             // efetivamente caiu no banco
   dias_uteis: number;
-  custo_oculto: number;            // pode ser negativo (sobrou) ou positivo (faltou)
+  custo_oculto: number;            // diferença entre esperado e recebido (faltou/sobrou)
+  custo_total: number;             // taxa_declarada + custo_oculto (consolidado)
   mensalidade: number;
   mensalidade_count: number;
 };
 
 export type ContabilIfood = {
   // Header
-  vendido_bruto: number;            // online + direto
-  vendido_online: number;
-  recebido_direto: number;
+  vendido_bruto: number;            // SOMENTE online (transacionado pelo iFood) — sem pgto direto loja
+  vendido_online: number;           // alias de vendido_bruto
+  recebido_direto: number;          // dinheiro/maquinininha recebido em mãos (informativo)
   liquido_esperado: number;
   recebido_repasse: number;
   repasses_count: number;
+  pedidos_count: number;            // qtd de pedidos iFood concluídos no mês
   custo_total: number;
   taxa_efetiva_pct: number;
   // Taxas
@@ -168,19 +170,23 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.text('RESUMO CONSOLIDADO', 14, 56);
 
   // Build resumo body — Brendi e iFood preenchidos com dados reais
+  // Nova estrutura: Categoria | Qtd | Vendido | Recebido | Custo | %
+  // - Vendido = bruto vendido na competência
+  // - Recebido = efetivamente creditado (line-of-truth: extrato/banco)
+  // - Custo = vendido - recebido (engloba taxa de transação + antecipação + promo + desconto oculto)
   const rows: any[] = [];
   for (const cat of CATEGORIAS_ORDEM) {
     if (cat === 'brendi') {
-      // Linha Brendi puxa do data.brendi
+      // Linha Brendi puxa do data.brendi (custo = declarado + oculto consolidado)
       if (data.brendi) {
         const b = data.brendi;
-        const pct = b.vendido_bruto > 0 ? (b.taxa_declarada / b.vendido_bruto) * 100 : 0;
+        const pct = b.vendido_bruto > 0 ? (b.custo_total / b.vendido_bruto) * 100 : 0;
         rows.push([
           'Brendi (online)',
           String(b.pedidos_count_mes),
           fmtNum(b.vendido_bruto),
-          fmtNum(b.esperado_liquido),
-          fmtNum(Math.abs(b.taxa_declarada)),
+          fmtNum(b.recebido_bb),
+          fmtNum(Math.abs(b.custo_total)),
           fmtPct(pct),
         ]);
       } else {
@@ -193,26 +199,27 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
       rows.push([CATEGORIA_LABELS[cat], '0', '0,00', '0,00', '0,00', '0,00%']);
       continue;
     }
-    const pct = r.bruto > 0 ? (r.taxa / r.bruto) * 100 : 0;
+    const pct = r.vendido > 0 ? (r.custo / r.vendido) * 100 : 0;
     rows.push([
       CATEGORIA_LABELS[cat],
       String(r.qtd),
-      fmtNum(r.bruto),
-      fmtNum(r.liquido),
-      fmtNum(Math.abs(r.taxa)),
+      fmtNum(r.vendido),
+      fmtNum(r.recebido),
+      fmtNum(Math.abs(r.custo)),
       fmtPct(pct),
     ]);
   }
 
-  // Adiciona linha iFood Marketplace se temos dados
+  // Adiciona linha iFood Marketplace (recebido = vendido - custo, todo dinheiro repassado online)
   if (data.ifood) {
     const i = data.ifood;
+    const recebidoIfood = i.vendido_bruto - i.custo_total;
     const pct = i.vendido_bruto > 0 ? (i.custo_total / i.vendido_bruto) * 100 : 0;
     rows.push([
       'iFood Marketplace',
-      '—',
+      String(i.pedidos_count),
       fmtNum(i.vendido_bruto),
-      fmtNum(i.liquido_esperado),
+      fmtNum(recebidoIfood),
       fmtNum(i.custo_total),
       fmtPct(pct),
     ]);
@@ -220,40 +227,40 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
 
   const baseSum = data.resumoPorCategoria.reduce((acc, r) => ({
     qtd: acc.qtd + r.qtd,
-    bruto: acc.bruto + r.bruto,
-    liq: acc.liq + r.liquido,
-    taxa: acc.taxa + Math.abs(r.taxa),
-  }), { qtd: 0, bruto: 0, liq: 0, taxa: 0 });
+    vendido: acc.vendido + r.vendido,
+    recebido: acc.recebido + r.recebido,
+    custo: acc.custo + Math.abs(r.custo),
+  }), { qtd: 0, vendido: 0, recebido: 0, custo: 0 });
   const brSum = data.brendi ? {
     qtd: data.brendi.pedidos_count_mes,
-    bruto: data.brendi.vendido_bruto,
-    liq: data.brendi.esperado_liquido,
-    taxa: Math.abs(data.brendi.taxa_declarada),
-  } : { qtd: 0, bruto: 0, liq: 0, taxa: 0 };
+    vendido: data.brendi.vendido_bruto,
+    recebido: data.brendi.recebido_bb,
+    custo: Math.abs(data.brendi.custo_total),
+  } : { qtd: 0, vendido: 0, recebido: 0, custo: 0 };
   const ifSum = data.ifood ? {
-    qtd: 0,
-    bruto: data.ifood.vendido_bruto,
-    liq: data.ifood.liquido_esperado,
-    taxa: data.ifood.custo_total,
-  } : { qtd: 0, bruto: 0, liq: 0, taxa: 0 };
+    qtd: data.ifood.pedidos_count,
+    vendido: data.ifood.vendido_bruto,
+    recebido: data.ifood.vendido_bruto - data.ifood.custo_total,
+    custo: data.ifood.custo_total,
+  } : { qtd: 0, vendido: 0, recebido: 0, custo: 0 };
   const totQtd = baseSum.qtd + brSum.qtd + ifSum.qtd;
-  const totBruto = baseSum.bruto + brSum.bruto + ifSum.bruto;
-  const totLiq = baseSum.liq + brSum.liq + ifSum.liq;
-  const totTaxa = baseSum.taxa + brSum.taxa + ifSum.taxa;
-  const totPct = totBruto > 0 ? (totTaxa / totBruto) * 100 : 0;
+  const totVendido = baseSum.vendido + brSum.vendido + ifSum.vendido;
+  const totRecebido = baseSum.recebido + brSum.recebido + ifSum.recebido;
+  const totCusto = baseSum.custo + brSum.custo + ifSum.custo;
+  const totPct = totVendido > 0 ? (totCusto / totVendido) * 100 : 0;
 
   rows.push([
     'TOTAL',
     String(totQtd),
-    fmtNum(totBruto),
-    fmtNum(totLiq),
-    fmtNum(totTaxa),
+    fmtNum(totVendido),
+    fmtNum(totRecebido),
+    fmtNum(totCusto),
     fmtPct(totPct),
   ]);
 
   autoTable(doc, {
     startY: 60,
-    head: [['Categoria', 'Qtd', 'Bruto', 'Líquido', 'Taxa', '%']],
+    head: [['Categoria', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%']],
     body: rows,
     theme: 'grid',
     styles: { font: 'helvetica', fontSize: 9, cellPadding: 2.5, textColor: BLACK },
@@ -283,11 +290,14 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.text('RESUMO DE TAXAS', 14, y);
   y += 5;
 
-  const taxaCredito = data.resumoPorCategoria.find(r => r.categoria === 'credito')?.taxa ?? 0;
-  const taxaDebito = data.resumoPorCategoria.find(r => r.categoria === 'debito')?.taxa ?? 0;
-  const taxaPix = data.resumoPorCategoria.find(r => r.categoria === 'pix')?.taxa ?? 0;
-  const taxaVoucher = ['alelo', 'ticket', 'vr', 'pluxee']
-    .reduce((s, c) => s + (data.resumoPorCategoria.find(r => r.categoria === c as ContabilCategoria)?.taxa ?? 0), 0);
+  const taxaCredito = data.resumoPorCategoria.find(r => r.categoria === 'credito')?.custo ?? 0;
+  const taxaDebito = data.resumoPorCategoria.find(r => r.categoria === 'debito')?.custo ?? 0;
+  const taxaPix = data.resumoPorCategoria.find(r => r.categoria === 'pix')?.custo ?? 0;
+  const taxaAlelo = data.resumoPorCategoria.find(r => r.categoria === 'alelo')?.custo ?? 0;
+  const taxaTicket = data.resumoPorCategoria.find(r => r.categoria === 'ticket')?.custo ?? 0;
+  const taxaVR = data.resumoPorCategoria.find(r => r.categoria === 'vr')?.custo ?? 0;
+  const taxaPluxee = data.resumoPorCategoria.find(r => r.categoria === 'pluxee')?.custo ?? 0;
+  const taxaVoucher = taxaAlelo + taxaTicket + taxaVR + taxaPluxee;
 
   // iFood Marketplace breakdown
   const ifd = data.ifood;
@@ -302,18 +312,24 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   const adsIfood = ifd ? Math.abs(ifd.ads) : 0;
   const totalIfood = ifd ? Math.abs(ifd.custo_total) : 0;
 
-  // Brendi
+  // Brendi: custo total = declarada + oculto (já consolidado em ContabilBrendi.custo_total)
   const taxaBrendi = data.brendi ? Math.abs(data.brendi.taxa_declarada) : 0;
   const custoOcultoBrendi = data.brendi ? Math.abs(data.brendi.custo_oculto) : 0;
+  const custoBrendiTotal = data.brendi ? Math.abs(data.brendi.custo_total) : (taxaBrendi + custoOcultoBrendi);
 
   const totalApurado = Math.abs(taxaCredito) + Math.abs(taxaDebito) + Math.abs(taxaPix)
-    + Math.abs(taxaVoucher) + totalIfood + taxaBrendi;
+    + Math.abs(taxaVoucher) + totalIfood + custoBrendiTotal;
 
   const taxaRows: Array<[string, string]> = [
-    ['Taxa de Crédito (Maquinona)', fmtBRL(Math.abs(taxaCredito))],
-    ['Taxa de Débito (Maquinona)', fmtBRL(Math.abs(taxaDebito))],
-    ['Taxa de Pix (Maquinona)', fmtBRL(Math.abs(taxaPix))],
-    ['Taxas de Voucher (Alelo + Ticket + VR + Pluxee)', fmtBRL(Math.abs(taxaVoucher))],
+    ['— Maquinona (iFood) —', ''],
+    ['Custo Crédito (taxa + antecip + outros embutidos)', fmtBRL(Math.abs(taxaCredito))],
+    ['Custo Débito (taxa + antecip + outros embutidos)', fmtBRL(Math.abs(taxaDebito))],
+    ['Custo Pix (Maquinona)', fmtBRL(Math.abs(taxaPix))],
+    ['— Vouchers —', ''],
+    ['Alelo', fmtBRL(Math.abs(taxaAlelo))],
+    ['Ticket', fmtBRL(Math.abs(taxaTicket))],
+    ['Vale Refeição (VR)', fmtBRL(Math.abs(taxaVR))],
+    ['Pluxee', fmtBRL(Math.abs(taxaPluxee))],
     ['— iFood Marketplace —', ''],
     ['Comissão iFood', fmtBRL(taxaComissaoIfood)],
     ['Taxa de transação iFood', fmtBRL(taxaTransacaoIfood)],
@@ -327,6 +343,7 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
     ['— Brendi —', ''],
     ['Taxa Brendi (declarada)', fmtBRL(taxaBrendi)],
     ['Custo oculto Brendi', fmtBRL(custoOcultoBrendi)],
+    ['Subtotal Brendi (declarada + oculto)', fmtBRL(custoBrendiTotal)],
   ];
 
   autoTable(doc, {
@@ -349,7 +366,7 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10.5);
   doc.setTextColor(...BLACK);
-  doc.text('TOTAL DE TAXAS APURADAS', 14, y);
+  doc.text('TOTAL DE CUSTOS APURADOS', 14, y);
   doc.text(fmtBRL(totalApurado), 14 + 130, y, { align: 'right' });
 
   y += 9;
@@ -357,7 +374,7 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.setFontSize(8);
   doc.setTextColor(...GRAY);
   const obsLines = doc.splitTextToSize(
-    'Cobertura: maquinona iFood (Crédito/Débito/Pix), vouchers (Alelo/Ticket/VR/Pluxee), iFood Marketplace (comissão + transação + antecipação + frete + ADS + mensalidade), Brendi (taxa declarada + custo oculto). Promoções subsidiadas pela loja são informativas e não somam no total apurado.',
+    'Vendido = bruto vendido na competência (mês). Recebido = efetivamente creditado em conta. Custo = Vendido − Recebido (engloba taxa de transação, antecipação, promoções absorvidas, custos embutidos). Cobertura: Maquinona (Crédito/Débito/Pix), Vouchers (Alelo/Ticket/VR/Pluxee, lotes filtrados pelo mês de competência), iFood Marketplace (comissão + transação + antecipação + frete + ADS + mensalidade + ajustes), Brendi (taxa declarada + custo oculto). Pgto direto loja iFood (dinheiro/Pix/maquinininha) não soma — já contabilizado em outras categorias.',
     doc.internal.pageSize.getWidth() - 28,
   );
   doc.text(obsLines, 14, y);
@@ -374,18 +391,18 @@ function buildCategoriaTable(
 ) {
   const byDay = new Map(dias.map(d => [d.dia, d]));
   const body: any[] = [];
-  let totQtd = 0, totBruto = 0, totLiq = 0, totTaxa = 0;
+  let totQtd = 0, totVendido = 0, totRecebido = 0, totCusto = 0;
 
   for (let d = 1; d <= monthDays; d++) {
     const row = byDay.get(d);
     const qtd = row?.qtd ?? 0;
-    const bruto = row?.bruto ?? 0;
-    const liq = row?.liquido ?? 0;
-    const taxa = Math.abs(row?.taxa ?? 0);
-    totQtd += qtd; totBruto += bruto; totLiq += liq; totTaxa += taxa;
-    body.push([String(d), String(qtd), fmtNum(bruto), fmtNum(taxa)]);
+    const vendido = row?.vendido ?? 0;
+    const recebido = row?.recebido ?? 0;
+    const custo = Math.abs(row?.custo ?? 0);
+    totQtd += qtd; totVendido += vendido; totRecebido += recebido; totCusto += custo;
+    body.push([String(d), String(qtd), fmtNum(vendido), fmtNum(custo)]);
   }
-  body.push(['TOTAL', String(totQtd), fmtNum(totBruto), fmtNum(totTaxa)]);
+  body.push(['TOTAL', String(totQtd), fmtNum(totVendido), fmtNum(totCusto)]);
 
   // Title above table
   doc.setFont('helvetica', 'bold');
@@ -397,7 +414,7 @@ function buildCategoriaTable(
     startY,
     margin: { left: startX, right: doc.internal.pageSize.getWidth() - startX - width },
     tableWidth: width,
-    head: [['Dia', 'Qtd', 'Bruto', 'Taxa']],
+    head: [['Dia', 'Qtd', 'Vendido', 'Custo']],
     body,
     theme: 'striped',
     styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 1.4, textColor: BLACK },
@@ -513,15 +530,16 @@ function renderIfoodPage(doc: jsPDF, data: ContabilPdfData) {
   doc.text('iFOOD MARKETPLACE', 14, 28);
 
   // KPI superiores (4 cards em grid)
+  const recebidoIfood = i.vendido_bruto - i.custo_total;
   const kpiData: Array<[string, string, string]> = [
-    ['Vendido bruto iFood', fmtBRL(i.vendido_bruto),
-      `Online: ${fmtBRL(i.vendido_online)} · Direto loja: ${fmtBRL(i.recebido_direto)}`],
-    ['Líquido esperado (repasse)', fmtBRL(i.liquido_esperado),
-      `${i.repasses_count} repasses · recebido ${fmtBRL(i.recebido_repasse)}`],
+    ['Vendido pelo iFood (online)', fmtBRL(i.vendido_bruto),
+      `${i.pedidos_count} pedidos no mês · transacionado pela plataforma`],
+    ['Recebido (vendido − custo)', fmtBRL(recebidoIfood),
+      `${i.repasses_count} repasses · efetivo em conta ${fmtBRL(i.recebido_repasse)}`],
     ['Custo total iFood', fmtBRL(i.custo_total),
       `Taxa efetiva: ${fmtNum(i.taxa_efetiva_pct)}% sobre o vendido`],
-    ['Recebido direto pela loja', fmtBRL(i.recebido_direto),
-      'Pgto na entrega + Dinheiro (não passa pelo iFood Pago)'],
+    ['Pgto direto loja (informativo)', fmtBRL(i.recebido_direto),
+      'Dinheiro/Pix/Maquinininha — não passa pelo iFood Pago'],
   ];
 
   let y = 32;

@@ -429,42 +429,53 @@ export default function AuditDashboard() {
     if (!period) return;
     setExportingContabil(true);
     try {
-      // Maquinona (Crédito/Débito/Pix) — direto de audit_card_transactions.
-      // Sem filtro de data (usa só audit_period_id). Filtragem por mês comp
-      // será feita ao mapear pra categoria — alguns períodos têm transações
-      // com sale_date span além do mês (jan/mar pra cobrir adjacências).
+      // ─── Maquinona (Crédito/Débito/Pix) — audit_card_transactions ───────────
+      // Custo = gross - net (engloba taxa de transação + antecipação + promoção
+      // absorvida pela loja + qualquer desconto embutido). Não usar tax_amount
+      // sozinho porque ele só pega a "taxa de transação" e ignora antecipação.
       const cardTxs: any[] = await fetchAllPaginated<any>(
         supabase
           .from('audit_card_transactions')
-          .select('payment_method, sale_date, gross_amount, net_amount, tax_amount, is_competencia')
+          .select('payment_method, sale_date, gross_amount, net_amount')
           .eq('audit_period_id', period.id),
       );
-      // Diagnóstico — útil pra detectar quando categoria não bate
-      const pmCounts: Record<string, number> = {};
-      const ymCounts: Record<string, number> = {};
-      const sampleSaleDates: string[] = [];
-      for (const t of cardTxs ?? []) {
-        const k = String(t.payment_method ?? '');
-        pmCounts[k] = (pmCounts[k] ?? 0) + 1;
-        const sd = String(t.sale_date ?? '');
-        const ym = sd.slice(0, 7) || '(vazio)';
-        ymCounts[ym] = (ymCounts[ym] ?? 0) + 1;
-        if (sampleSaleDates.length < 5) sampleSaleDates.push(sd);
-      }
-      console.log('[Contabil] audit_card_transactions:', cardTxs?.length ?? 0, 'rows', pmCounts, 'ymCounts:', ymCounts, 'sample sale_date:', sampleSaleDates);
 
-      // Vouchers — audit_voucher_lots agrupado por operadora
+      // ─── Vouchers — audit_voucher_lots + audit_voucher_items + overrides ────
+      // Replica a lógica do AuditVouchers ("Geral" tab): filtra items por
+      // data_transacao no mês de competência. Lote 100% no mês usa total do
+      // lote; lote parcial COM override usa override.taxa_competencia.
       const voucherLots: any[] = await fetchAllPaginated<any>(
         supabase
           .from('audit_voucher_lots')
-          .select('operadora, data_credito, data_corte, subtotal_vendas, valor_liquido, total_descontos')
+          .select('id, operadora, total_descontos, valor_liquido, subtotal_vendas')
           .eq('audit_period_id', period.id),
       );
-      console.log('[Contabil] audit_voucher_lots:', voucherLots?.length ?? 0, 'rows');
-
-      // qtd vouchers = número de lotes (audit_voucher_items pode não existir)
+      const voucherLotIds = (voucherLots ?? []).map((l: any) => l.id);
+      const voucherItems: any[] = voucherLotIds.length > 0
+        ? await fetchAllPaginated<any>(
+            (supabase as any)
+              .from('audit_voucher_items')
+              .select('lot_id, data_transacao, valor')
+              .in('lot_id', voucherLotIds),
+          )
+        : [];
+      const voucherOverrides: any[] = voucherLotIds.length > 0
+        ? await fetchAllPaginated<any>(
+            (supabase as any)
+              .from('audit_voucher_lot_competencia_overrides')
+              .select('lot_id, year, month, taxa_competencia')
+              .eq('year', year)
+              .eq('month', month)
+              .in('lot_id', voucherLotIds),
+          )
+        : [];
 
       const monthDays = new Date(year, month, 0).getDate();
+      const periodYM = `${year}-${String(month).padStart(2, '0')}`;
+      const competenciaIni = `${periodYM}-01`;
+      const competenciaFim = month === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
       // Mapeia payment_method → categoria
       const mapMaquinonaCat = (pm: string): ContabilCategoria | null => {
@@ -483,26 +494,21 @@ export default function AuditDashboard() {
         return null;
       };
 
-      type Agg = { qtd: number; bruto: number; liquido: number; taxa: number };
+      type Agg = { qtd: number; vendido: number; recebido: number; custo: number };
       const resumoMap = new Map<ContabilCategoria, Agg>();
       const detMap = new Map<ContabilCategoria, Map<number, Agg>>();
       const ensureAgg = (m: Map<ContabilCategoria, Agg>, k: ContabilCategoria): Agg => {
-        if (!m.has(k)) m.set(k, { qtd: 0, bruto: 0, liquido: 0, taxa: 0 });
+        if (!m.has(k)) m.set(k, { qtd: 0, vendido: 0, recebido: 0, custo: 0 });
         return m.get(k)!;
       };
       const ensureDayAgg = (cat: ContabilCategoria, dia: number): Agg => {
         if (!detMap.has(cat)) detMap.set(cat, new Map());
         const m = detMap.get(cat)!;
-        if (!m.has(dia)) m.set(dia, { qtd: 0, bruto: 0, liquido: 0, taxa: 0 });
+        if (!m.has(dia)) m.set(dia, { qtd: 0, vendido: 0, recebido: 0, custo: 0 });
         return m.get(dia)!;
       };
 
       // Agrega Maquinona — filtra por mês comp via sale_date.
-      // sale_date pode vir como 'YYYY-MM-DD', 'YYYY-MM-DDTHH...' ou Date.
-      // Tenta slice(0,7) primeiro; se não bate, parseia como Date.
-      const periodYM = `${year}-${String(month).padStart(2, '0')}`;
-      let cardTxsCompCount = 0;
-      let cardTxsCompUnmapped = 0;
       const txMonth = (sd: any): string | null => {
         if (sd == null) return null;
         const s = String(sd);
@@ -515,48 +521,97 @@ export default function AuditDashboard() {
       for (const t of (cardTxs ?? []) as any[]) {
         const ym = txMonth(t.sale_date);
         if (ym !== periodYM) continue;
-        cardTxsCompCount++;
         const cat = mapMaquinonaCat(t.payment_method);
-        if (!cat) { cardTxsCompUnmapped++; continue; }
+        if (!cat) continue;
+        const gross = Number(t.gross_amount ?? 0);
+        const net = Number(t.net_amount ?? 0);
         const r = ensureAgg(resumoMap, cat);
         r.qtd += 1;
-        r.bruto += Number(t.gross_amount ?? 0);
-        r.liquido += Number(t.net_amount ?? 0);
-        r.taxa += Math.abs(Number(t.tax_amount ?? 0));
+        r.vendido += gross;
+        r.recebido += net;
+        r.custo += Math.abs(gross - net);
         if (mode === 'detalhado') {
           const dStr = String(t.sale_date).slice(0, 10).split('-')[2];
           const d = Number(dStr);
           if (d >= 1 && d <= monthDays) {
             const dr = ensureDayAgg(cat, d);
             dr.qtd += 1;
-            dr.bruto += Number(t.gross_amount ?? 0);
-            dr.liquido += Number(t.net_amount ?? 0);
-            dr.taxa += Math.abs(Number(t.tax_amount ?? 0));
+            dr.vendido += gross;
+            dr.recebido += net;
+            dr.custo += Math.abs(gross - net);
           }
         }
       }
-      console.log('[Contabil] cardTxs do mês comp:', cardTxsCompCount, '· payment_method não mapeado:', cardTxsCompUnmapped);
 
-      // Agrega Vouchers — qtd = número de lotes
-      for (const l of (voucherLots ?? []) as any[]) {
-        const cat = mapVoucherCat(l.operadora);
+      // Agrega Vouchers — espelha lógica de competência do AuditVouchers.
+      // Vendido = soma dos items.valor com data_transacao no mês.
+      // Custo = se lote 100% no mês: total_descontos do lote. Se parcial COM
+      // override: usa override.taxa_competencia. Lote parcial SEM override é
+      // ignorado (precisa input manual no app antes de auditar).
+      const lotById = new Map<string, any>();
+      for (const l of (voucherLots ?? []) as any[]) lotById.set(l.id, l);
+      const itemsByLot = new Map<string, any[]>();
+      for (const it of (voucherItems ?? []) as any[]) {
+        const arr = itemsByLot.get(it.lot_id) ?? [];
+        arr.push(it);
+        itemsByLot.set(it.lot_id, arr);
+      }
+      const overrideByLot = new Map<string, any>();
+      for (const o of (voucherOverrides ?? []) as any[]) overrideByLot.set(o.lot_id, o);
+
+      for (const lot of (voucherLots ?? []) as any[]) {
+        const cat = mapVoucherCat(lot.operadora);
         if (!cat) continue;
+        const items = itemsByLot.get(lot.id) ?? [];
+        if (items.length === 0) continue;
+
+        // Items dentro da competência (mês selecionado)
+        let compCount = 0;
+        let compValor = 0;
+        const compItemDays: number[] = [];
+        for (const it of items) {
+          if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
+            compCount += 1;
+            compValor += Number(it.valor ?? 0);
+            const d = Number(String(it.data_transacao).slice(8, 10));
+            if (d >= 1 && d <= monthDays) compItemDays.push(d);
+          }
+        }
+        if (compCount === 0) continue; // Lote sem vendas no mês — ignora
+
+        const isParcial = items.length > compCount;
+        let custoLote = 0;
+        let recebidoLote = 0;
+        if (!isParcial) {
+          // 100% no mês — usa totais do lote
+          custoLote = Math.abs(Number(lot.total_descontos ?? 0));
+          recebidoLote = Number(lot.valor_liquido ?? 0);
+        } else {
+          const ovr = overrideByLot.get(lot.id);
+          if (!ovr) continue; // parcial sem override — não contribui
+          custoLote = Math.abs(Number(ovr.taxa_competencia ?? 0));
+          recebidoLote = compValor - custoLote;
+        }
+
         const r = ensureAgg(resumoMap, cat);
-        r.qtd += 1;
-        r.bruto += Number(l.subtotal_vendas ?? 0);
-        r.liquido += Number(l.valor_liquido ?? 0);
-        r.taxa += Math.abs(Number(l.total_descontos ?? 0));
-        if (mode === 'detalhado') {
-          const dateRef = String(l.data_corte ?? l.data_credito ?? '').slice(0, 10);
-          if (dateRef) {
-            const d = Number(dateRef.split('-')[2]);
-            if (d >= 1 && d <= monthDays) {
-              const dr = ensureDayAgg(cat, d);
-              dr.qtd += 1;
-              dr.bruto += Number(l.subtotal_vendas ?? 0);
-              dr.liquido += Number(l.valor_liquido ?? 0);
-              dr.taxa += Math.abs(Number(l.total_descontos ?? 0));
-            }
+        r.qtd += compCount; // qtd = nº de vendas (não lotes), bate com card "X vendas"
+        r.vendido += compValor;
+        r.recebido += recebidoLote;
+        r.custo += custoLote;
+
+        if (mode === 'detalhado' && compItemDays.length > 0) {
+          // Distribui custo proporcionalmente pelos dias dentro da competência
+          const custoPorDia = custoLote / compItemDays.length;
+          const recebidoPorDia = recebidoLote / compItemDays.length;
+          for (const it of items) {
+            if (it.data_transacao < competenciaIni || it.data_transacao >= competenciaFim) continue;
+            const d = Number(String(it.data_transacao).slice(8, 10));
+            if (d < 1 || d > monthDays) continue;
+            const dr = ensureDayAgg(cat, d);
+            dr.qtd += 1;
+            dr.vendido += Number(it.valor ?? 0);
+            dr.recebido += recebidoPorDia;
+            dr.custo += custoPorDia;
           }
         }
       }
@@ -567,7 +622,7 @@ export default function AuditDashboard() {
           const a = resumoMap.get(c);
           return {
             categoria: c, nome: CATEGORIA_LABELS[c],
-            qtd: a?.qtd ?? 0, bruto: a?.bruto ?? 0, liquido: a?.liquido ?? 0, taxa: a?.taxa ?? 0,
+            qtd: a?.qtd ?? 0, vendido: a?.vendido ?? 0, recebido: a?.recebido ?? 0, custo: a?.custo ?? 0,
           };
         });
 
@@ -580,22 +635,21 @@ export default function AuditDashboard() {
             dias: Array.from({ length: monthDays }, (_, i) => {
               const d = i + 1;
               const v = detMap.get(cat)?.get(d);
-              return { dia: d, qtd: v?.qtd ?? 0, bruto: v?.bruto ?? 0, liquido: v?.liquido ?? 0, taxa: v?.taxa ?? 0 };
+              return { dia: d, qtd: v?.qtd ?? 0, vendido: v?.vendido ?? 0, recebido: v?.recebido ?? 0, custo: v?.custo ?? 0 };
             }),
           }));
       }
 
-      // Busca dados Brendi (estágio 3)
-      const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
-      const nextMonthStart = month === 12
-        ? `${year + 1}-01-01`
-        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      // Busca dados Brendi (estágio 3) + iFood Marketplace (estágio 4) + qtd pedidos iFood
+      const monthStart = competenciaIni;
+      const nextMonthStart = competenciaFim;
       const sb: any = supabase;
       const [
         { data: brendiDaily },
         { count: brendiCountMes },
         { count: brendiCount3m },
         { data: ifoodRepasses },
+        { count: ifoodOrdersCount },
       ] = await Promise.all([
         sb.from('audit_brendi_daily')
           .select('expected_amount, expected_liquido, taxa_calculada, received_amount, diff, status')
@@ -611,20 +665,33 @@ export default function AuditDashboard() {
         sb.from('audit_ifood_repasses')
           .select('*')
           .eq('audit_period_id', period.id),
+        sb.from('audit_ifood_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('audit_period_id', period.id)
+          .gte('sale_date', monthStart)
+          .lt('sale_date', nextMonthStart)
+          .neq('status_pedido', 'CANCELADO'),
       ]);
 
       const bd = (brendiDaily ?? []) as any[];
       const sumB = (k: string) => bd.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+      const brendiVendido = sumB('expected_amount');
+      const brendiTaxaDeclarada = sumB('taxa_calculada');
+      const brendiEsperado = sumB('expected_liquido');
+      const brendiRecebido = sumB('received_amount');
+      const brendiCustoOculto = brendiEsperado - brendiRecebido;
+      const brendiCustoTotal = brendiVendido - brendiRecebido; // = declarada + oculto
       const brendiData = bd.length > 0 ? {
-        vendido_bruto: sumB('expected_amount'),
+        vendido_bruto: brendiVendido,
         pedidos_count_mes: brendiCountMes ?? 0,
         pedidos_importados_3meses: brendiCount3m ?? 0,
-        taxa_declarada: sumB('taxa_calculada'),
-        taxa_pct: sumB('expected_amount') > 0 ? (sumB('taxa_calculada') / sumB('expected_amount')) * 100 : 0,
-        esperado_liquido: sumB('expected_liquido'),
-        recebido_bb: sumB('received_amount'),
+        taxa_declarada: brendiTaxaDeclarada,
+        taxa_pct: brendiVendido > 0 ? (brendiTaxaDeclarada / brendiVendido) * 100 : 0,
+        esperado_liquido: brendiEsperado,
+        recebido_bb: brendiRecebido,
         dias_uteis: bd.length,
-        custo_oculto: sumB('expected_liquido') - sumB('received_amount'),
+        custo_oculto: brendiCustoOculto,
+        custo_total: brendiCustoTotal,
         mensalidade: bd.filter(r => r.status === 'mensalidade_descontada')
           .reduce((s, r) => s + Math.abs(Number(r.diff ?? 0)), 0),
         mensalidade_count: bd.filter(r => r.status === 'mensalidade_descontada').length,
@@ -632,9 +699,10 @@ export default function AuditDashboard() {
 
       const ifoodRows = (ifoodRepasses ?? []) as any[];
       const sumI = (k: string) => ifoodRows.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+      // Vendido pelo iFood = SOMENTE bruto_venda (transacionado pela plataforma).
+      // pgto_direto_loja é dinheiro/Pix/maquinininha — já entra em outras categorias.
       const brutoVenda = sumI('bruto_venda');
       const pgtoDireto = sumI('pgto_direto_loja');
-      const vendidoTotal = brutoVenda + pgtoDireto;
       const comissao = Math.abs(sumI('comissao'));
       const taxaTrans = Math.abs(sumI('taxa_transacao'));
       const taxaAntecip = Math.abs(sumI('conta_taxa_antecip'));
@@ -648,14 +716,15 @@ export default function AuditDashboard() {
         + frete + taxaEntrega + taxaSob + ads;
 
       const ifoodData = ifoodRows.length > 0 ? {
-        vendido_bruto: vendidoTotal,
+        vendido_bruto: brutoVenda,                  // só online — transacionado pelo iFood
         vendido_online: brutoVenda,
-        recebido_direto: pgtoDireto,
+        recebido_direto: pgtoDireto,                // informativo (não soma)
         liquido_esperado: sumI('liquido_esperado'),
         recebido_repasse: sumI('conta_recebido'),
         repasses_count: ifoodRows.length,
+        pedidos_count: ifoodOrdersCount ?? 0,
         custo_total: custoTotal,
-        taxa_efetiva_pct: vendidoTotal > 0 ? (custoTotal / vendidoTotal) * 100 : 0,
+        taxa_efetiva_pct: brutoVenda > 0 ? (custoTotal / brutoVenda) * 100 : 0,
         comissao,
         taxa_transacao: taxaTrans,
         taxa_antecipacao: taxaAntecip,
@@ -684,19 +753,7 @@ export default function AuditDashboard() {
         brendi: brendiData,
         ifood: ifoodData,
       });
-      // Diagnóstico - aparece como toast pra ajudar a debugar zeros no PDF
-      const pmKeys = Object.keys(pmCounts);
-      const pmList = pmKeys.length > 0 ? pmKeys.join(', ') : '(nenhum)';
-      const topYM = Object.entries(ymCounts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([k, v]) => `${k}=${v}`)
-        .join(' ');
-      const samples = sampleSaleDates.slice(0, 5).join(', ');
-      toast({
-        title: '✓ Relatório Contábil gerado',
-        description: `Maquinona: ${cardTxs?.length ?? 0} txs | mês ${periodYM}: ${cardTxsCompCount} | n.map: ${cardTxsCompUnmapped} | dist: ${topYM} | s: ${samples} | pms: ${pmList}`,
-      });
+      toast({ title: '✓ Relatório Contábil gerado' });
     } catch (e: any) {
       toast({ title: 'Erro ao gerar relatório', description: e.message ?? 'Erro desconhecido', variant: 'destructive' });
     } finally {

@@ -546,7 +546,7 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
         <CardTitle className="text-base">Repasses semanais</CardTitle>
         <p className="text-xs text-muted-foreground">
           Cada linha = 1 ciclo de repasse esperado. Ciclo: corte domingo (ou último dia do mês),
-          repasse na quarta D+24. Antecipação cai 21 dias antes do esperado.
+          repasse na primeira quarta-feira seguinte (D+3 se domingo, D+4 se sábado).
         </p>
       </CardHeader>
       <CardContent>

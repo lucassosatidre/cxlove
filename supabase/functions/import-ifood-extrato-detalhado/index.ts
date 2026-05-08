@@ -149,12 +149,14 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
 }
 
 // Calcula data_repasse_esperada de um pedido via data_criacao_pedido.
-// Regra iFood (validada contra fev/26):
+// Regra iFood Pago (com antecipação automática contratada — modelo padrão fev/26):
 //   1. Corte = próximo domingo (>= data_pedido), OU último dia do mês se vier antes
-//   2. data_repasse = próxima quarta-feira a partir de (corte + 21 dias)
-// Se corte é domingo, (dom + 21) = dom, próxima qua = +3 → total +24 dias do corte.
-// Se corte é último dia do mês (ex: sábado 28/02), (sat + 21) = sat, próxima qua = +4
-//   → total +25 dias. Bate com extrato fev/26 (28/02 → 25/03).
+//   2. data_repasse = próxima quarta-feira após o corte (D+3 se corte é dom, D+4 se sáb)
+// Validado contra portal iFood fev/26:
+//   - Corte 01/02 (dom) → repasse 04/02 (qua, D+3)
+//   - Corte 08/02 (dom) → repasse 11/02 (qua, D+3)
+//   - Corte 28/02 (sáb, fim do mês) → repasse 04/03 (qua, D+4)
+// (O modelo antigo D+24 era pra lojas SEM antecipação — virou caso raro.)
 function calcDataRepasseFromPedido(dataPedidoIso: string | null): string | null {
   if (!dataPedidoIso) return null;
   const [y, m, d] = dataPedidoIso.slice(0, 10).split('-').map(Number);
@@ -165,10 +167,10 @@ function calcDataRepasseFromPedido(dataPedidoIso: string | null): string | null 
   const lastDay = new Date(Date.UTC(y, m, 0)); // dia 0 do mês seguinte = último do mês
   const useMonthEnd = lastDay < sundayCorte && lastDay >= dt;
   const corte = useMonthEnd ? lastDay : sundayCorte;
-  const baseDate = new Date(corte.getTime() + 21 * 86400000);
-  const baseDow = baseDate.getUTCDay();
-  const daysUntilWed = (3 - baseDow + 7) % 7; // 3=Wed
-  const repasse = new Date(baseDate.getTime() + daysUntilWed * 86400000);
+  // Próxima quarta-feira após o corte
+  const corteDow = corte.getUTCDay();
+  const daysUntilWed = ((3 - corteDow + 7) % 7) || 7; // se corte for qua, vai pra próxima qua (+7)
+  const repasse = new Date(corte.getTime() + daysUntilWed * 86400000);
   return `${repasse.getUTCFullYear()}-${String(repasse.getUTCMonth() + 1).padStart(2, '0')}-${String(repasse.getUTCDate()).padStart(2, '0')}`;
 }
 
