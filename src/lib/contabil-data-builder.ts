@@ -192,7 +192,6 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     const cat = mapVoucherCat(lot.operadora);
     if (!cat) continue;
     const items = itemsByLot.get(lot.id) ?? [];
-    if (items.length === 0) continue;
     let compCount = 0;
     let compValor = 0;
     const compItemDays: number[] = [];
@@ -204,19 +203,34 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
         if (d >= 1 && d <= monthDays) compItemDays.push(d);
       }
     }
-    if (compCount === 0) continue;
-    const isParcial = items.length > compCount;
+    // Fallback pra lote sem items (caso real fev/26: 21 lotes VR sem items
+    // porque user só uploadou reembolsos.xls, não vendas.xls): se data_corte
+    // está no mês de competência, trata como lote 100% no mês usando os
+    // totais declarados. Sem isso, VR sumia inteiro do relatório.
+    const corteNoMes = lot.data_corte != null
+      && lot.data_corte >= competenciaIni
+      && lot.data_corte < competenciaFim;
+    if (items.length === 0) {
+      if (!corteNoMes) continue;
+    } else if (compCount === 0) {
+      continue;
+    }
+    const isParcial = items.length > 0 && items.length > compCount;
     let vendidoLote = compValor;     // default: soma items no mês
     let custoLote = 0;
     let recebidoLote = 0;
     if (!isParcial) {
-      // Lote 100% no mês: usa os valores DECLARADOS pelo lote (subtotal,
-      // descontos, líquido). Garante que vendido = recebido + custo mesmo
-      // quando o parser perdeu items individuais (já vi caso fev/26 lote VR
-      // 695835653 com subtotal 262,40 mas só 1 item parseado de 141,40).
+      // Lote 100% no mês (ou sem items mas com data_corte no mês): usa os
+      // valores DECLARADOS pelo lote (subtotal, descontos, líquido). Garante
+      // que vendido = recebido + custo mesmo quando o parser perdeu items
+      // individuais (já vi caso fev/26 lote VR 695835653 com subtotal 262,40
+      // mas só 1 item parseado de 141,40).
       vendidoLote = Number(lot.subtotal_vendas ?? compValor);
       custoLote = Math.abs(Number(lot.total_descontos ?? 0));
       recebidoLote = Number(lot.valor_liquido ?? 0);
+      // Sem items vinculados: estima qtd como 1 (o lote inteiro conta como
+      // um agregado) pra não zerar a contagem do mês.
+      if (items.length === 0) compCount = 1;
     } else {
       const ovr = overrideByLot.get(lot.id);
       if (!ovr) continue;
