@@ -440,6 +440,25 @@ export default function AuditDashboard() {
           .eq('audit_period_id', period.id),
       );
 
+      // ─── Cresol — depósitos Maquinona iFood efetivamente recebidos ──────────
+      // O sum(net_amount) das TXs é o que a Maquinona DECLARA como líquido,
+      // mas a Cresol entrega valores ligeiramente diferentes (custos extras
+      // como diferenças de conciliação, que a Maquinona não detalha por TX).
+      // Vamos usar o real recebido pra calcular um custo extra que aloca
+      // no Pix (categoria com menor custo nominal).
+      const cresolDeps: any[] = await fetchAllPaginated<any>(
+        (supabase as any)
+          .from('audit_bank_deposits')
+          .select('matched_competencia_amount')
+          .eq('audit_period_id', period.id)
+          .eq('bank', 'cresol')
+          .eq('category', 'ifood'),
+      );
+      const cresolRecebidoComp = (cresolDeps ?? []).reduce(
+        (s: number, d: any) => s + Number(d.matched_competencia_amount ?? 0),
+        0,
+      );
+
       // ─── Vouchers — audit_voucher_lots + audit_voucher_items + overrides ────
       // Replica a lógica do AuditVouchers ("Geral" tab): filtra items por
       // data_transacao no mês de competência. Lote 100% no mês usa total do
@@ -541,6 +560,20 @@ export default function AuditDashboard() {
             dr.custo += Math.abs(gross - net);
           }
         }
+      }
+
+      // Ajuste Cresol → Pix: a Maquinona declara sum(net) como recebido, mas o
+      // que cai na Cresol pode divergir (custos de conciliação não detalhados
+      // por TX). A diferença vai pro Pix como custo extra.
+      const maquinonaNetTotal =
+        (resumoMap.get('credito')?.recebido ?? 0)
+        + (resumoMap.get('debito')?.recebido ?? 0)
+        + (resumoMap.get('pix')?.recebido ?? 0);
+      const cresolDiff = maquinonaNetTotal - cresolRecebidoComp; // positivo = Cresol entregou MENOS
+      if (Math.abs(cresolDiff) > 0.01 && cresolRecebidoComp > 0) {
+        const pix = ensureAgg(resumoMap, 'pix');
+        pix.recebido -= cresolDiff;
+        pix.custo += cresolDiff;
       }
 
       // Agrega Vouchers — espelha lógica de competência do AuditVouchers.
@@ -715,12 +748,19 @@ export default function AuditDashboard() {
       const custoTotal = comissao + taxaTrans + taxaAntecip + taxaConv + mens
         + frete + taxaEntrega + taxaSob + ads;
 
+      // Líquido efetivo final = recebido na conta iFood Pago menos a taxa
+      // de antecipação. É o valor que a loja efetivamente fica.
+      const liquidoEfetivoTotal = ifoodRows.reduce(
+        (s, r) => s + Number(r.liquido_efetivo ?? r.conta_recebido ?? 0),
+        0,
+      );
       const ifoodData = ifoodRows.length > 0 ? {
         vendido_bruto: brutoVenda,                  // só online — transacionado pelo iFood
         vendido_online: brutoVenda,
         recebido_direto: pgtoDireto,                // informativo (não soma)
         liquido_esperado: sumI('liquido_esperado'),
         recebido_repasse: sumI('conta_recebido'),
+        liquido_efetivo: liquidoEfetivoTotal,       // recebido após desconto da taxa antecipação
         repasses_count: ifoodRows.length,
         pedidos_count: ifoodOrdersCount ?? 0,
         custo_total: custoTotal,

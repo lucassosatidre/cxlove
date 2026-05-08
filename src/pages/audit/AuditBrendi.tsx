@@ -382,29 +382,27 @@ function ResumoTab({
   crosscheck: CrosscheckResult | null;
   daily: DailyRow[];
 }) {
+  // Custo total = Bruto − Recebido (engloba taxas transacionais + mensalidade)
+  const custoTotal = totals.exp - totals.rec;
+  const custoPct = totals.exp > 0 ? (custoTotal / totals.exp) * 100 : 0;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <KpiCard
-          title="Vendido bruto (Brendi online)"
+          title="Total Bruto (Brendi online)"
           value={fmt(totals.exp)}
           hint={`${totals.pedidosMes} pedidos no mês · ${brendiOrdersCount} importados (3 meses)`}
         />
         <KpiCard
-          title="Taxa declarada Brendi"
-          value={`${totals.taxaDeclPct.toFixed(2).replace('.', ',')}%`}
-          hint={`${fmt(totals.taxaDecl)} (Pix 0,5% + R$0,40 · Cr.Online 5,69%)`}
+          title="Total Líquido (recebido BB)"
+          value={fmt(totals.rec)}
+          hint={`${daily.length} dias úteis com depósito`}
         />
         <KpiCard
-          title="Esperado líquido"
-          value={fmt(totals.expLiq)}
-          hint={`Recebido BB: ${fmt(totals.rec)} (${daily.length} dias úteis)`}
-        />
-        <KpiCard
-          title="Custo oculto"
-          value={fmt(Math.abs(totals.custoOculto))}
-          hint={`${totals.custoOculto > 0 ? 'Faltou' : 'Sobrou'} vs esperado · Mensalidade: ${fmt(totals.mensalidadeAmount)} (${totals.mensalidadeCount}x)`}
-          className={Math.abs(totals.custoOculto) > 100 ? 'text-rose-700 dark:text-rose-400' : 'text-foreground'}
+          title="Custo Total"
+          value={`${fmt(custoTotal)} (${custoPct.toFixed(2).replace('.', ',')}%)`}
+          hint={`Taxa declarada: ${fmt(totals.taxaDecl)} · Mensalidade/diferenças: ${fmt(Math.abs(totals.custoOculto))}`}
+          className={custoTotal > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-foreground'}
         />
       </div>
 
