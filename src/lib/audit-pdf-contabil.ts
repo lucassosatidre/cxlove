@@ -442,7 +442,7 @@ function detalhamentoPages(doc: jsPDF, data: ContabilPdfData) {
     if (cat === 'brendi') return false;
     const d = detalhe.find(x => x.categoria === cat);
     if (!d) return false;
-    return d.dias.some(r => r.qtd > 0 || r.bruto > 0);
+    return d.dias.some(r => r.qtd > 0 || r.vendido > 0);
   });
 
   // Render in pairs (landscape, two side-by-side)
