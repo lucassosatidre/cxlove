@@ -216,21 +216,32 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
       continue;
     }
     const isParcial = items.length > 0 && items.length > compCount;
+    const lotSubtotalDeclarado = Number(lot.subtotal_vendas ?? 0);
+    const lotDescDeclarado = Math.abs(Number(lot.total_descontos ?? 0));
+    const lotLiquidoDeclarado = Number(lot.valor_liquido ?? 0);
     let vendidoLote = compValor;     // default: soma items no mês
     let custoLote = 0;
     let recebidoLote = 0;
-    if (!isParcial) {
-      // Lote 100% no mês (ou sem items mas com data_corte no mês): usa os
-      // valores DECLARADOS pelo lote (subtotal, descontos, líquido). Garante
-      // que vendido = recebido + custo mesmo quando o parser perdeu items
-      // individuais (já vi caso fev/26 lote VR 695835653 com subtotal 262,40
-      // mas só 1 item parseado de 141,40).
-      vendidoLote = Number(lot.subtotal_vendas ?? compValor);
-      custoLote = Math.abs(Number(lot.total_descontos ?? 0));
-      recebidoLote = Number(lot.valor_liquido ?? 0);
-      // Sem items vinculados: estima qtd como 1 (o lote inteiro conta como
-      // um agregado) pra não zerar a contagem do mês.
-      if (items.length === 0) compCount = 1;
+    if (items.length === 0) {
+      // Sem items vinculados (ex: user só uploadou reembolsos.xls): usa os
+      // declarados do lote inteiro. Estima qtd como 1 pra não zerar.
+      vendidoLote = lotSubtotalDeclarado;
+      custoLote = lotDescDeclarado;
+      recebidoLote = lotLiquidoDeclarado;
+      compCount = 1;
+    } else if (!isParcial) {
+      // Lote 100% no mês: usa items_sum como vendido (bate com Maquinona/POS).
+      // Custo e líquido proporcionalizam pelo gap entre items_sum e subtotal
+      // declarado. Caso real fev/26: lote 695394978 declara R$ 552,58 mas
+      // só 1 item de R$ 95,81 está em fev (resto = vendas de jan que estão
+      // no mesmo ciclo de reembolso). Sem proporção, vendido inflava em
+      // R$ 676,77 vs Maquinona.
+      vendidoLote = compValor;
+      const proporcao = lotSubtotalDeclarado > 0
+        ? compValor / lotSubtotalDeclarado
+        : 1;
+      custoLote = lotDescDeclarado * proporcao;
+      recebidoLote = lotLiquidoDeclarado * proporcao;
     } else {
       const ovr = overrideByLot.get(lot.id);
       if (!ovr) continue;

@@ -369,14 +369,17 @@ export default function AuditVouchers() {
       const isParcial = items.length > comp.count;
 
       if (!isParcial) {
-        // 100% no mês — usa valores DECLARADOS do lote pra subtotal,
-        // descontos e líquido (mesmo escopo). Sem isso, subtotal saía da
-        // soma de items (pode divergir do declarado quando o parser perde
-        // venda — caso real fev/26 VR: itens somam 2.148,91 mas subtotais
-        // declarados somam 2.825,68) e líquido > vendido.
-        subtotal += lotSubtotal;
-        descontos += totalDesc;
-        liquido += lotLiquido;
+        // 100% no mês: vendido = soma items no mês (bate com Maquinona/POS).
+        // Custo/líquido proporcionais pelo gap entre items_sum e subtotal
+        // declarado — porque o lote pode incluir vendas de mês anterior que
+        // o usuário não importou (caso real fev/26 VR: lote 695394978 declara
+        // R$ 552,58 mas só R$ 95,81 caiu em fev — o resto é jan que ficou
+        // fora do upload). Sem proporção, inflava o vendido VR em R$ 676,77
+        // vs Maquinona.
+        subtotal += comp.valor;
+        const proporcao = lotSubtotal > 0 ? comp.valor / lotSubtotal : 1;
+        descontos += totalDesc * proporcao;
+        liquido += lotLiquido * proporcao;
       } else {
         countParcial++;
         subtotal += comp.valor; // parcial: só a porção do mês
@@ -1676,13 +1679,20 @@ function OverviewGrid({
         const lotDesc = (lotSubtotal > 0 && lotLiquido > 0 && lotSubtotal >= lotLiquido)
           ? lotSubtotal - lotLiquido
           : Number(l.total_descontos);
-        if (!isParcial) {
-          // 100% no mês: subtotal/descontos/líquido todos do lote declarado
-          // pra fechar matematicamente. comp.valor (soma items) pode divergir
-          // do declarado quando o parser perde vendas.
+        if (items.length === 0) {
+          // Sem items: usa declarado inteiro (fallback pra lote sem vendas
+          // vinculadas mas com data_corte no mês).
           subtotal += lotSubtotal;
           descontos += lotDesc;
           liquido += Number(l.valor_liquido);
+        } else if (!isParcial) {
+          // 100% no mês: vendido = items reais (bate com POS), custo e
+          // líquido proporcionalizam quando há gap (ver comentário em
+          // operadoraStats acima).
+          subtotal += compValor;
+          const proporcao = lotSubtotal > 0 ? compValor / lotSubtotal : 1;
+          descontos += lotDesc * proporcao;
+          liquido += Number(l.valor_liquido) * proporcao;
         } else {
           subtotal += compValor;
           const ovr = overrideByLot.get(l.id);
