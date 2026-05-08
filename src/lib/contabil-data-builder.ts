@@ -63,7 +63,7 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   const voucherLots: any[] = await fetchAllPaginated<any>(
     supabase
       .from('audit_voucher_lots')
-      .select('id, operadora, total_descontos, valor_liquido, subtotal_vendas')
+      .select('id, operadora, total_descontos, valor_liquido, subtotal_vendas, data_corte')
       .eq('audit_period_id', periodId),
   );
   const voucherLotIds = (voucherLots ?? []).map((l: any) => l.id);
