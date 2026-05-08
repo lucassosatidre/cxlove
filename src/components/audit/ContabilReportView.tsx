@@ -305,6 +305,11 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
   if (!data.ifood) return null;
   const i = data.ifood;
 
+  const somaTaxasBrutas = Math.abs(i.comissao) + Math.abs(i.taxa_transacao)
+    + Math.abs(i.taxa_antecipacao) + Math.abs(i.taxa_conveniencia)
+    + Math.abs(i.mensalidade) + Math.abs(i.frete) + Math.abs(i.taxa_entrega_ret)
+    + Math.abs(i.taxa_servico_sob_demanda) + Math.abs(i.ads);
+  const ajustesPositivos = Math.max(0, somaTaxasBrutas - i.custo_total);
   const breakdown: (string | number)[][] = [
     ['Comissão iFood', fmtNum(Math.abs(i.comissao))],
     ['Taxa de transação', fmtNum(Math.abs(i.taxa_transacao))],
@@ -315,8 +320,14 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
     ['Taxa entrega retenção', fmtNum(Math.abs(i.taxa_entrega_ret))],
     ['Taxa serviço Sob Demanda Off', fmtNum(Math.abs(i.taxa_servico_sob_demanda))],
     ['ADS (anúncios)', fmtNum(Math.abs(i.ads))],
-    ['TOTAL', fmtNum(i.custo_total)],
   ];
+  if (ajustesPositivos > 0.01) {
+    breakdown.push([
+      '(−) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',
+      `−${fmtNum(ajustesPositivos)}`,
+    ]);
+  }
+  breakdown.push(['TOTAL', fmtNum(i.custo_total)]);
   const informativo: [string, string][] = [
     ['Cancelamentos (total)', fmtNum(Math.abs(i.cancel_total))],
     ['Cancelamentos (parcial)', fmtNum(Math.abs(i.cancel_parcial))],

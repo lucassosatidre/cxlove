@@ -619,6 +619,16 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
   // Breakdown
   y = subTitle(doc, 'Detalhamento de cobranças', y);
 
+  // Soma das taxas brutas declaradas pelo iFood
+  const somaTaxasBrutas = Math.abs(i.comissao) + Math.abs(i.taxa_transacao)
+    + Math.abs(i.taxa_antecipacao) + Math.abs(i.taxa_conveniencia)
+    + Math.abs(i.mensalidade) + Math.abs(i.frete) + Math.abs(i.taxa_entrega_ret)
+    + Math.abs(i.taxa_servico_sob_demanda) + Math.abs(i.ads);
+  // Ajustes positivos = soma das taxas brutas − custo real (vendido − líq efetivo).
+  // Reflete reembolsos/ressarc/promo iFood/cancelamentos que retornam pra loja
+  // depois das taxas brutas.
+  const ajustesPositivos = Math.max(0, somaTaxasBrutas - i.custo_total);
+
   const breakdown: any[] = [
     ['Comissão iFood', fmtNum(Math.abs(i.comissao))],
     ['Taxa de transação', fmtNum(Math.abs(i.taxa_transacao))],
@@ -629,8 +639,14 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
     ['Taxa entrega retenção', fmtNum(Math.abs(i.taxa_entrega_ret))],
     ['Taxa serviço Sob Demanda Off', fmtNum(Math.abs(i.taxa_servico_sob_demanda))],
     ['ADS (anúncios)', fmtNum(Math.abs(i.ads))],
-    ['TOTAL', fmtNum(i.custo_total)],
   ];
+  if (ajustesPositivos > 0.01) {
+    breakdown.push([
+      '(−) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',
+      `−${fmtNum(ajustesPositivos)}`,
+    ]);
+  }
+  breakdown.push(['TOTAL', fmtNum(i.custo_total)]);
 
   styledTable(doc, y, ['Tipo de cobrança', 'Valor (R$)'], breakdown, [130, 50]);
 

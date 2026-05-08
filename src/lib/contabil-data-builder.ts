@@ -239,13 +239,20 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     }
   }
 
+  // Força a equação contábil: custo = vendido - recebido. Garante que
+  // sum(vendido) = sum(recebido) + sum(custo) na tabela consolidada.
+  // Diferenças vs valor declarado (ex: portal VR declarou R$469 mas banco
+  // entregou R$121 a mais) viram parte do custo apurado real.
   const resumoPorCategoria: ContabilResumoRow[] = CATEGORIAS_ORDEM
     .filter(c => c !== 'brendi')
     .map(c => {
       const a = resumoMap.get(c);
+      const vendido = a?.vendido ?? 0;
+      const recebido = a?.recebido ?? 0;
       return {
         categoria: c, nome: CATEGORIA_LABELS[c],
-        qtd: a?.qtd ?? 0, vendido: a?.vendido ?? 0, recebido: a?.recebido ?? 0, custo: a?.custo ?? 0,
+        qtd: a?.qtd ?? 0, vendido, recebido,
+        custo: Math.max(0, vendido - recebido),
       };
     });
 
@@ -337,6 +344,11 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     (s, r) => s + Number(r.liquido_efetivo ?? r.conta_recebido ?? 0),
     0,
   );
+  // Custo real iFood = vendido (online) - liquido efetivo (após antecipação).
+  // Garante que tabela consolidada feche matematicamente. Esse valor reflete
+  // o que efetivamente saiu da loja: taxas brutas (custoTotal) menos ajustes
+  // positivos (reembolsos/ressarc/promo iFood) mais taxa antecipação.
+  const custoRealIfood = Math.max(0, brutoVenda - liquidoEfetivoTotal);
   const ifoodData = ifoodRows.length > 0 ? {
     vendido_bruto: brutoVenda,
     vendido_online: brutoVenda,
@@ -346,11 +358,10 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     liquido_efetivo: liquidoEfetivoTotal,
     repasses_count: ifoodRows.length,
     pedidos_count: ifoodOrdersCount ?? 0,
-    custo_total: custoTotal,
-    // Taxa efetiva = custo total / faturamento total iFood (online + direto loja).
-    // Refletir o universo iFood completo, não só o que passou pela plataforma.
+    custo_total: custoRealIfood,
+    // Taxa efetiva = custo real / faturamento total iFood (online + direto loja).
     taxa_efetiva_pct: (brutoVenda + pgtoDireto) > 0
-      ? (custoTotal / (brutoVenda + pgtoDireto)) * 100
+      ? (custoRealIfood / (brutoVenda + pgtoDireto)) * 100
       : 0,
     comissao,
     taxa_transacao: taxaTrans,
