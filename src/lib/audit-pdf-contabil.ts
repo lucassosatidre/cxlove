@@ -208,7 +208,7 @@ function subTitle(doc: jsPDF, label: string, y: number) {
   return y + 5;
 }
 
-// KPI box elegante
+// KPI box elegante. Auto-ajusta fontSize do valor pra caber na largura.
 function kpiBox(
   doc: jsPDF,
   x: number, y: number, w: number, h: number,
@@ -230,13 +230,18 @@ function kpiBox(
   doc.setTextColor(...INK_MUTED);
   doc.text(eyebrow.toUpperCase(), x + 4, y + 5);
 
-  // Valor principal — grande e bold
+  // Valor principal — auto-ajusta fontSize (14 → 11) pra caber em w-8
   doc.setFont(FONT, 'bold');
-  doc.setFontSize(14);
   doc.setTextColor(...INK);
+  let valueFontSize = 14;
+  doc.setFontSize(valueFontSize);
+  while (doc.getTextWidth(value) > w - 8 && valueFontSize > 9) {
+    valueFontSize -= 0.5;
+    doc.setFontSize(valueFontSize);
+  }
   doc.text(value, x + 4, y + 13);
 
-  // Hint
+  // Hint (opcional)
   if (hint) {
     doc.setFont(FONT, 'normal');
     doc.setFontSize(7.5);
@@ -455,18 +460,7 @@ function pageResumoConsolidado(doc: jsPDF, data: ContabilPdfData) {
     fmtPct(totPct),
   ]);
 
-  styledTable(doc, y, ['Categoria', 'Qtd', 'Vendido', 'Recebido', 'Custo', '% s/vendido'], rows, [50, 22, 32, 32, 28, 22]);
-
-  // Nota de rodapé da seção
-  const notaY = (doc as any).lastAutoTable.finalY + 8;
-  doc.setFont(FONT, 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...INK_MUTED);
-  doc.text(
-    'Vendido = bruto na competência (mês). Recebido = efetivamente creditado em conta. '
-    + 'Custo = total de cobranças por adquirente/operadora.',
-    PAGE_MARGIN, notaY,
-  );
+  styledTable(doc, y, ['Categoria', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [50, 22, 32, 32, 28, 22]);
 }
 
 // ═══ Página 3: Maquinona iFood ═════════════════════════════════════════════
@@ -474,13 +468,6 @@ function pageMaquinona(doc: jsPDF, data: ContabilPdfData) {
   doc.addPage();
   pageHeader(doc, 'Maquinona iFood', 3);
   let y = sectionTitle(doc, 'Seção 2', 'Maquinona iFood', 22);
-
-  // Subtítulo descritivo
-  doc.setFont(FONT, 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...INK_SECONDARY);
-  doc.text('Vendas físicas (Crédito · Débito · Pix) processadas pela Maquinona iFood, com depósito na Cresol.', PAGE_MARGIN, y);
-  y += 8;
 
   // Calcular totais Maquinona
   const cats = ['credito', 'debito', 'pix'] as ContabilCategoria[];
@@ -519,20 +506,7 @@ function pageMaquinona(doc: jsPDF, data: ContabilPdfData) {
   }
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
 
-  styledTable(doc, y, ['Meio de pagamento', 'Qtd', 'Vendido', 'Recebido', 'Custo', '% s/vendido'], rows, [50, 22, 32, 32, 28, 22]);
-
-  // Nota
-  const notaY = (doc as any).lastAutoTable.finalY + 8;
-  doc.setFont(FONT, 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...INK_MUTED);
-  const nota = doc.splitTextToSize(
-    'Custo = vendido (bruto) − recebido (creditado em conta). Engloba taxa de transação, '
-    + 'taxa de antecipação automática, promoções absorvidas pela loja e custos de conciliação não detalhados '
-    + 'pela Maquinona (alocados ao Pix por convenção, equivalente à diferença real Maquinona × Cresol).',
-    pageW - PAGE_MARGIN * 2,
-  );
-  doc.text(nota, PAGE_MARGIN, notaY);
+  styledTable(doc, y, ['Meio de pagamento', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [50, 22, 32, 32, 28, 22]);
 }
 
 // ═══ Página 4: Vouchers ════════════════════════════════════════════════════
@@ -583,17 +557,7 @@ function pageVouchers(doc: jsPDF, data: ContabilPdfData) {
   }
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
 
-  styledTable(doc, y, ['Operadora', 'Qtd Vendas', 'Vendido', 'Recebido', 'Custo', '% s/vendido'], rows, [50, 28, 32, 32, 28, 22]);
-
-  const notaY = (doc as any).lastAutoTable.finalY + 8;
-  doc.setFont(FONT, 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...INK_MUTED);
-  doc.text(
-    'Vendas filtradas pelo mês de competência (data da transação). Lotes parciais '
-    + '(vendas de mais de um mês) usam override manual quando aplicável.',
-    PAGE_MARGIN, notaY,
-  );
+  styledTable(doc, y, ['Operadora', 'Qtd Vendas', 'Vendido', 'Recebido', 'Custo', '%'], rows, [50, 28, 32, 32, 28, 22]);
 }
 
 // ═══ Página 5: Brendi ══════════════════════════════════════════════════════
@@ -604,12 +568,6 @@ function pageBrendi(doc: jsPDF, data: ContabilPdfData) {
   pageHeader(doc, 'Brendi', 5);
   let y = sectionTitle(doc, 'Seção 4', 'Brendi', 22);
 
-  doc.setFont(FONT, 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...INK_SECONDARY);
-  doc.text('Marketplace de pedidos online com depósito direto via PIX no Banco do Brasil.', PAGE_MARGIN, y);
-  y += 8;
-
   const pctTotal = b.vendido_bruto > 0 ? (b.custo_total / b.vendido_bruto) * 100 : 0;
 
   // KPIs
@@ -617,34 +575,23 @@ function pageBrendi(doc: jsPDF, data: ContabilPdfData) {
   const kpiW = (pageW - PAGE_MARGIN * 2 - 8) / 3;
   kpiBox(doc, PAGE_MARGIN, y, kpiW, 24, 'Total bruto', fmtBRL(b.vendido_bruto), `${fmtInt(b.pedidos_count_mes)} pedidos no mês`);
   kpiBox(doc, PAGE_MARGIN + kpiW + 4, y, kpiW, 24, 'Total líquido', fmtBRL(b.recebido_bb), `${fmtInt(b.dias_uteis)} dias úteis com depósito`, POSITIVE);
-  kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(b.custo_total)}  ·  ${fmtPct(pctTotal)}`, 'Taxas transacionais + mensalidade', NEGATIVE);
+  kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(b.custo_total)}  ·  ${fmtPct(pctTotal)}`, '', NEGATIVE);
   y += 32;
 
   // Breakdown
   y = subTitle(doc, 'Detalhamento de cobranças', y);
 
   const rows: any[] = [
-    ['Taxas transacionais', 'Pix 0,5% + R$ 0,40 · Crédito Online 5,69%', fmtNum(b.taxa_declarada)],
-    ['Mensalidade', 'Diferença esperado vs recebido', fmtNum(b.custo_oculto)],
-    ['TOTAL', '', fmtNum(b.custo_total)],
+    ['Taxas transacionais', fmtNum(b.taxa_declarada)],
+    ['Mensalidade', fmtNum(b.custo_oculto)],
+    ['TOTAL', fmtNum(b.custo_total)],
   ];
 
   styledTable(
     doc, y,
-    ['Tipo de cobrança', 'Descrição', 'Valor (R$)'],
+    ['Tipo de cobrança', 'Valor (R$)'],
     rows,
-    [55, 90, 35],
-  );
-
-  const notaY = (doc as any).lastAutoTable.finalY + 8;
-  doc.setFont(FONT, 'italic');
-  doc.setFontSize(7.5);
-  doc.setTextColor(...INK_MUTED);
-  doc.text(
-    `Importados nos últimos 3 meses: ${fmtInt(b.pedidos_importados_3meses)} pedidos · `
-    + 'Taxas transacionais = soma das taxas declaradas pela Brendi por venda. '
-    + 'Mensalidade = diferença entre o esperado (bruto − taxa declarada) e o efetivamente recebido no banco.',
-    PAGE_MARGIN, notaY,
+    [130, 50],
   );
 }
 
@@ -655,12 +602,6 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
   doc.addPage();
   pageHeader(doc, 'iFood Marketplace', 6);
   let y = sectionTitle(doc, 'Seção 5', 'iFood Marketplace', 22);
-
-  doc.setFont(FONT, 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...INK_SECONDARY);
-  doc.text('Vendas online via iFood com repasses semanais (PIX único somando lojas) na conta iFood Pago.', PAGE_MARGIN, y);
-  y += 8;
 
   // KPIs
   const pageW = doc.internal.pageSize.getWidth();
@@ -744,7 +685,6 @@ function styledTable(
       cellPadding: { top: 2, right: 3, bottom: 3, left: 3 },
       lineWidth: { bottom: 0.4 },
       lineColor: RULE_DARK,
-      halign: 'left',
     },
     columnStyles: Object.fromEntries(widths.map((w, i) => [
       i,
@@ -755,6 +695,11 @@ function styledTable(
       },
     ])),
     didParseCell: (h) => {
+      // Header: alinhamento igual da coluna (left col 0, right resto)
+      if (h.section === 'head') {
+        h.cell.styles.halign = h.column.index === 0 ? 'left' : 'right';
+        return;
+      }
       // Linha TOTAL com fundo cinza e bordas top/bottom
       if (h.section === 'body' && h.row.index === rows.length - 1) {
         h.cell.styles.fillColor = TOTAL_BG;
@@ -766,13 +711,10 @@ function styledTable(
         if (h.row.index % 2 === 1) {
           h.cell.styles.fillColor = SUBTLE_BG;
         }
-        // Linha fina embaixo de cada row pra divisão visual
         h.cell.styles.lineWidth = { bottom: 0.1 };
         h.cell.styles.lineColor = RULE;
       }
     },
-    // Forçar todas as colunas pra direita exceto a primeira (texto)
-    headStylesAdvanced: {} as any,
   });
 }
 
