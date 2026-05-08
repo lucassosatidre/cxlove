@@ -368,14 +368,18 @@ export default function AuditVouchers() {
       const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
       const isParcial = items.length > comp.count;
 
-      subtotal += comp.valor;
-
       if (!isParcial) {
-        // 100% no mês — usa valores totais do lote
+        // 100% no mês — usa valores DECLARADOS do lote pra subtotal,
+        // descontos e líquido (mesmo escopo). Sem isso, subtotal saía da
+        // soma de items (pode divergir do declarado quando o parser perde
+        // venda — caso real fev/26 VR: itens somam 2.148,91 mas subtotais
+        // declarados somam 2.825,68) e líquido > vendido.
+        subtotal += lotSubtotal;
         descontos += totalDesc;
         liquido += lotLiquido;
       } else {
         countParcial++;
+        subtotal += comp.valor; // parcial: só a porção do mês
         const ovr = overrideByLot.get(l.id);
         if (ovr) {
           descontos += Number(ovr.taxa_competencia);
@@ -1652,12 +1656,18 @@ function OverviewGrid({
       for (const l of opLots) {
         const items = allItemsByLot[l.id] ?? [];
         const itemsComp = items.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
-        if (itemsComp.length === 0) continue;
+        // Fallback pra lote sem items mas com data_corte no mês (caso fev/26
+        // VR: user só uploadou reembolsos, sem vendas — lotes ficam sem items
+        // mas têm subtotal declarado).
+        const corteNoMes = l.data_corte != null
+          && l.data_corte >= competenciaIni
+          && l.data_corte < competenciaFim;
+        const hasComp = itemsComp.length > 0 || (items.length === 0 && corteNoMes);
+        if (!hasComp) continue;
         count++;
         salesCount += itemsComp.length;
         const compValor = itemsComp.reduce((s, it) => s + Number(it.valor), 0);
-        subtotal += compValor;
-        const isParcial = items.length > itemsComp.length;
+        const isParcial = items.length > 0 && items.length > itemsComp.length;
         const lotSubtotal = Number(l.subtotal_vendas) > 0 ? Number(l.subtotal_vendas) : items.reduce((s, it) => s + Number(it.valor), 0);
         // Sempre deriva via identidade liquido = subtotal - descontos (mesma
         // razão do computedLot — DB pode ter total_descontos errado herdado
@@ -1667,9 +1677,14 @@ function OverviewGrid({
           ? lotSubtotal - lotLiquido
           : Number(l.total_descontos);
         if (!isParcial) {
+          // 100% no mês: subtotal/descontos/líquido todos do lote declarado
+          // pra fechar matematicamente. comp.valor (soma items) pode divergir
+          // do declarado quando o parser perde vendas.
+          subtotal += lotSubtotal;
           descontos += lotDesc;
           liquido += Number(l.valor_liquido);
         } else {
+          subtotal += compValor;
           const ovr = overrideByLot.get(l.id);
           if (ovr) {
             descontos += Number(ovr.taxa_competencia);
