@@ -9,10 +9,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
-import { Loader2, FileText, Download, Lock, LockOpen } from 'lucide-react';
+import { Loader2, FileText, Download, Lock, LockOpen, ChevronDown, ChevronRight } from 'lucide-react';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
-import { generateContabilReport } from '@/lib/contabil-data-builder';
+import { buildContabilData, generateContabilReport } from '@/lib/contabil-data-builder';
+import { ContabilReportView } from '@/components/audit/ContabilReportView';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import type { ContabilPdfData } from '@/lib/audit-pdf-contabil';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
@@ -34,6 +37,13 @@ export default function AuditRelatorios() {
   const [generating, setGenerating] = useState<'resumido' | 'detalhado' | null>(null);
   const [closeOpen, setCloseOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+
+  const [resumidoData, setResumidoData] = useState<ContabilPdfData | null>(null);
+  const [detalhadoData, setDetalhadoData] = useState<ContabilPdfData | null>(null);
+  const [loadingData, setLoadingData] = useState(false);
+
+  const [expandedResumido, setExpandedResumido] = useState(false);
+  const [expandedDetalhado, setExpandedDetalhado] = useState(false);
 
   const reloadPeriod = async () => {
     if (!period) return;
@@ -95,10 +105,43 @@ export default function AuditRelatorios() {
         .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
       if (!active) return;
       setPeriod((data as AuditPeriod) ?? null);
+      setResumidoData(null);
+      setDetalhadoData(null);
       setLoading(false);
     })();
     return () => { active = false; };
   }, [isAdmin, month, year]);
+
+  // Carrega ambos os dados (resumido + detalhado) quando o período tem
+  // status que permite gerar relatório. Carrega só uma vez por mudança
+  // de período pra evitar requests duplicados.
+  useEffect(() => {
+    if (!period || period.status === 'aberto') return;
+    let active = true;
+    (async () => {
+      setLoadingData(true);
+      try {
+        const [resData, detData] = await Promise.all([
+          buildContabilData({
+            periodId: period.id, month, year,
+            emittedBy: user?.email ?? 'Admin', mode: 'resumido',
+          }),
+          buildContabilData({
+            periodId: period.id, month, year,
+            emittedBy: user?.email ?? 'Admin', mode: 'detalhado',
+          }),
+        ]);
+        if (!active) return;
+        setResumidoData(resData);
+        setDetalhadoData(detData);
+      } catch (e: any) {
+        if (active) toast.error('Erro ao carregar dados do relatório', { description: e?.message });
+      } finally {
+        if (active) setLoadingData(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [period, month, year, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGenerate = async (mode: 'resumido' | 'detalhado') => {
     if (!period) {
@@ -193,59 +236,99 @@ export default function AuditRelatorios() {
           </CardContent>
         </Card>
 
-        {/* Cards de relatório */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">Controle de Taxas — Resumido</CardTitle>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Capa + 5 páginas (Resumo Consolidado, Maquinona, Vouchers, Brendi, iFood Marketplace).
-                Cada categoria com 3 KPIs principais e tabela de detalhamento por adquirente/operadora.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={() => handleGenerate('resumido')}
-                disabled={!canGenerate || generating !== null}
-                className="gap-2"
-              >
-                {generating === 'resumido'
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Download className="h-4 w-4" />}
-                {generating === 'resumido' ? 'Gerando...' : 'Gerar PDF Resumido'}
-              </Button>
-            </CardContent>
-          </Card>
+        {/* Relatórios — collapsibles com visualização inline */}
+        {canGenerate && (
+          <>
+            {loadingData && (
+              <Card>
+                <CardContent className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando dados do período…
+                </CardContent>
+              </Card>
+            )}
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                <CardTitle className="text-base">Controle de Taxas — Detalhado</CardTitle>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Mesmo conteúdo do resumido + páginas extras com breakdown diário por categoria
-                (Crédito/Débito/Pix/Vouchers, dia a dia do mês). Útil pra arquivamento contábil.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={() => handleGenerate('detalhado')}
-                disabled={!canGenerate || generating !== null}
-                variant="outline"
-                className="gap-2"
-              >
-                {generating === 'detalhado'
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Download className="h-4 w-4" />}
-                {generating === 'detalhado' ? 'Gerando...' : 'Gerar PDF Detalhado'}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+            {/* Resumido */}
+            <Collapsible open={expandedResumido} onOpenChange={setExpandedResumido}>
+              <Card>
+                <CardHeader className="py-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <CollapsibleTrigger className="flex items-center gap-2 text-left flex-1 min-w-0">
+                      {expandedResumido
+                        ? <ChevronDown className="h-4 w-4 shrink-0" />
+                        : <ChevronRight className="h-4 w-4 shrink-0" />}
+                      <FileText className="h-5 w-5 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <CardTitle className="text-base">Controle de Taxas — Resumido</CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Capa + 5 seções (Resumo, Maquinona, Vouchers, Brendi, iFood Marketplace)
+                        </p>
+                      </div>
+                    </CollapsibleTrigger>
+                    <Button
+                      onClick={() => handleGenerate('resumido')}
+                      disabled={generating !== null}
+                      size="sm"
+                      className="gap-2"
+                    >
+                      {generating === 'resumido'
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Download className="h-4 w-4" />}
+                      {generating === 'resumido' ? 'Gerando...' : 'Baixar PDF'}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="pt-0">
+                    {resumidoData
+                      ? <ContabilReportView data={resumidoData} mode="resumido" />
+                      : <p className="text-sm text-muted-foreground">Aguardando carregamento…</p>}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+
+            {/* Detalhado */}
+            <Collapsible open={expandedDetalhado} onOpenChange={setExpandedDetalhado}>
+              <Card>
+                <CardHeader className="py-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <CollapsibleTrigger className="flex items-center gap-2 text-left flex-1 min-w-0">
+                      {expandedDetalhado
+                        ? <ChevronDown className="h-4 w-4 shrink-0" />
+                        : <ChevronRight className="h-4 w-4 shrink-0" />}
+                      <FileText className="h-5 w-5 text-primary shrink-0" />
+                      <div className="min-w-0">
+                        <CardTitle className="text-base">Controle de Taxas — Detalhado</CardTitle>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Resumido + breakdown diário por categoria (Crédito/Débito/Pix/Vouchers)
+                        </p>
+                      </div>
+                    </CollapsibleTrigger>
+                    <Button
+                      onClick={() => handleGenerate('detalhado')}
+                      disabled={generating !== null}
+                      size="sm"
+                      variant="outline"
+                      className="gap-2"
+                    >
+                      {generating === 'detalhado'
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Download className="h-4 w-4" />}
+                      {generating === 'detalhado' ? 'Gerando...' : 'Baixar PDF'}
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="pt-0">
+                    {detalhadoData
+                      ? <ContabilReportView data={detalhadoData} mode="detalhado" />
+                      : <p className="text-sm text-muted-foreground">Aguardando carregamento…</p>}
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
+          </>
+        )}
 
         {!canGenerate && period && (
           <Card className="border-amber-500/30 bg-amber-500/5">

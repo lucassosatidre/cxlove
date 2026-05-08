@@ -11,6 +11,7 @@ import {
   type ContabilCategoria,
   type ContabilResumoRow,
   type ContabilDetalhamento,
+  type ContabilPdfData,
 } from '@/lib/audit-pdf-contabil';
 import { periodFileTag, periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
 
@@ -23,12 +24,10 @@ export type GenerateContabilParams = {
 };
 
 /**
- * Busca dados do período no Supabase, agrega por categoria conforme a regra
- * de cada adquirente/operadora e dispara o download do PDF contábil.
- *
- * Lança erro se houver falha na query — chamador deve tratar.
+ * Constrói os dados consolidados do relatório contábil sem gerar PDF.
+ * Usado tanto pra exportar PDF quanto pra renderizar inline na tela.
  */
-export async function generateContabilReport(params: GenerateContabilParams): Promise<void> {
+export async function buildContabilData(params: GenerateContabilParams): Promise<ContabilPdfData> {
   const { periodId, month, year, emittedBy, mode } = params;
 
   // ─── Maquinona — audit_card_transactions ─────────────────────────────────
@@ -371,7 +370,7 @@ export async function generateContabilReport(params: GenerateContabilParams): Pr
     taxa_servico_cliente: Math.abs(sumI('taxa_servico_cliente')),
   } : undefined;
 
-  generateContabilPdf(mode, {
+  return {
     periodLabel: makePeriodLabel(month, year),
     periodFileTag: periodFileTag(month, year),
     monthDays,
@@ -380,5 +379,13 @@ export async function generateContabilReport(params: GenerateContabilParams): Pr
     detalhamentoDiario,
     brendi: brendiData,
     ifood: ifoodData,
-  });
+  };
+}
+
+/**
+ * Carrega os dados e dispara o download do PDF contábil.
+ */
+export async function generateContabilReport(params: GenerateContabilParams): Promise<void> {
+  const data = await buildContabilData(params);
+  generateContabilPdf(params.mode, data);
 }

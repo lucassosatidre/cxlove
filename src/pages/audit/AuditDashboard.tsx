@@ -415,24 +415,27 @@ export default function AuditDashboard() {
 
         {/* Selector */}
         <Card>
-          <CardContent className="flex flex-wrap items-center gap-3 py-4">
+          <CardContent className="py-4 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Mês</span>
               <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-                <SelectTrigger className="w-[160px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {MONTHS.map((m, i) => (<SelectItem key={i} value={String(i + 1)}>{m}</SelectItem>))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Ano</span>
               <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-                <SelectTrigger className="w-[110px]"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-[100px] h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {years.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-
             {period ? (
-              <Badge variant="secondary" className="ml-auto">
+              <Badge variant="secondary">
                 Período {MONTHS[month - 1]} {year} — {period.status}
               </Badge>
             ) : (
