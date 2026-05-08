@@ -444,14 +444,15 @@ function pageResumoConsolidado(doc: jsPDF, data: ContabilPdfData) {
   }
   if (data.ifood) {
     const i = data.ifood;
-    const pct = i.vendido_bruto > 0 ? (i.custo_total / i.vendido_bruto) * 100 : 0;
+    // Taxa iFood = custo / faturamento total iFood (online + direto loja).
+    // Já calculado em contabil-data-builder, reflete o universo iFood completo.
     rows.push([
       'iFood Marketplace',
       fmtInt(i.pedidos_count),
       fmtNum(i.vendido_bruto),
       fmtNum(i.liquido_efetivo),
       fmtNum(i.custo_total),
-      fmtPct(pct),
+      fmtPct(i.taxa_efetiva_pct),
     ]);
   }
   rows.push([

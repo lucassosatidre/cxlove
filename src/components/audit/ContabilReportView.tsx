@@ -147,8 +147,8 @@ function PageResumo({ data }: { data: ContabilPdfData }) {
   }
   if (data.ifood) {
     const i = data.ifood;
-    const pct = i.vendido_bruto > 0 ? (i.custo_total / i.vendido_bruto) * 100 : 0;
-    rows.push(['iFood Marketplace', fmtInt(i.pedidos_count), fmtNum(i.vendido_bruto), fmtNum(i.liquido_efetivo), fmtNum(i.custo_total), fmtPct(pct)]);
+    // Taxa iFood = custo / faturamento total iFood (online + direto loja).
+    rows.push(['iFood Marketplace', fmtInt(i.pedidos_count), fmtNum(i.vendido_bruto), fmtNum(i.liquido_efetivo), fmtNum(i.custo_total), fmtPct(i.taxa_efetiva_pct)]);
   }
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
 
