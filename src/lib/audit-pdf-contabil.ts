@@ -1,22 +1,23 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-// ═══ Paleta corporativa ════════════════════════════════════════════════════
-const PRIMARY: [number, number, number] = [234, 88, 12];           // laranja queimado (mais corporativo que F97316)
-const PRIMARY_DARK: [number, number, number] = [194, 65, 12];      // laranja escuro pra acentos
-const INK: [number, number, number] = [17, 24, 39];                // cinza-azulado quase preto (texto principal)
-const INK_SECONDARY: [number, number, number] = [75, 85, 99];      // cinza médio (subtítulos)
-const INK_MUTED: [number, number, number] = [156, 163, 175];       // cinza claro (legendas, hint)
-const RULE: [number, number, number] = [229, 231, 235];            // linha divisória sutil
-const RULE_DARK: [number, number, number] = [55, 65, 81];          // linha divisória forte
-const SUBTLE_BG: [number, number, number] = [249, 250, 251];       // fundo sutil pra zebra
-const TOTAL_BG: [number, number, number] = [243, 244, 246];        // fundo da linha TOTAL
-const POSITIVE: [number, number, number] = [5, 150, 105];          // verde
-const NEGATIVE: [number, number, number] = [220, 38, 38];          // vermelho
+// ═══ Paleta corporativa (refinada) ═════════════════════════════════════════
+const PRIMARY: [number, number, number] = [180, 83, 9];            // laranja terracota (mais sóbrio, menos saturado)
+const PRIMARY_DARK: [number, number, number] = [124, 45, 18];      // laranja-marrom escuro pra acentos profundos
+const INK: [number, number, number] = [15, 23, 42];                // slate-900 (texto principal — quase preto, levemente azulado)
+const INK_SECONDARY: [number, number, number] = [51, 65, 85];      // slate-700 (subtítulos)
+const INK_MUTED: [number, number, number] = [148, 163, 184];       // slate-400 (legendas, hint)
+const RULE: [number, number, number] = [226, 232, 240];            // slate-200 (linha divisória sutil)
+const RULE_DARK: [number, number, number] = [51, 65, 85];          // slate-700 (divisória de header)
+const SUBTLE_BG: [number, number, number] = [248, 250, 252];       // slate-50 (zebra)
+const TOTAL_BG: [number, number, number] = [241, 245, 249];        // slate-100 (linha TOTAL)
+const POSITIVE: [number, number, number] = [4, 120, 87];           // emerald-700 (verde mais sóbrio)
+const NEGATIVE: [number, number, number] = [185, 28, 28];          // red-700 (vermelho mais sóbrio)
 const WHITE: [number, number, number] = [255, 255, 255];
 
-// Tipografia
+// Tipografia: títulos em serifa (clássico contábil), body em sans-serif.
 const FONT = 'helvetica';
+const FONT_SERIF = 'times';
 
 export type ContabilCategoria =
   | 'credito' | 'debito' | 'pix' | 'brendi'
@@ -172,17 +173,17 @@ function pageFooter(doc: jsPDF, totalPages: number) {
   }
 }
 
-// Título de seção: linha laranja + título grande
+// Título de seção: linha laranja + título grande em serifa
 function sectionTitle(doc: jsPDF, eyebrow: string, title: string, y: number) {
-  // Eyebrow (pequeno texto laranja acima)
+  // Eyebrow (pequeno texto laranja acima, em sans-serif uppercase)
   doc.setFont(FONT, 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...PRIMARY);
   doc.text(eyebrow.toUpperCase(), PAGE_MARGIN, y);
 
-  // Título principal
-  doc.setFont(FONT, 'bold');
-  doc.setFontSize(20);
+  // Título principal em serifa pra dar peso clássico contábil
+  doc.setFont(FONT_SERIF, 'bold');
+  doc.setFontSize(22);
   doc.setTextColor(...INK);
   doc.text(title, PAGE_MARGIN, y + 9);
 
@@ -191,7 +192,7 @@ function sectionTitle(doc: jsPDF, eyebrow: string, title: string, y: number) {
   doc.setLineWidth(0.8);
   doc.line(PAGE_MARGIN, y + 12.5, PAGE_MARGIN + 14, y + 12.5);
 
-  return y + 17;
+  return y + 18;
 }
 
 // Rótulo de seção secundária (H3)
@@ -272,21 +273,21 @@ function coverPage(doc: jsPDF, data: ContabilPdfData, mode: 'resumido' | 'detalh
 
   // Eyebrow centralizado embaixo da faixa
   doc.setFont(FONT, 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(8.5);
   doc.setTextColor(...WHITE);
   doc.text('RELATÓRIO CONTÁBIL', PAGE_MARGIN, 50);
 
-  // Título principal grande
-  doc.setFont(FONT, 'bold');
-  doc.setFontSize(28);
+  // Título principal grande em serifa (clássico contábil)
+  doc.setFont(FONT_SERIF, 'bold');
+  doc.setFontSize(30);
   doc.setTextColor(...WHITE);
   doc.text('Controle de Taxas', PAGE_MARGIN, 60);
 
-  // Período em destaque (fora da faixa)
-  doc.setFont(FONT, 'bold');
-  doc.setFontSize(36);
+  // Período em destaque (fora da faixa) — serifa, com tracking aberto
+  doc.setFont(FONT_SERIF, 'bold');
+  doc.setFontSize(38);
   doc.setTextColor(...INK);
-  doc.text(data.periodLabel, PAGE_MARGIN, 95);
+  doc.text(data.periodLabel, PAGE_MARGIN, 96);
 
   // Linha decorativa abaixo do período
   doc.setDrawColor(...PRIMARY);

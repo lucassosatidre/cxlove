@@ -41,8 +41,8 @@ function Kpi({ eyebrow, value, hint, tone = 'default' }: {
 function SectionHeader({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
     <div className="mb-3">
-      <div className="text-xs font-bold uppercase tracking-wide text-primary">{eyebrow}</div>
-      <h2 className="text-2xl font-bold mt-1">{title}</h2>
+      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-primary">{eyebrow}</div>
+      <h2 className="font-serif text-3xl font-bold mt-1 tracking-tight">{title}</h2>
       <div className="h-0.5 w-14 bg-primary mt-2" />
     </div>
   );
