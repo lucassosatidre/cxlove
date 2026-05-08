@@ -206,9 +206,15 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     }
     if (compCount === 0) continue;
     const isParcial = items.length > compCount;
+    let vendidoLote = compValor;     // default: soma items no mês
     let custoLote = 0;
     let recebidoLote = 0;
     if (!isParcial) {
+      // Lote 100% no mês: usa os valores DECLARADOS pelo lote (subtotal,
+      // descontos, líquido). Garante que vendido = recebido + custo mesmo
+      // quando o parser perdeu items individuais (já vi caso fev/26 lote VR
+      // 695835653 com subtotal 262,40 mas só 1 item parseado de 141,40).
+      vendidoLote = Number(lot.subtotal_vendas ?? compValor);
       custoLote = Math.abs(Number(lot.total_descontos ?? 0));
       recebidoLote = Number(lot.valor_liquido ?? 0);
     } else {
@@ -219,7 +225,7 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     }
     const r = ensureAgg(resumoMap, cat);
     r.qtd += compCount;
-    r.vendido += compValor;
+    r.vendido += vendidoLote;
     r.recebido += recebidoLote;
     r.custo += custoLote;
 
