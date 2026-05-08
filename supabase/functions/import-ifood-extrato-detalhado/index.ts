@@ -448,6 +448,8 @@ Deno.serve(async (req) => {
       periodo_apuracao_inicio: null, periodo_apuracao_fim: null,
     });
 
+    let dataRepasseAusenteCount = 0;
+    let dataRepasseAusenteValor = 0;
     for (const l of lancamentos) {
       const isImpactoSim = l.impacto_no_repasse === 'SIM';
       // SEMPRE calcula data_repasse pela regra D+3/D+4 (modelo com antecipação
@@ -460,7 +462,14 @@ Deno.serve(async (req) => {
         calcDataRepasseFromPedido(l.data_criacao_pedido_associado)
         ?? calcDataRepasseFromPedido(l.data_apuracao_fim)
         ?? shiftBack21d(l.data_repasse_esperada);
-      if (!dataRepasse) continue;
+      if (!dataRepasse) {
+        // Lançamento sem qualquer data utilizável — não é agregado em nenhum
+        // repasse, então some do líquido_esperado consolidado. Conta pra
+        // exibir no toast/log no front.
+        dataRepasseAusenteCount += 1;
+        dataRepasseAusenteValor += Number(l.valor ?? 0);
+        continue;
+      }
       const key = dataRepasse;
       if (!acc.has(key)) acc.set(key, newAcc());
       const a = acc.get(key)!;
@@ -565,6 +574,10 @@ Deno.serve(async (req) => {
       breakdown_by_categoria: Object.fromEntries(
         Object.entries(breakdownByCategoria).map(([k, v]) => [k, { count: v.count, soma: round2(v.soma) }])
       ),
+      // Lançamentos sem qualquer data utilizável — fora do consolidado de
+      // repasses. Útil pra detectar mensalidade/ADS sem competência atribuída.
+      data_repasse_ausente_count: dataRepasseAusenteCount,
+      data_repasse_ausente_valor: round2(dataRepasseAusenteValor),
       message: `${inserted} lançamentos importados (loja ${storeIdCurto}, comp ${competenciaArquivo}). ${repassesPayload.length} repasses agregados.`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {

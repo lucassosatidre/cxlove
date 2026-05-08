@@ -48,15 +48,20 @@ function parseBBValue(v: any): { amount: number; isCredit: boolean } | null {
 }
 
 function categorizeBB(detail: string): string {
-  const d = (detail || '').toUpperCase();
+  // Normaliza acentos/cedilha pra que regex sem diacríticos pegue todas as
+  // variações do banco: "VR REFEIÇÃO" / "VR REFEICAO" / "Vr Refeicão" → idem.
+  const d = (detail || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase();
   // Alelo: nome ou CNPJ 04.740.876/0001-25
   if (/ALELO/.test(d) || /04\.?740\.?876/.test(d)) return 'alelo';
   // Ticket Edenred: nome ou CNPJ 47.866.934/0001-74
   if (/TICKET|EDENRED/.test(d) || /47\.?866\.?934/.test(d)) return 'ticket';
   // Pluxee/Sodexo
   if (/PLUXEE|SODEXO/.test(d)) return 'pluxee';
-  // VR
-  if (/78626983|BANCO VR|VR\s+BENEFICIOS|VR\s+REFEICAO/.test(d)) return 'vr';
+  // VR — várias formas: Banco VR, VR Benefícios, VR Refeição, CNPJ 78626983
+  if (/78626983|BANCO\s*VR|VR\s+BENEFICIOS?|VR\s+REFEICAO/.test(d)) return 'vr';
   if (/BRENDI/.test(d)) return 'brendi';
   return 'outro';
 }
