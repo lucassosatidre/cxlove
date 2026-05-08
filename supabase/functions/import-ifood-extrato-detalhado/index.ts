@@ -148,18 +148,21 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
   return 'outros';
 }
 
-// Calcula data_repasse_esperada de um pedido via data_criacao_pedido.
+// Calcula data_repasse_esperada a partir de uma data base (data do pedido OU data
+// de apuração fim — ambas servem como referência pro ciclo iFood).
 // Regra iFood Pago (com antecipação automática contratada — modelo padrão fev/26):
-//   1. Corte = próximo domingo (>= data_pedido), OU último dia do mês se vier antes
+//   1. Corte = próximo domingo (>= base), OU último dia do mês se vier antes
 //   2. data_repasse = próxima quarta-feira após o corte (D+3 se corte é dom, D+4 se sáb)
 // Validado contra portal iFood fev/26:
 //   - Corte 01/02 (dom) → repasse 04/02 (qua, D+3)
 //   - Corte 08/02 (dom) → repasse 11/02 (qua, D+3)
 //   - Corte 28/02 (sáb, fim do mês) → repasse 04/03 (qua, D+4)
-// (O modelo antigo D+24 era pra lojas SEM antecipação — virou caso raro.)
-function calcDataRepasseFromPedido(dataPedidoIso: string | null): string | null {
-  if (!dataPedidoIso) return null;
-  const [y, m, d] = dataPedidoIso.slice(0, 10).split('-').map(Number);
+// (O modelo antigo D+24 era pra lojas SEM antecipação — virou caso raro. A coluna
+// `data_repasse_esperada` do XLSX traz D+24 mesmo com antecipação ativa, então
+// ignoramos ela e calculamos pelo ciclo real.)
+function calcDataRepasseFromPedido(baseIso: string | null): string | null {
+  if (!baseIso) return null;
+  const [y, m, d] = baseIso.slice(0, 10).split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
   const dow = dt.getUTCDay(); // 0=Sun, 6=Sat
   const daysUntilSunday = (7 - dow) % 7;
@@ -172,6 +175,16 @@ function calcDataRepasseFromPedido(dataPedidoIso: string | null): string | null 
   const daysUntilWed = ((3 - corteDow + 7) % 7) || 7; // se corte for qua, vai pra próxima qua (+7)
   const repasse = new Date(corte.getTime() + daysUntilWed * 86400000);
   return `${repasse.getUTCFullYear()}-${String(repasse.getUTCMonth() + 1).padStart(2, '0')}-${String(repasse.getUTCDate()).padStart(2, '0')}`;
+}
+
+// Recua 21 dias de uma data D+24 (formato YYYY-MM-DD). Usado como fallback quando
+// não temos data_pedido nem data_apuracao mas a coluna data_repasse_esperada do
+// XLSX existe (linhas tipo mensalidade/ADS sem pedido associado).
+function shiftBack21d(iso: string | null): string | null {
+  if (!iso) return null;
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d) - 21 * 86400000);
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
 }
 
 // ─── Server ────────────────────────────────────────────────────────────────
@@ -437,12 +450,16 @@ Deno.serve(async (req) => {
 
     for (const l of lancamentos) {
       const isImpactoSim = l.impacto_no_repasse === 'SIM';
-      let dataRepasse: string | null = l.data_repasse_esperada;
-      if (!isImpactoSim) {
-        // pgto-direto: calcula data_repasse pelo data_criacao_pedido
-        dataRepasse = calcDataRepasseFromPedido(l.data_criacao_pedido_associado);
-        if (!dataRepasse) continue; // sem data, ignora (raro)
-      }
+      // SEMPRE calcula data_repasse pela regra D+3/D+4 (modelo com antecipação
+      // automática). A coluna data_repasse_esperada do XLSX traz D+24 mesmo com
+      // antecipação ativa — não confiamos nela. Ordem de fallback:
+      //   1) data_criacao_pedido_associado (preferido, vendas têm pedido)
+      //   2) data_apuracao_fim (fim do período de apuração)
+      //   3) data_repasse_esperada do XLSX − 21 dias (linhas sem pedido nem apuração)
+      let dataRepasse: string | null =
+        calcDataRepasseFromPedido(l.data_criacao_pedido_associado)
+        ?? calcDataRepasseFromPedido(l.data_apuracao_fim)
+        ?? shiftBack21d(l.data_repasse_esperada);
       if (!dataRepasse) continue;
       const key = dataRepasse;
       if (!acc.has(key)) acc.set(key, newAcc());

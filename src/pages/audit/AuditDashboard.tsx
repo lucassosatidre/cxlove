@@ -454,7 +454,7 @@ export default function AuditDashboard() {
       const voucherItems: any[] = voucherLotIds.length > 0
         ? await fetchAllPaginated<any>(
             (supabase as any)
-              .from('audit_voucher_items')
+              .from('audit_voucher_lot_items')
               .select('lot_id, data_transacao, valor')
               .in('lot_id', voucherLotIds),
           )
