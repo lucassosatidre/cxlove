@@ -283,7 +283,7 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     { count: brendiCountMes },
     { count: brendiCount3m },
     { data: ifoodRepasses },
-    { count: ifoodOrdersCount },
+    { data: ifoodOrdersRows },
   ] = await Promise.all([
     sb.from('audit_brendi_daily')
       .select('expected_amount, expected_liquido, taxa_calculada, received_amount, diff, status')
@@ -300,7 +300,7 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
       .select('*')
       .eq('audit_period_id', periodId),
     sb.from('audit_ifood_orders')
-      .select('id', { count: 'exact', head: true })
+      .select('valor_itens, taxa_entrega_cliente')
       .eq('audit_period_id', periodId)
       .gte('sale_date', monthStart)
       .lt('sale_date', nextMonth)
@@ -333,6 +333,11 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
 
   const ifoodRows = (ifoodRepasses ?? []) as any[];
   const sumI = (k: string) => ifoodRows.reduce((s, r) => s + Number(r[k] ?? 0), 0);
+  const ifoodOrdersList = (ifoodOrdersRows ?? []) as Array<{ valor_itens: number | null; taxa_entrega_cliente: number | null }>;
+  const valorVendasPortal = ifoodOrdersList.reduce(
+    (s, r) => s + Number(r.valor_itens ?? 0) + Number(r.taxa_entrega_cliente ?? 0),
+    0,
+  );
   const brutoVenda = sumI('bruto_venda');
   const pgtoDireto = sumI('pgto_direto_loja');
   const comissao = Math.abs(sumI('comissao'));
@@ -358,12 +363,13 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   const ifoodData = ifoodRows.length > 0 ? {
     vendido_bruto: brutoVenda,
     vendido_online: brutoVenda,
+    valor_vendas_portal: valorVendasPortal,
     recebido_direto: pgtoDireto,
     liquido_esperado: sumI('liquido_esperado'),
     recebido_repasse: sumI('conta_recebido'),
     liquido_efetivo: liquidoEfetivoTotal,
     repasses_count: ifoodRows.length,
-    pedidos_count: ifoodOrdersCount ?? 0,
+    pedidos_count: ifoodOrdersList.length,
     custo_total: custoRealIfood,
     // Taxa efetiva = custo real / faturamento total iFood (online + direto loja).
     taxa_efetiva_pct: (brutoVenda + pgtoDireto) > 0

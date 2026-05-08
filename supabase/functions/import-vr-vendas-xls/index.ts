@@ -248,6 +248,15 @@ Deno.serve(async (req) => {
     // pequenos. Pra cada venda escolhe o lote com data_corte mais cedo
     // (≥ data_venda) que ainda tem capacidade pra acomodar; em empate de
     // data_corte, prefere o lote com MENOR remaining (encaixe apertado).
+    //
+    // Limitação conhecida: bin-packing é heurístico. Quando um lote VR
+    // fica "envenenado" no início (vendas grandes que cabem mas pertenciam
+    // a outro ciclo), o resto cascateia e items_sum diverge de subtotal.
+    // Caso real: mai/26 lote 696721182 (corte Feb-24) recebeu 5 items
+    // somando 518,80 (4 primeiros = 433,80 = subtotal exato, 5º item R$85
+    // sobrou e pertenceria ao lote 697505311). Por isso o
+    // contabil-data-builder usa lot.subtotal_vendas em lotes 100% no mês
+    // (commit 12aec8a) — confia no total declarado pelo extrato VR.
     type Linked = { lot_id: string; sale: RawSale };
     const linked: Linked[] = [];
     const orphans: { sale: RawSale; reason: string }[] = [];
@@ -351,6 +360,38 @@ Deno.serve(async (req) => {
       status: 'completed', imported_rows: insertedItems, duplicate_rows: 0,
     }).eq('id', importRec.id);
 
+    // Diagnóstico de integridade: pra cada lote afetado, compara items_sum
+    // com subtotal_vendas declarado. Diff ≠ 0 indica binding heurístico
+    // imperfeito (ver "Limitação conhecida" no comentário acima).
+    const integrityWarnings: Array<{
+      lot_id: string; numero_reembolso: string; produto: string;
+      data_corte: string | null; subtotal_declared: number;
+      items_sum: number; gap: number; items_count: number;
+    }> = [];
+    const linkedByLot = new Map<string, number>();
+    const linkedCountByLot = new Map<string, number>();
+    for (const l of linked) {
+      linkedByLot.set(l.lot_id, (linkedByLot.get(l.lot_id) ?? 0) + l.sale.valor);
+      linkedCountByLot.set(l.lot_id, (linkedCountByLot.get(l.lot_id) ?? 0) + 1);
+    }
+    for (const lot of (vrLots as any[])) {
+      const itemsSum = Math.round((linkedByLot.get(lot.id) ?? 0) * 100) / 100;
+      const declared = Math.round(Number(lot.subtotal_vendas ?? 0) * 100) / 100;
+      const gap = Math.round((declared - itemsSum) * 100) / 100;
+      if (Math.abs(gap) > TOLERANCE) {
+        integrityWarnings.push({
+          lot_id: lot.id,
+          numero_reembolso: lot.numero_reembolso,
+          produto: lot.produto,
+          data_corte: lot.data_corte,
+          subtotal_declared: declared,
+          items_sum: itemsSum,
+          gap,
+          items_count: linkedCountByLot.get(lot.id) ?? 0,
+        });
+      }
+    }
+
     return new Response(JSON.stringify({
       success: true,
       total_sales: sales.length,
@@ -364,7 +405,9 @@ Deno.serve(async (req) => {
       })),
       affected_lots: affectedLotIds.length,
       inserted_items: insertedItems,
-      message: `${linked.length} vendas vinculadas a ${affectedLotIds.length} lotes${orphans.length > 0 ? ` (${orphans.length} órfãs)` : ''}`,
+      integrity_warnings_count: integrityWarnings.length,
+      integrity_warnings: integrityWarnings,
+      message: `${linked.length} vendas vinculadas a ${affectedLotIds.length} lotes${orphans.length > 0 ? ` (${orphans.length} órfãs)` : ''}${integrityWarnings.length > 0 ? ` · ${integrityWarnings.length} lote(s) com gap subtotal×items` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-vr-vendas-xls error', e);

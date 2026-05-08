@@ -348,6 +348,14 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
           <Kpi eyebrow="Total líquido" value={fmtBRL(i.liquido_efetivo)} hint={`${i.repasses_count} repasses, após antecipação`} tone="positive" />
           <Kpi eyebrow="Custo total" value={`${fmtBRL(i.custo_total)} · ${fmtPct(i.taxa_efetiva_pct)}`} tone="negative" />
         </div>
+        {i.valor_vendas_portal > 0 && (
+          <div className="text-xs text-muted-foreground border-l-2 border-border/60 pl-3">
+            <span className="font-medium">Valor das vendas no portal iFood:</span>{' '}
+            <span className="tabular-nums">{fmtBRL(i.valor_vendas_portal)}</span>
+            <span className="mx-2">·</span>
+            <span>Sistema (online + direto loja): <span className="tabular-nums">{fmtBRL(i.vendido_bruto + i.recebido_direto)}</span></span>
+          </div>
+        )}
         <div>
           <SubHeader>Detalhamento de cobranças</SubHeader>
           <StyledTable

@@ -78,6 +78,10 @@ export type ContabilBrendi = {
 export type ContabilIfood = {
   vendido_bruto: number;
   vendido_online: number;
+  // Soma de subtotal + taxa de entrega cobrada do cliente (audit_ifood_orders).
+  // É a "vendas no portal" do iFood — costuma divergir do vendido_bruto
+  // (que vem de audit_ifood_repasses, já com retenções aplicadas).
+  valor_vendas_portal: number;
   recebido_direto: number;
   liquido_esperado: number;
   recebido_repasse: number;
@@ -615,6 +619,18 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
   kpiBox(doc, PAGE_MARGIN + kpiW + 4, y, kpiW, 24, 'Total líquido', fmtBRL(i.liquido_efetivo), `${i.repasses_count} repasses, após antecipação`, POSITIVE);
   kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(i.custo_total)}  ·  ${fmtPct(i.taxa_efetiva_pct)}`, 'Comissão + taxas + logística + ADS', NEGATIVE);
   y += 32;
+
+  // Cross-reference: valor declarado pelo iFood no portal (subtotal + entrega)
+  // — confronta com o (vendido_bruto + recebido_direto) que vem dos repasses.
+  if (i.valor_vendas_portal > 0) {
+    doc.setFont(FONT, 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(...INK_SECONDARY);
+    const sistemaTotal = i.vendido_bruto + i.recebido_direto;
+    const linha = `Valor das vendas no portal iFood: ${fmtBRL(i.valor_vendas_portal)}   ·   Sistema (online + direto loja): ${fmtBRL(sistemaTotal)}`;
+    doc.text(linha, PAGE_MARGIN, y);
+    y += 6;
+  }
 
   // Breakdown
   y = subTitle(doc, 'Detalhamento de cobranças', y);

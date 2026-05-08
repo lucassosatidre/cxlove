@@ -175,6 +175,10 @@ Deno.serve(async (req) => {
       ok: 0,
       missing_in_ifood: [] as Array<any>,
       missing_in_saipos: [] as Array<any>,
+      // Pedidos com valor_liquido<0 no relatório iFood são ajustes pós-fato
+      // (cancelamento/reembolso) reaparecendo num mês diferente. Não são
+      // pedidos novos faltando no Saipos — segregados pra não inflar o ruído.
+      missing_in_saipos_adjustments: [] as Array<any>,
       value_mismatch: [] as Array<any>,
     };
 
@@ -187,7 +191,10 @@ Deno.serve(async (req) => {
           order_id: oid, saipos_total: s.total, pagamento: s.pagamento, data_venda: s.data_venda,
         });
       } else if (!s && f) {
-        crosscheck.missing_in_saipos.push({
+        const bucket = f.liquido < 0
+          ? crosscheck.missing_in_saipos_adjustments
+          : crosscheck.missing_in_saipos;
+        bucket.push({
           order_id: oid, ifood_total_pago: f.total_pago, ifood_liquido: f.liquido,
           data_pedido: f.data_pedido, store_id_curto: f.store_id_curto,
         });
@@ -412,13 +419,15 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.6-2026-05-08-tolerancia-100',
+      edge_version: 'v2.7-2026-05-08-segrega-ajustes',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
         missing_in_ifood: crosscheck.missing_in_ifood.slice(0, 100),
         missing_in_saipos_count: crosscheck.missing_in_saipos.length,
         missing_in_saipos: crosscheck.missing_in_saipos.slice(0, 100),
+        missing_in_saipos_adjustments_count: crosscheck.missing_in_saipos_adjustments.length,
+        missing_in_saipos_adjustments: crosscheck.missing_in_saipos_adjustments.slice(0, 100),
         value_mismatch_count: crosscheck.value_mismatch.length,
         value_mismatch: crosscheck.value_mismatch.slice(0, 100),
       },

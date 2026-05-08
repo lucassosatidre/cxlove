@@ -63,6 +63,11 @@ type CrosscheckResult = {
   missing_in_ifood_count: number;
   missing_in_saipos: Array<{ order_id: string; ifood_total_pago: number; ifood_liquido: number; data_pedido?: string; store_id_curto?: string }>;
   missing_in_saipos_count: number;
+  // Pedidos no relatório iFood com valor_liquido<0 (ajustes pós-fato:
+  // cancelamentos/reembolsos reaparecendo num mês posterior). Não são
+  // pedidos novos faltando no Saipos — exibidos separados pra não inflar.
+  missing_in_saipos_adjustments?: Array<{ order_id: string; ifood_total_pago: number; ifood_liquido: number; data_pedido?: string; store_id_curto?: string }>;
+  missing_in_saipos_adjustments_count?: number;
   value_mismatch: Array<{ order_id: string; saipos_total: number; ifood_total_pago: number; ifood_taxa_servico?: number; diff: number; diff_sem_taxa_servico?: number; data?: string; pagamento_saipos?: string; store_id_curto?: string }>;
   value_mismatch_count: number;
 };
@@ -786,6 +791,43 @@ function CrosscheckTab({
                     <TableCell className="text-xs text-muted-foreground">{storeName(r.store_id_curto ?? null)}</TableCell>
                     <TableCell className="text-right">{fmt(r.ifood_total_pago)}</TableCell>
                     <TableCell className="text-right text-muted-foreground">{fmt(r.ifood_liquido)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {(crosscheck.missing_in_saipos_adjustments_count ?? 0) > 0 && (
+        <Card className="border-dashed border-muted-foreground/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-muted-foreground">
+              Ajustes pós-fato (líquido negativo) — {crosscheck.missing_in_saipos_adjustments_count}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Cancelamentos/reembolsos do iFood reaparecendo num mês posterior. Não são pedidos novos faltando no Saipos — segregados pra não inflar o cross-check.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Data/Hora</TableHead>
+                  <TableHead>Order ID</TableHead>
+                  <TableHead>Loja iFood</TableHead>
+                  <TableHead className="text-right">Total pago</TableHead>
+                  <TableHead className="text-right">Líquido</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(crosscheck.missing_in_saipos_adjustments ?? []).map(r => (
+                  <TableRow key={r.order_id}>
+                    <TableCell className="text-xs whitespace-nowrap">{fmtDateTime(r.data_pedido)}</TableCell>
+                    <TableCell className="font-mono text-xs">{r.order_id}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{storeName(r.store_id_curto ?? null)}</TableCell>
+                    <TableCell className="text-right">{fmt(r.ifood_total_pago)}</TableCell>
+                    <TableCell className="text-right text-rose-600 dark:text-rose-400">{fmt(r.ifood_liquido)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
