@@ -333,7 +333,11 @@ export async function generateContabilReport(params: GenerateContabilParams): Pr
     repasses_count: ifoodRows.length,
     pedidos_count: ifoodOrdersCount ?? 0,
     custo_total: custoTotal,
-    taxa_efetiva_pct: brutoVenda > 0 ? (custoTotal / brutoVenda) * 100 : 0,
+    // Taxa efetiva = custo total / faturamento total iFood (online + direto loja).
+    // Refletir o universo iFood completo, não só o que passou pela plataforma.
+    taxa_efetiva_pct: (brutoVenda + pgtoDireto) > 0
+      ? (custoTotal / (brutoVenda + pgtoDireto)) * 100
+      : 0,
     comissao,
     taxa_transacao: taxaTrans,
     taxa_antecipacao: taxaAntecip,

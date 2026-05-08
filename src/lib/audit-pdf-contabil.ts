@@ -252,7 +252,7 @@ function kpiBox(
 }
 
 // ═══ Página 1: Capa ════════════════════════════════════════════════════════
-function coverPage(doc: jsPDF, data: ContabilPdfData) {
+function coverPage(doc: jsPDF, data: ContabilPdfData, mode: 'resumido' | 'detalhado') {
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
 
@@ -300,13 +300,16 @@ function coverPage(doc: jsPDF, data: ContabilPdfData) {
   doc.setTextColor(...PRIMARY);
   doc.text('SUMÁRIO', PAGE_MARGIN, sumarioY);
 
-  const items = [
+  const items: Array<[string, string, string]> = [
     ['1', 'Resumo Consolidado', '2'],
     ['2', 'Maquinona iFood', '3'],
     ['3', 'Vouchers', '4'],
     ['4', 'Brendi', '5'],
     ['5', 'iFood Marketplace', '6'],
   ];
+  if (mode === 'detalhado') {
+    items.push(['6', 'Detalhamento diário por categoria', '7+']);
+  }
   let y = sumarioY + 7;
   for (const [num, label, pg] of items) {
     doc.setFont(FONT, 'bold');
@@ -718,18 +721,23 @@ function styledTable(
   });
 }
 
-// ═══ Daily detalhamento (modo detalhado) ═══════════════════════════════════
-function buildCategoriaTable(
+// ═══ Detalhamento diário (modo detalhado) ═════════════════════════════════
+// Uma página dedicada por categoria, no mesmo padrão visual do resumido:
+// header da seção + 3 KPIs no topo + tabela diária estilizada com TOTAL.
+
+const SECTION_INDEX: Record<ContabilCategoria, number> = {
+  credito: 6, debito: 7, pix: 8, brendi: 9, alelo: 10, ticket: 11, vr: 12, pluxee: 13,
+};
+
+function pageDetalheCategoria(
   doc: jsPDF,
   categoria: ContabilCategoria,
   dias: ContabilDiaRow[],
   monthDays: number,
-  startX: number,
-  startY: number,
-  width: number,
+  pageNum: number,
 ) {
   const byDay = new Map(dias.map(d => [d.dia, d]));
-  const body: any[] = [];
+  const rows: any[] = [];
   let totQtd = 0, totVendido = 0, totRecebido = 0, totCusto = 0;
   for (let d = 1; d <= monthDays; d++) {
     const row = byDay.get(d);
@@ -738,47 +746,43 @@ function buildCategoriaTable(
     const recebido = row?.recebido ?? 0;
     const custo = Math.abs(row?.custo ?? 0);
     totQtd += qtd; totVendido += vendido; totRecebido += recebido; totCusto += custo;
-    body.push([String(d), String(qtd), fmtNum(vendido), fmtNum(custo)]);
+    if (qtd === 0 && vendido === 0 && custo === 0) continue; // pula dias sem movimento
+    const pct = vendido > 0 ? (custo / vendido) * 100 : 0;
+    rows.push([
+      String(d).padStart(2, '0'),
+      fmtInt(qtd),
+      fmtNum(vendido),
+      fmtNum(recebido),
+      fmtNum(custo),
+      fmtPct(pct),
+    ]);
   }
-  body.push(['TOTAL', String(totQtd), fmtNum(totVendido), fmtNum(totCusto)]);
+  const totPct = totVendido > 0 ? (totCusto / totVendido) * 100 : 0;
+  rows.push([
+    'TOTAL',
+    fmtInt(totQtd),
+    fmtNum(totVendido),
+    fmtNum(totRecebido),
+    fmtNum(totCusto),
+    fmtPct(totPct),
+  ]);
 
-  doc.setFont(FONT, 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...PRIMARY);
-  doc.text(CATEGORIA_LABELS[categoria].toUpperCase(), startX, startY - 2);
+  doc.addPage();
+  pageHeader(doc, `Detalhamento — ${CATEGORIA_LABELS[categoria]}`, pageNum);
+  const sectionNum = SECTION_INDEX[categoria];
+  let y = sectionTitle(doc, `Seção ${sectionNum}`, `${CATEGORIA_LABELS[categoria]} — diário`, 22);
 
-  autoTable(doc, {
-    startY,
-    margin: { left: startX, right: doc.internal.pageSize.getWidth() - startX - width },
-    tableWidth: width,
-    head: [['Dia', 'Qtd', 'Vendido', 'Custo']],
-    body,
-    theme: 'plain',
-    styles: { font: FONT, fontSize: 7, cellPadding: 1.4, textColor: INK },
-    headStyles: {
-      fillColor: WHITE,
-      textColor: INK_MUTED,
-      fontStyle: 'bold',
-      lineWidth: { bottom: 0.3 },
-      lineColor: RULE_DARK,
-    },
-    columnStyles: {
-      0: { halign: 'center', cellWidth: 12 },
-      1: { halign: 'right', cellWidth: 14 },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-    },
-    didParseCell: (h) => {
-      if (h.section === 'body' && h.row.index === body.length - 1) {
-        h.cell.styles.fillColor = TOTAL_BG;
-        h.cell.styles.fontStyle = 'bold';
-        h.cell.styles.lineWidth = { top: 0.3 };
-        h.cell.styles.lineColor = INK;
-      } else if (h.section === 'body' && h.row.index % 2 === 1) {
-        h.cell.styles.fillColor = SUBTLE_BG;
-      }
-    },
-  });
+  // 3 KPIs
+  const pageW = doc.internal.pageSize.getWidth();
+  const kpiW = (pageW - PAGE_MARGIN * 2 - 8) / 3;
+  kpiBox(doc, PAGE_MARGIN, y, kpiW, 24, 'Total vendido', fmtBRL(totVendido), `${fmtInt(totQtd)} transações`);
+  kpiBox(doc, PAGE_MARGIN + kpiW + 4, y, kpiW, 24, 'Total recebido', fmtBRL(totRecebido), '', POSITIVE);
+  kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(totCusto)}  ·  ${fmtPct(totPct)}`, '', NEGATIVE);
+  y += 32;
+
+  // Tabela diária
+  y = subTitle(doc, 'Movimento dia a dia', y);
+  styledTable(doc, y, ['Dia', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [22, 22, 35, 35, 32, 22]);
 }
 
 function detalhamentoPages(doc: jsPDF, data: ContabilPdfData, pageStart: number) {
@@ -791,26 +795,10 @@ function detalhamentoPages(doc: jsPDF, data: ContabilPdfData, pageStart: number)
   });
 
   let pageNum = pageStart;
-  for (let i = 0; i < ativas.length; i += 2) {
-    doc.addPage('a4', 'landscape');
-    pageHeader(doc, 'Detalhamento Diário', pageNum);
+  for (const cat of ativas) {
+    const dias = detalhe.find(x => x.categoria === cat)?.dias ?? [];
+    pageDetalheCategoria(doc, cat, dias, data.monthDays, pageNum);
     pageNum++;
-
-    const pageW = doc.internal.pageSize.getWidth();
-    const margin = PAGE_MARGIN;
-    const gap = 10;
-    const colWidth = (pageW - margin * 2 - gap) / 2;
-
-    const cat1 = ativas[i];
-    const cat2 = ativas[i + 1];
-
-    const dias1 = detalhe.find(x => x.categoria === cat1)?.dias ?? [];
-    buildCategoriaTable(doc, cat1, dias1, data.monthDays, margin, 28, colWidth);
-
-    if (cat2) {
-      const dias2 = detalhe.find(x => x.categoria === cat2)?.dias ?? [];
-      buildCategoriaTable(doc, cat2, dias2, data.monthDays, margin + colWidth + gap, 28, colWidth);
-    }
   }
 }
 
@@ -821,7 +809,7 @@ export function generateContabilPdf(
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
 
   // Página 1: Capa
-  coverPage(doc, data);
+  coverPage(doc, data, mode);
   // Página 2: Resumo Consolidado
   pageResumoConsolidado(doc, data);
   // Página 3: Maquinona iFood
