@@ -395,7 +395,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.3-2026-05-05-crosscheck-todos-canal-ifood',
+      edge_version: 'v2.4-2026-05-08-d3-alinhado',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
