@@ -268,6 +268,7 @@ Deno.serve(async (req) => {
 
     const matchedDataSet = new Set<string>(); // datas esperadas já matched
     const matchedAntecipIds = new Set<string>(); // ids de antecipações que casaram (pra Pass 3)
+    const antecipDataEsperada = new Map<string, string>(); // antecipId → dataEsperada matched (chave do expectedByDate)
     const repasseUpdates: Array<{ id: string; payload: any }> = [];
     const movimentoUpdates: Array<{ id: string; payload: any }> = [];
     // Diagnóstico: registro por antecipação do que aconteceu
@@ -332,6 +333,7 @@ Deno.serve(async (req) => {
 
       matchedDataSet.add(dataEsperada);
       matchedAntecipIds.add(a.id);
+      antecipDataEsperada.set(a.id, dataEsperada);
       movimentoUpdates.push({
         id: a.id,
         payload: { status: 'matched', match_repasse_ids: exp.ids },
@@ -392,8 +394,12 @@ Deno.serve(async (req) => {
       if (taxasUsadas.has(t.id)) continue;
       taxasUsadas.add(t.id);
 
-      const dataEsperada = a.data;
-      const exp = expectedByDate.get(dataEsperada);
+      // Usa a data esperada que esta antecipação matched no Pass 2 (pode ser ±2d
+      // diferente de a.data quando o PIX antecipou). Sem isso, a taxa antecip é
+      // descartada quando data esperada ≠ data efetiva do PIX.
+      const dataEsperadaMatched = antecipDataEsperada.get(a.id);
+      if (!dataEsperadaMatched) continue;
+      const exp = expectedByDate.get(dataEsperadaMatched);
       if (!exp) continue;
       // rateia taxa por proporção do subtotal de cada loja
       for (const repId of exp.ids) {
@@ -452,7 +458,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.8-2026-05-09-janela-2d',
+      edge_version: 'v2.9-2026-05-09-pass3-data-matched',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
