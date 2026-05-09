@@ -458,10 +458,32 @@ Deno.serve(async (req) => {
       //   1) data_criacao_pedido_associado (preferido, vendas têm pedido)
       //   2) data_apuracao_fim (fim do período de apuração)
       //   3) data_repasse_esperada do XLSX − 21 dias (linhas sem pedido nem apuração)
-      let dataRepasse: string | null =
-        calcDataRepasseFromPedido(l.data_criacao_pedido_associado)
-        ?? calcDataRepasseFromPedido(l.data_apuracao_fim)
-        ?? shiftBack21d(l.data_repasse_esperada);
+      // Rastreia qual data alimentou o bucket calc — vira a "data efetiva de
+      // apuração" da linha. Usada no MIN/MAX do periodo_apuracao_inicio/fim em
+      // vez de data_apuracao_inicio/fim do XLSX (que pode estar desalinhada do
+      // ciclo, ex: pedidos do domingo de corte vêm com apuração da semana
+      // seguinte → mancha o range mostrado).
+      let dataRepasse: string | null = null;
+      let baseDate: string | null = null;
+      const calcFromPedido = calcDataRepasseFromPedido(l.data_criacao_pedido_associado);
+      if (calcFromPedido) {
+        dataRepasse = calcFromPedido;
+        baseDate = l.data_criacao_pedido_associado;
+      }
+      if (!dataRepasse) {
+        const calcFromApur = calcDataRepasseFromPedido(l.data_apuracao_fim);
+        if (calcFromApur) {
+          dataRepasse = calcFromApur;
+          baseDate = l.data_apuracao_fim;
+        }
+      }
+      if (!dataRepasse) {
+        const shifted = shiftBack21d(l.data_repasse_esperada);
+        if (shifted) {
+          dataRepasse = shifted;
+          baseDate = shifted;
+        }
+      }
       if (!dataRepasse) {
         // Lançamento sem qualquer data utilizável — não é agregado em nenhum
         // repasse, então some do líquido_esperado consolidado. Conta pra
@@ -497,12 +519,15 @@ Deno.serve(async (req) => {
           case 'mensalidade': a.mensalidade += l.valor; break;
           default: a.outros += l.valor;
         }
-        // janela de apuração
-        if (l.data_apuracao_inicio && (!a.periodo_apuracao_inicio || l.data_apuracao_inicio < a.periodo_apuracao_inicio)) {
-          a.periodo_apuracao_inicio = l.data_apuracao_inicio;
-        }
-        if (l.data_apuracao_fim && (!a.periodo_apuracao_fim || l.data_apuracao_fim > a.periodo_apuracao_fim)) {
-          a.periodo_apuracao_fim = l.data_apuracao_fim;
+        // Janela de apuração derivada da base_date que alimentou o bucket — fica
+        // alinhada com o ciclo de repasse (corte dom + qua seguinte).
+        if (baseDate) {
+          if (!a.periodo_apuracao_inicio || baseDate < a.periodo_apuracao_inicio) {
+            a.periodo_apuracao_inicio = baseDate;
+          }
+          if (!a.periodo_apuracao_fim || baseDate > a.periodo_apuracao_fim) {
+            a.periodo_apuracao_fim = baseDate;
+          }
         }
       } else {
         // impacto=NÃO: vai pra pgto_direto_loja (Entrada Financeira) ou promo_loja
