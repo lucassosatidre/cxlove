@@ -505,8 +505,8 @@ export default function AuditImportacoes() {
                       {docImports.length > 0 && (
                         <div className="text-xs space-y-1 pl-6">
                           {docImports.slice(0, 10).map((imp, idx) => (
-                            <div key={idx} className="flex items-baseline gap-2 text-muted-foreground">
-                              <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0 self-center" />
+                            <div key={idx} className="flex items-center gap-2 text-muted-foreground">
+                              <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" />
                               <span className="font-mono text-foreground truncate" title={imp.file_name}>
                                 {imp.file_name}
                               </span>
@@ -514,6 +514,15 @@ export default function AuditImportacoes() {
                               <span className="shrink-0">{fmtInt(Number(imp.imported_rows ?? 0))} linhas</span>
                               <span className="shrink-0">·</span>
                               <span className="shrink-0">{new Date(imp.created_at).toLocaleDateString('pt-BR')}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                onClick={() => setToDelete(imp)}
+                                title="Apagar este arquivo"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           ))}
                         </div>
