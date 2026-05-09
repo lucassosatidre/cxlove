@@ -140,6 +140,54 @@ export default function AuditImportacoes() {
     if (period) await refresh(period.id);
   };
 
+  const deleteImpactText = (fileType: string): string => {
+    switch (fileType) {
+      case 'maquinona':
+        return 'As transações da Maquinona usam transaction_id como chave (UPSERT). Re-upload sobrescreve as mesmas linhas — esta ação só apaga o registro de importação.';
+      case 'vr_vendas':
+        return 'Itens vinculados a lotes VR não são apagados aqui (vínculo via lot_id). Esta ação apaga apenas o registro de importação; re-upload reprocessa.';
+      case 'cresol':
+      case 'bb':
+        return 'Todos os depósitos bancários vinculados a este arquivo serão apagados.';
+      case 'ticket':
+      case 'alelo':
+      case 'pluxee':
+      case 'vr':
+        return 'Todos os lotes de voucher e seus itens vinculados a este arquivo serão apagados.';
+      case 'brendi':
+        return 'Todos os pedidos Brendi vinculados a este arquivo serão apagados.';
+      case 'saipos':
+        return 'Todas as vendas Saipos vinculadas a este arquivo serão apagadas.';
+      case 'ifood_orders':
+        return 'Todos os pedidos iFood vinculados a este arquivo serão apagados.';
+      case 'ifood_conta_csv':
+        return 'Todos os movimentos da conta iFood Pago vinculados a este arquivo serão apagados.';
+      case 'ifood_extrato_detalhado':
+        return 'Todos os lançamentos detalhados E os repasses agregados desta loja (no período) serão apagados.';
+      default:
+        return 'Apenas o registro de importação será apagado.';
+    }
+  };
+
+  const handleDeleteImport = async () => {
+    if (!toDelete || !period) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.rpc('delete_audit_import', { p_import_id: toDelete.id });
+      if (error) throw error;
+      const rows = (data as any)?.deleted_data_rows ?? 0;
+      toast.success('Arquivo apagado', {
+        description: `${toDelete.file_name} · ${rows} registro(s) vinculado(s) removido(s).`,
+      });
+      setToDelete(null);
+      await refresh(period.id);
+    } catch (e: any) {
+      toast.error('Falha ao apagar', { description: e?.message ?? 'Erro desconhecido' });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Executa os 4 matches em sequência: Maquinona×Cresol, Vouchers, Brendi, iFood Marketplace.
   // Cada um roda só com os dados que tem disponíveis. Logs vão como toasts.
   const runFullAudit = async () => {
