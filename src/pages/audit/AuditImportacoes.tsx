@@ -33,7 +33,7 @@ const MONTHS = [
 
 const fmtInt = (v: number) => v.toLocaleString('pt-BR');
 
-type ImportRow = { file_type: string; status: string; imported_rows: number; created_at: string; file_name: string };
+type ImportRow = { id: string; file_type: string; status: string; imported_rows: number; created_at: string; file_name: string };
 
 type MonthSlot = 'anterior' | 'comp' | 'posterior';
 
