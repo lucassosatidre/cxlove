@@ -188,6 +188,17 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   const overrideByLot = new Map<string, any>();
   for (const o of (voucherOverrides ?? []) as any[]) overrideByLot.set(o.lot_id, o);
 
+  // Operadora "tem items importados"? Se sim, lots sem items são vendas de
+  // outro mês — NÃO usa fallback de subtotal declarado (senão infla o vendido,
+  // caso real mar/26 VR: 3 lots órfãos somando R$ 510,90 fantasma).
+  const operadoraTemItens: Record<string, boolean> = {};
+  for (const lot of (voucherLots ?? [])) {
+    if ((itemsByLot.get(lot.id)?.length ?? 0) > 0) {
+      const cat = mapVoucherCat(lot.operadora);
+      if (cat) operadoraTemItens[cat] = true;
+    }
+  }
+
   for (const lot of (voucherLots ?? []) as any[]) {
     const cat = mapVoucherCat(lot.operadora);
     if (!cat) continue;
