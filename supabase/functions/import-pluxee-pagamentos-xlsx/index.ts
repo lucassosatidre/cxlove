@@ -335,6 +335,68 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Aplica taxa rateada do header sobre os lots pluxee no range do extrato.
+    // Identidade: BRUTO - NÃO_PAGOS - TAXAS - SERVIÇOS = LÍQUIDO. Descontos
+    // reais sobre vendas pagas = TAXAS + SERVIÇOS. NÃO_PAGOS já tratado por
+    // status_remote='ERRO NO PAGAMENTO' nos items.
+    let lotsAdjusted = 0;
+    let taxaRateApplied = 0;
+    try {
+      const header = parsePagamentosHeader(rows);
+      if (header.rangeIni && header.rangeFim && header.totalBruto > 0) {
+        const brutoPago = header.totalBruto - header.totalNaoPagos;
+        const totalDescontos = header.totalTaxas + header.totalServicos;
+        const taxaRate = brutoPago > 0 ? totalDescontos / brutoPago : 0;
+        taxaRateApplied = taxaRate;
+
+        const { data: lotsInRange } = await supabase
+          .from('audit_voucher_lots')
+          .select('id')
+          .eq('audit_period_id', audit_period_id)
+          .eq('operadora', 'pluxee')
+          .gte('data_credito', header.rangeIni)
+          .lte('data_credito', header.rangeFim);
+
+        const rangeIds = (lotsInRange ?? []).map(l => l.id);
+        if (rangeIds.length > 0) {
+          // Carrega items de TODOS os lots do range em 1 query e indexa por lot_id
+          const { data: rangeItems } = await supabase
+            .from('audit_voucher_lot_items')
+            .select('lot_id, valor, status_remote')
+            .in('lot_id', rangeIds)
+            .limit(20000);
+          const itemsByLot = new Map<string, any[]>();
+          for (const it of (rangeItems ?? [])) {
+            const arr = itemsByLot.get(it.lot_id) ?? [];
+            arr.push(it);
+            itemsByLot.set(it.lot_id, arr);
+          }
+
+          for (const lot of (lotsInRange ?? [])) {
+            const items = itemsByLot.get(lot.id) ?? [];
+            const brutoPagoLote = items
+              .filter(it => !String(it.status_remote ?? '').toUpperCase().includes('ERRO'))
+              .reduce((s, it) => s + Number(it.valor || 0), 0);
+            const descLote = Math.round(brutoPagoLote * taxaRate * 100) / 100;
+            const liqLote = Math.round((brutoPagoLote - descLote) * 100) / 100;
+            const { error: updErr } = await supabase
+              .from('audit_voucher_lots')
+              .update({
+                subtotal_vendas: Math.round(brutoPagoLote * 100) / 100,
+                total_descontos: descLote,
+                valor_liquido: liqLote,
+              })
+              .eq('id', lot.id);
+            if (!updErr) lotsAdjusted++;
+          }
+        }
+      } else {
+        console.warn('parsePagamentosHeader: range/bruto não detectados', header);
+      }
+    } catch (e) {
+      console.error('Erro ao aplicar taxas do header pluxee', e);
+    }
+
     await supabase.from('audit_imports').update({
       status: 'completed', imported_rows: updatedItems + createdItems, duplicate_rows: 0,
     }).eq('id', importRec.id);
