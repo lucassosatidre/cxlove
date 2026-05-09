@@ -153,6 +153,8 @@ export default function AuditImportacoes() {
       case 'ticket':
       case 'alelo':
       case 'pluxee':
+      case 'pluxee_vendas':
+      case 'pluxee_pagamentos':
       case 'vr':
         return 'Todos os lotes de voucher e seus itens vinculados a este arquivo serão apagados.';
       case 'brendi':
