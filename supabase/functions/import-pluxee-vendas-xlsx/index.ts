@@ -167,17 +167,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: `Erro ao registrar: ${importErr.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Apaga lotes vendas anteriores (re-import sempre substitui o universo de
-    // vendas do mês). Cascade não existe — apaga items manualmente.
+    // Apaga TODOS os lotes pluxee EXCETO os 'PLUXEE-PAG-*' (que pertencem ao
+    // importer de pagamentos). Inclui formato antigo PLUXEE-YYYYMMDD-N do CSV
+    // legacy e o atual PLUXEE-VENDAS-*. Cascade não existe — apaga items manualmente.
     const { data: oldLots } = await supabase
-      .from('audit_voucher_lots').select('id')
+      .from('audit_voucher_lots').select('id,numero_reembolso')
       .eq('audit_period_id', audit_period_id)
-      .eq('operadora', 'pluxee')
-      .like('numero_reembolso', 'PLUXEE-VENDAS-%');
-    if (oldLots && oldLots.length > 0) {
-      const ids = oldLots.map(l => l.id);
+      .eq('operadora', 'pluxee');
+    const toDelete = (oldLots ?? []).filter(l => !String(l.numero_reembolso ?? '').startsWith('PLUXEE-PAG-'));
+    if (toDelete.length > 0) {
+      const ids = toDelete.map(l => l.id);
       await supabase.from('audit_voucher_lot_items').delete().in('lot_id', ids);
-      await supabase.from('audit_voucher_lots').delete().in('id', ids);
+      const { error: delErr } = await supabase.from('audit_voucher_lots').delete().in('id', ids);
+      if (delErr) console.warn('cleanup pluxee vendas:', delErr.message);
     }
 
     // Agrupa por data_pagamento
