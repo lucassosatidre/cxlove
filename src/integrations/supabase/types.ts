@@ -2299,6 +2299,27 @@ export type Database = {
           },
         ]
       }
+      pickngo_webhook_logs: {
+        Row: {
+          event_type: string | null
+          id: string
+          payload: Json
+          received_at: string
+        }
+        Insert: {
+          event_type?: string | null
+          id?: string
+          payload: Json
+          received_at?: string
+        }
+        Update: {
+          event_type?: string | null
+          id?: string
+          payload?: Json
+          received_at?: string
+        }
+        Relationships: []
+      }
       salon_card_transactions: {
         Row: {
           brand: string | null
