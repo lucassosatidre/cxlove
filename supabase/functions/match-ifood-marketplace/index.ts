@@ -52,6 +52,13 @@ const REPASSE_TOLERANCE_EXATO = 0.10;
 // R$100 ainda é segurança boa: PIX de outra comp difere em MILHARES,
 // não centenas — false positive é improvável.
 const REPASSE_TOLERANCE_APROX = 100.0;
+const REPASSE_TOLERANCE_DIAS = 2; // PIX antecipação pode adiantar 1-2 dias
+
+function shiftDateIso(iso: string, deltaDays: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
