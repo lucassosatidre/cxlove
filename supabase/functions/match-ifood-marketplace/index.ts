@@ -452,7 +452,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.7-2026-05-08-segrega-ajustes',
+      edge_version: 'v2.8-2026-05-09-janela-2d',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,
