@@ -150,6 +150,7 @@ Deno.serve(async (req) => {
       deposits.map(d => d.deposit_date),
       { month: period.month, year: period.year },
       'Cresol',
+      [-1, 0, 1],
     );
     if (!periodCheck.ok) {
       await supabase.from('audit_imports').update({

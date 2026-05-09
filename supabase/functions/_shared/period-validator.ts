@@ -36,6 +36,7 @@ export function validatePeriodMatch(
   dates: (string | null | undefined)[],
   period: PeriodRef,
   label: string,
+  allowedOffsets: number[] = [0],
 ): PeriodValidation {
   const breakdown: Record<string, number> = {};
   for (const d of dates) {
@@ -45,25 +46,33 @@ export function validatePeriodMatch(
   }
   const total = Object.values(breakdown).reduce((s, n) => s + n, 0);
   const targetYM = periodYM(period);
-  // Mês mais frequente nos dados — só pra log
   const primaryYM = Object.entries(breakdown)
     .sort((a, b) => b[1] - a[1])[0]?.[0] ?? targetYM;
 
   if (total === 0) {
-    // Nenhuma data parseável — não bloqueia (deixa o parser tradicional
-    // decidir; pode ser arquivo vazio ou erro de formato pego adiante)
     return { ok: true, breakdown, primaryYM };
   }
 
-  const inTarget = breakdown[targetYM] ?? 0;
-  if (inTarget === 0) {
+  const allowedYMs = new Set(
+    allowedOffsets.map(off => {
+      const d = new Date(period.year, period.month - 1 + off, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    })
+  );
+
+  const inAllowed = Object.entries(breakdown)
+    .filter(([ym]) => allowedYMs.has(ym))
+    .reduce((s, [, n]) => s + n, 0);
+
+  if (inAllowed === 0) {
     const found = Object.entries(breakdown)
       .sort((a, b) => b[1] - a[1])
       .map(([ym, n]) => `${ym} (${n})`)
       .join(', ');
+    const allowedList = Array.from(allowedYMs).sort().join(', ');
     return {
       ok: false,
-      error: `Arquivo ${label} não tem nenhuma linha em ${targetYM}. Datas encontradas: ${found}. Faça upload na auditoria do mês correto.`,
+      error: `Arquivo ${label} não tem nenhuma linha nos meses esperados (${allowedList}). Datas encontradas: ${found}. Faça upload na auditoria do mês correto.`,
       breakdown,
       primaryYM,
     };

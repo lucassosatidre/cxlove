@@ -250,6 +250,7 @@ Deno.serve(async (req) => {
       deposits.map(d => d.deposit_date),
       { month: period.month, year: period.year },
       'BB',
+      [0, 1],
     );
     if (!periodCheck.ok) {
       // Marca import como failed antes de retornar (já foi inserido em audit_imports)
