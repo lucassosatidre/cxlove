@@ -16,7 +16,8 @@ import {
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import {
   UploadMaquinonaCard, UploadCresolCard,
-  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard, UploadPluxeeCard,
+  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
+  UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
   UploadBrendiCard, UploadSaiposCard,
   UploadIfoodExtratoDetalhadoCard, UploadIfoodOrdersCard, UploadIfoodContaCsvCard,
   dispatchAutoMatchVouchers,
