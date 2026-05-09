@@ -16,7 +16,8 @@ import {
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import {
   UploadMaquinonaCard, UploadCresolCard,
-  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard, UploadPluxeeCard,
+  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
+  UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
   UploadBrendiCard, UploadSaiposCard,
   UploadIfoodExtratoDetalhadoCard, UploadIfoodOrdersCard, UploadIfoodContaCsvCard,
   dispatchAutoMatchVouchers,
@@ -152,6 +153,8 @@ export default function AuditImportacoes() {
       case 'ticket':
       case 'alelo':
       case 'pluxee':
+      case 'pluxee_vendas':
+      case 'pluxee_pagamentos':
       case 'vr':
         return 'Todos os lotes de voucher e seus itens vinculados a este arquivo serão apagados.';
       case 'brendi':
@@ -315,12 +318,20 @@ export default function AuditImportacoes() {
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['vr']); },
     },
     {
-      id: 'pluxee', label: 'Reembolsos Pluxee',
-      description: 'CSV de reembolsos Pluxee/Sodexo (arquivo com prefixo "1976928"). Inclua o mês de competência E o mês posterior — vendas do fim do mês fecham em lote só no extrato do mês seguinte.',
-      format: '.csv',
+      id: 'pluxee_vendas', label: 'Pluxee — Extrato de Vendas',
+      description: 'XLSX "extrato_vendas" da Pluxee. 1 arquivo do mês de competência — define todas as vendas e quando devem pagar (data de pagamento pode cair no mês seguinte).',
+      format: '.xlsx',
+      monthSlots: ['comp'],
+      fileTypes: ['pluxee_vendas'],
+      group: 'vouchers', Component: UploadPluxeeVendasCard,
+    },
+    {
+      id: 'pluxee_pagamentos', label: 'Pluxee — Extrato de Pagamentos',
+      description: 'XLSX "extrato_pagamentos" da Pluxee — confirma pagamentos efetivos (PAGO/ERRO) e descontos. 1 arquivo do mês comp + 1 do mês posterior (cobre vendas que pagam só no mês seguinte).',
+      format: '.xlsx',
       monthSlots: ['comp', 'posterior'],
-      fileTypes: ['pluxee'],
-      group: 'vouchers', Component: UploadPluxeeCard,
+      fileTypes: ['pluxee_pagamentos'],
+      group: 'vouchers', Component: UploadPluxeePagamentosCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
     },
     // ─── Brendi ─────────────────────────────────────────────────────────────

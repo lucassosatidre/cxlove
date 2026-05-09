@@ -17,7 +17,8 @@ import {
   ArrowLeft, ChevronDown, ChevronRight, Loader2,
 } from 'lucide-react';
 import {
-  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard, UploadPluxeeCard,
+  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
+  UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
   dispatchAutoMatchVouchers,
 } from '@/components/audit/UploadCards';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';

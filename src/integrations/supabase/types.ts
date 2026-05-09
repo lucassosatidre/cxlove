@@ -1160,6 +1160,7 @@ export type Database = {
           lot_id: string
           numero_cartao_mascarado: string | null
           numero_documento: string | null
+          status_remote: string | null
           valor: number
         }
         Insert: {
@@ -1172,6 +1173,7 @@ export type Database = {
           lot_id: string
           numero_cartao_mascarado?: string | null
           numero_documento?: string | null
+          status_remote?: string | null
           valor: number
         }
         Update: {
@@ -1184,6 +1186,7 @@ export type Database = {
           lot_id?: string
           numero_cartao_mascarado?: string | null
           numero_documento?: string | null
+          status_remote?: string | null
           valor?: number
         }
         Relationships: [
