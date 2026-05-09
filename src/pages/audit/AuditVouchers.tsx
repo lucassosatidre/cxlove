@@ -1723,7 +1723,7 @@ function OverviewGrid({
       result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando };
     }
     return result;
-  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim]);
+  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim, operadoraTemItens]);
 
   // Totais consolidados das 4 operadoras
   const totals = useMemo(() => {
