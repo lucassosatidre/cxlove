@@ -188,6 +188,17 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   const overrideByLot = new Map<string, any>();
   for (const o of (voucherOverrides ?? []) as any[]) overrideByLot.set(o.lot_id, o);
 
+  // Operadora "tem items importados"? Se sim, lots sem items são vendas de
+  // outro mês — NÃO usa fallback de subtotal declarado (senão infla o vendido,
+  // caso real mar/26 VR: 3 lots órfãos somando R$ 510,90 fantasma).
+  const operadoraTemItens: Record<string, boolean> = {};
+  for (const lot of (voucherLots ?? [])) {
+    if ((itemsByLot.get(lot.id)?.length ?? 0) > 0) {
+      const cat = mapVoucherCat(lot.operadora);
+      if (cat) operadoraTemItens[cat] = true;
+    }
+  }
+
   for (const lot of (voucherLots ?? []) as any[]) {
     const cat = mapVoucherCat(lot.operadora);
     if (!cat) continue;
@@ -203,15 +214,15 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
         if (d >= 1 && d <= monthDays) compItemDays.push(d);
       }
     }
-    // Fallback pra lote sem items (caso real fev/26: 21 lotes VR sem items
-    // porque user só uploadou reembolsos.xls, não vendas.xls): se data_corte
-    // está no mês de competência, trata como lote 100% no mês usando os
-    // totais declarados. Sem isso, VR sumia inteiro do relatório.
     const corteNoMes = lot.data_corte != null
       && lot.data_corte >= competenciaIni
       && lot.data_corte < competenciaFim;
+    const operadoraJaImportada = operadoraTemItens[cat] === true;
     if (items.length === 0) {
-      if (!corteNoMes) continue;
+      // Fallback só quando a operadora INTEIRA não tem items (= user não
+      // uploadou vendas pra essa operadora). Se tem items mas este lote
+      // está vazio, é venda de mês anterior — pula.
+      if (!corteNoMes || operadoraJaImportada) continue;
     } else if (compCount === 0) {
       continue;
     }
