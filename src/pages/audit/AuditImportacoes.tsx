@@ -101,7 +101,7 @@ export default function AuditImportacoes() {
   const refresh = async (periodId: string) => {
     const { data } = await supabase
       .from('audit_imports')
-      .select('file_type, status, imported_rows, created_at, file_name')
+      .select('id, file_type, status, imported_rows, created_at, file_name')
       .eq('audit_period_id', periodId)
       .order('created_at', { ascending: false });
     setImports((data ?? []) as any);
