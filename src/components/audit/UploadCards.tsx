@@ -838,11 +838,10 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
-          // PRIMEIRO arquivo do batch: clear_existing=true. Limpa lixo no edge
-          // via SERVICE_ROLE (não depende de RLS do client). Demais arquivos
-          // só fazem upsert.
+          // clear_existing desabilitado: cada upload individual faz upsert.
+          // O botão de lixeira na aba Importações cobre apagar quando necessário.
           const { data, error } = await supabase.functions.invoke('import-brendi-xlsx', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Brendi');
@@ -951,9 +950,9 @@ export function UploadSaiposCard({ period, ensurePeriod, onAfter }: UploadCardPr
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
-          // Primeiro arquivo: clear_existing=true (RLS bypass via SERVICE_ROLE)
+          // clear_existing desabilitado: cada upload individual faz upsert.
           const { data, error } = await supabase.functions.invoke('import-saipos-xlsx', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Saipos');
@@ -1082,8 +1081,9 @@ export function UploadIfoodOrdersCard({ period, ensurePeriod, onAfter }: UploadC
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
+          // clear_existing desabilitado: cada upload individual faz upsert.
           const { data, error } = await supabase.functions.invoke('import-ifood-orders', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import iFood Orders');
@@ -1278,8 +1278,9 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
           const rows = lines.map(line => parseCsvLine(line));
           if (!rows.length) throw new Error('CSV vazio');
 
+          // clear_existing desabilitado: cada upload individual faz upsert.
           const { data, error } = await supabase.functions.invoke('import-ifood-conta-csv', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Conta iFood Pago');
