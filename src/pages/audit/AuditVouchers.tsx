@@ -1649,6 +1649,17 @@ function OverviewGrid({
 }) {
   const operadoras = ['ticket', 'alelo', 'vr', 'pluxee'];
 
+  // Pra cada operadora, marca se tem QUALQUER item importado. Se sim, lotes
+  // sem items são vendas de outro mês (NÃO devem usar fallback do subtotal
+  // declarado, senão inflam o "Vendido (bruto)" — caso real VR mar/26).
+  const operadoraTemItens = useMemo(() => {
+    const has: Record<string, boolean> = {};
+    for (const l of lots) {
+      if ((allItemsByLot[l.id]?.length ?? 0) > 0) has[l.operadora] = true;
+    }
+    return has;
+  }, [lots, allItemsByLot]);
+
   const statsPorOperadora = useMemo(() => {
     const result: Record<string, { count: number; salesCount: number; subtotal: number; descontos: number; liquido: number; taxaPct: number; matched: number; aguardando: number }> = {};
     const overrideByLot = new Map<string, CompOverride>();
@@ -1656,17 +1667,19 @@ function OverviewGrid({
 
     for (const op of operadoras) {
       const opLots = lots.filter(l => l.operadora === op);
+      const operadoraJaImportada = operadoraTemItens[op] === true;
       let count = 0, salesCount = 0, subtotal = 0, descontos = 0, liquido = 0, matched = 0, aguardando = 0;
       for (const l of opLots) {
         const items = allItemsByLot[l.id] ?? [];
         const itemsComp = items.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
-        // Fallback pra lote sem items mas com data_corte no mês (caso fev/26
-        // VR: user só uploadou reembolsos, sem vendas — lotes ficam sem items
-        // mas têm subtotal declarado).
+        // Fallback pra lote sem items mas com data_corte no mês — SÓ quando a
+        // operadora inteira não tem items (user não importou vendas ainda).
+        // Se tem items mas este lote está vazio, é venda de mês anterior.
         const corteNoMes = l.data_corte != null
           && l.data_corte >= competenciaIni
           && l.data_corte < competenciaFim;
-        const hasComp = itemsComp.length > 0 || (items.length === 0 && corteNoMes);
+        const hasComp = itemsComp.length > 0
+          || (items.length === 0 && corteNoMes && !operadoraJaImportada);
         if (!hasComp) continue;
         count++;
         salesCount += itemsComp.length;
