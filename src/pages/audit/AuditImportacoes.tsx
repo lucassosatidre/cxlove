@@ -89,6 +89,8 @@ export default function AuditImportacoes() {
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningAudit, setRunningAudit] = useState(false);
+  const [toDelete, setToDelete] = useState<ImportRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // URL sync
   useEffect(() => {
