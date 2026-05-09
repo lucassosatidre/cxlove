@@ -259,6 +259,7 @@ Deno.serve(async (req) => {
       parsedLots.map(l => l.data_pagamento),
       { month: period.month, year: period.year },
       'Pluxee',
+      [0, 1],
     );
     if (!periodCheck.ok) {
       return new Response(JSON.stringify({
