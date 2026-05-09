@@ -78,6 +78,65 @@ function colIndex(header: any[], ...needles: string[]): number {
   return -1;
 }
 
+// Parse header do extrato_pagamentos (rows ~9-17): extrai range do filtro e
+// totais (BRUTO, TAXAS, SERVIÇOS CONTRATADOS, OUTRAS DEDUÇÕES, LÍQUIDO).
+// Busca por keywords no label da linha + pega o último número numérico da
+// linha (mais robusto que assumir col fixa).
+function parsePagamentosHeader(rows: any[][]): {
+  rangeIni: string | null;
+  rangeFim: string | null;
+  totalBruto: number;
+  totalTaxas: number;
+  totalServicos: number;
+  totalNaoPagos: number;
+  totalLiquido: number;
+} {
+  const norm = (s: any) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const numFromCell = (v: any): number | null => {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const s = String(v).replace(/r\$/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const n = Number(s);
+    return isFinite(n) ? n : null;
+  };
+  const lastNumberInRow = (r: any[]): number => {
+    for (let i = (r?.length ?? 0) - 1; i >= 0; i--) {
+      const n = numFromCell(r[i]);
+      if (n != null) return n;
+    }
+    return 0;
+  };
+
+  let rangeIni: string | null = null;
+  let rangeFim: string | null = null;
+  let totalBruto = 0, totalTaxas = 0, totalServicos = 0, totalNaoPagos = 0, totalLiquido = 0;
+
+  // Limita scan às primeiras 30 rows (header é até ~17)
+  const limit = Math.min(rows.length, 30);
+  for (let i = 0; i < limit; i++) {
+    const r = rows[i] ?? [];
+    const joined = r.map((c: any) => norm(c)).join(' | ');
+    if ((rangeIni == null || rangeFim == null)) {
+      const m = joined.match(/(\d{2})\/(\d{2})\/(\d{4}).{1,10}?(\d{2})\/(\d{2})\/(\d{4})/);
+      if (m) {
+        rangeIni = `${m[3]}-${m[2]}-${m[1]}`;
+        rangeFim = `${m[6]}-${m[5]}-${m[4]}`;
+      }
+    }
+    if (joined.includes('total bruto')) totalBruto = lastNumberInRow(r);
+    else if (joined.includes('valor taxas') || joined.includes('valor das taxas')) totalTaxas = lastNumberInRow(r);
+    else if (joined.includes('servicos contratados') || joined.includes('servico contratado')) totalServicos = lastNumberInRow(r);
+    else if (joined.includes('outras deducoes') || joined.includes('nao pagos') || joined.includes('nao pago')) {
+      // só pega se for label de TOTAL (linha curta com valor à direita), não a sublinha
+      const v = lastNumberInRow(r);
+      if (v > totalNaoPagos) totalNaoPagos = v;
+    }
+    else if (joined.includes('total liquido')) totalLiquido = lastNumberInRow(r);
+  }
+
+  return { rangeIni, rangeFim, totalBruto, totalTaxas, totalServicos, totalNaoPagos, totalLiquido };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -276,6 +335,68 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Aplica taxa rateada do header sobre os lots pluxee no range do extrato.
+    // Identidade: BRUTO - NÃO_PAGOS - TAXAS - SERVIÇOS = LÍQUIDO. Descontos
+    // reais sobre vendas pagas = TAXAS + SERVIÇOS. NÃO_PAGOS já tratado por
+    // status_remote='ERRO NO PAGAMENTO' nos items.
+    let lotsAdjusted = 0;
+    let taxaRateApplied = 0;
+    try {
+      const header = parsePagamentosHeader(rows);
+      if (header.rangeIni && header.rangeFim && header.totalBruto > 0) {
+        const brutoPago = header.totalBruto - header.totalNaoPagos;
+        const totalDescontos = header.totalTaxas + header.totalServicos;
+        const taxaRate = brutoPago > 0 ? totalDescontos / brutoPago : 0;
+        taxaRateApplied = taxaRate;
+
+        const { data: lotsInRange } = await supabase
+          .from('audit_voucher_lots')
+          .select('id')
+          .eq('audit_period_id', audit_period_id)
+          .eq('operadora', 'pluxee')
+          .gte('data_credito', header.rangeIni)
+          .lte('data_credito', header.rangeFim);
+
+        const rangeIds = (lotsInRange ?? []).map(l => l.id);
+        if (rangeIds.length > 0) {
+          // Carrega items de TODOS os lots do range em 1 query e indexa por lot_id
+          const { data: rangeItems } = await supabase
+            .from('audit_voucher_lot_items')
+            .select('lot_id, valor, status_remote')
+            .in('lot_id', rangeIds)
+            .limit(20000);
+          const itemsByLot = new Map<string, any[]>();
+          for (const it of (rangeItems ?? [])) {
+            const arr = itemsByLot.get(it.lot_id) ?? [];
+            arr.push(it);
+            itemsByLot.set(it.lot_id, arr);
+          }
+
+          for (const lot of (lotsInRange ?? [])) {
+            const items = itemsByLot.get(lot.id) ?? [];
+            const brutoPagoLote = items
+              .filter(it => !String(it.status_remote ?? '').toUpperCase().includes('ERRO'))
+              .reduce((s, it) => s + Number(it.valor || 0), 0);
+            const descLote = Math.round(brutoPagoLote * taxaRate * 100) / 100;
+            const liqLote = Math.round((brutoPagoLote - descLote) * 100) / 100;
+            const { error: updErr } = await supabase
+              .from('audit_voucher_lots')
+              .update({
+                subtotal_vendas: Math.round(brutoPagoLote * 100) / 100,
+                total_descontos: descLote,
+                valor_liquido: liqLote,
+              })
+              .eq('id', lot.id);
+            if (!updErr) lotsAdjusted++;
+          }
+        }
+      } else {
+        console.warn('parsePagamentosHeader: range/bruto não detectados', header);
+      }
+    } catch (e) {
+      console.error('Erro ao aplicar taxas do header pluxee', e);
+    }
+
     await supabase.from('audit_imports').update({
       status: 'completed', imported_rows: updatedItems + createdItems, duplicate_rows: 0,
     }).eq('id', importRec.id);
@@ -291,7 +412,9 @@ Deno.serve(async (req) => {
       orphan_pagamentos: orphans.length,
       created_orphan_lots: createdLots,
       created_orphan_items: createdItems,
-      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes`,
+      lots_adjusted: lotsAdjusted,
+      taxa_rate_pct: Math.round(taxaRateApplied * 10000) / 100,
+      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-pagamentos-xlsx error', e);
