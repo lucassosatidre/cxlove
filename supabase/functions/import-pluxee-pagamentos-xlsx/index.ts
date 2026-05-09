@@ -412,7 +412,9 @@ Deno.serve(async (req) => {
       orphan_pagamentos: orphans.length,
       created_orphan_lots: createdLots,
       created_orphan_items: createdItems,
-      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes`,
+      lots_adjusted: lotsAdjusted,
+      taxa_rate_pct: Math.round(taxaRateApplied * 10000) / 100,
+      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-pagamentos-xlsx error', e);
