@@ -214,15 +214,15 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
         if (d >= 1 && d <= monthDays) compItemDays.push(d);
       }
     }
-    // Fallback pra lote sem items (caso real fev/26: 21 lotes VR sem items
-    // porque user só uploadou reembolsos.xls, não vendas.xls): se data_corte
-    // está no mês de competência, trata como lote 100% no mês usando os
-    // totais declarados. Sem isso, VR sumia inteiro do relatório.
     const corteNoMes = lot.data_corte != null
       && lot.data_corte >= competenciaIni
       && lot.data_corte < competenciaFim;
+    const operadoraJaImportada = operadoraTemItens[cat] === true;
     if (items.length === 0) {
-      if (!corteNoMes) continue;
+      // Fallback só quando a operadora INTEIRA não tem items (= user não
+      // uploadou vendas pra essa operadora). Se tem items mas este lote
+      // está vazio, é venda de mês anterior — pula.
+      if (!corteNoMes || operadoraJaImportada) continue;
     } else if (compCount === 0) {
       continue;
     }
