@@ -519,12 +519,15 @@ Deno.serve(async (req) => {
           case 'mensalidade': a.mensalidade += l.valor; break;
           default: a.outros += l.valor;
         }
-        // janela de apuração
-        if (l.data_apuracao_inicio && (!a.periodo_apuracao_inicio || l.data_apuracao_inicio < a.periodo_apuracao_inicio)) {
-          a.periodo_apuracao_inicio = l.data_apuracao_inicio;
-        }
-        if (l.data_apuracao_fim && (!a.periodo_apuracao_fim || l.data_apuracao_fim > a.periodo_apuracao_fim)) {
-          a.periodo_apuracao_fim = l.data_apuracao_fim;
+        // Janela de apuração derivada da base_date que alimentou o bucket — fica
+        // alinhada com o ciclo de repasse (corte dom + qua seguinte).
+        if (baseDate) {
+          if (!a.periodo_apuracao_inicio || baseDate < a.periodo_apuracao_inicio) {
+            a.periodo_apuracao_inicio = baseDate;
+          }
+          if (!a.periodo_apuracao_fim || baseDate > a.periodo_apuracao_fim) {
+            a.periodo_apuracao_fim = baseDate;
+          }
         }
       } else {
         // impacto=NÃO: vai pra pgto_direto_loja (Entrada Financeira) ou promo_loja
