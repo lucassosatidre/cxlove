@@ -316,9 +316,9 @@ export default function AuditImportacoes() {
     },
     {
       id: 'pluxee', label: 'Reembolsos Pluxee',
-      description: 'CSV de reembolsos Pluxee/Sodexo (arquivo com prefixo "1976928").',
+      description: 'CSV de reembolsos Pluxee/Sodexo (arquivo com prefixo "1976928"). Inclua o mês de competência E o mês posterior — vendas do fim do mês fecham em lote só no extrato do mês seguinte.',
       format: '.csv',
-      monthSlots: ['comp'],
+      monthSlots: ['comp', 'posterior'],
       fileTypes: ['pluxee'],
       group: 'vouchers', Component: UploadPluxeeCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
