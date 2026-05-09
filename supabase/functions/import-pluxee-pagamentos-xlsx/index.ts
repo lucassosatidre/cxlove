@@ -78,6 +78,65 @@ function colIndex(header: any[], ...needles: string[]): number {
   return -1;
 }
 
+// Parse header do extrato_pagamentos (rows ~9-17): extrai range do filtro e
+// totais (BRUTO, TAXAS, SERVIÇOS CONTRATADOS, OUTRAS DEDUÇÕES, LÍQUIDO).
+// Busca por keywords no label da linha + pega o último número numérico da
+// linha (mais robusto que assumir col fixa).
+function parsePagamentosHeader(rows: any[][]): {
+  rangeIni: string | null;
+  rangeFim: string | null;
+  totalBruto: number;
+  totalTaxas: number;
+  totalServicos: number;
+  totalNaoPagos: number;
+  totalLiquido: number;
+} {
+  const norm = (s: any) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const numFromCell = (v: any): number | null => {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const s = String(v).replace(/r\$/gi, '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const n = Number(s);
+    return isFinite(n) ? n : null;
+  };
+  const lastNumberInRow = (r: any[]): number => {
+    for (let i = (r?.length ?? 0) - 1; i >= 0; i--) {
+      const n = numFromCell(r[i]);
+      if (n != null) return n;
+    }
+    return 0;
+  };
+
+  let rangeIni: string | null = null;
+  let rangeFim: string | null = null;
+  let totalBruto = 0, totalTaxas = 0, totalServicos = 0, totalNaoPagos = 0, totalLiquido = 0;
+
+  // Limita scan às primeiras 30 rows (header é até ~17)
+  const limit = Math.min(rows.length, 30);
+  for (let i = 0; i < limit; i++) {
+    const r = rows[i] ?? [];
+    const joined = r.map((c: any) => norm(c)).join(' | ');
+    if ((rangeIni == null || rangeFim == null)) {
+      const m = joined.match(/(\d{2})\/(\d{2})\/(\d{4}).{1,10}?(\d{2})\/(\d{2})\/(\d{4})/);
+      if (m) {
+        rangeIni = `${m[3]}-${m[2]}-${m[1]}`;
+        rangeFim = `${m[6]}-${m[5]}-${m[4]}`;
+      }
+    }
+    if (joined.includes('total bruto')) totalBruto = lastNumberInRow(r);
+    else if (joined.includes('valor taxas') || joined.includes('valor das taxas')) totalTaxas = lastNumberInRow(r);
+    else if (joined.includes('servicos contratados') || joined.includes('servico contratado')) totalServicos = lastNumberInRow(r);
+    else if (joined.includes('outras deducoes') || joined.includes('nao pagos') || joined.includes('nao pago')) {
+      // só pega se for label de TOTAL (linha curta com valor à direita), não a sublinha
+      const v = lastNumberInRow(r);
+      if (v > totalNaoPagos) totalNaoPagos = v;
+    }
+    else if (joined.includes('total liquido')) totalLiquido = lastNumberInRow(r);
+  }
+
+  return { rangeIni, rangeFim, totalBruto, totalTaxas, totalServicos, totalNaoPagos, totalLiquido };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
