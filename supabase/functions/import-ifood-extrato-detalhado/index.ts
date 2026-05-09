@@ -152,11 +152,12 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
 // de apuração fim — ambas servem como referência pro ciclo iFood).
 // Regra iFood Pago (com antecipação automática contratada — modelo padrão fev/26):
 //   1. Corte = próximo domingo (>= base), OU último dia do mês se vier antes
-//   2. data_repasse = próxima quarta-feira após o corte (D+3 se corte é dom, D+4 se sáb)
-// Validado contra portal iFood fev/26:
-//   - Corte 01/02 (dom) → repasse 04/02 (qua, D+3)
-//   - Corte 08/02 (dom) → repasse 11/02 (qua, D+3)
-//   - Corte 28/02 (sáb, fim do mês) → repasse 04/03 (qua, D+4)
+//   2. Domingo âncora = próximo domingo >= corte (= corte se já for dom)
+//   3. data_repasse = âncora + 3 (sempre na quarta-feira seguinte ao âncora)
+// Validado contra portal iFood:
+//   - Corte 01/02 (dom) → âncora 01/02 → repasse 04/02 (qua, D+3)
+//   - Corte 28/02 (sáb, fim do mês) → âncora 01/03 → repasse 04/03 (qua)
+//   - Corte 31/03 (ter, fim do mês) → âncora 05/04 → repasse 08/04 (qua)
 // (O modelo antigo D+24 era pra lojas SEM antecipação — virou caso raro. A coluna
 // `data_repasse_esperada` do XLSX traz D+24 mesmo com antecipação ativa, então
 // ignoramos ela e calculamos pelo ciclo real.)
@@ -170,10 +171,18 @@ function calcDataRepasseFromPedido(baseIso: string | null): string | null {
   const lastDay = new Date(Date.UTC(y, m, 0)); // dia 0 do mês seguinte = último do mês
   const useMonthEnd = lastDay < sundayCorte && lastDay >= dt;
   const corte = useMonthEnd ? lastDay : sundayCorte;
-  // Próxima quarta-feira após o corte
+  // Repasse = primeira quarta APÓS o domingo âncora.
+  // Domingo âncora = próximo domingo >= corte (= o próprio corte se já for dom).
+  // Esse extra step tira a ambiguidade de meses que terminam mid-week:
+  // - Sat (último dia do mês): âncora = dom seguinte (1d após), repasse Wed (D+4 do Sat)
+  // - Sun: âncora = ele mesmo, repasse +3 (D+3 do Sun)
+  // - Tue (ex: 31/03/2026): âncora = dom seguinte (5d após = 05/04), repasse 08/04
+  //   (não 01/04 — esse pagaria o ciclo Mon 23 a Sun 29; os 2d Mon-Tue ficam no
+  //   próximo ciclo regular).
   const corteDow = corte.getUTCDay();
-  const daysUntilWed = ((3 - corteDow + 7) % 7) || 7; // se corte for qua, vai pra próxima qua (+7)
-  const repasse = new Date(corte.getTime() + daysUntilWed * 86400000);
+  const daysToAnchorSun = corteDow === 0 ? 0 : (7 - corteDow);
+  const anchorSunday = new Date(corte.getTime() + daysToAnchorSun * 86400000);
+  const repasse = new Date(anchorSunday.getTime() + 3 * 86400000); // Wed = Sun + 3
   return `${repasse.getUTCFullYear()}-${String(repasse.getUTCMonth() + 1).padStart(2, '0')}-${String(repasse.getUTCDate()).padStart(2, '0')}`;
 }
 
