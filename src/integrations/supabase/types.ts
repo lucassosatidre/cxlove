@@ -2813,6 +2813,7 @@ export type Database = {
           topics: string[]
         }[]
       }
+      delete_audit_import: { Args: { p_import_id: string }; Returns: Json }
       get_audit_contabil_breakdown: {
         Args: { p_period_id: string }
         Returns: {
