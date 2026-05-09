@@ -6,8 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, CheckCircle2, Circle, Play, FileText } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Play, FileText, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useState as useReactState } from 'react';
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import {
   UploadMaquinonaCard, UploadCresolCard,
