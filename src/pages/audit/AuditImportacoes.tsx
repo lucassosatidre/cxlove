@@ -334,6 +334,15 @@ export default function AuditImportacoes() {
       group: 'vouchers', Component: UploadPluxeePagamentosCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
     },
+    {
+      id: 'pluxee_csv_legacy', label: 'Pluxee — CSV legado (recuperação)',
+      description: 'CSV de reembolsos Pluxee no formato antigo (arquivo "1976928*.csv"). Use APENAS pra recuperar dados de audit periods anteriores a mar/26 que ainda usavam o formato CSV — não é mais o formato atual.',
+      format: '.csv',
+      monthSlots: ['comp'],
+      fileTypes: ['pluxee'],
+      group: 'vouchers', Component: UploadPluxeeCard,
+      postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
+    },
     // ─── Brendi ─────────────────────────────────────────────────────────────
     {
       id: 'brendi', label: 'Pedidos Brendi',
