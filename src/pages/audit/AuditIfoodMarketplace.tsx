@@ -43,6 +43,7 @@ type Repasse = {
   cancel_total: number;
   cancel_parcial: number;
   ads: number;
+  frota_garantida: number;
   ressarc: number;
   ocor_venda: number;
   reembolsos: number;
