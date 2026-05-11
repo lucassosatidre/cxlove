@@ -475,6 +475,7 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
             <Row label="Frete iFood" value={fmt(Math.abs(totals.frete_ifood))} />
             <Row label="Taxa entrega retenção" value={fmt(Math.abs(totals.taxa_entrega_ret))} />
             <Row label="Taxa serviço Sob Demanda Off" value={fmt(Math.abs(totals.taxa_servico_sob_demanda))} />
+            <Row label="Frota Garantida" value={fmt(Math.abs(totals.frota_garantida))} />
             <hr className="my-1" />
             <Row label="Subtotal" value={fmt(totals.custos_logistica)} bold />
           </CardContent>
