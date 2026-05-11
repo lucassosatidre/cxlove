@@ -453,7 +453,7 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: number; taxa_servico_sob_demanda: number;
       taxa_servico_cliente: number; promo_ifood: number; promo_loja: number;
       frete_ifood: number; cancel_frete: number; cancel_total: number; cancel_parcial: number;
-      ads: number; ressarc: number; ocor_venda: number; reembolsos: number;
+      ads: number; frota_garantida: number; ressarc: number; ocor_venda: number; reembolsos: number;
       mensalidade: number; outros: number;
       liquido_esperado: number;
       periodo_apuracao_inicio: string | null;
