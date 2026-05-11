@@ -537,6 +537,7 @@ Deno.serve(async (req) => {
           case 'cancel_total': a.cancel_total += l.valor; break;
           case 'cancel_parcial': a.cancel_parcial += l.valor; break;
           case 'ads': a.ads += l.valor; break;
+          case 'frota_garantida': a.frota_garantida += l.valor; break;
           case 'ressarc': a.ressarc += l.valor; break;
           case 'ocor_venda': a.ocor_venda += l.valor; break;
           case 'reembolsos': a.reembolsos += l.valor; break;
