@@ -140,7 +140,22 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
   if (f === 'cancelamento solicitação frete' || f === 'cancelamento solicitacao frete') return 'cancel_frete';
   if (f === 'cancelamento total') return 'cancel_total';
   if (f === 'cancelamento parcial') return 'cancel_parcial';
-  if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') return 'ads';
+  // "Ocorrência avulsa" é um fato_gerador genérico que o iFood usa pra ADS,
+  // Frota Garantida, ajustes de comissão e outros eventos. Subdividir pelo
+  // tipo_lancamento + descricao_lancamento — fallback NÃO é ads (era bug:
+  // Frota Garantida e ajustes inflavam o bucket de marketing).
+  if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') {
+    if (t.startsWith('frota garantida') || d.includes('frota garantida') || d.includes('frota dedicada')) {
+      return 'frota_garantida';
+    }
+    if (t.includes('ajuste de comissão') || t.includes('ajuste de comissao') || t.includes('ajuste comissão') || t.includes('ajuste comissao')) {
+      return 'comissao';
+    }
+    if (d.includes('anúncios') || d.includes('anuncios') || d.includes('pacote de anúncios') || d.includes('pacote de anuncios')) {
+      return 'ads';
+    }
+    return 'outros';
+  }
   if (f === 'ocorrência venda' || f === 'ocorrencia venda') return 'ocor_venda';
   if (f === 'ressarcimento/indenização' || f === 'ressarcimento/indenizacao') return 'ressarc';
   if (f === 'fechamento') return 'mensalidade';
