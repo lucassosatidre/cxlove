@@ -279,6 +279,7 @@ Deno.serve(async (req) => {
       const { data: existingGlobal } = await supabase
         .from('audit_card_transactions')
         .select('transaction_id')
+        .eq('audit_period_id', audit_period_id)
         .in('transaction_id', ids);
       const globalSet = new Set((existingGlobal ?? []).map((e: any) => e.transaction_id));
       const newIds = chunk.filter(t => !globalSet.has(t.transaction_id)).length;
