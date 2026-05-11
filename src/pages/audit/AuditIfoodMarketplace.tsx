@@ -229,6 +229,7 @@ export default function AuditIfoodMarketplace() {
     const cancel_total = sum('cancel_total');
     const cancel_parcial = sum('cancel_parcial');
     const ads = sum('ads');
+    const frota_garantida = sum('frota_garantida');
     const ressarc = sum('ressarc');
     const ocor_venda = sum('ocor_venda');
     const reembolsos = sum('reembolsos');
