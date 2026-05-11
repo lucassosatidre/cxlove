@@ -586,6 +586,7 @@ Deno.serve(async (req) => {
       cancel_total: round2(a.cancel_total),
       cancel_parcial: round2(a.cancel_parcial),
       ads: round2(a.ads),
+      frota_garantida: round2(a.frota_garantida),
       ressarc: round2(a.ressarc),
       ocor_venda: round2(a.ocor_venda),
       reembolsos: round2(a.reembolsos),
