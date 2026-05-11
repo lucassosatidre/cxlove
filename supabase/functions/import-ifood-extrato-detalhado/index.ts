@@ -466,7 +466,7 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: 0, taxa_servico_sob_demanda: 0,
       taxa_servico_cliente: 0, promo_ifood: 0, promo_loja: 0,
       frete_ifood: 0, cancel_frete: 0, cancel_total: 0, cancel_parcial: 0,
-      ads: 0, ressarc: 0, ocor_venda: 0, reembolsos: 0,
+      ads: 0, frota_garantida: 0, ressarc: 0, ocor_venda: 0, reembolsos: 0,
       mensalidade: 0, outros: 0,
       liquido_esperado: 0,
       periodo_apuracao_inicio: null, periodo_apuracao_fim: null,
