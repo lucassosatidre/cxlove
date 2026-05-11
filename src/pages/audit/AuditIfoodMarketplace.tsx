@@ -43,6 +43,7 @@ type Repasse = {
   cancel_total: number;
   cancel_parcial: number;
   ads: number;
+  frota_garantida: number;
   ressarc: number;
   ocor_venda: number;
   reembolsos: number;
@@ -228,6 +229,7 @@ export default function AuditIfoodMarketplace() {
     const cancel_total = sum('cancel_total');
     const cancel_parcial = sum('cancel_parcial');
     const ads = sum('ads');
+    const frota_garantida = sum('frota_garantida');
     const ressarc = sum('ressarc');
     const ocor_venda = sum('ocor_venda');
     const reembolsos = sum('reembolsos');
@@ -245,7 +247,7 @@ export default function AuditIfoodMarketplace() {
     // Custos que SOMAM no total (sinal negativo no DB → abs pra exibição)
     const custos_taxas = Math.abs(comissao) + Math.abs(taxa_transacao) + Math.abs(taxa_conveniencia)
       + Math.abs(mensalidade) + Math.abs(conta_taxa_antecip || 0);
-    const custos_logistica = Math.abs(frete_ifood) + Math.abs(taxa_entrega_ret) + Math.abs(taxa_servico_sob_demanda);
+    const custos_logistica = Math.abs(frete_ifood) + Math.abs(taxa_entrega_ret) + Math.abs(taxa_servico_sob_demanda) + Math.abs(frota_garantida);
     const custos_marketing = Math.abs(ads); // promo_loja é informativo
     const custo_total = custos_taxas + custos_logistica + custos_marketing;
 
@@ -256,7 +258,7 @@ export default function AuditIfoodMarketplace() {
       taxa_servico_sob_demanda, taxa_servico_cliente,
       promo_ifood, promo_loja,
       frete_ifood, cancel_frete, cancel_total, cancel_parcial,
-      ads, ressarc, ocor_venda, reembolsos, mensalidade, outros,
+      ads, frota_garantida, ressarc, ocor_venda, reembolsos, mensalidade, outros,
       liquido_esperado, conta_recebido, conta_taxa_antecip, liquido_efetivo,
       custos_taxas, custos_logistica, custos_marketing, custo_total,
       taxa_efetiva,
@@ -473,6 +475,7 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
             <Row label="Frete iFood" value={fmt(Math.abs(totals.frete_ifood))} />
             <Row label="Taxa entrega retenção" value={fmt(Math.abs(totals.taxa_entrega_ret))} />
             <Row label="Taxa serviço Sob Demanda Off" value={fmt(Math.abs(totals.taxa_servico_sob_demanda))} />
+            <Row label="Frota Garantida" value={fmt(Math.abs(totals.frota_garantida))} />
             <hr className="my-1" />
             <Row label="Subtotal" value={fmt(totals.custos_logistica)} bold />
           </CardContent>
@@ -637,6 +640,7 @@ function RepasseDetalhe({ r }: { r: Repasse }) {
           <DetailRow label="Taxa entrega retenção" value={r.taxa_entrega_ret} />
           <DetailRow label="Taxa serviço Sob Demanda" value={r.taxa_servico_sob_demanda} />
           <DetailRow label="ADS" value={r.ads} />
+          <DetailRow label="Frota Garantida" value={r.frota_garantida} />
           <DetailRow label="Mensalidade" value={r.mensalidade} />
           <DetailRow label="Tx antecipação (banco)" value={-(r.conta_taxa_antecip ?? 0)} />
         </div>

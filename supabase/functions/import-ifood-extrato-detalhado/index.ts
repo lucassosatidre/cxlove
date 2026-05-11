@@ -140,7 +140,22 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
   if (f === 'cancelamento solicitação frete' || f === 'cancelamento solicitacao frete') return 'cancel_frete';
   if (f === 'cancelamento total') return 'cancel_total';
   if (f === 'cancelamento parcial') return 'cancel_parcial';
-  if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') return 'ads';
+  // "Ocorrência avulsa" é um fato_gerador genérico que o iFood usa pra ADS,
+  // Frota Garantida, ajustes de comissão e outros eventos. Subdividir pelo
+  // tipo_lancamento + descricao_lancamento — fallback NÃO é ads (era bug:
+  // Frota Garantida e ajustes inflavam o bucket de marketing).
+  if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') {
+    if (t.startsWith('frota garantida') || d.includes('frota garantida') || d.includes('frota dedicada')) {
+      return 'frota_garantida';
+    }
+    if (t.includes('ajuste de comissão') || t.includes('ajuste de comissao') || t.includes('ajuste comissão') || t.includes('ajuste comissao')) {
+      return 'comissao';
+    }
+    if (d.includes('anúncios') || d.includes('anuncios') || d.includes('pacote de anúncios') || d.includes('pacote de anuncios')) {
+      return 'ads';
+    }
+    return 'outros';
+  }
   if (f === 'ocorrência venda' || f === 'ocorrencia venda') return 'ocor_venda';
   if (f === 'ressarcimento/indenização' || f === 'ressarcimento/indenizacao') return 'ressarc';
   if (f === 'fechamento') return 'mensalidade';
@@ -438,7 +453,7 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: number; taxa_servico_sob_demanda: number;
       taxa_servico_cliente: number; promo_ifood: number; promo_loja: number;
       frete_ifood: number; cancel_frete: number; cancel_total: number; cancel_parcial: number;
-      ads: number; ressarc: number; ocor_venda: number; reembolsos: number;
+      ads: number; frota_garantida: number; ressarc: number; ocor_venda: number; reembolsos: number;
       mensalidade: number; outros: number;
       liquido_esperado: number;
       periodo_apuracao_inicio: string | null;
@@ -451,7 +466,7 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: 0, taxa_servico_sob_demanda: 0,
       taxa_servico_cliente: 0, promo_ifood: 0, promo_loja: 0,
       frete_ifood: 0, cancel_frete: 0, cancel_total: 0, cancel_parcial: 0,
-      ads: 0, ressarc: 0, ocor_venda: 0, reembolsos: 0,
+      ads: 0, frota_garantida: 0, ressarc: 0, ocor_venda: 0, reembolsos: 0,
       mensalidade: 0, outros: 0,
       liquido_esperado: 0,
       periodo_apuracao_inicio: null, periodo_apuracao_fim: null,
@@ -522,6 +537,7 @@ Deno.serve(async (req) => {
           case 'cancel_total': a.cancel_total += l.valor; break;
           case 'cancel_parcial': a.cancel_parcial += l.valor; break;
           case 'ads': a.ads += l.valor; break;
+          case 'frota_garantida': a.frota_garantida += l.valor; break;
           case 'ressarc': a.ressarc += l.valor; break;
           case 'ocor_venda': a.ocor_venda += l.valor; break;
           case 'reembolsos': a.reembolsos += l.valor; break;
@@ -570,6 +586,7 @@ Deno.serve(async (req) => {
       cancel_total: round2(a.cancel_total),
       cancel_parcial: round2(a.cancel_parcial),
       ads: round2(a.ads),
+      frota_garantida: round2(a.frota_garantida),
       ressarc: round2(a.ressarc),
       ocor_venda: round2(a.ocor_venda),
       reembolsos: round2(a.reembolsos),

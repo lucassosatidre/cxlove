@@ -711,6 +711,7 @@ export type Database = {
           data_repasse_esperada: string
           diff: number | null
           frete_ifood: number | null
+          frota_garantida: number
           id: string
           liquido_efetivo: number | null
           liquido_esperado: number | null
@@ -750,6 +751,7 @@ export type Database = {
           data_repasse_esperada: string
           diff?: number | null
           frete_ifood?: number | null
+          frota_garantida?: number
           id?: string
           liquido_efetivo?: number | null
           liquido_esperado?: number | null
@@ -789,6 +791,7 @@ export type Database = {
           data_repasse_esperada?: string
           diff?: number | null
           frete_ifood?: number | null
+          frota_garantida?: number
           id?: string
           liquido_efetivo?: number | null
           liquido_esperado?: number | null
