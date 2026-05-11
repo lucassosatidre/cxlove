@@ -31,7 +31,7 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const TOLERANCE_BY_OPERADORA: Record<string, number> = {
   ticket: 0.02,
   alelo: 15,
-  pluxee: 0.02,
+  pluxee: 10, // taxa real varia por origem (PAT/AUXILIO/REEMBOLSO EXPRESSO); estimativa rateada do header é aproximação
   vr: 0.02,
 };
 const DEFAULT_TOLERANCE = 0.02;
