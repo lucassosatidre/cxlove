@@ -640,6 +640,7 @@ function RepasseDetalhe({ r }: { r: Repasse }) {
           <DetailRow label="Taxa entrega retenção" value={r.taxa_entrega_ret} />
           <DetailRow label="Taxa serviço Sob Demanda" value={r.taxa_servico_sob_demanda} />
           <DetailRow label="ADS" value={r.ads} />
+          <DetailRow label="Frota Garantida" value={r.frota_garantida} />
           <DetailRow label="Mensalidade" value={r.mensalidade} />
           <DetailRow label="Tx antecipação (banco)" value={-(r.conta_taxa_antecip ?? 0)} />
         </div>
