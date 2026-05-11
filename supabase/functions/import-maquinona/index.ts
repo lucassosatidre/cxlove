@@ -287,7 +287,7 @@ Deno.serve(async (req) => {
       // Upsert REAL (sem ignoreDuplicates) — UPDATE valores quando transaction_id já existe
       const { error: upsertErr } = await supabase
         .from('audit_card_transactions')
-        .upsert(chunk, { onConflict: 'transaction_id' });
+        .upsert(chunk, { onConflict: 'audit_period_id,transaction_id' });
       if (upsertErr) {
         await supabase.from('audit_imports').update({
           status: 'failed', error_message: upsertErr.message,
