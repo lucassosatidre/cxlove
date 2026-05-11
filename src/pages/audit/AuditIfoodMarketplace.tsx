@@ -247,7 +247,7 @@ export default function AuditIfoodMarketplace() {
     // Custos que SOMAM no total (sinal negativo no DB → abs pra exibição)
     const custos_taxas = Math.abs(comissao) + Math.abs(taxa_transacao) + Math.abs(taxa_conveniencia)
       + Math.abs(mensalidade) + Math.abs(conta_taxa_antecip || 0);
-    const custos_logistica = Math.abs(frete_ifood) + Math.abs(taxa_entrega_ret) + Math.abs(taxa_servico_sob_demanda);
+    const custos_logistica = Math.abs(frete_ifood) + Math.abs(taxa_entrega_ret) + Math.abs(taxa_servico_sob_demanda) + Math.abs(frota_garantida);
     const custos_marketing = Math.abs(ads); // promo_loja é informativo
     const custo_total = custos_taxas + custos_logistica + custos_marketing;
 
