@@ -821,6 +821,87 @@ export function UploadPluxeePagamentosCard({ ensurePeriod, onAfter }: UploadCard
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Pluxee — CSV legado (formato antigo "1976928*.csv", recuperação)
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadPluxeeCard({ ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const handleFiles = async (files: File[]) => {
+    const csvs = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
+    const invalid = files.length - csvs.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .csv`);
+    if (csvs.length === 0) return;
+    const p = await ensurePeriod();
+    if (!p) return;
+    setUploading(true);
+    const summaries: string[] = [];
+    const failures: string[] = [];
+    try {
+      for (let i = 0; i < csvs.length; i++) {
+        const file = csvs[i];
+        setProgress({ current: i + 1, total: csvs.length });
+        try {
+          const buf = await file.arrayBuffer();
+          // Pluxee CSV vem em ISO-8859-1 (Latin-1)
+          const content = new TextDecoder('iso-8859-1').decode(buf);
+          const { data, error } = await supabase.functions.invoke('import-pluxee-csv', {
+            body: { audit_period_id: p.id, file_name: file.name, content },
+          });
+          if (error) {
+            let detail = error.message ?? 'erro';
+            try {
+              const ctx = (error as any).context;
+              if (ctx && typeof ctx.json === 'function') {
+                const bj = await ctx.json();
+                if (bj?.error) detail = bj.error;
+              }
+            } catch { /* noop */ }
+            throw new Error(detail);
+          }
+          if (data?.skipped) { failures.push(`${file.name}: ${data.error}`); continue; }
+          if (!data?.success) throw new Error(data?.error || 'Falha no import');
+          summaries.push(data.message ?? `${file.name}: ok`);
+        } catch (e: any) {
+          failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+        }
+      }
+      if (failures.length) toast.error(`${failures.length}/${csvs.length} falharam`, { description: failures.join(' | ') });
+      if (summaries.length) toast.success(summaries.join(' · '));
+      await onAfter();
+    } finally {
+      setUploading(false);
+      setProgress(null);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileText className="h-5 w-5 text-amber-600" />
+        <CardTitle className="text-base">Pluxee — CSV legado (.csv)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Formato antigo (arquivo "1976928*.csv"). Use APENAS pra recuperar audit
+          periods anteriores a mar/26 que ainda usavam CSV. Não é mais o formato atual.
+        </p>
+        <input
+          ref={inputRef} type="file" accept=".csv" multiple className="hidden"
+          onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) handleFiles(f); }}
+        />
+        <Button variant="outline" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…') : 'Selecionar CSV (legado)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Brendi — XLSX (report "Resultado da consulta")
 // ─────────────────────────────────────────────────────────────────────────────
 export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
