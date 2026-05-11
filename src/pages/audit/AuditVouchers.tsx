@@ -560,21 +560,36 @@ export default function AuditVouchers() {
     const dep1 = lot?.bb_deposit_id ? deposits.find(d => d.id === lot.bb_deposit_id) : null;
     const dep2 = depositId ? deposits.find(d => d.id === depositId) : null;
     const sumDeps = (dep1 ? Number(dep1.amount) : 0) + (dep2 ? Number(dep2.amount) : 0);
-    const diff = lot ? sumDeps - Number(lot.valor_liquido) : 0;
+    const subtotal = Number(lot?.subtotal_vendas ?? 0);
+    // Recalcula descontos a partir do BB real (manual = BB é a verdade)
+    let extra: Record<string, any> = {};
+    let diff = lot ? sumDeps - Number(lot.valor_liquido) : 0;
+    if (lot && subtotal > 0 && sumDeps > 0) {
+      const newLiq = Math.round(sumDeps * 100) / 100;
+      const newDesc = Math.round((subtotal - sumDeps) * 100) / 100;
+      extra = { total_descontos: newDesc, valor_liquido: newLiq };
+      diff = 0;
+    }
     const { error } = await supabase
       .from('audit_voucher_lots')
-      .update({ bb_deposit_id_2: depositId, manual: true, diff })
+      .update({ bb_deposit_id_2: depositId, manual: true, diff, ...extra })
       .eq('id', lotId);
     if (error) { toast.error('Erro ao atualizar 2º match', { description: error.message }); return; }
-    toast.success(depositId ? '2º depósito vinculado' : '2º depósito removido');
+    toast.success(depositId ? '2º depósito vinculado · descontos recalculados' : '2º depósito removido');
     if (period) await refresh(period.id);
   };
 
   const setLotMatch = async (lotId: string, depositId: string | null) => {
     if (!depositId) {
+      // Remove match: zera descontos/liquido (serão recalculados quando re-pareado).
+      // subtotal_vendas é preservado (reflete o bruto importado real).
       const { error } = await supabase
         .from('audit_voucher_lots')
-        .update({ bb_deposit_id: null, bb_deposit_id_2: null, status: 'pending', manual: false, diff: null })
+        .update({
+          bb_deposit_id: null, bb_deposit_id_2: null,
+          status: 'pending', manual: false, diff: null,
+          total_descontos: 0, valor_liquido: 0,
+        })
         .eq('id', lotId);
       if (error) { toast.error('Erro ao remover match', { description: error.message }); return; }
       toast.success('Match removido');
@@ -585,19 +600,30 @@ export default function AuditVouchers() {
     const lot = lots.find(l => l.id === lotId);
     const otherLotsOnSameDep = lots.filter(l => l.bb_deposit_id === depositId && l.id !== lotId);
     const isMultiLot = otherLotsOnSameDep.length > 0;
-    const diff = (dep && lot && !isMultiLot)
-      ? Number(dep.amount) - Number(lot.valor_liquido)
-      : 0;
-    // Edição manual primária zera o secundário (usuário recomeça do zero)
+    const sumDeps = Number(dep?.amount ?? 0);
+    const subtotal = Number(lot?.subtotal_vendas ?? 0);
+    // Recalcula descontos/líquido a partir do BB real quando 1:1.
+    // Multi-lot: agregação resolve em outro lugar; só registra diff sem recalcular.
+    let extra: Record<string, any> = {};
+    let diff = 0;
+    if (!isMultiLot && dep && lot && subtotal > 0) {
+      const newLiq = Math.round(sumDeps * 100) / 100;
+      const newDesc = Math.round((subtotal - sumDeps) * 100) / 100;
+      extra = { total_descontos: newDesc, valor_liquido: newLiq };
+      diff = 0;
+    } else if (dep && lot && !isMultiLot) {
+      diff = sumDeps - Number(lot.valor_liquido);
+    }
     const { error } = await supabase
       .from('audit_voucher_lots')
-      .update({ bb_deposit_id: depositId, bb_deposit_id_2: null, status: 'matched', manual: true, diff })
+      .update({ bb_deposit_id: depositId, bb_deposit_id_2: null, status: 'matched', manual: true, diff, ...extra })
       .eq('id', lotId);
     if (error) { toast.error('Erro ao atualizar match', { description: error.message }); return; }
-    toast.success(isMultiLot ? `Match agregado (depósito agora paga ${otherLotsOnSameDep.length + 1} lotes)` : 'Match atualizado');
+    toast.success(isMultiLot
+      ? `Match agregado (depósito agora paga ${otherLotsOnSameDep.length + 1} lotes)`
+      : 'Match atualizado · descontos recalculados');
     if (period) await refresh(period.id);
   };
-
   const saveOverride = async (lotId: string, taxaCompetencia: number, note: string | null) => {
     const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
     if (existing) {

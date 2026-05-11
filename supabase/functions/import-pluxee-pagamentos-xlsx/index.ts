@@ -374,6 +374,9 @@ Deno.serve(async (req) => {
 
           for (const lot of (lotsInRange ?? [])) {
             const items = itemsByLot.get(lot.id) ?? [];
+            // subtotal_vendas SEMPRE reflete o bruto total importado (incluindo ERRO),
+            // pra UI mostrar que houve venda. Só descontos/líquido excluem ERRO.
+            const brutoTotalLote = items.reduce((s, it) => s + Number(it.valor || 0), 0);
             const brutoPagoLote = items
               .filter(it => !String(it.status_remote ?? '').toUpperCase().includes('ERRO'))
               .reduce((s, it) => s + Number(it.valor || 0), 0);
@@ -382,7 +385,7 @@ Deno.serve(async (req) => {
             const { error: updErr } = await supabase
               .from('audit_voucher_lots')
               .update({
-                subtotal_vendas: Math.round(brutoPagoLote * 100) / 100,
+                subtotal_vendas: Math.round(brutoTotalLote * 100) / 100,
                 total_descontos: descLote,
                 valor_liquido: liqLote,
               })
