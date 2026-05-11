@@ -258,7 +258,7 @@ export default function AuditIfoodMarketplace() {
       taxa_servico_sob_demanda, taxa_servico_cliente,
       promo_ifood, promo_loja,
       frete_ifood, cancel_frete, cancel_total, cancel_parcial,
-      ads, ressarc, ocor_venda, reembolsos, mensalidade, outros,
+      ads, frota_garantida, ressarc, ocor_venda, reembolsos, mensalidade, outros,
       liquido_esperado, conta_recebido, conta_taxa_antecip, liquido_efetivo,
       custos_taxas, custos_logistica, custos_marketing, custo_total,
       taxa_efetiva,
