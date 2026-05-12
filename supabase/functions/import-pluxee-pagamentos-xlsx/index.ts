@@ -16,7 +16,7 @@
 //   por data_pagamento e item dentro com status_remote já populado.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -214,11 +214,23 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: periodCheck.error, breakdown_by_month: periodCheck.breakdown }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Filtra pagamentos pelo mês alvo (data_pagamento) com offset +1 — Pluxee
+    // paga D+5/D+10 após corte, então pagamento do mês N pode cair no N+1.
+    // Sem isso, arquivo cobrindo mar+abr criava lotes PLUXEE-PAG nos 2 audit
+    // periods (duplicação cross-período silenciosa).
+    const periodFilter = filterToPeriod(
+      pagamentos,
+      (p) => p.data_pagamento,
+      { month: period.month, year: period.year },
+      [0, 1],
+    );
+    const pagamentosKept = periodFilter.kept;
+
     // Registra import
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id, file_type: 'pluxee_pagamentos', file_name,
-        total_rows: pagamentos.length, status: 'pending', created_by: userId,
+        total_rows: pagamentosKept.length, status: 'pending', created_by: userId,
       }).select().single();
     if (importErr) {
       return new Response(JSON.stringify({ error: `Erro ao registrar: ${importErr.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -262,7 +274,7 @@ Deno.serve(async (req) => {
     const orphans: Pag[] = [];
 
     // Pass 1: atualiza status_remote nos items que casam
-    for (const p of pagamentos) {
+    for (const p of pagamentosKept) {
       const itemId = existingByAuth.get(p.numero_autorizacao);
       if (itemId) {
         const { error: updErr } = await supabase
@@ -411,13 +423,16 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       total_pagamentos: pagamentos.length,
+      kept_in_period: pagamentosKept.length,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
       updated_items: updatedItems,
       orphan_pagamentos: orphans.length,
       created_orphan_lots: createdLots,
       created_orphan_items: createdItems,
       lots_adjusted: lotsAdjusted,
       taxa_rate_pct: Math.round(taxaRateApplied * 10000) / 100,
-      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)`,
+      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-pagamentos-xlsx error', e);

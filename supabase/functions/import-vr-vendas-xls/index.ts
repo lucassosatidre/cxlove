@@ -11,7 +11,7 @@
 //   Header com colunas: CNPJ, Produto, Data, Hora, Cartão, Número Autorização, Valor
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -201,6 +201,17 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Filtra vendas pelo mês alvo (apenas mês exato — venda é por competência
+    // do mês da venda). Arquivo cobrindo jan-mar não deve inserir items de
+    // jan/mar quando audit_period é fev.
+    const periodFilter = filterToPeriod(
+      sales,
+      (s) => s.data_venda,
+      { month: period.month, year: period.year },
+      [0],
+    );
+    const salesKept = periodFilter.kept;
+
     // Carrega TODOS os lotes VR do período (não só do mês de competência —
     // venda de fev pode estar em lote com corte em mar). Inclui subtotal_vendas
     // pra respeitar capacidade do lote no binding.
@@ -263,7 +274,7 @@ Deno.serve(async (req) => {
     const usedByLot = new Map<string, number>();
 
     const TOLERANCE = 0.05;
-    const sortedSales = [...sales].sort((a, b) => {
+    const sortedSales = [...salesKept].sort((a, b) => {
       if (a.data_venda !== b.data_venda) return a.data_venda.localeCompare(b.data_venda);
       return b.valor - a.valor;
     });
@@ -307,7 +318,7 @@ Deno.serve(async (req) => {
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id, file_type: 'vr', file_name,
-        total_rows: sales.length, status: 'pending', created_by: userId,
+        total_rows: salesKept.length, status: 'pending', created_by: userId,
       }).select().single();
     if (importErr) {
       return new Response(JSON.stringify({ error: `Erro ao registrar: ${importErr.message}` }), {
@@ -395,6 +406,9 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       total_sales: sales.length,
+      kept_in_period: salesKept.length,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
       linked_count: linked.length,
       orphan_count: orphans.length,
       orphans: orphans.slice(0, 30).map(o => ({

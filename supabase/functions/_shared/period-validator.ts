@@ -79,3 +79,41 @@ export function validatePeriodMatch(
   }
   return { ok: true, breakdown, primaryYM };
 }
+
+/**
+ * Filtra itens pelo mês alvo (e offsets opcionais). Use depois do
+ * validatePeriodMatch passar, pra descartar linhas de meses adjacentes que
+ * o user importou misturadas (causa-raiz da duplicação cross-período de VR/
+ * Ticket/Pluxee: arquivos cobriam jan-mar e o importer aceitava tudo).
+ */
+export function filterToPeriod<T>(
+  items: T[],
+  getDate: (item: T) => string | null | undefined,
+  period: PeriodRef,
+  allowedOffsets: number[] = [0],
+): { kept: T[]; skipped: number; skippedByMonth: Record<string, number> } {
+  const allowedYMs = new Set(
+    allowedOffsets.map(off => {
+      const d = new Date(period.year, period.month - 1 + off, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }),
+  );
+  const kept: T[] = [];
+  const skippedByMonth: Record<string, number> = {};
+  let skipped = 0;
+  for (const item of items) {
+    const ds = getDate(item);
+    const ym = ds ? ymOf(ds) : null;
+    if (!ym) {
+      kept.push(item);
+      continue;
+    }
+    if (allowedYMs.has(ym)) {
+      kept.push(item);
+    } else {
+      skipped += 1;
+      skippedByMonth[ym] = (skippedByMonth[ym] ?? 0) + 1;
+    }
+  }
+  return { kept, skipped, skippedByMonth };
+}

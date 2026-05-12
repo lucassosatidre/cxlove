@@ -15,7 +15,7 @@
 // status (PAGO / ERRO NO PAGAMENTO) é preenchido pelo importer de pagamentos.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -157,11 +157,21 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: periodCheck.error, breakdown_by_month: periodCheck.breakdown }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Filtra items pelo mês alvo (data_transacao). Arquivo cobrindo mais de
+    // um mês não deve criar items fora do period — competência é a venda.
+    const periodFilter = filterToPeriod(
+      items,
+      (it) => it.data_transacao,
+      { month: period.month, year: period.year },
+      [0],
+    );
+    const itemsKept = periodFilter.kept;
+
     // Registra import
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id, file_type: 'pluxee_vendas', file_name,
-        total_rows: items.length, status: 'pending', created_by: userId,
+        total_rows: itemsKept.length, status: 'pending', created_by: userId,
       }).select().single();
     if (importErr) {
       return new Response(JSON.stringify({ error: `Erro ao registrar: ${importErr.message}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -184,7 +194,7 @@ Deno.serve(async (req) => {
 
     // Agrupa por data_pagamento
     const byPag = new Map<string, Item[]>();
-    for (const it of items) {
+    for (const it of itemsKept) {
       const arr = byPag.get(it.data_pagamento) ?? [];
       arr.push(it);
       byPag.set(it.data_pagamento, arr);
@@ -256,8 +266,11 @@ Deno.serve(async (req) => {
       inserted_lots: insertedLots,
       inserted_items: insertedItems,
       total_items: items.length,
+      kept_in_period: itemsKept.length,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
       warnings,
-      message: `${insertedLots} lotes (por data_pagamento) com ${insertedItems} vendas`,
+      message: `${insertedLots} lotes (por data_pagamento) com ${insertedItems} vendas${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-vendas-xlsx error', e);

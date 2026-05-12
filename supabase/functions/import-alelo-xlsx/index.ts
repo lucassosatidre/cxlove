@@ -10,7 +10,7 @@
 //   11=Status  12=Data Pagamento
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -203,13 +203,23 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Filtra vendas pelo mês alvo (data_venda). Arquivo cobrindo mais de um
+    // mês não deve criar lotes/items fora do period — evita duplicação.
+    const periodFilter = filterToPeriod(
+      sales,
+      (s) => s.data_venda,
+      { month: period.month, year: period.year },
+      [0],
+    );
+    const salesKept = periodFilter.kept;
+
     type Lot = {
       data_pag: string;
       items: RawSale[];
       bruto: number; liquido: number; produtos: Set<string>;
     };
     const lotMap = new Map<string, Lot>();
-    for (const s of sales) {
+    for (const s of salesKept) {
       const lot = lotMap.get(s.data_pag) ?? { data_pag: s.data_pag, items: [], bruto: 0, liquido: 0, produtos: new Set<string>() };
       lot.items.push(s);
       lot.bruto += s.bruto;
@@ -219,7 +229,7 @@ Deno.serve(async (req) => {
     }
     const lots = Array.from(lotMap.values()).sort((a, b) => a.data_pag.localeCompare(b.data_pag));
 
-    const totalItems = sales.length;
+    const totalItems = salesKept.length;
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id, file_type: 'alelo', file_name,
@@ -334,7 +344,9 @@ Deno.serve(async (req) => {
       skipped_header: skippedHeader,
       skipped_non_approved: skippedNonApproved,
       skipped_invalid: skippedInvalid,
-      message: `${insertedLots} lotes novos + ${updatedLots} atualizados (${insertedItems} vendas)`,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
+      message: `${insertedLots} lotes novos + ${updatedLots} atualizados (${insertedItems} vendas)${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-alelo-xlsx error', e);

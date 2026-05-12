@@ -16,7 +16,7 @@
 //   - Filtra status que comecem com "Pago" (Pago Antecipado, Pago, etc).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -216,6 +216,18 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Filtra pelo mês alvo (+1 pra capturar vendas do mês creditadas no mês
+    // seguinte). Sem isso, arquivo cobrindo jan-mar gerava 21 lotes idênticos
+    // em cada audit_period — duplicação cross-período silenciosa.
+    const periodFilter = filterToPeriod(
+      lots,
+      (l) => l.data_corte ?? l.data_pagamento,
+      { month: period.month, year: period.year },
+      [0, 1],
+    );
+    const lotsKept = periodFilter.kept;
+    const skippedByMonth = periodFilter.skippedByMonth;
+
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
         audit_period_id, file_type: 'vr', file_name,
@@ -229,17 +241,24 @@ Deno.serve(async (req) => {
 
     let insertedLots = 0;
     let updatedLots = 0;
+    let skippedDupCrossPeriod = 0;
     const insertedItems = 0;
 
-    for (const lot of lots) {
+    for (const lot of lotsKept) {
       const totalDesc = Math.round((lot.bruto - lot.liquido) * 100) / 100;
-      const { data: existing } = await supabase
+      // Checagem GLOBAL pelo numero_reembolso: se já existe em OUTRO período,
+      // pula (cada reembolso vive em 1 só período — o do mês da venda).
+      const { data: anyExisting } = await supabase
         .from('audit_voucher_lots')
-        .select('id')
-        .eq('audit_period_id', audit_period_id)
+        .select('id, audit_period_id')
         .eq('operadora', 'vr')
         .eq('numero_reembolso', lot.guia)
         .maybeSingle();
+      if (anyExisting && anyExisting.audit_period_id !== audit_period_id) {
+        skippedDupCrossPeriod++;
+        continue;
+      }
+      const existing = anyExisting && anyExisting.audit_period_id === audit_period_id ? anyExisting : null;
 
       const lotPayload = {
         audit_period_id, operadora: 'vr',
@@ -309,7 +328,12 @@ Deno.serve(async (req) => {
       inserted_items: insertedItems,
       skipped_non_pago: skippedNonPago,
       skipped_invalid: skippedInvalid,
-      message: `${insertedLots} lotes novos + ${updatedLots} atualizados`,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: skippedByMonth,
+      skipped_dup_cross_period: skippedDupCrossPeriod,
+      message: `${insertedLots} lotes novos + ${updatedLots} atualizados`
+        + (periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês alvo)` : '')
+        + (skippedDupCrossPeriod > 0 ? ` (${skippedDupCrossPeriod} já existem em outro período)` : ''),
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-vr-xls error', e);

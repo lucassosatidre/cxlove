@@ -6,7 +6,7 @@
 // os matches por posição pra reconstruir a sequência lógica.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -445,6 +445,17 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Filtra lotes pelo mês alvo (data_credito) com offset +1 — Ticket credita
+    // até ~3 semanas após corte, então vendas do mês N podem ter crédito no
+    // mês N+1. Lotes com crédito fora desse range pertencem a outro audit_period.
+    const periodFilter = filterToPeriod(
+      lots,
+      (l: any) => l.data_credito,
+      { month: period.month, year: period.year },
+      [0, 1],
+    );
+    const lotsKept = periodFilter.kept;
+
     // Sanity: subtotal_vendas == soma items, e (subtotal - total_descontos) == valor_liquido.
     const integrityErrors: string[] = [];
     for (const l of lots) {
@@ -458,7 +469,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const totalItems = lots.reduce((s, l) => s + l.items.length, 0);
+    const totalItems = lotsKept.reduce((s, l) => s + l.items.length, 0);
 
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
@@ -480,7 +491,8 @@ Deno.serve(async (req) => {
     let insertedItems = 0;
     const lotErrors: string[] = [];
 
-    for (const l of lots) {
+    let skippedDupCrossPeriod = 0;
+    for (const l of lotsKept) {
       try {
         // Reconciliação aritmética. O TOTAL_DESC_RE é frágil — pdfjs reordena
         // "Total Descontos" e "Valor Líquido" e a regex acaba capturando o R$
@@ -501,13 +513,21 @@ Deno.serve(async (req) => {
           l.valor_liquido = l.subtotal_vendas;
         }
 
-        const { data: existing } = await supabase
+        // Checagem GLOBAL pelo numero_reembolso (não só do período): se o lote
+        // já existe em outro audit_period, pula — cada reembolso vive em UM
+        // só mês (o da venda). Sem isso, arquivo cobrindo fev+mar gerava o
+        // mesmo lote nos 2 periods.
+        const { data: anyExisting } = await supabase
           .from('audit_voucher_lots')
-          .select('id')
-          .eq('audit_period_id', audit_period_id)
+          .select('id, audit_period_id')
           .eq('operadora', 'ticket')
           .eq('numero_reembolso', l.numero_reembolso)
           .maybeSingle();
+        if (anyExisting && anyExisting.audit_period_id !== audit_period_id) {
+          skippedDupCrossPeriod++;
+          continue;
+        }
+        const existing = anyExisting && anyExisting.audit_period_id === audit_period_id ? anyExisting : null;
 
         const lotPayload = {
           audit_period_id,
@@ -597,6 +617,10 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       total_lots: lots.length,
+      kept_in_period: lotsKept.length,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
+      skipped_dup_cross_period: skippedDupCrossPeriod,
       inserted_lots: insertedLots,
       updated_lots: updatedLots,
       total_items: totalItems,
@@ -605,7 +629,7 @@ Deno.serve(async (req) => {
       lot_errors: lotErrors.slice(0, 10),
       lot_errors_count: lotErrors.length,
       warnings: warnings.slice(0, 20),
-      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas)${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}`,
+      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas)${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}${skippedDupCrossPeriod > 0 ? ` (${skippedDupCrossPeriod} já em outro período)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-ticket-pdf error', e);
