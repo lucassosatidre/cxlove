@@ -2916,6 +2916,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      ifood_calc_data_repasse: { Args: { base: string }; Returns: string }
+      ifood_shift_back21d: { Args: { base: string }; Returns: string }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
       promote_from_waitlist: {
         Args: {
