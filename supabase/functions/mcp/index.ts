@@ -805,6 +805,8 @@ const corsHeaders = {
 
 app.options("/*", (c) => new Response(null, { headers: corsHeaders }));
 
+const mcpHandler = transport.bind(mcp);
+
 app.all("/*", async (c) => {
   const auth = checkAuth(c.req.raw);
   if (!auth.ok) {
@@ -817,8 +819,7 @@ app.all("/*", async (c) => {
       },
     });
   }
-  const resp = await transport.handleRequest(c.req.raw, mcp);
-  // attach CORS to response
+  const resp = await mcpHandler(c.req.raw);
   const newHeaders = new Headers(resp.headers);
   for (const [k, v] of Object.entries(corsHeaders)) newHeaders.set(k, v);
   return new Response(resp.body, { status: resp.status, headers: newHeaders });
