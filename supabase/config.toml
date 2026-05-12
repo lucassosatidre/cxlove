@@ -2,3 +2,6 @@ project_id = "hvpmkkxvvjnefayrlcjy"
 
 [functions.pickngo-webhook]
 verify_jwt = false
+
+[functions.mcp]
+verify_jwt = false
