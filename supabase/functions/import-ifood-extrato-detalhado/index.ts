@@ -140,13 +140,21 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
   if (f === 'cancelamento solicitação frete' || f === 'cancelamento solicitacao frete') return 'cancel_frete';
   if (f === 'cancelamento total') return 'cancel_total';
   if (f === 'cancelamento parcial') return 'cancel_parcial';
-  // "Ocorrência avulsa" no iFood é guarda-chuva: ADS (pacote de anúncios) +
-  // Frota Garantida (logística contratada) + ajustes diversos. Separar pela
-  // descrição é único caminho — fato_gerador é idêntico em todos.
+  // "Ocorrência avulsa" é um fato_gerador genérico que o iFood usa pra ADS,
+  // Frota Garantida, ajustes de comissão e outros eventos. Subdividir pelo
+  // tipo_lancamento + descricao_lancamento — fallback NÃO é ads (era bug:
+  // Frota Garantida e ajustes inflavam o bucket de marketing).
   if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') {
-    if (d.includes('pacote de anúncios') || d.includes('pacote de anuncios')) return 'ads';
-    if (d.includes('frota garantida')) return 'frete_garantido';
-    return 'outros_avulsos';
+    if (t.startsWith('frota garantida') || d.includes('frota garantida') || d.includes('frota dedicada')) {
+      return 'frota_garantida';
+    }
+    if (t.includes('ajuste de comissão') || t.includes('ajuste de comissao') || t.includes('ajuste comissão') || t.includes('ajuste comissao')) {
+      return 'comissao';
+    }
+    if (d.includes('anúncios') || d.includes('anuncios') || d.includes('pacote de anúncios') || d.includes('pacote de anuncios')) {
+      return 'ads';
+    }
+    return 'outros';
   }
   if (f === 'ocorrência venda' || f === 'ocorrencia venda') return 'ocor_venda';
   if (f === 'ressarcimento/indenização' || f === 'ressarcimento/indenizacao') return 'ressarc';
@@ -159,11 +167,12 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
 // de apuração fim — ambas servem como referência pro ciclo iFood).
 // Regra iFood Pago (com antecipação automática contratada — modelo padrão fev/26):
 //   1. Corte = próximo domingo (>= base), OU último dia do mês se vier antes
-//   2. data_repasse = próxima quarta-feira após o corte (D+3 se corte é dom, D+4 se sáb)
-// Validado contra portal iFood fev/26:
-//   - Corte 01/02 (dom) → repasse 04/02 (qua, D+3)
-//   - Corte 08/02 (dom) → repasse 11/02 (qua, D+3)
-//   - Corte 28/02 (sáb, fim do mês) → repasse 04/03 (qua, D+4)
+//   2. Domingo âncora = próximo domingo >= corte (= corte se já for dom)
+//   3. data_repasse = âncora + 3 (sempre na quarta-feira seguinte ao âncora)
+// Validado contra portal iFood:
+//   - Corte 01/02 (dom) → âncora 01/02 → repasse 04/02 (qua, D+3)
+//   - Corte 28/02 (sáb, fim do mês) → âncora 01/03 → repasse 04/03 (qua)
+//   - Corte 31/03 (ter, fim do mês) → âncora 05/04 → repasse 08/04 (qua)
 // (O modelo antigo D+24 era pra lojas SEM antecipação — virou caso raro. A coluna
 // `data_repasse_esperada` do XLSX traz D+24 mesmo com antecipação ativa, então
 // ignoramos ela e calculamos pelo ciclo real.)
@@ -177,10 +186,18 @@ function calcDataRepasseFromPedido(baseIso: string | null): string | null {
   const lastDay = new Date(Date.UTC(y, m, 0)); // dia 0 do mês seguinte = último do mês
   const useMonthEnd = lastDay < sundayCorte && lastDay >= dt;
   const corte = useMonthEnd ? lastDay : sundayCorte;
-  // Próxima quarta-feira após o corte
+  // Repasse = primeira quarta APÓS o domingo âncora.
+  // Domingo âncora = próximo domingo >= corte (= o próprio corte se já for dom).
+  // Esse extra step tira a ambiguidade de meses que terminam mid-week:
+  // - Sat (último dia do mês): âncora = dom seguinte (1d após), repasse Wed (D+4 do Sat)
+  // - Sun: âncora = ele mesmo, repasse +3 (D+3 do Sun)
+  // - Tue (ex: 31/03/2026): âncora = dom seguinte (5d após = 05/04), repasse 08/04
+  //   (não 01/04 — esse pagaria o ciclo Mon 23 a Sun 29; os 2d Mon-Tue ficam no
+  //   próximo ciclo regular).
   const corteDow = corte.getUTCDay();
-  const daysUntilWed = ((3 - corteDow + 7) % 7) || 7; // se corte for qua, vai pra próxima qua (+7)
-  const repasse = new Date(corte.getTime() + daysUntilWed * 86400000);
+  const daysToAnchorSun = corteDow === 0 ? 0 : (7 - corteDow);
+  const anchorSunday = new Date(corte.getTime() + daysToAnchorSun * 86400000);
+  const repasse = new Date(anchorSunday.getTime() + 3 * 86400000); // Wed = Sun + 3
   return `${repasse.getUTCFullYear()}-${String(repasse.getUTCMonth() + 1).padStart(2, '0')}-${String(repasse.getUTCDate()).padStart(2, '0')}`;
 }
 
@@ -436,8 +453,7 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: number; taxa_servico_sob_demanda: number;
       taxa_servico_cliente: number; promo_ifood: number; promo_loja: number;
       frete_ifood: number; cancel_frete: number; cancel_total: number; cancel_parcial: number;
-      ads: number; frete_garantido: number; outros_avulsos: number;
-      ressarc: number; ocor_venda: number; reembolsos: number;
+      ads: number; frota_garantida: number; ressarc: number; ocor_venda: number; reembolsos: number;
       mensalidade: number; outros: number;
       liquido_esperado: number;
       periodo_apuracao_inicio: string | null;
@@ -450,8 +466,7 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: 0, taxa_servico_sob_demanda: 0,
       taxa_servico_cliente: 0, promo_ifood: 0, promo_loja: 0,
       frete_ifood: 0, cancel_frete: 0, cancel_total: 0, cancel_parcial: 0,
-      ads: 0, frete_garantido: 0, outros_avulsos: 0,
-      ressarc: 0, ocor_venda: 0, reembolsos: 0,
+      ads: 0, frota_garantida: 0, ressarc: 0, ocor_venda: 0, reembolsos: 0,
       mensalidade: 0, outros: 0,
       liquido_esperado: 0,
       periodo_apuracao_inicio: null, periodo_apuracao_fim: null,
@@ -467,10 +482,32 @@ Deno.serve(async (req) => {
       //   1) data_criacao_pedido_associado (preferido, vendas têm pedido)
       //   2) data_apuracao_fim (fim do período de apuração)
       //   3) data_repasse_esperada do XLSX − 21 dias (linhas sem pedido nem apuração)
-      let dataRepasse: string | null =
-        calcDataRepasseFromPedido(l.data_criacao_pedido_associado)
-        ?? calcDataRepasseFromPedido(l.data_apuracao_fim)
-        ?? shiftBack21d(l.data_repasse_esperada);
+      // Rastreia qual data alimentou o bucket calc — vira a "data efetiva de
+      // apuração" da linha. Usada no MIN/MAX do periodo_apuracao_inicio/fim em
+      // vez de data_apuracao_inicio/fim do XLSX (que pode estar desalinhada do
+      // ciclo, ex: pedidos do domingo de corte vêm com apuração da semana
+      // seguinte → mancha o range mostrado).
+      let dataRepasse: string | null = null;
+      let baseDate: string | null = null;
+      const calcFromPedido = calcDataRepasseFromPedido(l.data_criacao_pedido_associado);
+      if (calcFromPedido) {
+        dataRepasse = calcFromPedido;
+        baseDate = l.data_criacao_pedido_associado;
+      }
+      if (!dataRepasse) {
+        const calcFromApur = calcDataRepasseFromPedido(l.data_apuracao_fim);
+        if (calcFromApur) {
+          dataRepasse = calcFromApur;
+          baseDate = l.data_apuracao_fim;
+        }
+      }
+      if (!dataRepasse) {
+        const shifted = shiftBack21d(l.data_repasse_esperada);
+        if (shifted) {
+          dataRepasse = shifted;
+          baseDate = shifted;
+        }
+      }
       if (!dataRepasse) {
         // Lançamento sem qualquer data utilizável — não é agregado em nenhum
         // repasse, então some do líquido_esperado consolidado. Conta pra
@@ -500,20 +537,22 @@ Deno.serve(async (req) => {
           case 'cancel_total': a.cancel_total += l.valor; break;
           case 'cancel_parcial': a.cancel_parcial += l.valor; break;
           case 'ads': a.ads += l.valor; break;
-          case 'frete_garantido': a.frete_garantido += l.valor; break;
-          case 'outros_avulsos': a.outros_avulsos += l.valor; break;
+          case 'frota_garantida': a.frota_garantida += l.valor; break;
           case 'ressarc': a.ressarc += l.valor; break;
           case 'ocor_venda': a.ocor_venda += l.valor; break;
           case 'reembolsos': a.reembolsos += l.valor; break;
           case 'mensalidade': a.mensalidade += l.valor; break;
           default: a.outros += l.valor;
         }
-        // janela de apuração
-        if (l.data_apuracao_inicio && (!a.periodo_apuracao_inicio || l.data_apuracao_inicio < a.periodo_apuracao_inicio)) {
-          a.periodo_apuracao_inicio = l.data_apuracao_inicio;
-        }
-        if (l.data_apuracao_fim && (!a.periodo_apuracao_fim || l.data_apuracao_fim > a.periodo_apuracao_fim)) {
-          a.periodo_apuracao_fim = l.data_apuracao_fim;
+        // Janela de apuração derivada da base_date que alimentou o bucket — fica
+        // alinhada com o ciclo de repasse (corte dom + qua seguinte).
+        if (baseDate) {
+          if (!a.periodo_apuracao_inicio || baseDate < a.periodo_apuracao_inicio) {
+            a.periodo_apuracao_inicio = baseDate;
+          }
+          if (!a.periodo_apuracao_fim || baseDate > a.periodo_apuracao_fim) {
+            a.periodo_apuracao_fim = baseDate;
+          }
         }
       } else {
         // impacto=NÃO: vai pra pgto_direto_loja (Entrada Financeira) ou promo_loja
@@ -547,8 +586,7 @@ Deno.serve(async (req) => {
       cancel_total: round2(a.cancel_total),
       cancel_parcial: round2(a.cancel_parcial),
       ads: round2(a.ads),
-      frete_garantido: round2(a.frete_garantido),
-      outros_avulsos: round2(a.outros_avulsos),
+      frota_garantida: round2(a.frota_garantida),
       ressarc: round2(a.ressarc),
       ocor_venda: round2(a.ocor_venda),
       reembolsos: round2(a.reembolsos),

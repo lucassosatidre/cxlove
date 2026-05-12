@@ -1,25 +1,26 @@
 -- =============================================================================
--- iFood Marketplace — separa "Ocorrência avulsa" em ads (anúncios) + Frota
--- Garantida (logística) + outros avulsos
+-- iFood Marketplace — backfill da separação "Ocorrência avulsa"
 -- =============================================================================
--- Bug: o classificador agrupava TODO fato_gerador="Ocorrência avulsa" no bucket
--- `ads`. iFood usa essa categoria como guarda-chuva pra anúncios, Frota
--- Garantida e ajustes diversos. Em Mar/26 a Estrela contratou Frota Garantida
--- e R$ ~6,8k caiu indevidamente em ADS, inflando o KPI de marketing.
+-- Lovable adicionou a coluna `frota_garantida` em audit_ifood_repasses na
+-- migration 20260511210859, e atualizou o classificador do edge function pra
+-- separar Frota Garantida / ADS / ajustes de comissão / outros.
 --
--- Esta migration: adiciona 2 colunas, atualiza categoria_calc em lançamentos
--- existentes e re-agrega audit_ifood_repasses sem precisar reimportar XLSX.
+-- MAS dados já importados (Mar/26 em diante) continuam com tudo agrupado em
+-- `ads` — sem reimport o KPI continua errado. Esta migration faz o backfill
+-- 100% via SQL re-agregando audit_ifood_lancamentos, sem precisar reimportar
+-- XLSX.
+--
+-- Passos:
+--   1. Atualiza audit_ifood_lancamentos.categoria_calc das linhas "Ocorrência
+--      avulsa" usando a MESMA regra do edge atualizado.
+--   2. Re-agrega audit_ifood_repasses: redistribui o valor entre ads,
+--      frota_garantida, comissao e outros conforme a nova classificação.
 -- =============================================================================
 
--- ─── 1. Novas colunas em audit_ifood_repasses ────────────────────────────────
-ALTER TABLE public.audit_ifood_repasses
-  ADD COLUMN IF NOT EXISTS frete_garantido numeric(14,2) DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS outros_avulsos  numeric(14,2) DEFAULT 0;
-
--- ─── 2. Helpers SQL para recalcular data_repasse a partir de uma data base ──
--- Espelha calcDataRepasseFromPedido() do edge function:
---   1) corte = próximo domingo (>= base) OU último dia do mês se vier antes
---   2) data_repasse = próxima quarta-feira após o corte
+-- ─── 1. Helpers SQL pra replicar calcDataRepasseFromPedido + shiftBack21d ───
+-- Espelha calcDataRepasseFromPedido() do edge:
+--   corte = próximo domingo (>= base), ou último dia do mês se vier antes;
+--   data_repasse = próxima quarta-feira após o corte.
 CREATE OR REPLACE FUNCTION public.ifood_calc_data_repasse(base date)
 RETURNS date
 LANGUAGE plpgsql
@@ -51,7 +52,6 @@ BEGIN
 END;
 $$;
 
--- Espelha shiftBack21d()
 CREATE OR REPLACE FUNCTION public.ifood_shift_back21d(base date)
 RETURNS date
 LANGUAGE sql
@@ -60,24 +60,32 @@ AS $$
   SELECT CASE WHEN base IS NULL THEN NULL ELSE base - 21 END;
 $$;
 
--- ─── 3. Backfill audit_ifood_lancamentos.categoria_calc ─────────────────────
--- Linhas com fato_gerador="Ocorrência avulsa" ficam:
---   - "pacote de anúncios"  → 'ads' (continua)
---   - "Frota Garantida"     → 'frete_garantido' (novo bucket)
---   - resto                 → 'outros_avulsos'
+-- ─── 2. Reclassifica lançamentos "Ocorrência avulsa" ────────────────────────
+-- Mesma regra do edge atualizado:
+--   - tipo "Frota Garantida..." ou descrição com "frota garantida/dedicada" → frota_garantida
+--   - tipo com "ajuste de comissão"                                         → comissao
+--   - descrição com "anúncios/pacote de anúncios"                           → ads
+--   - resto                                                                 → outros
 UPDATE public.audit_ifood_lancamentos
 SET categoria_calc = CASE
-  WHEN descricao_lancamento ILIKE '%pacote de an%ncios%' THEN 'ads'
-  WHEN descricao_lancamento ILIKE '%frota garantida%'    THEN 'frete_garantido'
-  ELSE 'outros_avulsos'
+  WHEN lower(coalesce(tipo_lancamento,'')) LIKE 'frota garantida%'
+       OR lower(coalesce(descricao_lancamento,'')) LIKE '%frota garantida%'
+       OR lower(coalesce(descricao_lancamento,'')) LIKE '%frota dedicada%' THEN 'frota_garantida'
+  WHEN lower(coalesce(tipo_lancamento,'')) LIKE '%ajuste de comiss%' THEN 'comissao'
+  WHEN lower(coalesce(descricao_lancamento,'')) LIKE '%pacote de an%'
+       OR lower(coalesce(descricao_lancamento,'')) LIKE '%an%ncios%' THEN 'ads'
+  ELSE 'outros'
 END
 WHERE lower(coalesce(fato_gerador,'')) IN ('ocorrência avulsa', 'ocorrencia avulsa');
 
--- ─── 4. Re-agregação dos repasses existentes ────────────────────────────────
--- Recalcula data_repasse via mesma cascata de fallbacks do edge function:
---   1) data_criacao_pedido_associado (UTC date)
+-- ─── 3. Re-agregação dos repasses existentes ────────────────────────────────
+-- Calcula data_repasse usando a mesma cascata de fallbacks do edge function:
+--   1) data_criacao_pedido_associado (UTC)
 --   2) data_apuracao_fim
 --   3) data_repasse_esperada do XLSX − 21 dias
+-- Considera apenas linhas com impacto_no_repasse='SIM' (mesma regra do agg
+-- original). Só atualiza colunas que mudaram: ads, frota_garantida, comissao,
+-- outros. As demais (bruto_venda, taxa_*, etc.) ficam inalteradas.
 WITH lanc AS (
   SELECT
     l.audit_period_id,
@@ -89,25 +97,36 @@ WITH lanc AS (
     ) AS data_repasse_calc,
     l.categoria_calc,
     l.impacto_no_repasse,
-    l.valor
+    l.valor,
+    lower(coalesce(l.fato_gerador,'')) AS fg_lower
   FROM public.audit_ifood_lancamentos l
 ), agg AS (
+  -- Apenas avalia as linhas que vieram de "Ocorrência avulsa" — qualquer
+  -- outra categoria já está corretamente agregada. Para essas, recomputa o
+  -- delta a aplicar em ads, frota_garantida, comissao e outros.
   SELECT
     audit_period_id,
     store_id_curto,
     data_repasse_calc,
-    SUM(CASE WHEN impacto_no_repasse = 'SIM' AND categoria_calc = 'ads'             THEN valor ELSE 0 END) AS ads_novo,
-    SUM(CASE WHEN impacto_no_repasse = 'SIM' AND categoria_calc = 'frete_garantido' THEN valor ELSE 0 END) AS frete_garantido_sum,
-    SUM(CASE WHEN impacto_no_repasse = 'SIM' AND categoria_calc = 'outros_avulsos'  THEN valor ELSE 0 END) AS outros_avulsos_sum
+    SUM(CASE WHEN categoria_calc = 'ads'             THEN valor ELSE 0 END) AS sum_ads,
+    SUM(CASE WHEN categoria_calc = 'frota_garantida' THEN valor ELSE 0 END) AS sum_frota,
+    SUM(CASE WHEN categoria_calc = 'comissao'        THEN valor ELSE 0 END) AS sum_comissao_extra,
+    SUM(CASE WHEN categoria_calc = 'outros'          THEN valor ELSE 0 END) AS sum_outros_extra,
+    -- Total da "Ocorrência avulsa" que antes ia 100% pra ads
+    SUM(valor) AS sum_total_avulsa
   FROM lanc
-  WHERE data_repasse_calc IS NOT NULL
+  WHERE impacto_no_repasse = 'SIM'
+    AND fg_lower IN ('ocorrência avulsa', 'ocorrencia avulsa')
+    AND data_repasse_calc IS NOT NULL
   GROUP BY 1, 2, 3
 )
 UPDATE public.audit_ifood_repasses r
 SET
-  ads             = ROUND(agg.ads_novo::numeric, 2),
-  frete_garantido = ROUND(agg.frete_garantido_sum::numeric, 2),
-  outros_avulsos  = ROUND(agg.outros_avulsos_sum::numeric, 2),
+  -- Antes: ads continha TODO sum_total_avulsa. Agora separa.
+  ads             = ROUND((COALESCE(r.ads, 0) - agg.sum_total_avulsa + agg.sum_ads)::numeric, 2),
+  frota_garantida = ROUND((COALESCE(r.frota_garantida, 0) + agg.sum_frota)::numeric, 2),
+  comissao        = ROUND((COALESCE(r.comissao, 0) + agg.sum_comissao_extra)::numeric, 2),
+  outros          = ROUND((COALESCE(r.outros, 0) + agg.sum_outros_extra)::numeric, 2),
   updated_at      = now()
 FROM agg
 WHERE r.audit_period_id        = agg.audit_period_id

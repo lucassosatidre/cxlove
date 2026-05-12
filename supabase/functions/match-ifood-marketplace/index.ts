@@ -52,6 +52,13 @@ const REPASSE_TOLERANCE_EXATO = 0.10;
 // R$100 ainda é segurança boa: PIX de outra comp difere em MILHARES,
 // não centenas — false positive é improvável.
 const REPASSE_TOLERANCE_APROX = 100.0;
+const REPASSE_TOLERANCE_DIAS = 2; // PIX antecipação pode adiantar 1-2 dias
+
+function shiftDateIso(iso: string, deltaDays: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + deltaDays);
+  return d.toISOString().slice(0, 10);
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -261,6 +268,7 @@ Deno.serve(async (req) => {
 
     const matchedDataSet = new Set<string>(); // datas esperadas já matched
     const matchedAntecipIds = new Set<string>(); // ids de antecipações que casaram (pra Pass 3)
+    const antecipDataEsperada = new Map<string, string>(); // antecipId → dataEsperada matched (chave do expectedByDate)
     const repasseUpdates: Array<{ id: string; payload: any }> = [];
     const movimentoUpdates: Array<{ id: string; payload: any }> = [];
     // Diagnóstico: registro por antecipação do que aconteceu
@@ -270,40 +278,67 @@ Deno.serve(async (req) => {
     }> = [];
 
     for (const a of antecipacoes) {
-      // data_repasse_esperada agora é a data EFETIVA do recebimento (D+3/D+4),
-      // que é a mesma data em que cai a antecipação no CSV iFood Pago.
-      const dataEsperada = a.data;
-      const exp = expectedByDate.get(dataEsperada);
-      if (!exp) {
-        movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
-        antecipDiag.push({ data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp', esperado_soma: 0, diff: 0, razao: 'sem repasse esperado nesta data' });
-        continue;
+      // Janela ±REPASSE_TOLERANCE_DIAS dias: PIX iFood pode adiantar 1-2 dias
+      // em relação à data_repasse_esperada calculada (Wed após corte Sun).
+      // Tenta off=0 primeiro, depois ±1, ±2.
+      const offsetsToTry: number[] = [0];
+      for (let off = 1; off <= REPASSE_TOLERANCE_DIAS; off++) {
+        offsetsToTry.push(-off, off);
       }
-      if (matchedDataSet.has(dataEsperada)) {
-        movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
-        antecipDiag.push({ data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp', esperado_soma: exp.soma, diff: 0, razao: 'data ja matched por outra antecipacao' });
-        continue;
-      }
-      const diff = Math.abs(Number(a.valor) - exp.soma);
-      let matchType: 'matched' | 'matched_aprox' | null = null;
-      if (diff <= REPASSE_TOLERANCE_EXATO) matchType = 'matched';
-      else if (diff <= REPASSE_TOLERANCE_APROX) matchType = 'matched_aprox';
 
-      if (!matchType) {
+      let exp: { soma: number; ids: string[] } | null = null;
+      let dataEsperada: string | null = null;
+      let matchType: 'matched' | 'matched_aprox' | null = null;
+      let bestDiff = Infinity;
+      let razaoUnmatched = '';
+
+      for (const off of offsetsToTry) {
+        const candidato = off === 0 ? a.data : shiftDateIso(a.data, off);
+        if (matchedDataSet.has(candidato)) continue;
+        const e = expectedByDate.get(candidato);
+        if (!e) {
+          if (off === 0) razaoUnmatched = 'sem repasse esperado nesta data';
+          continue;
+        }
+        const diff = Math.abs(Number(a.valor) - e.soma);
+        if (diff <= REPASSE_TOLERANCE_EXATO) {
+          exp = e; dataEsperada = candidato; matchType = 'matched'; bestDiff = diff;
+          break;
+        }
+        if (diff <= REPASSE_TOLERANCE_APROX && diff < bestDiff) {
+          exp = e; dataEsperada = candidato; matchType = 'matched_aprox'; bestDiff = diff;
+        } else if (off === 0 && !razaoUnmatched) {
+          razaoUnmatched = `diff > tolerancia ${REPASSE_TOLERANCE_APROX} (esperado R$${e.soma.toFixed(2)}, recebido R$${Number(a.valor).toFixed(2)})`;
+        }
+      }
+
+      if (!exp || !dataEsperada || !matchType) {
         movimentoUpdates.push({ id: a.id, payload: { status: 'unmatched_outra_comp', match_repasse_ids: [] } });
-        antecipDiag.push({ data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp', esperado_soma: exp.soma, diff: Math.round(diff * 100) / 100, razao: `diff > tolerancia ${REPASSE_TOLERANCE_APROX}` });
+        antecipDiag.push({
+          data: a.data, valor: Number(a.valor), status: 'unmatched_outra_comp',
+          esperado_soma: expectedByDate.get(a.data)?.soma ?? 0,
+          diff: 0,
+          razao: razaoUnmatched || 'nenhuma data esperada na janela ±2 dias',
+        });
         continue;
       }
-      antecipDiag.push({ data: a.data, valor: Number(a.valor), status: matchType, esperado_soma: exp.soma, diff: Math.round(diff * 100) / 100, razao: 'ok' });
+
+      const offMatched = Math.round((new Date(dataEsperada + 'T00:00:00Z').getTime() - new Date(a.data + 'T00:00:00Z').getTime()) / 86400000);
+      antecipDiag.push({
+        data: a.data, valor: Number(a.valor), status: matchType,
+        esperado_soma: exp.soma,
+        diff: Math.round(bestDiff * 100) / 100,
+        razao: offMatched !== 0 ? `match em ${dataEsperada} (off ${offMatched > 0 ? '+' : ''}${offMatched}d)` : 'ok',
+      });
 
       matchedDataSet.add(dataEsperada);
       matchedAntecipIds.add(a.id);
+      antecipDataEsperada.set(a.id, dataEsperada);
       movimentoUpdates.push({
         id: a.id,
         payload: { status: 'matched', match_repasse_ids: exp.ids },
       });
 
-      // Pra cada repasse dessa data: rateia conta_recebido por proporção do subtotal
       for (const repId of exp.ids) {
         const rep = repassesById.get(repId);
         if (!rep) continue;
@@ -314,7 +349,7 @@ Deno.serve(async (req) => {
           id: repId,
           payload: {
             conta_recebido: recebidoLoja,
-            conta_data_recebimento: a.data,
+            conta_data_recebimento: a.data, // data REAL do PIX
             conta_movimento_id: a.id,
             status: matchType,
             diff: Math.round(diffLoja * 100) / 100,
@@ -359,8 +394,12 @@ Deno.serve(async (req) => {
       if (taxasUsadas.has(t.id)) continue;
       taxasUsadas.add(t.id);
 
-      const dataEsperada = a.data;
-      const exp = expectedByDate.get(dataEsperada);
+      // Usa a data esperada que esta antecipação matched no Pass 2 (pode ser ±2d
+      // diferente de a.data quando o PIX antecipou). Sem isso, a taxa antecip é
+      // descartada quando data esperada ≠ data efetiva do PIX.
+      const dataEsperadaMatched = antecipDataEsperada.get(a.id);
+      if (!dataEsperadaMatched) continue;
+      const exp = expectedByDate.get(dataEsperadaMatched);
       if (!exp) continue;
       // rateia taxa por proporção do subtotal de cada loja
       for (const repId of exp.ids) {
@@ -419,7 +458,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      edge_version: 'v2.7-2026-05-08-segrega-ajustes',
+      edge_version: 'v2.9-2026-05-09-pass3-data-matched',
       crosscheck: {
         ok: crosscheck.ok,
         missing_in_ifood_count: crosscheck.missing_in_ifood.length,

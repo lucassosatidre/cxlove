@@ -711,6 +711,7 @@ export type Database = {
           data_repasse_esperada: string
           diff: number | null
           frete_ifood: number | null
+          frota_garantida: number
           id: string
           liquido_efetivo: number | null
           liquido_esperado: number | null
@@ -750,6 +751,7 @@ export type Database = {
           data_repasse_esperada: string
           diff?: number | null
           frete_ifood?: number | null
+          frota_garantida?: number
           id?: string
           liquido_efetivo?: number | null
           liquido_esperado?: number | null
@@ -789,6 +791,7 @@ export type Database = {
           data_repasse_esperada?: string
           diff?: number | null
           frete_ifood?: number | null
+          frota_garantida?: number
           id?: string
           liquido_efetivo?: number | null
           liquido_esperado?: number | null
@@ -1160,6 +1163,7 @@ export type Database = {
           lot_id: string
           numero_cartao_mascarado: string | null
           numero_documento: string | null
+          status_remote: string | null
           valor: number
         }
         Insert: {
@@ -1172,6 +1176,7 @@ export type Database = {
           lot_id: string
           numero_cartao_mascarado?: string | null
           numero_documento?: string | null
+          status_remote?: string | null
           valor: number
         }
         Update: {
@@ -1184,6 +1189,7 @@ export type Database = {
           lot_id?: string
           numero_cartao_mascarado?: string | null
           numero_documento?: string | null
+          status_remote?: string | null
           valor?: number
         }
         Relationships: [
@@ -2299,6 +2305,27 @@ export type Database = {
           },
         ]
       }
+      pickngo_webhook_logs: {
+        Row: {
+          event_type: string | null
+          id: string
+          payload: Json
+          received_at: string
+        }
+        Insert: {
+          event_type?: string | null
+          id?: string
+          payload: Json
+          received_at?: string
+        }
+        Update: {
+          event_type?: string | null
+          id?: string
+          payload?: Json
+          received_at?: string
+        }
+        Relationships: []
+      }
       salon_card_transactions: {
         Row: {
           brand: string | null
@@ -2792,6 +2819,7 @@ export type Database = {
           topics: string[]
         }[]
       }
+      delete_audit_import: { Args: { p_import_id: string }; Returns: Json }
       get_audit_contabil_breakdown: {
         Args: { p_period_id: string }
         Returns: {

@@ -279,6 +279,7 @@ Deno.serve(async (req) => {
       const { data: existingGlobal } = await supabase
         .from('audit_card_transactions')
         .select('transaction_id')
+        .eq('audit_period_id', audit_period_id)
         .in('transaction_id', ids);
       const globalSet = new Set((existingGlobal ?? []).map((e: any) => e.transaction_id));
       const newIds = chunk.filter(t => !globalSet.has(t.transaction_id)).length;
@@ -287,7 +288,7 @@ Deno.serve(async (req) => {
       // Upsert REAL (sem ignoreDuplicates) — UPDATE valores quando transaction_id já existe
       const { error: upsertErr } = await supabase
         .from('audit_card_transactions')
-        .upsert(chunk, { onConflict: 'transaction_id' });
+        .upsert(chunk, { onConflict: 'audit_period_id,transaction_id' });
       if (upsertErr) {
         await supabase.from('audit_imports').update({
           status: 'failed', error_message: upsertErr.message,

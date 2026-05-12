@@ -6,12 +6,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, CheckCircle2, Circle, Play, FileText } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Play, FileText, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
 import AuditNavTabs from '@/components/audit/AuditNavTabs';
 import {
   UploadMaquinonaCard, UploadCresolCard,
-  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard, UploadPluxeeCard,
+  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
+  UploadPluxeeVendasCard, UploadPluxeePagamentosCard, UploadPluxeeCard,
   UploadBrendiCard, UploadSaiposCard,
   UploadIfoodExtratoDetalhadoCard, UploadIfoodOrdersCard, UploadIfoodContaCsvCard,
   dispatchAutoMatchVouchers,
@@ -28,7 +34,7 @@ const MONTHS = [
 
 const fmtInt = (v: number) => v.toLocaleString('pt-BR');
 
-type ImportRow = { file_type: string; status: string; imported_rows: number; created_at: string; file_name: string };
+type ImportRow = { id: string; file_type: string; status: string; imported_rows: number; created_at: string; file_name: string };
 
 type MonthSlot = 'anterior' | 'comp' | 'posterior';
 
@@ -84,6 +90,8 @@ export default function AuditImportacoes() {
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningAudit, setRunningAudit] = useState(false);
+  const [toDelete, setToDelete] = useState<ImportRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // URL sync
   useEffect(() => {
@@ -96,7 +104,7 @@ export default function AuditImportacoes() {
   const refresh = async (periodId: string) => {
     const { data } = await supabase
       .from('audit_imports')
-      .select('file_type, status, imported_rows, created_at, file_name')
+      .select('id, file_type, status, imported_rows, created_at, file_name')
       .eq('audit_period_id', periodId)
       .order('created_at', { ascending: false });
     setImports((data ?? []) as any);
@@ -131,6 +139,56 @@ export default function AuditImportacoes() {
 
   const onUploadAfter = async () => {
     if (period) await refresh(period.id);
+  };
+
+  const deleteImpactText = (fileType: string): string => {
+    switch (fileType) {
+      case 'maquinona':
+        return 'As transações da Maquinona usam transaction_id como chave (UPSERT). Re-upload sobrescreve as mesmas linhas — esta ação só apaga o registro de importação.';
+      case 'vr_vendas':
+        return 'Itens vinculados a lotes VR não são apagados aqui (vínculo via lot_id). Esta ação apaga apenas o registro de importação; re-upload reprocessa.';
+      case 'cresol':
+      case 'bb':
+        return 'Todos os depósitos bancários vinculados a este arquivo serão apagados.';
+      case 'ticket':
+      case 'alelo':
+      case 'pluxee':
+      case 'pluxee_vendas':
+      case 'pluxee_pagamentos':
+      case 'vr':
+        return 'Todos os lotes de voucher e seus itens vinculados a este arquivo serão apagados.';
+      case 'brendi':
+        return 'Todos os pedidos Brendi vinculados a este arquivo serão apagados.';
+      case 'saipos':
+        return 'Todas as vendas Saipos vinculadas a este arquivo serão apagadas.';
+      case 'ifood_orders':
+        return 'Todos os pedidos iFood vinculados a este arquivo serão apagados.';
+      case 'ifood_conta_csv':
+        return 'Todos os movimentos da conta iFood Pago vinculados a este arquivo serão apagados.';
+      case 'ifood_extrato_detalhado':
+        return 'Todos os lançamentos detalhados E os repasses agregados desta loja (no período) serão apagados.';
+      default:
+        return 'Apenas o registro de importação será apagado.';
+    }
+  };
+
+  const handleDeleteImport = async () => {
+    if (!toDelete || !period) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.rpc('delete_audit_import', { p_import_id: toDelete.id });
+      if (error) throw error;
+      const rows = (data as any)?.deleted_data_rows ?? 0;
+      toast.success('Arquivo apagado', {
+        description: `${toDelete.file_name} · ${rows} registro(s) vinculado(s) removido(s).`,
+      });
+      setToDelete(null);
+      await refresh(period.id);
+    } catch (e: any) {
+      toast.error('Falha ao apagar', { description: e?.message ?? 'Erro desconhecido' });
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // Executa os 4 matches em sequência: Maquinona×Cresol, Vouchers, Brendi, iFood Marketplace.
@@ -260,8 +318,25 @@ export default function AuditImportacoes() {
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['vr']); },
     },
     {
-      id: 'pluxee', label: 'Reembolsos Pluxee',
-      description: 'CSV de reembolsos Pluxee/Sodexo (arquivo com prefixo "1976928").',
+      id: 'pluxee_vendas', label: 'Pluxee — Extrato de Vendas',
+      description: 'XLSX "extrato_vendas" da Pluxee. 1 arquivo do mês de competência — define todas as vendas e quando devem pagar (data de pagamento pode cair no mês seguinte).',
+      format: '.xlsx',
+      monthSlots: ['comp'],
+      fileTypes: ['pluxee_vendas'],
+      group: 'vouchers', Component: UploadPluxeeVendasCard,
+    },
+    {
+      id: 'pluxee_pagamentos', label: 'Pluxee — Extrato de Pagamentos',
+      description: 'XLSX "extrato_pagamentos" da Pluxee — confirma pagamentos efetivos (PAGO/ERRO) e descontos. 1 arquivo do mês comp + 1 do mês posterior (cobre vendas que pagam só no mês seguinte).',
+      format: '.xlsx',
+      monthSlots: ['comp', 'posterior'],
+      fileTypes: ['pluxee_pagamentos'],
+      group: 'vouchers', Component: UploadPluxeePagamentosCard,
+      postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
+    },
+    {
+      id: 'pluxee_csv_legacy', label: 'Pluxee — CSV legado (recuperação)',
+      description: 'CSV de reembolsos Pluxee no formato antigo (arquivo "1976928*.csv"). Use APENAS pra recuperar dados de audit periods anteriores a mar/26 que ainda usavam o formato CSV — não é mais o formato atual.',
       format: '.csv',
       monthSlots: ['comp'],
       fileTypes: ['pluxee'],
@@ -450,8 +525,8 @@ export default function AuditImportacoes() {
                       {docImports.length > 0 && (
                         <div className="text-xs space-y-1 pl-6">
                           {docImports.slice(0, 10).map((imp, idx) => (
-                            <div key={idx} className="flex items-baseline gap-2 text-muted-foreground">
-                              <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0 self-center" />
+                            <div key={idx} className="flex items-center gap-2 text-muted-foreground">
+                              <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" />
                               <span className="font-mono text-foreground truncate" title={imp.file_name}>
                                 {imp.file_name}
                               </span>
@@ -459,6 +534,15 @@ export default function AuditImportacoes() {
                               <span className="shrink-0">{fmtInt(Number(imp.imported_rows ?? 0))} linhas</span>
                               <span className="shrink-0">·</span>
                               <span className="shrink-0">{new Date(imp.created_at).toLocaleDateString('pt-BR')}</span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                onClick={() => setToDelete(imp)}
+                                title="Apagar este arquivo"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
                           ))}
                         </div>
@@ -486,6 +570,36 @@ export default function AuditImportacoes() {
           );
         })}
       </div>
+
+      <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && !deleting && setToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar este arquivo importado?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <div className="font-mono text-xs bg-muted p-2 rounded break-all">
+                  {toDelete?.file_name}
+                </div>
+                <p>{toDelete ? deleteImpactText(toDelete.file_type) : ''}</p>
+                <p className="text-xs italic">
+                  Após apagar, faça o upload da versão atualizada e reexecute a auditoria.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); handleDeleteImport(); }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Apagar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

@@ -696,67 +696,179 @@ export function UploadVRCard({ period, ensurePeriod, onAfter }: UploadCardProps)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pluxee — CSV ISO-8859-1
+// Pluxee — XLSX (formato novo, mai/2026 em diante: 3 arquivos)
 // ─────────────────────────────────────────────────────────────────────────────
-export function UploadPluxeeCard({ period, ensurePeriod, onAfter }: UploadCardProps) {
+// Helper genérico para uploads Pluxee XLSX.
+function usePluxeeXlsxUploader(
+  fnName: 'import-pluxee-vendas-xlsx' | 'import-pluxee-pagamentos-xlsx',
+  sheetMatcher: (n: string) => boolean,
+  ensurePeriod: () => Promise<AuditPeriodLite | null>,
+  onAfter: () => Promise<void> | void,
+) {
+  return async (files: File[], setProgress: (v: { current: number; total: number } | null) => void) => {
+    const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+    const invalid = files.length - xlsx.length;
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .xlsx`);
+    if (xlsx.length === 0) return { ok: false, summaries: [] as string[] };
+    const summaries: string[] = [];
+    const failures: string[] = [];
+    const p = await ensurePeriod();
+    if (!p) return { ok: false, summaries };
+    for (let i = 0; i < xlsx.length; i++) {
+      const file = xlsx[i];
+      setProgress({ current: i + 1, total: xlsx.length });
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+        const sheetName = wb.SheetNames.find(n => sheetMatcher(n.toLowerCase())) ?? wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+        if (!rows.length) throw new Error('Aba vazia');
+        const { data, error } = await supabase.functions.invoke(fnName, {
+          body: { audit_period_id: p.id, rows, file_name: file.name },
+        });
+        if (error) {
+          let detail = error.message ?? 'erro';
+          try {
+            const ctx = (error as any).context;
+            if (ctx && typeof ctx.json === 'function') {
+              const bj = await ctx.json();
+              if (bj?.error) detail = bj.error;
+            }
+          } catch { /* noop */ }
+          throw new Error(detail);
+        }
+        if (!data?.success) throw new Error(data?.error || 'Falha no import');
+        summaries.push(data.message ?? `${file.name}: ok`);
+      } catch (e: any) {
+        failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
+      }
+    }
+    if (failures.length) toast.error(`${failures.length}/${xlsx.length} falharam`, { description: failures.join(' | ') });
+    if (summaries.length) toast.success(summaries.join(' · '));
+    await onAfter();
+    return { ok: failures.length === 0, summaries };
+  };
+}
+
+export function UploadPluxeeVendasCard({ ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const upload = usePluxeeXlsxUploader('import-pluxee-vendas-xlsx', n => n.includes('vendas'), ensurePeriod, onAfter);
+  const handleFiles = async (files: File[]) => {
+    setUploading(true);
+    try { await upload(files, setProgress); }
+    finally { setUploading(false); setProgress(null); if (inputRef.current) inputRef.current.value = ''; }
+  };
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileSpreadsheet className="h-5 w-5 text-violet-600" />
+        <CardTitle className="text-base">Pluxee — Extrato de Vendas (.xlsx)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          XLSX "extrato_vendas" do portal Pluxee. 1 arquivo do mês de competência —
+          define todas as vendas do mês e a data esperada de pagamento.
+        </p>
+        <input
+          ref={inputRef} type="file" accept=".xlsx" multiple className="hidden"
+          onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) handleFiles(f); }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…') : 'Selecionar XLSX'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function UploadPluxeePagamentosCard({ ensurePeriod, onAfter }: UploadCardProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const upload = usePluxeeXlsxUploader('import-pluxee-pagamentos-xlsx', n => n.includes('pagamento'), ensurePeriod, onAfter);
+  const handleFiles = async (files: File[]) => {
+    setUploading(true);
+    try { await upload(files, setProgress); }
+    finally { setUploading(false); setProgress(null); if (inputRef.current) inputRef.current.value = ''; }
+  };
+  return (
+    <Card>
+      <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
+        <FileSpreadsheet className="h-5 w-5 text-violet-700" />
+        <CardTitle className="text-base">Pluxee — Extrato de Pagamentos (.xlsx)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          XLSX "extrato_pagamentos" do portal Pluxee. Confirma status PAGO/ERRO e descontos.
+          Envie 1 arquivo do mês de competência E 1 do mês posterior — vendas do fim do mês
+          fecham só no extrato do mês seguinte.
+        </p>
+        <input
+          ref={inputRef} type="file" accept=".xlsx" multiple className="hidden"
+          onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) handleFiles(f); }}
+        />
+        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+          {uploading ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…') : 'Selecionar XLSX (1 ou mais)'}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pluxee — CSV legado (formato antigo "1976928*.csv", recuperação)
+// ─────────────────────────────────────────────────────────────────────────────
+export function UploadPluxeeCard({ ensurePeriod, onAfter }: UploadCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
   const handleFiles = async (files: File[]) => {
-    const csvs = files.filter(f => /\.csv$/i.test(f.name));
+    const csvs = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
     const invalid = files.length - csvs.length;
     if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .csv`);
     if (csvs.length === 0) return;
-
+    const p = await ensurePeriod();
+    if (!p) return;
     setUploading(true);
-    setProgress({ current: 0, total: csvs.length });
-    let totalLots = 0;
-    let totalItems = 0;
+    const summaries: string[] = [];
     const failures: string[] = [];
-
     try {
-      const p = await ensurePeriod();
-      if (!p) return;
-
       for (let i = 0; i < csvs.length; i++) {
         const file = csvs[i];
         setProgress({ current: i + 1, total: csvs.length });
         try {
           const buf = await file.arrayBuffer();
+          // Pluxee CSV vem em ISO-8859-1 (Latin-1)
           const content = new TextDecoder('iso-8859-1').decode(buf);
-
           const { data, error } = await supabase.functions.invoke('import-pluxee-csv', {
-            body: { audit_period_id: p.id, content, file_name: file.name },
+            body: { audit_period_id: p.id, file_name: file.name, content },
           });
           if (error) {
-            let detail = error.message ?? 'erro desconhecido';
+            let detail = error.message ?? 'erro';
             try {
               const ctx = (error as any).context;
               if (ctx && typeof ctx.json === 'function') {
-                const bodyJson = await ctx.json();
-                if (bodyJson?.error) detail = bodyJson.error;
+                const bj = await ctx.json();
+                if (bj?.error) detail = bj.error;
               }
-            } catch { /* fallback */ }
+            } catch { /* noop */ }
             throw new Error(detail);
           }
-          if (!data?.success) {
-            if (data?.skipped) { failures.push(`${file.name}: ${data.error}`); continue; }
-            throw new Error(data?.error || 'Falha no import Pluxee');
-          }
-
-          totalLots += Number(data.inserted_lots ?? 0) + Number(data.updated_lots ?? 0);
-          totalItems += Number(data.inserted_items ?? 0);
+          if (data?.skipped) { failures.push(`${file.name}: ${data.error}`); continue; }
+          if (!data?.success) throw new Error(data?.error || 'Falha no import');
+          summaries.push(data.message ?? `${file.name}: ok`);
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
         }
       }
-
-      if (failures.length === 0) {
-        toast.success(`${totalLots} lotes Pluxee + ${totalItems} vendas`);
-      } else {
-        toast.error(`${failures.length} de ${csvs.length} falharam`, { description: failures.join(' | ') });
-      }
+      if (failures.length) toast.error(`${failures.length}/${csvs.length} falharam`, { description: failures.join(' | ') });
+      if (summaries.length) toast.success(summaries.join(' · '));
       await onAfter();
     } finally {
       setUploading(false);
@@ -768,31 +880,21 @@ export function UploadPluxeeCard({ period, ensurePeriod, onAfter }: UploadCardPr
   return (
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
-        <FileText className="h-5 w-5 text-violet-600" />
-        <CardTitle className="text-base">Pluxee — Reembolsos (.csv)</CardTitle>
+        <FileText className="h-5 w-5 text-amber-600" />
+        <CardTitle className="text-base">Pluxee — CSV legado (.csv)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          CSV de reembolsos Pluxee/Sodexo (arquivos com "1976928" no nome).
-          Cada arquivo contém os lotes pagos com vendas embutidas.
-          Arquivos de "vendas" sem o prefixo são redundantes — sistema avisa.
+          Formato antigo (arquivo "1976928*.csv"). Use APENAS pra recuperar audit
+          periods anteriores a mar/26 que ainda usavam CSV. Não é mais o formato atual.
         </p>
         <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,text/csv,text/plain,application/csv,application/vnd.ms-excel,application/octet-stream"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            if (files.length > 0) handleFiles(files);
-          }}
+          ref={inputRef} type="file" accept=".csv" multiple className="hidden"
+          onChange={(e) => { const f = Array.from(e.target.files ?? []); if (f.length) handleFiles(f); }}
         />
-        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
+        <Button variant="outline" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
           {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-          {uploading
-            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
-            : 'Selecionar CSV (1 ou mais)'}
+          {uploading ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…') : 'Selecionar CSV (legado)'}
         </Button>
       </CardContent>
     </Card>
@@ -838,11 +940,10 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
-          // PRIMEIRO arquivo do batch: clear_existing=true. Limpa lixo no edge
-          // via SERVICE_ROLE (não depende de RLS do client). Demais arquivos
-          // só fazem upsert.
+          // clear_existing desabilitado: cada upload individual faz upsert.
+          // O botão de lixeira na aba Importações cobre apagar quando necessário.
           const { data, error } = await supabase.functions.invoke('import-brendi-xlsx', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Brendi');
@@ -951,9 +1052,9 @@ export function UploadSaiposCard({ period, ensurePeriod, onAfter }: UploadCardPr
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
-          // Primeiro arquivo: clear_existing=true (RLS bypass via SERVICE_ROLE)
+          // clear_existing desabilitado: cada upload individual faz upsert.
           const { data, error } = await supabase.functions.invoke('import-saipos-xlsx', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Saipos');
@@ -1082,8 +1183,9 @@ export function UploadIfoodOrdersCard({ period, ensurePeriod, onAfter }: UploadC
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
 
+          // clear_existing desabilitado: cada upload individual faz upsert.
           const { data, error } = await supabase.functions.invoke('import-ifood-orders', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import iFood Orders');
@@ -1278,8 +1380,9 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
           const rows = lines.map(line => parseCsvLine(line));
           if (!rows.length) throw new Error('CSV vazio');
 
+          // clear_existing desabilitado: cada upload individual faz upsert.
           const { data, error } = await supabase.functions.invoke('import-ifood-conta-csv', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: i === 0 },
+            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Conta iFood Pago');
