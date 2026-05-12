@@ -1696,6 +1696,7 @@ export type Database = {
       }
       clau_tool_logs: {
         Row: {
+          caller: string
           conversation_id: string | null
           created_at: string | null
           duration_ms: number | null
@@ -1707,6 +1708,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          caller?: string
           conversation_id?: string | null
           created_at?: string | null
           duration_ms?: number | null
@@ -1718,6 +1720,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          caller?: string
           conversation_id?: string | null
           created_at?: string | null
           duration_ms?: number | null
@@ -2919,6 +2922,7 @@ export type Database = {
       ifood_calc_data_repasse: { Args: { base: string }; Returns: string }
       ifood_shift_back21d: { Args: { base: string }; Returns: string }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
+      openclaw_run_sql_select: { Args: { p_sql: string }; Returns: Json }
       promote_from_waitlist: {
         Args: {
           p_freed_by: string
