@@ -308,7 +308,8 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
   const somaTaxasBrutas = Math.abs(i.comissao) + Math.abs(i.taxa_transacao)
     + Math.abs(i.taxa_antecipacao) + Math.abs(i.taxa_conveniencia)
     + Math.abs(i.mensalidade) + Math.abs(i.frete) + Math.abs(i.taxa_entrega_ret)
-    + Math.abs(i.taxa_servico_sob_demanda) + Math.abs(i.ads);
+    + Math.abs(i.taxa_servico_sob_demanda) + Math.abs(i.frete_garantido ?? 0)
+    + Math.abs(i.ads) + Math.abs(i.outros_avulsos ?? 0);
   const ajustesPositivos = Math.max(0, somaTaxasBrutas - i.custo_total);
   const breakdown: (string | number)[][] = [
     ['Comissão iFood', fmtNum(Math.abs(i.comissao))],
@@ -319,8 +320,12 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
     ['Frete iFood', fmtNum(Math.abs(i.frete))],
     ['Taxa entrega retenção', fmtNum(Math.abs(i.taxa_entrega_ret))],
     ['Taxa serviço Sob Demanda Off', fmtNum(Math.abs(i.taxa_servico_sob_demanda))],
+    ['Frota Garantida', fmtNum(Math.abs(i.frete_garantido ?? 0))],
     ['ADS (anúncios)', fmtNum(Math.abs(i.ads))],
   ];
+  if (Math.abs(i.outros_avulsos ?? 0) > 0.005) {
+    breakdown.push(['Outros avulsos', fmtNum(Math.abs(i.outros_avulsos ?? 0))]);
+  }
   if (ajustesPositivos > 0.01) {
     breakdown.push([
       '(-) Ajustes positivos (estornos / reembolsos / ressarc / promo iFood)',

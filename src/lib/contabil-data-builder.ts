@@ -391,8 +391,10 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   const taxaEntrega = Math.abs(sumI('taxa_entrega_ret'));
   const taxaSob = Math.abs(sumI('taxa_servico_sob_demanda'));
   const ads = Math.abs(sumI('ads'));
+  const freteGarantido = Math.abs(sumI('frete_garantido'));
+  const outrosAvulsos = Math.abs(sumI('outros_avulsos'));
   const custoTotal = comissao + taxaTrans + taxaAntecip + taxaConv + mens
-    + frete + taxaEntrega + taxaSob + ads;
+    + frete + taxaEntrega + taxaSob + freteGarantido + ads + outrosAvulsos;
   const liquidoEfetivoTotal = ifoodRows.reduce(
     (s, r) => s + Number(r.liquido_efetivo ?? r.conta_recebido ?? 0),
     0,
@@ -425,7 +427,9 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     frete,
     taxa_entrega_ret: taxaEntrega,
     taxa_servico_sob_demanda: taxaSob,
+    frete_garantido: freteGarantido,
     ads,
+    outros_avulsos: outrosAvulsos,
     promocoes_loja: Math.abs(sumI('promo_loja')),
     cancel_total: Math.abs(sumI('cancel_total')),
     cancel_parcial: Math.abs(sumI('cancel_parcial')),

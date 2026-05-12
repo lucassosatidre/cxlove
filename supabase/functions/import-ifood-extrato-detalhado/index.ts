@@ -140,7 +140,14 @@ function classificar(fato: string | null, tipo: string | null, desc: string | nu
   if (f === 'cancelamento solicitação frete' || f === 'cancelamento solicitacao frete') return 'cancel_frete';
   if (f === 'cancelamento total') return 'cancel_total';
   if (f === 'cancelamento parcial') return 'cancel_parcial';
-  if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') return 'ads';
+  // "Ocorrência avulsa" no iFood é guarda-chuva: ADS (pacote de anúncios) +
+  // Frota Garantida (logística contratada) + ajustes diversos. Separar pela
+  // descrição é único caminho — fato_gerador é idêntico em todos.
+  if (f === 'ocorrência avulsa' || f === 'ocorrencia avulsa') {
+    if (d.includes('pacote de anúncios') || d.includes('pacote de anuncios')) return 'ads';
+    if (d.includes('frota garantida')) return 'frete_garantido';
+    return 'outros_avulsos';
+  }
   if (f === 'ocorrência venda' || f === 'ocorrencia venda') return 'ocor_venda';
   if (f === 'ressarcimento/indenização' || f === 'ressarcimento/indenizacao') return 'ressarc';
   if (f === 'fechamento') return 'mensalidade';
@@ -429,7 +436,8 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: number; taxa_servico_sob_demanda: number;
       taxa_servico_cliente: number; promo_ifood: number; promo_loja: number;
       frete_ifood: number; cancel_frete: number; cancel_total: number; cancel_parcial: number;
-      ads: number; ressarc: number; ocor_venda: number; reembolsos: number;
+      ads: number; frete_garantido: number; outros_avulsos: number;
+      ressarc: number; ocor_venda: number; reembolsos: number;
       mensalidade: number; outros: number;
       liquido_esperado: number;
       periodo_apuracao_inicio: string | null;
@@ -442,7 +450,8 @@ Deno.serve(async (req) => {
       taxa_entrega_ret: 0, taxa_servico_sob_demanda: 0,
       taxa_servico_cliente: 0, promo_ifood: 0, promo_loja: 0,
       frete_ifood: 0, cancel_frete: 0, cancel_total: 0, cancel_parcial: 0,
-      ads: 0, ressarc: 0, ocor_venda: 0, reembolsos: 0,
+      ads: 0, frete_garantido: 0, outros_avulsos: 0,
+      ressarc: 0, ocor_venda: 0, reembolsos: 0,
       mensalidade: 0, outros: 0,
       liquido_esperado: 0,
       periodo_apuracao_inicio: null, periodo_apuracao_fim: null,
@@ -491,6 +500,8 @@ Deno.serve(async (req) => {
           case 'cancel_total': a.cancel_total += l.valor; break;
           case 'cancel_parcial': a.cancel_parcial += l.valor; break;
           case 'ads': a.ads += l.valor; break;
+          case 'frete_garantido': a.frete_garantido += l.valor; break;
+          case 'outros_avulsos': a.outros_avulsos += l.valor; break;
           case 'ressarc': a.ressarc += l.valor; break;
           case 'ocor_venda': a.ocor_venda += l.valor; break;
           case 'reembolsos': a.reembolsos += l.valor; break;
@@ -536,6 +547,8 @@ Deno.serve(async (req) => {
       cancel_total: round2(a.cancel_total),
       cancel_parcial: round2(a.cancel_parcial),
       ads: round2(a.ads),
+      frete_garantido: round2(a.frete_garantido),
+      outros_avulsos: round2(a.outros_avulsos),
       ressarc: round2(a.ressarc),
       ocor_venda: round2(a.ocor_venda),
       reembolsos: round2(a.reembolsos),

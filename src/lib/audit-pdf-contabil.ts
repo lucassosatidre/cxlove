@@ -98,7 +98,9 @@ export type ContabilIfood = {
   frete: number;
   taxa_entrega_ret: number;
   taxa_servico_sob_demanda: number;
+  frete_garantido: number;
   ads: number;
+  outros_avulsos: number;
   promocoes_loja: number;
   cancel_total: number;
   cancel_parcial: number;
@@ -617,7 +619,7 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
   const kpiW = (pageW - PAGE_MARGIN * 2 - 8) / 3;
   kpiBox(doc, PAGE_MARGIN, y, kpiW, 24, 'Total bruto', fmtBRL(i.vendido_bruto), `${fmtInt(i.pedidos_count)} pedidos online`);
   kpiBox(doc, PAGE_MARGIN + kpiW + 4, y, kpiW, 24, 'Total líquido', fmtBRL(i.liquido_efetivo), `${i.repasses_count} repasses, após antecipação`, POSITIVE);
-  kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(i.custo_total)}  ·  ${fmtPct(i.taxa_efetiva_pct)}`, 'Comissão + taxas + logística + ADS', NEGATIVE);
+  kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(i.custo_total)}  ·  ${fmtPct(i.taxa_efetiva_pct)}`, 'Comissão + taxas + logística + Frota + ADS', NEGATIVE);
   y += 32;
 
   // Cross-reference: valor declarado pelo iFood no portal (subtotal + entrega)
@@ -639,7 +641,8 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
   const somaTaxasBrutas = Math.abs(i.comissao) + Math.abs(i.taxa_transacao)
     + Math.abs(i.taxa_antecipacao) + Math.abs(i.taxa_conveniencia)
     + Math.abs(i.mensalidade) + Math.abs(i.frete) + Math.abs(i.taxa_entrega_ret)
-    + Math.abs(i.taxa_servico_sob_demanda) + Math.abs(i.ads);
+    + Math.abs(i.taxa_servico_sob_demanda) + Math.abs(i.frete_garantido ?? 0)
+    + Math.abs(i.ads) + Math.abs(i.outros_avulsos ?? 0);
   // Ajustes positivos = soma das taxas brutas − custo real (vendido − líq efetivo).
   // Reflete reembolsos/ressarc/promo iFood/cancelamentos que retornam pra loja
   // depois das taxas brutas.
@@ -654,8 +657,12 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
     ['Frete iFood', fmtNum(Math.abs(i.frete))],
     ['Taxa entrega retenção', fmtNum(Math.abs(i.taxa_entrega_ret))],
     ['Taxa serviço Sob Demanda Off', fmtNum(Math.abs(i.taxa_servico_sob_demanda))],
+    ['Frota Garantida', fmtNum(Math.abs(i.frete_garantido ?? 0))],
     ['ADS (anúncios)', fmtNum(Math.abs(i.ads))],
   ];
+  if (Math.abs(i.outros_avulsos ?? 0) > 0.005) {
+    breakdown.push(['Outros avulsos', fmtNum(Math.abs(i.outros_avulsos ?? 0))]);
+  }
   if (ajustesPositivos > 0.01) {
     // Helvetica do jsPDF não suporta U+2212 (minus matemático) — vira `("`
     // no rendering. Usar hífen ASCII U+002D que sempre renderiza.
