@@ -691,8 +691,7 @@ const mcp = new McpServer({ name: "openclaw-cxlove-mcp", version: SERVER_VERSION
 
 // register all table tools
 for (const [name, cfg] of Object.entries(TOOLS)) {
-  mcp.tool({
-    name,
+  mcp.tool(name, {
     description: cfg.description,
     inputSchema: buildInputSchema(cfg),
     handler: async (args: any) => {
@@ -718,8 +717,7 @@ for (const [name, cfg] of Object.entries(TOOLS)) {
   });
 }
 
-mcp.tool({
-  name: "get_audit_period_summary",
+mcp.tool("get_audit_period_summary", {
   description: "Resumo agregado de um período de auditoria (totais + depósitos). Combina get_audit_period_totals + get_audit_period_deposits.",
   inputSchema: {
     type: "object",
@@ -739,8 +737,7 @@ mcp.tool({
   },
 });
 
-mcp.tool({
-  name: "describe_schema",
+mcp.tool("describe_schema", {
   description: "Retorna colunas (tipo, nullable) das tabelas do schema public. Filtro opcional 'tables' (array de nomes).",
   inputSchema: {
     type: "object",
@@ -759,8 +756,7 @@ mcp.tool({
   },
 });
 
-mcp.tool({
-  name: "get_server_info",
+mcp.tool("get_server_info", {
   description: "Versão do servidor MCP, timestamp do deploy e hash do schema atual.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   handler: async () => {
@@ -776,8 +772,7 @@ mcp.tool({
   },
 });
 
-mcp.tool({
-  name: "run_sql_select",
+mcp.tool("run_sql_select", {
   description: "Executa SELECT/WITH read-only no schema public via role openclaw_readonly (timeout 10s, limite 10MB). Sem janela máxima — só o limit/time-out seguram. Use describe_schema para descobrir colunas.",
   inputSchema: {
     type: "object",
