@@ -1,35 +1,42 @@
 COMBOS E TAMANHOS — PIZZARIA ESTRELA DA ILHA
 ========================================
 
-COMBO 1
+ABERTURA DO PEDIDO
+- A Lucinéia abre perguntando: "Você deseja pedir uma pizza ou um combo?"
+- Se o cliente disser COMBO, descrever as duas opções com o preço "a partir de" antes de pedir confirmação:
+  * Combo 1: duas pizzas grandes salgadas com refrigerante 1,5 litros incluso, a partir de R$ 117.
+  * Combo 2: uma pizza gigante salgada, uma broto doce e refrigerante 1,5 litros incluso, a partir de R$ 114.
+
+COMBO 1 (a partir de R$ 117,00)
 - Contém: 2 pizzas grandes salgadas + 1 refrigerante 1,5L incluso.
-- Bebidas inclusas (escolher uma): Coca Cola 1,5L, Coca Cola Zero 1,5L, Guaraná Antarctica 1,5L, Guaraná Antarctica Zero 1,5L.
+- Bebida inclusa (cliente escolhe 1, sem custo): Coca Cola 1,5L, Coca Cola Zero 1,5L, Guaraná Antarctica 1,5L ou Guaraná Antarctica Zero 1,5L.
 - Cada pizza grande pode ter até 2 sabores (50/50). Pizza inteira de 1 sabor também é possível.
 - Pizzas grandes do Combo 1 são apenas salgadas.
-- Borda recheada opcional, por pizza.
-- Para o valor exato, a IA consulta a ferramenta consultar_combo_1.
+- Borda recheada opcional, por pizza (4 sabores: Catupiry, Cheddar, Chocolate Preto, Chocolate Branco).
+- Upsell disponível: 1 pizza broto doce promocional, a partir de R$ 20 (Chocolate Preto). Outros sabores conforme tabela.
+- Bebidas extras pagas são chamadas separadamente em consultar_bebida_avulsa.
+- Para o valor exato, a IA consulta consultar_combo_um.
 
-COMBO 2
-- Contém: 1 pizza gigante salgada + 1 broto doce obrigatório + 1 refrigerante 1,5L incluso.
-- Bebidas inclusas: mesma lista do Combo 1.
+COMBO 2 (a partir de R$ 114,00)
+- Contém: 1 pizza gigante salgada + 1 broto doce obrigatória + 1 refrigerante 1,5L incluso.
+- Bebida inclusa (mesma lista do Combo 1, sem custo).
 - A gigante pode ter até 3 sabores. Se forem 2 sabores, um fica com 8 fatias e o outro com 4 — confirmar qual fica com 8 com o cliente.
-- A broto doce é obrigatória e tem lista própria de sabores. Para a lista, use a ferramenta listar_sabores categoria='brotos_doces_opcionais'.
-- Borda recheada opcional na gigante.
-- Para o valor exato, a IA consulta consultar_combo_2.
+- A broto doce inclusa tem lista própria de sabores. Chocolate Preto e Nutella são gratuitos no combo; outros sabores têm adicional a partir de R$ 10.
+- Borda recheada opcional na gigante (4 sabores).
+- O Combo 2 NÃO tem upsell de outra broto doce promocional (já vem com uma inclusa).
+- Bebidas extras pagas: chamar consultar_bebida_avulsa.
+- Para o valor exato, a IA consulta consultar_combo_dois.
 
-MONTE DO SEU JEITO (pizza avulsa, sem combo)
-- Broto: 25 cm, 4 fatias, 1 sabor — pode ser salgada OU doce.
-- Grande: 35 cm, 8 fatias, até 2 sabores salgados.
-- Gigante: 40 cm, 12 fatias, até 3 sabores salgados.
+MONTE DO SEU JEITO — pizza avulsa, sem combo
+- Broto: 25 cm, 4 fatias, 1 sabor — pode ser salgada OU doce. A partir de R$ 57,00.
+- Grande: 35 cm, 8 fatias, até 2 sabores salgados. A partir de R$ 67,00.
+- Gigante: 40 cm, 12 fatias, até 3 sabores salgados. A partir de R$ 87,00.
+- Todas podem ter borda recheada nos 4 sabores, INCLUSIVE broto doce.
+- Upsell disponível em TODOS os tamanhos:
+  * 1 pizza broto doce promocional (a partir de R$ 20 Chocolate Preto)
+  * 1 refrigerante 1,5L promocional por R$ 7,00 (Coca Cola, Coca Zero, Guaraná, Guaraná Zero)
+- Limite de 1 unidade de cada upsell por pizza principal.
 - Para o valor exato, a IA consulta consultar_monte_do_seu_jeito.
-
-BEBIDA PROMOCIONAL
-- Apenas válida com Monte do Seu Jeito grande ou gigante: refrigerante 1,5L por valor promocional. Use consultar_monte_do_seu_jeito com bebida_promocional informada.
-- Pizza broto não tem bebida promocional. Bebida com broto é em preço avulso.
-
-PEDIDO MÍNIMO
-- Pedido mínimo é R$ 67,00 em produtos (não conta a taxa de entrega).
-- Se o subtotal de produtos não atinge, a Lucinéia avisa e oferece complementar (mais uma pizza, bebida, borda, etc.).
 
 BORDAS RECHEADAS
 - 4 sabores disponíveis: Catupiry, Cheddar, Chocolate Preto, Chocolate Branco.
@@ -37,6 +44,30 @@ BORDAS RECHEADAS
   * Pizza Broto: R$ 16,00
   * Pizza Grande: R$ 18,00
   * Pizza Gigante: R$ 20,00
-- Catupiry e Cheddar são bordas salgadas — recomendadas para pizzas salgadas.
-- Chocolate Preto e Chocolate Branco são bordas doces — recomendadas para brotos doces.
-- Quando o cliente pedir borda, a Lucinéia deve perguntar qual sabor entre os 4 antes de calcular o preço.
+- Borda só vai na pizza PRINCIPAL. A pizza broto doce do UPSELL (segunda pizza adicionada ao pedido por preço promocional) NÃO tem opção de borda.
+- A broto doce inclusa no Combo 2 também NÃO tem borda.
+
+UPSELL PIZZA BROTO DOCE PROMOCIONAL
+- Disponível em: Combo 1 e em todas as 3 categorias do Monte do Seu Jeito.
+- Não disponível em: Combo 2 (já vem com broto doce inclusa).
+- Limite: 1 unidade por pizza principal.
+- Preços a partir de R$ 20 (Chocolate Preto) até R$ 60 (sabores com ouro: Coconut Gold, Nutella Imperial, Sensação Gold).
+
+REFRIGERANTE PROMOCIONAL R$ 7,00
+- Disponível apenas em Monte do Seu Jeito (broto, grande e gigante).
+- 1 unidade por pizza principal.
+- 4 opções 1,5L: Coca Cola, Coca Cola Zero, Guaraná Antarctica, Guaraná Antarctica Zero.
+
+BEBIDAS EXTRAS PAGAS
+- Quando o cliente pede MAIS bebidas além da inclusa/promocional, a Lucinéia chama consultar_bebida_avulsa separadamente para cada bebida.
+- Preço cheio conforme tabela avulsa (refri 1,5L = R$ 19,90, Heineken Longneck = R$ 15,90, etc).
+
+MÚLTIPLOS ITENS NO MESMO PEDIDO
+- O cliente pode pedir vários produtos principais (combo ou pizza avulsa) no mesmo pedido.
+- Cada produto principal tem direito aos próprios benefícios (refri incluso/promocional, upsell de broto doce quando aplicável).
+- A Lucinéia fecha todas as especificações de um produto antes de iniciar o próximo.
+- Após fechar um produto, pergunta: "Quer adicionar mais alguma pizza ou combo ao seu pedido?"
+
+PEDIDO MÍNIMO
+- Pedido mínimo é R$ 67,00 em produtos (não conta a taxa de entrega).
+- Se o subtotal de produtos não atinge, a Lucinéia avisa e oferece complementar.

@@ -33,7 +33,7 @@ type MenuData = {
   };
   monte_do_seu_jeito: {
     tamanhos: {
-      broto: { preco_base: number; borda: number };
+      broto: { preco_base: number; borda: number; bebida_promocional?: number };
       grande: { preco_base: number; borda: number; bebida_promocional: number };
       gigante: { preco_base: number; borda: number; bebida_promocional: number };
     };
@@ -45,6 +45,7 @@ type MenuData = {
       adicional_gigante: number;
     }[];
     sabores_doces_broto_individual: { sabor: string; adicional_broto_doce_individual: number }[];
+    brotos_doces_opcionais_com_broto?: { sabor: string; valor: number }[];
     brotos_doces_opcionais_com_grande: { sabor: string; valor: number }[];
     brotos_doces_opcionais_com_gigante: { sabor: string; valor: number }[];
   };
@@ -91,6 +92,39 @@ function resolverBorda(menu: MenuData, args: any, valorPorTamanho: number): { sa
     return { sabor: "Catupiry", valor: valorPorTamanho };
   }
   return { sabor: null, valor: 0 };
+}
+
+/**
+ * Resolve o upsell de pizza broto doce promocional.
+ * Retorna { sabor, valor } onde valor=0 se nenhum upsell.
+ * `tabela` é a lista correspondente ao tamanho da pizza principal.
+ */
+function resolverUpsellBrotoDoce(
+  saborInput: any,
+  tabela: { sabor: string; valor: number }[],
+): { sabor: string | null; valor: number } {
+  if (typeof saborInput !== "string" || !saborInput.trim() || normalize(saborInput) === "nenhuma") {
+    return { sabor: null, valor: 0 };
+  }
+  const match = tabela.find((s) => normalize(s.sabor) === normalize(saborInput));
+  if (!match) return { sabor: saborInput, valor: -1 };
+  return { sabor: match.sabor, valor: match.valor };
+}
+
+/**
+ * Resolve a bebida inclusa do combo (sem custo).
+ * Aceita os 4 refrigerantes 1,5L. Retorna o nome canônico.
+ */
+function resolverBebidaInclusa(menu: MenuData, saborInput: any): { sabor: string | null; valor: number; erro?: string } {
+  const inclusas = menu.combo_1.bebidas_inclusas;
+  if (typeof saborInput !== "string" || !saborInput.trim()) {
+    return { sabor: null, valor: 0 };
+  }
+  const match = inclusas.find((b) => normalize(b) === normalize(saborInput));
+  if (!match) {
+    return { sabor: saborInput, valor: 0, erro: `Bebida inclusa "${saborInput}" inválida. Opções: ${inclusas.join(", ")}.` };
+  }
+  return { sabor: match, valor: 0 };
 }
 
 function listarSabores(menu: MenuData, categoria: string) {
@@ -152,20 +186,37 @@ function consultarCombo1(menu: MenuData, args: any) {
     b1.sabor ? { pizza: 1, sabor: b1.sabor, valor: b1.valor } : null,
     b2.sabor ? { pizza: 2, sabor: b2.sabor, valor: b2.valor } : null,
   ].filter(Boolean);
+  // Refri incluso (escolha do cliente, sem custo)
+  const inclusaInfo = resolverBebidaInclusa(menu, args.bebida_inclusa);
+  if (inclusaInfo.erro) return { error: inclusaInfo.erro };
+
+  // Upsell de broto doce promocional (a tabela do upsell do Combo 1 é a mesma do upsell com_grande)
+  const upsellInfo = resolverUpsellBrotoDoce(args.broto_doce_upsell, menu.monte_do_seu_jeito.brotos_doces_opcionais_com_grande);
+  if (upsellInfo.valor === -1) {
+    const opcoes = menu.monte_do_seu_jeito.brotos_doces_opcionais_com_grande.map((b) => b.sabor).join(", ");
+    return { error: `Upsell broto doce "${upsellInfo.sabor}" não existe. Opções: ${opcoes} ou 'nenhuma'.` };
+  }
+
+  // Bebida extra paga (1 unidade — para múltiplas, chamar consultar_bebida_avulsa separadamente)
   let bebida_extra = 0;
+  let bebida_extra_nome: string | null = null;
   if (args.bebida_extra && args.bebida_extra !== "nenhuma") {
     const b = findBy(menu.bebidas_avulsas, "nome", args.bebida_extra);
     if (!b) return { error: `Bebida "${args.bebida_extra}" não existe.` };
     bebida_extra = b.preco;
+    bebida_extra_nome = b.nome;
   }
-  const subtotal = round2(menu.combo_1.preco_base + adicionais + bordas + bebida_extra);
+  const subtotal = round2(menu.combo_1.preco_base + adicionais + bordas + upsellInfo.valor + bebida_extra);
   return {
     combo: "Combo 1 - 2 pizzas grandes + refrigerante 1,5L incluso",
     preco_base: menu.combo_1.preco_base,
     adicionais_pizzas: round2(adicionais),
     bordas: round2(bordas),
     bordas_escolhidas,
+    bebida_inclusa: inclusaInfo.sabor,
+    upsell_broto_doce: upsellInfo.sabor ? { sabor: upsellInfo.sabor, valor: upsellInfo.valor } : null,
     bebida_extra,
+    bebida_extra_nome,
     subtotal_produtos: subtotal,
     pedido_minimo_atingido: subtotal >= menu.regras_gerais.pedido_minimo_produtos,
     falta_para_minimo: subtotal >= menu.regras_gerais.pedido_minimo_produtos ? 0 : round2(menu.regras_gerais.pedido_minimo_produtos - subtotal),
@@ -201,11 +252,19 @@ function consultarCombo2(menu: MenuData, args: any) {
     return { error: `Sabor de borda "${bordaInfo.sabor}" não existe. Use: ${disp.join(", ")} ou 'nenhuma'.` };
   }
   const borda = bordaInfo.valor;
+
+  // Refri incluso (escolha do cliente, sem custo)
+  const inclusaInfo = resolverBebidaInclusa(menu, args.bebida_inclusa);
+  if (inclusaInfo.erro) return { error: inclusaInfo.erro };
+
+  // Bebida extra paga (1 unidade — para múltiplas, chamar consultar_bebida_avulsa separadamente)
   let bebida_extra = 0;
+  let bebida_extra_nome: string | null = null;
   if (args.bebida_extra && args.bebida_extra !== "nenhuma") {
     const b = findBy(menu.bebidas_avulsas, "nome", args.bebida_extra);
     if (!b) return { error: `Bebida "${args.bebida_extra}" não existe.` };
     bebida_extra = b.preco;
+    bebida_extra_nome = b.nome;
   }
   const subtotal = round2(menu.combo_2.preco_base + adicionais_gigante + adicional_broto + borda + bebida_extra);
   return {
@@ -215,7 +274,9 @@ function consultarCombo2(menu: MenuData, args: any) {
     broto_doce: { sabor: broto.sabor, adicional: adicional_broto },
     borda,
     sabor_borda: bordaInfo.sabor,
+    bebida_inclusa: inclusaInfo.sabor,
     bebida_extra,
+    bebida_extra_nome,
     subtotal_produtos: subtotal,
     pedido_minimo_atingido: subtotal >= menu.regras_gerais.pedido_minimo_produtos,
     falta_para_minimo: subtotal >= menu.regras_gerais.pedido_minimo_produtos ? 0 : round2(menu.regras_gerais.pedido_minimo_produtos - subtotal),
@@ -277,17 +338,31 @@ function consultarMonteDoSeuJeito(menu: MenuData, args: any) {
     return { error: `Sabor de borda "${bordaMonteInfo.sabor}" não existe. Use: ${disp.join(", ")} ou 'nenhuma'.` };
   }
   const borda = bordaMonteInfo.valor;
+  // Refri promocional 1,5L por R$ 7 — agora disponível em broto, grande E gigante
   let bebida_promo = 0;
-  if (
-    args.bebida_promocional &&
-    args.bebida_promocional !== "nenhuma" &&
-    (tamanho === "grande" || tamanho === "gigante")
-  ) {
+  let bebida_promo_sabor: string | null = null;
+  if (args.bebida_promocional && args.bebida_promocional !== "nenhuma") {
     if (!menu.monte_do_seu_jeito.bebidas_promocionais_grande_ou_gigante.includes(args.bebida_promocional)) {
       return { error: `bebida_promocional "${args.bebida_promocional}" não está na lista promocional.` };
     }
     bebida_promo = (menu.monte_do_seu_jeito.tamanhos as any)[tamanho].bebida_promocional ?? 0;
+    bebida_promo_sabor = args.bebida_promocional;
   }
+
+  // Upsell de broto doce promocional — tabela varia por tamanho da pizza principal
+  const tabelaUpsell =
+    tamanho === "broto"
+      ? menu.monte_do_seu_jeito.brotos_doces_opcionais_com_broto ?? menu.monte_do_seu_jeito.brotos_doces_opcionais_com_grande
+      : tamanho === "grande"
+      ? menu.monte_do_seu_jeito.brotos_doces_opcionais_com_grande
+      : menu.monte_do_seu_jeito.brotos_doces_opcionais_com_gigante;
+  const upsellInfo = resolverUpsellBrotoDoce(args.broto_doce_upsell, tabelaUpsell);
+  if (upsellInfo.valor === -1) {
+    const opcoes = tabelaUpsell.map((b) => b.sabor).join(", ");
+    return { error: `Upsell broto doce "${upsellInfo.sabor}" não existe. Opções: ${opcoes} ou 'nenhuma'.` };
+  }
+
+  // Bebida extra paga (1 unidade — para múltiplas, chamar consultar_bebida_avulsa)
   let bebida_avulsa = 0;
   if (args.bebida_avulsa && args.bebida_avulsa !== "nenhuma") {
     const b = findBy(menu.bebidas_avulsas, "nome", args.bebida_avulsa);
@@ -295,7 +370,7 @@ function consultarMonteDoSeuJeito(menu: MenuData, args: any) {
     bebida_avulsa = b.preco;
   }
 
-  const subtotal = round2(cfg.preco_base + adicionais + borda + bebida_promo + bebida_avulsa);
+  const subtotal = round2(cfg.preco_base + adicionais + borda + bebida_promo + upsellInfo.valor + bebida_avulsa);
   return {
     pedido: `Monte do Seu Jeito - ${tamanho}`,
     preco_base: cfg.preco_base,
@@ -303,6 +378,8 @@ function consultarMonteDoSeuJeito(menu: MenuData, args: any) {
     borda,
     sabor_borda: bordaMonteInfo.sabor,
     bebida_promocional: bebida_promo,
+    bebida_promocional_sabor: bebida_promo_sabor,
+    upsell_broto_doce: upsellInfo.sabor ? { sabor: upsellInfo.sabor, valor: upsellInfo.valor } : null,
     bebida_avulsa,
     subtotal_produtos: subtotal,
     pedido_minimo_atingido: subtotal >= menu.regras_gerais.pedido_minimo_produtos,
