@@ -1,9 +1,41 @@
-## Redeploy `match-ifood-marketplace` e verificar versão
+## Fix: `openclaw_run_sql_select` falha com "cannot set parameter role within security-definer function"
 
-1. Disparar deploy da edge function `match-ifood-marketplace` via `supabase--deploy_edge_functions(["match-ifood-marketplace"])`. O deploy usa o código atualmente sincronizado no projeto Lovable (que está em sync bidirecional com o GitHub, então reflete o commit `c4e8d80` se já foi mergeado).
-2. Após deploy bem-sucedido, chamar a função via `supabase--curl_edge_functions` (POST com `audit_period_id` do período Feb/2026 atual da rota) para capturar o JSON de resposta.
-3. Validar que `edge_version` no payload retornado é exatamente `v2.2-2026-05-05-pass3-fix` e reportar o resultado.
+### Causa
+A função foi criada com `SECURITY DEFINER`, e o Postgres proíbe `SET LOCAL ROLE` dentro de funções DEFINER (seria escalada de privilégio trivial).
 
-Se o deploy falhar, checar logs com `supabase--edge_function_logs` e, se for problema de lockfile, remover `deno.lock` e re-tentar (ver edge-function-deploy-errors).
+### Solução: opção 1 — trocar para `SECURITY INVOKER`
 
-Observação: Lovable não tem comando explícito de "puxar commit X do GitHub" — o sync é automático. Se o commit `c4e8d80` ainda não apareceu no workspace, é necessário aguardar a sincronização antes do deploy. Posso confirmar lendo o header `// match-ifood-marketplace v2.2 (2026-05-05)` no `index.ts` antes de deployar.
+Migration única que:
+
+1. **Recria `public.openclaw_run_sql_select(text)` com `SECURITY INVOKER`**
+   - Mantém todas as guardas de regex (SELECT/WITH only, dangerous keywords, pg_*, multi-statement).
+   - Mantém `SET LOCAL statement_timeout`, `SET LOCAL idle_in_transaction_session_timeout`, `SET LOCAL ROLE openclaw_readonly`.
+   - Mantém o `RESET ROLE` no exception handler.
+   - `search_path` continua `public`.
+
+2. **Permissões de execução**
+   - `REVOKE ALL ON FUNCTION public.openclaw_run_sql_select(text) FROM PUBLIC, anon, authenticated;`
+   - `GRANT EXECUTE ON FUNCTION public.openclaw_run_sql_select(text) TO service_role;`
+   - Como a edge function `mcp` chama via service_role (após validar o `OPENCLAW_MCP_TOKEN`), o invoker terá permissão de fazer `SET LOCAL ROLE openclaw_readonly`. service_role pode trocar para qualquer role.
+
+3. **Garantia adicional sobre `openclaw_readonly`**
+   - O role já existe (criado na migration anterior). A migration vai apenas garantir, idempotente:
+     - `GRANT openclaw_readonly TO service_role;` (necessário para service_role poder `SET ROLE` para ele em alguns setups Supabase — idempotente).
+
+### Validação após deploy
+
+Vou rodar via `supabase--read_query` (simula o caminho da função) e/ou via `supabase--curl_edge_functions` no endpoint MCP usando o token. Casos:
+
+- ✅ `SELECT COUNT(*) FROM daily_closings`
+- ✅ `SELECT closing_date, total_dinheiro FROM daily_closings ORDER BY closing_date DESC LIMIT 3`
+- ✅ `WITH x AS (SELECT 1 as n) SELECT * FROM x`
+- ✅ `SELECT 1` (vazio mas válido)
+- 🚫 `INSERT INTO daily_closings ...` → "operação proibida"
+- 🚫 `SELECT * FROM pg_user` → "Acesso a catálogo pg_*"
+- 🚫 `SELECT 1; DROP TABLE x` → "Apenas 1 statement"
+- 🚫 Tentativa de escrita via SELECT em função (ex: `SELECT pg_sleep(20)`) → barrada por timeout 10s
+
+Confirmo aqui assim que a migration aplicar e os testes passarem; aí você re-roda do seu lado.
+
+### Observação sobre segurança
+Trocar para `INVOKER` não enfraquece nada neste caminho: o único caller é a edge function MCP autenticada por token, rodando como service_role. Os usuários `anon`/`authenticated` ficam sem `EXECUTE`. A defesa em profundidade (regex + role read-only + timeout) continua intacta.
