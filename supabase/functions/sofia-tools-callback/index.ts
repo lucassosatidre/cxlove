@@ -276,8 +276,12 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    // Sofia pode mandar em formatos diferentes — normalizar
+    // Sofia pode mandar em formatos diferentes — normalizar.
+    // Em Custom Mid-Call Tools, a Sofia não envia o nome da tool no body,
+    // então preferimos pegar via query string ?tool=NOMEDATOOL.
+    const url = new URL(req.url);
     const toolName: string =
+      url.searchParams.get("tool") ??
       body?.tool_name ??
       body?.name ??
       body?.function?.name ??
@@ -297,6 +301,8 @@ Deno.serve(async (req) => {
         // mantém string crua
       }
     }
+    // Quando a Sofia chama via Custom Mid-Call Tools, o body é só os argumentos
+    // (sem wrapping). Já é o que queremos: args = body.
     if (!toolName) {
       return jsonResponse({ ok: false, error: "tool_name ausente no payload." }, 400);
     }
