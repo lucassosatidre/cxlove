@@ -85,15 +85,16 @@ function listarSabores(menu: MenuData, categoria: string) {
 }
 
 function consultarCombo1(menu: MenuData, args: any) {
-  // Aceita 2 formatos:
+  // Aceita 3 formatos:
   //  (a) pizza_1: [s1,s2], pizza_2: [s1,s2]
-  //  (b) flat: sabor_pizza1_a, sabor_pizza1_b, sabor_pizza2_a, sabor_pizza2_b
+  //  (b) sabor_pizza1_a/b, sabor_pizza2_a/b (com números)
+  //  (c) sabor_pizza_um_a/b, sabor_pizza_dois_a/b (Sofia não aceita números no nome)
   const pizza_1: string[] = Array.isArray(args.pizza_1)
     ? args.pizza_1
-    : [args.sabor_pizza1_a, args.sabor_pizza1_b].filter(Boolean);
+    : [args.sabor_pizza_um_a ?? args.sabor_pizza1_a, args.sabor_pizza_um_b ?? args.sabor_pizza1_b].filter(Boolean);
   const pizza_2: string[] = Array.isArray(args.pizza_2)
     ? args.pizza_2
-    : [args.sabor_pizza2_a, args.sabor_pizza2_b].filter(Boolean);
+    : [args.sabor_pizza_dois_a ?? args.sabor_pizza2_a, args.sabor_pizza_dois_b ?? args.sabor_pizza2_b].filter(Boolean);
   const partes: string[] = [...pizza_1, ...pizza_2];
   if (partes.length !== 4) return { error: "Combo 1 precisa de 4 sabores: 2 para pizza 1 e 2 para pizza 2 (repita o mesmo sabor se for pizza inteira)." };
 
@@ -105,9 +106,11 @@ function consultarCombo1(menu: MenuData, args: any) {
     detalhe_partes.push({ parte: item.sabor, adicional: item.adicional_combo_1 });
     adicionais += item.adicional_combo_1;
   }
+  const borda1 = args.borda_pizza_um ?? args.borda_pizza_1;
+  const borda2 = args.borda_pizza_dois ?? args.borda_pizza_2;
   const bordas =
-    (args.borda_pizza_1 ? menu.combo_1.borda_por_pizza : 0) +
-    (args.borda_pizza_2 ? menu.combo_1.borda_por_pizza : 0);
+    (borda1 ? menu.combo_1.borda_por_pizza : 0) +
+    (borda2 ? menu.combo_1.borda_por_pizza : 0);
   let bebida_extra = 0;
   if (args.bebida_extra && args.bebida_extra !== "nenhuma") {
     const b = findBy(menu.bebidas_avulsas, "nome", args.bebida_extra);
@@ -129,10 +132,14 @@ function consultarCombo1(menu: MenuData, args: any) {
 }
 
 function consultarCombo2(menu: MenuData, args: any) {
-  // Aceita pizza_gigante: [s1,s2,s3] OU flat sabor_gigante_1/2/3
+  // Aceita 3 formatos para os 3 sabores da gigante
   const partes: string[] = Array.isArray(args.pizza_gigante)
     ? args.pizza_gigante
-    : [args.sabor_gigante_1, args.sabor_gigante_2, args.sabor_gigante_3].filter(Boolean);
+    : [
+        args.sabor_gigante_um ?? args.sabor_gigante_1,
+        args.sabor_gigante_dois ?? args.sabor_gigante_2,
+        args.sabor_gigante_tres ?? args.sabor_gigante_3,
+      ].filter(Boolean);
   if (partes.length !== 3) return { error: "Combo 2 precisa de 3 sabores para a pizza gigante (repita o sabor se for pizza inteira de 1 sabor)." };
 
   let adicionais_gigante = 0;
@@ -173,10 +180,14 @@ function consultarMonteDoSeuJeito(menu: MenuData, args: any) {
   const cfg = menu.monte_do_seu_jeito.tamanhos[tamanho];
   if (!cfg) return { error: `tamanho "${tamanho}" inválido.` };
 
-  // Aceita sabores: [...] OU flat sabor_1, sabor_2, sabor_3
+  // Aceita sabores: [...] OU flat (com palavras ou números)
   const sabores: string[] = Array.isArray(args.sabores)
     ? args.sabores
-    : [args.sabor_1, args.sabor_2, args.sabor_3].filter(Boolean);
+    : [
+        args.sabor_um ?? args.sabor_1,
+        args.sabor_dois ?? args.sabor_2,
+        args.sabor_tres ?? args.sabor_3,
+      ].filter(Boolean);
   const expected = tamanho === "broto" ? 1 : tamanho === "grande" ? 2 : 3;
   if (sabores.length !== expected) {
     return { error: `tamanho ${tamanho} exige ${expected} sabor(es). Para pizza inteira de 1 sabor, repita o mesmo sabor.` };
