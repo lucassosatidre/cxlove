@@ -10,9 +10,10 @@ import SofiaAssistentes from '@/components/sofia/SofiaAssistentes';
 
 export default function Sofia() {
   const { user } = useAuth();
-  const { isAdmin } = useUserRole();
+  const { isAdmin, loading: roleLoading } = useUserRole();
 
   if (!user) return <Navigate to="/login" replace />;
+  if (roleLoading) return null;
   if (!isAdmin) return <Navigate to="/" replace />;
 
   return (
