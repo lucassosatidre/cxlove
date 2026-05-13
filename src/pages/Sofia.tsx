@@ -7,6 +7,7 @@ import SofiaPainel from '@/components/sofia/SofiaPainel';
 import SofiaPedidos from '@/components/sofia/SofiaPedidos';
 import SofiaCampanhas from '@/components/sofia/SofiaCampanhas';
 import SofiaAssistentes from '@/components/sofia/SofiaAssistentes';
+import SofiaConhecimento from '@/components/sofia/SofiaConhecimento';
 
 export default function Sofia() {
   const { user } = useAuth();
@@ -23,11 +24,13 @@ export default function Sofia() {
           <TabsTrigger value="painel">Painel</TabsTrigger>
           <TabsTrigger value="pedidos">Pedidos por Telefone</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
+          <TabsTrigger value="conhecimento">Conhecimento</TabsTrigger>
           <TabsTrigger value="assistentes">Assistentes</TabsTrigger>
         </TabsList>
         <TabsContent value="painel" className="mt-4"><SofiaPainel /></TabsContent>
         <TabsContent value="pedidos" className="mt-4"><SofiaPedidos /></TabsContent>
         <TabsContent value="campanhas" className="mt-4"><SofiaCampanhas /></TabsContent>
+        <TabsContent value="conhecimento" className="mt-4"><SofiaConhecimento /></TabsContent>
         <TabsContent value="assistentes" className="mt-4"><SofiaAssistentes /></TabsContent>
       </Tabs>
     </AppLayout>
