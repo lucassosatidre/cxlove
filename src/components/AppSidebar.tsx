@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useAvatarEmoji } from '@/hooks/useAvatarEmoji';
-import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard, Calculator, Brain } from 'lucide-react';
+import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard, Calculator, Brain, Headphones } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -49,6 +49,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
       navItems.push({ icon: CreditCard, label: 'Maquininhas', path: '/admin/maquininhas', permission: 'dashboard' });
       navItems.push({ icon: Calculator, label: 'Auditoria de Taxas', path: '/admin/auditoria', permission: 'dashboard' });
       navItems.push({ icon: Brain, label: 'Memória da Clau', path: '/admin/clau/memoria', permission: 'dashboard' });
+      navItems.push({ icon: Headphones, label: 'Sofia', path: '/admin/sofia', permission: 'dashboard' });
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
     }
   }

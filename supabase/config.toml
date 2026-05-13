@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.mcp]
 verify_jwt = false
+
+[functions.sofia-webhook]
+verify_jwt = false
