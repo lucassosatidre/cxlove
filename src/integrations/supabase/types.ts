@@ -2952,6 +2952,30 @@ export type Database = {
         }
         Relationships: []
       }
+      sofia_menu: {
+        Row: {
+          created_at: string
+          data: Json
+          id: string
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          id?: string
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          id?: string
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           details: Json | null
