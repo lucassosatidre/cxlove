@@ -359,9 +359,11 @@ Deno.serve(async (req) => {
         break;
       }
       case "consultar_combo_1":
+      case "consultar_combo_um":
         result = consultarCombo1(menu, args);
         break;
       case "consultar_combo_2":
+      case "consultar_combo_dois":
         result = consultarCombo2(menu, args);
         break;
       case "consultar_monte_do_seu_jeito":
