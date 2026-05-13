@@ -2851,6 +2851,107 @@ export type Database = {
           },
         ]
       }
+      sofia_kb_documents: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          raw: Json | null
+          sofia_doc_id: number
+          sofia_kb_id: number
+          status: string | null
+          status_label: string | null
+          synced_at: string
+          type: string | null
+          type_label: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          raw?: Json | null
+          sofia_doc_id: number
+          sofia_kb_id: number
+          status?: string | null
+          status_label?: string | null
+          synced_at?: string
+          type?: string | null
+          type_label?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          raw?: Json | null
+          sofia_doc_id?: number
+          sofia_kb_id?: number
+          status?: string | null
+          status_label?: string | null
+          synced_at?: string
+          type?: string | null
+          type_label?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sofia_kb_documents_sofia_kb_id_fkey"
+            columns: ["sofia_kb_id"]
+            isOneToOne: false
+            referencedRelation: "sofia_knowledgebases"
+            referencedColumns: ["sofia_kb_id"]
+          },
+        ]
+      }
+      sofia_knowledgebases: {
+        Row: {
+          assistants_count: number | null
+          created_at: string
+          description: string | null
+          documents_count: number | null
+          id: string
+          name: string
+          raw: Json | null
+          sofia_kb_id: number
+          status: string | null
+          status_label: string | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          assistants_count?: number | null
+          created_at?: string
+          description?: string | null
+          documents_count?: number | null
+          id?: string
+          name: string
+          raw?: Json | null
+          sofia_kb_id: number
+          status?: string | null
+          status_label?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          assistants_count?: number | null
+          created_at?: string
+          description?: string | null
+          documents_count?: number | null
+          id?: string
+          name?: string
+          raw?: Json | null
+          sofia_kb_id?: number
+          status?: string | null
+          status_label?: string | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           details: Json | null
