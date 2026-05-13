@@ -1,0 +1,32 @@
+COMBOS E TAMANHOS — PIZZARIA ESTRELA DA ILHA
+========================================
+
+COMBO 1
+- Contém: 2 pizzas grandes salgadas + 1 refrigerante 1,5L incluso.
+- Bebidas inclusas (escolher uma): Coca Cola 1,5L, Coca Cola Zero 1,5L, Guaraná Antarctica 1,5L, Guaraná Antarctica Zero 1,5L.
+- Cada pizza grande pode ter até 2 sabores (50/50). Pizza inteira de 1 sabor também é possível.
+- Pizzas grandes do Combo 1 são apenas salgadas.
+- Borda recheada opcional, por pizza.
+- Para o valor exato, a IA consulta a ferramenta consultar_combo_1.
+
+COMBO 2
+- Contém: 1 pizza gigante salgada + 1 broto doce obrigatório + 1 refrigerante 1,5L incluso.
+- Bebidas inclusas: mesma lista do Combo 1.
+- A gigante pode ter até 3 sabores. Se forem 2 sabores, um fica com 8 fatias e o outro com 4 — confirmar qual fica com 8 com o cliente.
+- A broto doce é obrigatória e tem lista própria de sabores. Para a lista, use a ferramenta listar_sabores categoria='brotos_doces_opcionais'.
+- Borda recheada opcional na gigante.
+- Para o valor exato, a IA consulta consultar_combo_2.
+
+MONTE DO SEU JEITO (pizza avulsa, sem combo)
+- Broto: 25 cm, 4 fatias, 1 sabor — pode ser salgada OU doce.
+- Grande: 35 cm, 8 fatias, até 2 sabores salgados.
+- Gigante: 40 cm, 12 fatias, até 3 sabores salgados.
+- Para o valor exato, a IA consulta consultar_monte_do_seu_jeito.
+
+BEBIDA PROMOCIONAL
+- Apenas válida com Monte do Seu Jeito grande ou gigante: refrigerante 1,5L por valor promocional. Use consultar_monte_do_seu_jeito com bebida_promocional informada.
+- Pizza broto não tem bebida promocional. Bebida com broto é em preço avulso.
+
+PEDIDO MÍNIMO
+- Pedido mínimo é R$ 67,00 em produtos (não conta a taxa de entrega).
+- Se o subtotal de produtos não atinge, a Lucinéia avisa e oferece complementar (mais uma pizza, bebida, borda, etc.).

@@ -1,0 +1,53 @@
+INFORMAÇÕES GERAIS — PIZZARIA ESTRELA DA ILHA
+========================================
+
+HORÁRIO DE FUNCIONAMENTO
+- Terça a domingo, das 18h às 23h.
+- Segunda-feira: fechado.
+- Última pedida por telefone: 22h30.
+
+FORMAS DE PAGAMENTO ACEITAS
+- Dinheiro (perguntar troco para quanto).
+- Pix (enviar chave por SMS após confirmar pedido).
+- Cartão na entrega: débito, crédito.
+- Vale-refeição: Alelo, Sodexo/Pluxee, Ticket, VR.
+
+ENTREGA
+- Para confirmar valor da entrega, a IA consulta consultar_taxa_entrega informando o bairro.
+- Bairros atendidos: Rio Tavares, Campeche, Morro das Pedras, Tapera, Canto da Lagoa, Porto da Lagoa, Ribeirão da Ilha, Sertão do Ribeirão, Armação do Pântano do Sul, Costeira do Pirajubaé, Matadeiro, Alto Ribeirão, Pântano do Sul, Lagoinha do Leste, Costa de Cima, Costa de Dentro, Caeira da Barra do Sul.
+- Para outros bairros: oferecer retirada no balcão ou transferir para humano confirmar viabilidade.
+- Tempo médio de entrega: 35 a 50 minutos.
+
+RETIRADA NO BALCÃO
+- Disponível durante o horário de funcionamento.
+- Endereço da loja: Rod. Baldicero Filomeno (Ribeirão da Ilha), Florianópolis–SC. (Quando o cliente perguntar pelo endereço exato, leia devagar.)
+
+RESERVAS DE MESA
+- Não são feitas por telefone.
+- Direcionar: 'As reservas são feitas pelo link no nosso Instagram. Posso te passar o WhatsApp da pizzaria pra você receber o link?'
+
+ANIVERSARIANTE / PROMOÇÕES PARA SALÃO
+- Existem benefícios para aniversariantes no salão (não no delivery). Quando perguntarem: 'Para o aniversariante temos cortesia no salão. Para confirmar o que se aplica à sua data, é melhor passar pelo WhatsApp.'
+
+REFIL NO SALÃO
+- Refil é exclusivo do salão (rodízio).
+- Não há refil em delivery.
+
+ESTACIONAMENTO
+- A pizzaria tem estacionamento próprio.
+
+RODÍZIO
+- Rodízio é uma modalidade do salão.
+- Não há rodízio em delivery.
+
+RECLAMAÇÕES
+- Sempre acolher primeiro com empatia.
+- Anotar telefone e contexto.
+- Informar que será encaminhado para o responsável retornar.
+
+TRANSFERÊNCIA PARA HUMANO — quando fazer
+- Reserva.
+- Reclamação grave.
+- Sabor ou cobrança fora do cardápio que o cliente insiste.
+- Solicitações administrativas (nota, parceria, etc).
+- Bairro fora da lista de entrega.

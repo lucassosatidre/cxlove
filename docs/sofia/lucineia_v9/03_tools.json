@@ -1,0 +1,408 @@
+[
+  {
+    "type": "end_call",
+    "data": {
+      "description": "Encerre a chamada quando o pedido tiver sido confirmado e a forma de pagamento informada, ou quando o cliente disser que quer desligar, ou após tentativas sem resposta."
+    }
+  },
+  {
+    "type": "function",
+    "data": {
+      "name": "listar_sabores",
+      "description": "Liste os sabores disponíveis em uma categoria. Use SEMPRE antes de afirmar que um sabor não existe.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "categoria": {
+            "type": "string",
+            "enum": [
+              "salgados_grande_gigante",
+              "doces_broto_individual",
+              "brotos_doces_opcionais",
+              "bebidas_avulsas",
+              "bebidas_inclusas_combo"
+            ],
+            "description": "Qual categoria listar."
+          }
+        },
+        "required": [
+          "categoria"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "data": {
+      "name": "consultar_combo_1",
+      "description": "Calcula o subtotal do Combo 1 (2 pizzas grandes salgadas + 1 refrigerante 1,5L incluso). Preço base R$ 117,00. Passe os sabores como 4 partes (cada pizza tem 2 partes; se a pizza é inteira de 1 sabor, repita o mesmo sabor 2x naquela pizza). Borda opcional. Bebida extra opcional. Retorna subtotal e composição.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pizza_1": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "enum": [
+                "Alcatra",
+                "Alcatra com Catupiry",
+                "Alcatra com Cheddar",
+                "Alcatra com Cebola",
+                "Americana",
+                "Alho e Óleo",
+                "Bacon",
+                "Brócolis",
+                "Calabresa",
+                "Calabresa com Cebola",
+                "Calabresa com Catupiry",
+                "Calabresa Paulista (sem queijo)",
+                "Camarão",
+                "Camarão com Catupiry",
+                "Carne Seca",
+                "Catuperony",
+                "Catuperu",
+                "Cinco Queijos",
+                "Frango com Catupiry",
+                "Frango com Cheddar",
+                "Frango com Milho",
+                "Frango com Muçarela",
+                "Frango Especial 2.0",
+                "Fugazzeta",
+                "Havaiana",
+                "Lombo",
+                "Lombo com Catupiry",
+                "Portuguesa",
+                "Muçarela",
+                "Muçarela com Milho",
+                "Marguerita",
+                "Milho com Bacon",
+                "Pepperoni",
+                "Presunto com Muçarela",
+                "Três Queijos",
+                "Tomate com Muçarela",
+                "Quatro Queijos",
+                "Strogonoff de Alcatra"
+              ]
+            },
+            "description": "Sabores das 2 partes da pizza 1. Para pizza inteira, repita o mesmo sabor 2 vezes."
+          },
+          "pizza_2": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "enum": [
+                "Alcatra",
+                "Alcatra com Catupiry",
+                "Alcatra com Cheddar",
+                "Alcatra com Cebola",
+                "Americana",
+                "Alho e Óleo",
+                "Bacon",
+                "Brócolis",
+                "Calabresa",
+                "Calabresa com Cebola",
+                "Calabresa com Catupiry",
+                "Calabresa Paulista (sem queijo)",
+                "Camarão",
+                "Camarão com Catupiry",
+                "Carne Seca",
+                "Catuperony",
+                "Catuperu",
+                "Cinco Queijos",
+                "Frango com Catupiry",
+                "Frango com Cheddar",
+                "Frango com Milho",
+                "Frango com Muçarela",
+                "Frango Especial 2.0",
+                "Fugazzeta",
+                "Havaiana",
+                "Lombo",
+                "Lombo com Catupiry",
+                "Portuguesa",
+                "Muçarela",
+                "Muçarela com Milho",
+                "Marguerita",
+                "Milho com Bacon",
+                "Pepperoni",
+                "Presunto com Muçarela",
+                "Três Queijos",
+                "Tomate com Muçarela",
+                "Quatro Queijos",
+                "Strogonoff de Alcatra"
+              ]
+            },
+            "description": "Sabores das 2 partes da pizza 2."
+          },
+          "borda_pizza_1": {
+            "type": "boolean",
+            "description": "Adicionar borda na pizza 1 (R$ 18,00)."
+          },
+          "borda_pizza_2": {
+            "type": "boolean",
+            "description": "Adicionar borda na pizza 2 (R$ 18,00)."
+          },
+          "bebida_extra": {
+            "type": "string",
+            "enum": [
+              "nenhuma",
+              "Heineken Longneck Zero 330ml",
+              "Heineken Longneck 330ml",
+              "Água Mineral 500ml",
+              "Água com Gás 1,5L",
+              "Guaraná Antarctica 1,5L",
+              "Guaraná Antarctica Zero 1,5L",
+              "Coca Cola 1,5L",
+              "Coca Cola Zero 1,5L"
+            ],
+            "description": "Bebida extra (paga à parte). Use 'nenhuma' se o cliente só quiser o refri incluso."
+          }
+        },
+        "required": [
+          "pizza_1",
+          "pizza_2",
+          "borda_pizza_1",
+          "borda_pizza_2",
+          "bebida_extra"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "data": {
+      "name": "consultar_combo_2",
+      "description": "Calcula o subtotal do Combo 2 (1 pizza gigante salgada + 1 broto doce obrigatório + 1 refrigerante 1,5L incluso). Preço base R$ 114,00. A gigante tem 3 partes; se for inteira de 1 sabor, repita o sabor 3x. Se for 2 sabores, um fica com 8 fatias e outro com 4 — informar qual fica com 8 no campo sabor_principal_gigante.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pizza_gigante": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "string",
+              "enum": [
+                "Alcatra",
+                "Alcatra com Catupiry",
+                "Alcatra com Cebola",
+                "Alcatra com Cheddar",
+                "Alho e Óleo",
+                "Americana",
+                "Bacon",
+                "Brócolis",
+                "Calabresa",
+                "Calabresa com Cebola",
+                "Calabresa com Catupiry",
+                "Calabresa Paulista (sem queijo)",
+                "Camarão",
+                "Camarão com Catupiry",
+                "Carne Seca",
+                "Catuperony",
+                "Catuperu",
+                "Frango com Catupiry",
+                "Frango com Cheddar",
+                "Frango com Milho",
+                "Frango com Muçarela",
+                "Frango Especial 2.0",
+                "Fugazzeta",
+                "Havaiana",
+                "Lombo",
+                "Lombo com Catupiry",
+                "Marguerita",
+                "Milho com Bacon",
+                "Muçarela",
+                "Muçarela com Milho",
+                "Presunto com Muçarela",
+                "Pepperoni",
+                "Portuguesa",
+                "Tomate com Muçarela",
+                "Três Queijos",
+                "Quatro Queijos",
+                "Strogonoff de Alcatra"
+              ]
+            },
+            "description": "Sabores das 3 partes da gigante."
+          },
+          "broto_doce": {
+            "type": "string",
+            "enum": [
+              "Pizza Broto de Chocolate Preto",
+              "Pizza Broto de Sensação Preto",
+              "Pizza Broto de Nutella",
+              "Pizza Broto de Nutella com Morango",
+              "Pizza Broto de Charge",
+              "Pizza Broto de Prestígio",
+              "Pizza Broto de Chocolate Branco",
+              "Pizza Broto de Sensação Branco",
+              "Pizza Broto de Chocolate Mesclado",
+              "Pizza Broto de Sensação Mesclado",
+              "Pizza Broto de Coconut Gold",
+              "Pizza Broto de Nutella Imperial",
+              "Pizza Broto de Sensação Gold"
+            ],
+            "description": "Sabor da broto doce obrigatória."
+          },
+          "borda_gigante": {
+            "type": "boolean",
+            "description": "Borda na pizza gigante (R$ 20,00)."
+          },
+          "bebida_extra": {
+            "type": "string",
+            "enum": [
+              "nenhuma",
+              "Heineken Longneck Zero 330ml",
+              "Heineken Longneck 330ml",
+              "Água Mineral 500ml",
+              "Água com Gás 1,5L",
+              "Guaraná Antarctica 1,5L",
+              "Guaraná Antarctica Zero 1,5L",
+              "Coca Cola 1,5L",
+              "Coca Cola Zero 1,5L"
+            ],
+            "description": "Bebida extra paga à parte."
+          }
+        },
+        "required": [
+          "pizza_gigante",
+          "broto_doce",
+          "borda_gigante",
+          "bebida_extra"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "data": {
+      "name": "consultar_monte_do_seu_jeito",
+      "description": "Calcula o subtotal para 1 pizza avulsa Monte do Seu Jeito. Grande (R$ 67,00 base, 2 partes salgadas), gigante (R$ 87,00 base, 3 partes salgadas) ou broto (R$ 57,00 base, 1 sabor — salgado OU doce). Grande/gigante podem ter bebida promocional 1,5L por R$ 7,00. Broto usa bebida em preço avulso.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "tamanho": {
+            "type": "string",
+            "enum": [
+              "broto",
+              "grande",
+              "gigante"
+            ]
+          },
+          "sabores": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "type": "string"
+            },
+            "description": "Sabores. Broto: 1 sabor (salgado ou doce). Grande: 2 partes (salgado). Gigante: 3 partes (salgado). Repita sabor para pizza inteira."
+          },
+          "tipo_broto": {
+            "type": "string",
+            "enum": [
+              "salgada",
+              "doce",
+              "nao_aplica"
+            ],
+            "description": "Use 'salgada' ou 'doce' se tamanho=broto. Senão 'nao_aplica'."
+          },
+          "borda": {
+            "type": "boolean",
+            "description": "Adicionar borda. Broto R$ 16, Grande R$ 18, Gigante R$ 20."
+          },
+          "bebida_promocional": {
+            "type": "string",
+            "enum": [
+              "nenhuma",
+              "Coca Cola 1,5L",
+              "Coca Cola Zero 1,5L",
+              "Guaraná Antarctica 1,5L",
+              "Guaraná Antarctica Zero 1,5L"
+            ],
+            "description": "Refrigerante 1,5L por R$ 7,00. Só válido com grande ou gigante."
+          },
+          "bebida_avulsa": {
+            "type": "string",
+            "enum": [
+              "nenhuma",
+              "Heineken Longneck Zero 330ml",
+              "Heineken Longneck 330ml",
+              "Água Mineral 500ml",
+              "Água com Gás 1,5L",
+              "Guaraná Antarctica 1,5L",
+              "Guaraná Antarctica Zero 1,5L",
+              "Coca Cola 1,5L",
+              "Coca Cola Zero 1,5L"
+            ],
+            "description": "Bebida em preço avulso (para broto, ou bebida adicional em grande/gigante)."
+          }
+        },
+        "required": [
+          "tamanho",
+          "sabores",
+          "tipo_broto",
+          "borda",
+          "bebida_promocional",
+          "bebida_avulsa"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "data": {
+      "name": "consultar_bebida_avulsa",
+      "description": "Retorna o preço de uma bebida avulsa.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "bebida": {
+            "type": "string",
+            "enum": [
+              "Heineken Longneck Zero 330ml",
+              "Heineken Longneck 330ml",
+              "Água Mineral 500ml",
+              "Água com Gás 1,5L",
+              "Guaraná Antarctica 1,5L",
+              "Guaraná Antarctica Zero 1,5L",
+              "Coca Cola 1,5L",
+              "Coca Cola Zero 1,5L"
+            ]
+          },
+          "quantidade": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 1
+          }
+        },
+        "required": [
+          "bebida",
+          "quantidade"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "data": {
+      "name": "consultar_taxa_entrega",
+      "description": "Retorna a taxa de entrega para um bairro. Se o bairro não estiver na lista, retorna 'fora_da_area' e a Lucinéia deve oferecer retirada ou transferir.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "bairro": {
+            "type": "string",
+            "description": "Nome do bairro do cliente."
+          }
+        },
+        "required": [
+          "bairro"
+        ]
+      }
+    }
+  }
+]

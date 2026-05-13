@@ -1,0 +1,64 @@
+CARDÁPIO PIZZARIA ESTRELA DA ILHA
+========================================
+
+PIZZAS SALGADAS (sabores disponíveis para Combo 1, Combo 2 e Monte do Seu Jeito grande/gigante):
+
+- Alcatra: Muçarela, Miolo da alcatra em iscas
+- Alcatra com Catupiry: Alcatra em iscas, Muçarela, Catupiry Original
+- Alcatra com Cheddar: Alcatra em iscas, Muçarela, Cheddar
+- Alcatra com Cebola: Alcatra em iscas, Muçarela, Cebola
+- Americana: Presunto, Bacon em tiras, Muçarela, Requeijão Catupiry Original
+- Alho e Óleo: Alho frito em conserva com azeite de oliva extra virgem
+- Bacon: Bacon em tiras, Muçarela
+- Brócolis: Muçarela, Brócolis
+- Calabresa: Muçarela, Calabresa
+- Calabresa com Cebola: Muçarela, Cebola, Calabresa
+- Calabresa com Catupiry: Calabresa, Muçarela, Catupiry Original
+- Calabresa Paulista (sem queijo): Calabresa, Cebola
+- Camarão: Muçarela, Camarão
+- Camarão com Catupiry: Camarão ao molho da casa, Muçarela, Catupiry Original
+- Carne Seca: Muçarela, Carne seca desfiada
+- Catuperony: Muçarela, Pepperoni, Catupiry
+- Catuperu: Peito de peru defumado em fatias, Tomate salada, Muçarela, Requeijão
+- Cinco Queijos: Parmesão, Provolone, Requeijão, Muçarela, Gorgonzola
+- Frango com Catupiry: Frango desfiado, Requeijão Catupiry Original, Muçarela
+- Frango com Cheddar: Frango, Muçarela, Cheddar
+- Frango com Milho: Frango desfiado, Muçarela, Milho
+- Frango com Muçarela: Muçarela, Frango desfiado
+- Frango Especial 2.0: Frango desfiado, Muçarela, Requeijão Catupiry Original, Bacon em tiras
+- Fugazzeta: Muçarela, Cebola
+- Havaiana: Muçarela, Lombo, Abacaxi
+- Lombo: Muçarela, Lombo
+- Lombo com Catupiry: Muçarela, Lombo, Catupiry
+- Portuguesa: Presunto, Ovo cozido, Ervilha, Cebola, Muçarela
+- Muçarela: Muçarela
+- Muçarela com Milho: Muçarela, Milho
+- Marguerita: Tomate, Parmesão, Manjericão, Muçarela
+- Milho com Bacon: Muçarela, Milho, Bacon em tiras
+- Pepperoni: Pepperoni, Muçarela
+- Presunto com Muçarela: Muçarela, Presunto
+- Três Queijos: Parmesão, Muçarela, Requeijão Catupiry Original
+- Tomate com Muçarela: Muçarela ralada, Tomate fatiado
+- Quatro Queijos: Parmesão, Provolone, Muçarela, Requeijão Catupiry Original
+- Strogonoff de Alcatra: Muçarela, Alcatra ao molho branco, Batata palha
+
+BROTOS DOCES (avulsas ou como acompanhamento do Combo 2):
+
+- Chocolate Preto: Chocolate preto derretido Genuine Cargill Premium
+- Sensação Preto: Chocolate preto Genuine, Morango
+- Nutella: Nutella original
+- Nutella com Morango: Nutella original com morango
+- Charge: Chocolate preto, Amendoim, Leite condensado
+- Prestígio: Chocolate preto, Coco ralado, Leite condensado
+- Chocolate Branco: Chocolate branco
+- Sensação Branco: Chocolate branco com morango
+- Chocolate Mesclado: Chocolate preto, Chocolate branco
+- Sensação Mesclado: Chocolate branco, Chocolate preto com morango
+- Sensação Gold: Chocolate preto, Ouro, Morango
+- Nutella Imperial: Nutella original com ouro, Bombons de chocolate
+- Coconut Gold: Chocolate branco com ouro, Bombons de coco
+
+OBSERVAÇÕES SOBRE SABORES:
+- Pizza salgada e doce não vão na mesma pizza.
+- Para preços, sempre use as ferramentas de consulta (a IA tem acesso direto).
+- Para confirmar se um sabor específico existe, use a ferramenta listar_sabores.
