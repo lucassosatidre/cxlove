@@ -116,7 +116,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
             <img
               src={caixaLoveLogo}
               alt="Caixa Love"
-              className="w-[120px] object-contain"
+              className="w-[160px] object-contain"
               style={{ mixBlendMode: 'lighten' }}
             />
             <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight mt-2">CAIXA LOVE</p>
