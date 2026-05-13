@@ -2591,6 +2591,266 @@ export type Database = {
           },
         ]
       }
+      sofia_assistants: {
+        Row: {
+          created_at: string
+          id: string
+          inbound_webhook_url: string | null
+          language_id: number | null
+          name: string
+          phone_number_id: number | null
+          post_call_evaluation: boolean | null
+          post_call_schema: Json | null
+          raw: Json | null
+          sofia_id: number
+          status: string
+          synced_at: string
+          type: string
+          updated_at: string
+          voice_id: number | null
+          webhook_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inbound_webhook_url?: string | null
+          language_id?: number | null
+          name: string
+          phone_number_id?: number | null
+          post_call_evaluation?: boolean | null
+          post_call_schema?: Json | null
+          raw?: Json | null
+          sofia_id: number
+          status?: string
+          synced_at?: string
+          type: string
+          updated_at?: string
+          voice_id?: number | null
+          webhook_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inbound_webhook_url?: string | null
+          language_id?: number | null
+          name?: string
+          phone_number_id?: number | null
+          post_call_evaluation?: boolean | null
+          post_call_schema?: Json | null
+          raw?: Json | null
+          sofia_id?: number
+          status?: string
+          synced_at?: string
+          type?: string
+          updated_at?: string
+          voice_id?: number | null
+          webhook_url?: string | null
+        }
+        Relationships: []
+      }
+      sofia_calls: {
+        Row: {
+          assistant_sofia_id: number | null
+          campaign_id: string | null
+          cost_minutes: number | null
+          created_at: string
+          customer_name: string | null
+          direction: string
+          duration_sec: number | null
+          ended_at: string | null
+          extracted_data: Json | null
+          id: string
+          phone: string | null
+          raw: Json | null
+          recording_url: string | null
+          sofia_call_id: string | null
+          started_at: string | null
+          status: string
+          summary: string | null
+          transcript: Json | null
+          updated_at: string
+        }
+        Insert: {
+          assistant_sofia_id?: number | null
+          campaign_id?: string | null
+          cost_minutes?: number | null
+          created_at?: string
+          customer_name?: string | null
+          direction: string
+          duration_sec?: number | null
+          ended_at?: string | null
+          extracted_data?: Json | null
+          id?: string
+          phone?: string | null
+          raw?: Json | null
+          recording_url?: string | null
+          sofia_call_id?: string | null
+          started_at?: string | null
+          status?: string
+          summary?: string | null
+          transcript?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          assistant_sofia_id?: number | null
+          campaign_id?: string | null
+          cost_minutes?: number | null
+          created_at?: string
+          customer_name?: string | null
+          direction?: string
+          duration_sec?: number | null
+          ended_at?: string | null
+          extracted_data?: Json | null
+          id?: string
+          phone?: string | null
+          raw?: Json | null
+          recording_url?: string | null
+          sofia_call_id?: string | null
+          started_at?: string | null
+          status?: string
+          summary?: string | null
+          transcript?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sofia_calls_assistant_sofia_id_fkey"
+            columns: ["assistant_sofia_id"]
+            isOneToOne: false
+            referencedRelation: "sofia_assistants"
+            referencedColumns: ["sofia_id"]
+          },
+          {
+            foreignKeyName: "sofia_calls_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "sofia_campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sofia_campaign_targets: {
+        Row: {
+          attempts: number
+          campaign_id: string
+          created_at: string
+          customer_name: string | null
+          id: string
+          last_attempt_at: string | null
+          last_call_id: string | null
+          phone: string
+          status: string
+          updated_at: string
+          variables: Json | null
+        }
+        Insert: {
+          attempts?: number
+          campaign_id: string
+          created_at?: string
+          customer_name?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_call_id?: string | null
+          phone: string
+          status?: string
+          updated_at?: string
+          variables?: Json | null
+        }
+        Update: {
+          attempts?: number
+          campaign_id?: string
+          created_at?: string
+          customer_name?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          last_call_id?: string | null
+          phone?: string
+          status?: string
+          updated_at?: string
+          variables?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sofia_campaign_targets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "sofia_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sofia_campaign_targets_last_call_id_fkey"
+            columns: ["last_call_id"]
+            isOneToOne: false
+            referencedRelation: "sofia_calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sofia_campaigns: {
+        Row: {
+          assistant_sofia_id: number
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          default_variables: Json | null
+          dial_window_end: string | null
+          dial_window_start: string | null
+          estimated_minutes_per_call: number | null
+          id: string
+          kind: string
+          max_concurrent: number
+          name: string
+          notes: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assistant_sofia_id: number
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_variables?: Json | null
+          dial_window_end?: string | null
+          dial_window_start?: string | null
+          estimated_minutes_per_call?: number | null
+          id?: string
+          kind: string
+          max_concurrent?: number
+          name: string
+          notes?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assistant_sofia_id?: number
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_variables?: Json | null
+          dial_window_end?: string | null
+          dial_window_start?: string | null
+          estimated_minutes_per_call?: number | null
+          id?: string
+          kind?: string
+          max_concurrent?: number
+          name?: string
+          notes?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sofia_campaigns_assistant_sofia_id_fkey"
+            columns: ["assistant_sofia_id"]
+            isOneToOne: false
+            referencedRelation: "sofia_assistants"
+            referencedColumns: ["sofia_id"]
+          },
+        ]
+      }
       sync_logs: {
         Row: {
           details: Json | null
