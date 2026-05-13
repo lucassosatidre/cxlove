@@ -17,6 +17,7 @@ import { corsHeaders, jsonResponse } from "../_shared/sofia.ts";
 
 type MenuData = {
   regras_gerais: { pedido_minimo_produtos: number };
+  bordas_disponiveis?: string[];
   combo_1: {
     preco_base: number;
     borda_por_pizza: number;
@@ -67,6 +68,31 @@ function findBy<T extends Record<string, unknown>>(list: T[], key: keyof T, targ
   return list.find((it) => normalize(String(it[key])) === n) ?? null;
 }
 
+/**
+ * Resolve a borda escolhida pelo cliente.
+ * Aceita tanto:
+ *  - sabor_borda: "Catupiry" | "Cheddar" | "Chocolate Preto" | "Chocolate Branco" | "nenhuma"
+ *  - borda: true/false (legado: true → Catupiry como default; false → nenhuma)
+ *
+ * Retorna { sabor: string | null, valor: number } onde valor=0 se não houver borda.
+ */
+function resolverBorda(menu: MenuData, args: any, valorPorTamanho: number): { sabor: string | null; valor: number } {
+  const disponiveis = menu.bordas_disponiveis ?? ["Catupiry", "Cheddar", "Chocolate Preto", "Chocolate Branco"];
+  const bruto = args.sabor_borda;
+  if (typeof bruto === "string" && bruto.trim() && normalize(bruto) !== "nenhuma") {
+    const match = disponiveis.find((s) => normalize(s) === normalize(bruto));
+    if (!match) {
+      return { sabor: bruto, valor: -1 }; // sinaliza erro
+    }
+    return { sabor: match, valor: valorPorTamanho };
+  }
+  // Legado: aceita borda boolean
+  if (args.borda === true) {
+    return { sabor: "Catupiry", valor: valorPorTamanho };
+  }
+  return { sabor: null, valor: 0 };
+}
+
 function listarSabores(menu: MenuData, categoria: string) {
   switch (categoria) {
     case "salgados_grande_gigante":
@@ -106,11 +132,26 @@ function consultarCombo1(menu: MenuData, args: any) {
     detalhe_partes.push({ parte: item.sabor, adicional: item.adicional_combo_1 });
     adicionais += item.adicional_combo_1;
   }
-  const borda1 = args.borda_pizza_um ?? args.borda_pizza_1;
-  const borda2 = args.borda_pizza_dois ?? args.borda_pizza_2;
-  const bordas =
-    (borda1 ? menu.combo_1.borda_por_pizza : 0) +
-    (borda2 ? menu.combo_1.borda_por_pizza : 0);
+  // Aceita sabor_borda_pizza_um / sabor_borda_pizza_dois (strings) OU borda_pizza_um/dois (booleanos legados)
+  const disponiveis = menu.bordas_disponiveis ?? ["Catupiry", "Cheddar", "Chocolate Preto", "Chocolate Branco"];
+  function resolveBordaCombo(saborInput: any, bordaBool: any) {
+    if (typeof saborInput === "string" && saborInput.trim() && normalize(saborInput) !== "nenhuma") {
+      const match = disponiveis.find((s) => normalize(s) === normalize(saborInput));
+      if (!match) return { sabor: saborInput, valor: -1 };
+      return { sabor: match, valor: menu.combo_1.borda_por_pizza };
+    }
+    if (bordaBool === true) return { sabor: "Catupiry", valor: menu.combo_1.borda_por_pizza };
+    return { sabor: null, valor: 0 };
+  }
+  const b1 = resolveBordaCombo(args.sabor_borda_pizza_um, args.borda_pizza_um ?? args.borda_pizza_1);
+  const b2 = resolveBordaCombo(args.sabor_borda_pizza_dois, args.borda_pizza_dois ?? args.borda_pizza_2);
+  if (b1.valor === -1) return { error: `Sabor de borda "${b1.sabor}" não existe. Use: ${disponiveis.join(", ")} ou 'nenhuma'.` };
+  if (b2.valor === -1) return { error: `Sabor de borda "${b2.sabor}" não existe. Use: ${disponiveis.join(", ")} ou 'nenhuma'.` };
+  const bordas = b1.valor + b2.valor;
+  const bordas_escolhidas = [
+    b1.sabor ? { pizza: 1, sabor: b1.sabor, valor: b1.valor } : null,
+    b2.sabor ? { pizza: 2, sabor: b2.sabor, valor: b2.valor } : null,
+  ].filter(Boolean);
   let bebida_extra = 0;
   if (args.bebida_extra && args.bebida_extra !== "nenhuma") {
     const b = findBy(menu.bebidas_avulsas, "nome", args.bebida_extra);
@@ -122,7 +163,8 @@ function consultarCombo1(menu: MenuData, args: any) {
     combo: "Combo 1 - 2 pizzas grandes + refrigerante 1,5L incluso",
     preco_base: menu.combo_1.preco_base,
     adicionais_pizzas: round2(adicionais),
-    bordas,
+    bordas: round2(bordas),
+    bordas_escolhidas,
     bebida_extra,
     subtotal_produtos: subtotal,
     pedido_minimo_atingido: subtotal >= menu.regras_gerais.pedido_minimo_produtos,
@@ -153,7 +195,12 @@ function consultarCombo2(menu: MenuData, args: any) {
   const broto = findBy(menu.combo_2.brotos_doces_obrigatorias, "sabor", args.broto_doce);
   if (!broto) return { error: `Broto doce "${args.broto_doce}" não existe. Use listar_sabores categoria='brotos_doces_opcionais'.` };
   const adicional_broto = broto.adicional_broto_combo_2;
-  const borda = args.borda_gigante ? menu.combo_2.borda_gigante : 0;
+  const bordaInfo = resolverBorda(menu, { sabor_borda: args.sabor_borda_gigante, borda: args.borda_gigante }, menu.combo_2.borda_gigante);
+  if (bordaInfo.valor === -1) {
+    const disp = menu.bordas_disponiveis ?? ["Catupiry", "Cheddar", "Chocolate Preto", "Chocolate Branco"];
+    return { error: `Sabor de borda "${bordaInfo.sabor}" não existe. Use: ${disp.join(", ")} ou 'nenhuma'.` };
+  }
+  const borda = bordaInfo.valor;
   let bebida_extra = 0;
   if (args.bebida_extra && args.bebida_extra !== "nenhuma") {
     const b = findBy(menu.bebidas_avulsas, "nome", args.bebida_extra);
@@ -167,6 +214,7 @@ function consultarCombo2(menu: MenuData, args: any) {
     adicionais_gigante: round2(adicionais_gigante),
     broto_doce: { sabor: broto.sabor, adicional: adicional_broto },
     borda,
+    sabor_borda: bordaInfo.sabor,
     bebida_extra,
     subtotal_produtos: subtotal,
     pedido_minimo_atingido: subtotal >= menu.regras_gerais.pedido_minimo_produtos,
@@ -223,7 +271,12 @@ function consultarMonteDoSeuJeito(menu: MenuData, args: any) {
     }
   }
 
-  const borda = args.borda ? cfg.borda : 0;
+  const bordaMonteInfo = resolverBorda(menu, args, cfg.borda);
+  if (bordaMonteInfo.valor === -1) {
+    const disp = menu.bordas_disponiveis ?? ["Catupiry", "Cheddar", "Chocolate Preto", "Chocolate Branco"];
+    return { error: `Sabor de borda "${bordaMonteInfo.sabor}" não existe. Use: ${disp.join(", ")} ou 'nenhuma'.` };
+  }
+  const borda = bordaMonteInfo.valor;
   let bebida_promo = 0;
   if (
     args.bebida_promocional &&
@@ -248,6 +301,7 @@ function consultarMonteDoSeuJeito(menu: MenuData, args: any) {
     preco_base: cfg.preco_base,
     adicionais_sabores: round2(adicionais),
     borda,
+    sabor_borda: bordaMonteInfo.sabor,
     bebida_promocional: bebida_promo,
     bebida_avulsa,
     subtotal_produtos: subtotal,

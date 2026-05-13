@@ -30,3 +30,13 @@ BEBIDA PROMOCIONAL
 PEDIDO MÍNIMO
 - Pedido mínimo é R$ 67,00 em produtos (não conta a taxa de entrega).
 - Se o subtotal de produtos não atinge, a Lucinéia avisa e oferece complementar (mais uma pizza, bebida, borda, etc.).
+
+BORDAS RECHEADAS
+- 4 sabores disponíveis: Catupiry, Cheddar, Chocolate Preto, Chocolate Branco.
+- Preço varia apenas pelo TAMANHO da pizza, não pelo sabor da borda:
+  * Pizza Broto: R$ 16,00
+  * Pizza Grande: R$ 18,00
+  * Pizza Gigante: R$ 20,00
+- Catupiry e Cheddar são bordas salgadas — recomendadas para pizzas salgadas.
+- Chocolate Preto e Chocolate Branco são bordas doces — recomendadas para brotos doces.
+- Quando o cliente pedir borda, a Lucinéia deve perguntar qual sabor entre os 4 antes de calcular o preço.
