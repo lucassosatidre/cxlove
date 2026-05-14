@@ -58,7 +58,42 @@ BROTOS DOCES (avulsas ou como acompanhamento do Combo 2):
 - Nutella Imperial: Nutella original com ouro, Bombons de chocolate
 - Coconut Gold: Chocolate branco com ouro, Bombons de coco
 
-OBSERVAÇÕES SOBRE SABORES:
+BEBIDAS AVULSAS DISPONÍVEIS (preço cheio, paga à parte):
+
+Refrigerantes 1,5L:
+- Coca Cola 1,5L
+- Coca Cola Zero 1,5L
+- Guaraná Antarctica 1,5L
+- Guaraná Antarctica Zero 1,5L
+
+Refrigerantes 350ml (latinha):
+- Coca Cola 350ml
+- Coca Cola Zero 350ml
+- Fanta Laranja 350ml
+- Sprite 350ml
+
+Vinhos da casa 750ml:
+- Vinho Estrela Seco 750ml
+- Vinho Estrela Suave 750ml
+
+Cervejas:
+- Heineken Longneck 330ml
+- Heineken Longneck Zero 330ml
+
+Águas:
+- Água Mineral sem Gás 500ml
+- Água Mineral com Gás 500ml
+- Água Tônica 350ml
+- Água Tônica Zero 350ml
+
+Outros:
+- Del Valle Uva 290ml
+- Bally Tropical 250ml
+- Kombucha Maracujá 350ml
+- Kombucha Abacaxi com Hibisco 350ml
+
+OBSERVAÇÕES SOBRE SABORES E BEBIDAS:
 - Pizza salgada e doce não vão na mesma pizza.
 - Para preços, sempre use as ferramentas de consulta (a IA tem acesso direto).
 - Para confirmar se um sabor específico existe, use a ferramenta listar_sabores.
+- Para preço de bebida avulsa, sempre use consultar_bebida_avulsa.
