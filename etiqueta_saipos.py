@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "146"
+VERSION = "147"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
@@ -881,11 +881,20 @@ def processar_arquivo(filepath):
 _LOVELABEL_SEEN = {}
 _LOVELABEL_DEDUP_S = 5
 
-def _prod_fonte(tamanho):
+def _prod_fonte_bold(tamanho):
     for p in ("arialbd.ttf", "C:\\Windows\\Fonts\\arialbd.ttf",
               "/Library/Fonts/Arial Bold.ttf",
               "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
               "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+        try: return ImageFont.truetype(p, tamanho)
+        except: continue
+    return ImageFont.load_default()
+
+def _prod_fonte_normal(tamanho):
+    for p in ("arial.ttf", "C:\\Windows\\Fonts\\arial.ttf",
+              "/Library/Fonts/Arial.ttf",
+              "/System/Library/Fonts/Supplemental/Arial.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
         try: return ImageFont.truetype(p, tamanho)
         except: continue
     return ImageFont.load_default()
@@ -896,12 +905,25 @@ def _prod_data_br(iso_str):
         return f"{d}/{m}/{y}"
     except: return iso_str or ""
 
-def _prod_fit(draw, texto, max_w, max_h, tam_max=72, tam_min=10):
+# Detecta gramatura no final do nome: "PARMESÃO 30G", "ABACAXI 100G", "ALCATRA 130G", etc
+_PORCAO_RE = re.compile(r'\s+(\d+(?:[.,]\d+)?)\s*[Gg]\s*$')
+
+def _extrair_porcao(nome):
+    """Retorna (nome_sem_porcao, 'NNG'|None)."""
+    m = _PORCAO_RE.search(nome)
+    if not m:
+        return nome.strip(), None
+    qtd = m.group(1).replace(",", ".")
+    if qtd.endswith(".0"): qtd = qtd[:-2]
+    return _PORCAO_RE.sub("", nome).strip(), f"{qtd}G"
+
+def _prod_fit(draw, texto, max_w, max_h, bold=True, tam_max=72, tam_min=10):
+    loader = _prod_fonte_bold if bold else _prod_fonte_normal
     for s in range(tam_max, tam_min - 1, -1):
-        f = _prod_fonte(s)
+        f = loader(s)
         bb = draw.textbbox((0, 0), texto, font=f)
         if (bb[2] - bb[0]) <= max_w and (bb[3] - bb[1]) <= max_h: return f
-    return _prod_fonte(tam_min)
+    return loader(tam_min)
 
 def _prod_wrap(draw, texto, font, max_w):
     palavras, linhas, atual = texto.split(), [], ""
@@ -916,15 +938,21 @@ def _prod_wrap(draw, texto, font, max_w):
     return linhas
 
 def gerar_etiqueta_producao(payload):
-    """Layout CO LOVE: nome do insumo + FAB/VAL + faixa preta 'Por: <responsavel>'."""
+    """
+    Layout CO LOVE v147:
+    - NOME (em negrito, grande, sem a gramatura se houver)
+    - FAB / VAL (fonte normal)
+    - Faixa preta: 'PORCAO: NNG  RESPONSAVEL: NOME' (ou só RESPONSAVEL: ...) — fonte normal
+    """
     img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
     draw = ImageDraw.Draw(img)
     margem_e, margem_d, margem_t, margem_b = 16, 28, 8, 8
 
-    nome = (payload.get("product_name") or "?").upper()
+    nome_raw = (payload.get("product_name") or "?").upper()
+    nome, porcao = _extrair_porcao(nome_raw)
     fab = _prod_data_br(payload.get("manufacture_date") or "")
     val = _prod_data_br(payload.get("expiry_date") or "")
-    resp = (payload.get("responsible_name") or "?").strip()
+    resp = (payload.get("responsible_name") or "?").strip().upper()
 
     largura_util = LARGURA_PX - margem_e - margem_d
     altura_util = ALTURA_PX - margem_t - margem_b
@@ -934,8 +962,8 @@ def gerar_etiqueta_producao(payload):
     y_nome, y_datas = margem_t, margem_t + h_nome
     y_resp = y_datas + h_datas
 
-    # Nome (1 ou 2 linhas, centralizado)
-    f_nome = _prod_fit(draw, nome, largura_util, h_nome - 4, tam_max=72, tam_min=20)
+    # ---- Nome do produto (BOLD, 1 ou 2 linhas, centralizado)
+    f_nome = _prod_fit(draw, nome, largura_util, h_nome - 4, bold=True, tam_max=72, tam_min=20)
     bb = draw.textbbox((0, 0), nome, font=f_nome)
     if (bb[2] - bb[0]) <= largura_util:
         lh = bb[3] - bb[1]
@@ -944,7 +972,7 @@ def gerar_etiqueta_producao(payload):
         draw.text((x, y), nome, fill="black", font=f_nome)
     else:
         for s in range(50, 14, -2):
-            f_tmp = _prod_fonte(s)
+            f_tmp = _prod_fonte_bold(s)
             linhas = _prod_wrap(draw, nome, f_tmp, largura_util)
             if len(linhas) > 2: continue
             line_h = draw.textbbox((0, 0), "Ag", font=f_tmp)[3]
@@ -958,11 +986,11 @@ def gerar_etiqueta_producao(payload):
                     draw.text((x, y0 + i * (line_h + 2)), l, fill="black", font=f_tmp)
                 break
 
-    # Datas
+    # ---- Datas (fonte NORMAL, sem negrito)
     label_fab, label_val = f"FAB: {fab}", f"VAL: {val}"
     metade = largura_util // 2
-    f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, tam_max=44, tam_min=14)
-    f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, tam_max=44, tam_min=14)
+    f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, bold=False, tam_max=44, tam_min=14)
+    f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, bold=False, tam_max=44, tam_min=14)
     f_dat = f_b if f_b.size < f_a.size else f_a
     bb_fab = draw.textbbox((0, 0), label_fab, font=f_dat)
     bb_val = draw.textbbox((0, 0), label_val, font=f_dat)
@@ -971,9 +999,12 @@ def gerar_etiqueta_producao(payload):
     draw.text((margem_e, y_label), label_fab, fill="black", font=f_dat)
     draw.text((LARGURA_PX - margem_d - (bb_val[2] - bb_val[0]), y_label), label_val, fill="black", font=f_dat)
 
-    # Faixa preta com responsavel
-    label_resp = f"Por: {resp}"
-    f_resp = _prod_fit(draw, label_resp, largura_util - 8, h_resp - 6, tam_max=36, tam_min=12)
+    # ---- Faixa preta: porção (se houver) + responsável (fonte NORMAL, branca)
+    if porcao:
+        label_resp = f"PORÇÃO: {porcao}   RESPONSÁVEL: {resp}"
+    else:
+        label_resp = f"RESPONSÁVEL: {resp}"
+    f_resp = _prod_fit(draw, label_resp, largura_util - 8, h_resp - 6, bold=False, tam_max=32, tam_min=10)
     fy0, fy1 = y_resp, ALTURA_PX - margem_b
     draw.rectangle([margem_e - 4, fy0, LARGURA_PX - margem_d + 4, fy1], fill="black")
     bb_r = draw.textbbox((0, 0), label_resp, font=f_resp)
