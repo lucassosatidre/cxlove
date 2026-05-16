@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "145"
+VERSION = "146"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
@@ -875,6 +875,145 @@ def processar_arquivo(filepath):
     if filename.lower().startswith("nfce_"): processar_nfce(filepath, filename); return
     processar_pedido(filepath, filename)
 
+# ============================================================
+# CO LOVE - Etiquetas de Producao (.lovelabel)
+# ============================================================
+_LOVELABEL_SEEN = {}
+_LOVELABEL_DEDUP_S = 5
+
+def _prod_fonte(tamanho):
+    for p in ("arialbd.ttf", "C:\\Windows\\Fonts\\arialbd.ttf",
+              "/Library/Fonts/Arial Bold.ttf",
+              "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+              "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+        try: return ImageFont.truetype(p, tamanho)
+        except: continue
+    return ImageFont.load_default()
+
+def _prod_data_br(iso_str):
+    try:
+        y, m, d = iso_str.split("-")
+        return f"{d}/{m}/{y}"
+    except: return iso_str or ""
+
+def _prod_fit(draw, texto, max_w, max_h, tam_max=72, tam_min=10):
+    for s in range(tam_max, tam_min - 1, -1):
+        f = _prod_fonte(s)
+        bb = draw.textbbox((0, 0), texto, font=f)
+        if (bb[2] - bb[0]) <= max_w and (bb[3] - bb[1]) <= max_h: return f
+    return _prod_fonte(tam_min)
+
+def _prod_wrap(draw, texto, font, max_w):
+    palavras, linhas, atual = texto.split(), [], ""
+    for p in palavras:
+        t = (atual + " " + p).strip()
+        bb = draw.textbbox((0, 0), t, font=font)
+        if (bb[2] - bb[0]) <= max_w: atual = t
+        else:
+            if atual: linhas.append(atual)
+            atual = p
+    if atual: linhas.append(atual)
+    return linhas
+
+def gerar_etiqueta_producao(payload):
+    """Layout CO LOVE: nome do insumo + FAB/VAL + faixa preta 'Por: <responsavel>'."""
+    img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
+    draw = ImageDraw.Draw(img)
+    margem_e, margem_d, margem_t, margem_b = 16, 28, 8, 8
+
+    nome = (payload.get("product_name") or "?").upper()
+    fab = _prod_data_br(payload.get("manufacture_date") or "")
+    val = _prod_data_br(payload.get("expiry_date") or "")
+    resp = (payload.get("responsible_name") or "?").strip()
+
+    largura_util = LARGURA_PX - margem_e - margem_d
+    altura_util = ALTURA_PX - margem_t - margem_b
+    h_nome = int(altura_util * 0.45)
+    h_datas = int(altura_util * 0.25)
+    h_resp = altura_util - h_nome - h_datas
+    y_nome, y_datas = margem_t, margem_t + h_nome
+    y_resp = y_datas + h_datas
+
+    # Nome (1 ou 2 linhas, centralizado)
+    f_nome = _prod_fit(draw, nome, largura_util, h_nome - 4, tam_max=72, tam_min=20)
+    bb = draw.textbbox((0, 0), nome, font=f_nome)
+    if (bb[2] - bb[0]) <= largura_util:
+        lh = bb[3] - bb[1]
+        x = margem_e + (largura_util - (bb[2] - bb[0])) // 2
+        y = y_nome + (h_nome - lh) // 2 - 4
+        draw.text((x, y), nome, fill="black", font=f_nome)
+    else:
+        for s in range(50, 14, -2):
+            f_tmp = _prod_fonte(s)
+            linhas = _prod_wrap(draw, nome, f_tmp, largura_util)
+            if len(linhas) > 2: continue
+            line_h = draw.textbbox((0, 0), "Ag", font=f_tmp)[3]
+            total_h = line_h * len(linhas) + 2 * (len(linhas) - 1)
+            if total_h <= h_nome - 4:
+                y0 = y_nome + (h_nome - total_h) // 2 - 2
+                for i, l in enumerate(linhas):
+                    bbl = draw.textbbox((0, 0), l, font=f_tmp)
+                    lw = bbl[2] - bbl[0]
+                    x = margem_e + (largura_util - lw) // 2
+                    draw.text((x, y0 + i * (line_h + 2)), l, fill="black", font=f_tmp)
+                break
+
+    # Datas
+    label_fab, label_val = f"FAB: {fab}", f"VAL: {val}"
+    metade = largura_util // 2
+    f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, tam_max=44, tam_min=14)
+    f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, tam_max=44, tam_min=14)
+    f_dat = f_b if f_b.size < f_a.size else f_a
+    bb_fab = draw.textbbox((0, 0), label_fab, font=f_dat)
+    bb_val = draw.textbbox((0, 0), label_val, font=f_dat)
+    h_label = max(bb_fab[3] - bb_fab[1], bb_val[3] - bb_val[1])
+    y_label = y_datas + (h_datas - h_label) // 2 - 2
+    draw.text((margem_e, y_label), label_fab, fill="black", font=f_dat)
+    draw.text((LARGURA_PX - margem_d - (bb_val[2] - bb_val[0]), y_label), label_val, fill="black", font=f_dat)
+
+    # Faixa preta com responsavel
+    label_resp = f"Por: {resp}"
+    f_resp = _prod_fit(draw, label_resp, largura_util - 8, h_resp - 6, tam_max=36, tam_min=12)
+    fy0, fy1 = y_resp, ALTURA_PX - margem_b
+    draw.rectangle([margem_e - 4, fy0, LARGURA_PX - margem_d + 4, fy1], fill="black")
+    bb_r = draw.textbbox((0, 0), label_resp, font=f_resp)
+    rw, rh = bb_r[2] - bb_r[0], bb_r[3] - bb_r[1]
+    rx = margem_e + (largura_util - rw) // 2
+    ry = fy0 + ((fy1 - fy0) - rh) // 2 - 2
+    draw.text((rx, ry), label_resp, fill="white", font=f_resp)
+    return img
+
+def processar_lovelabel(filepath, filename):
+    try:
+        time.sleep(0.6)
+        with open(filepath, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as e:
+        log(f"  ERRO lendo .lovelabel: {e}"); return
+    if payload.get("type") != "producao":
+        log(f"  .lovelabel ignorado (type != producao)"); return
+    batch_id = payload.get("batch_id", "?")
+    is_reprint = bool(payload.get("reprint"))
+    now = time.time()
+    last = _LOVELABEL_SEEN.get(batch_id)
+    if last and (now - last) < _LOVELABEL_DEDUP_S and not is_reprint:
+        log(f"  dedup .lovelabel {str(batch_id)[:8]}")
+        try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename))
+        except: pass
+        return
+    _LOVELABEL_SEEN[batch_id] = now
+    qtd = max(1, min(50, int(payload.get("quantity", 1))))
+    nome = payload.get("product_name", "?")
+    log(f"  CO LOVE: {qtd}x '{nome}' (batch {str(batch_id)[:8]}{'/REIMP' if is_reprint else ''})")
+    img = gerar_etiqueta_producao(payload)
+    for i in range(qtd):
+        try: imprimir_etiqueta(img)
+        except Exception as e: log(f"  ERRO imp {i+1}/{qtd}: {e}"); break
+        time.sleep(0.2)
+    try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log(f"  Movido")
+    except Exception as e: log(f"  ERRO mover: {e}")
+
+
 class SaiposHandler(FileSystemEventHandler):
     def on_created(self, event): self._processar(event.src_path)
     def on_moved(self, event): self._processar(event.dest_path)
@@ -885,6 +1024,9 @@ class SaiposHandler(FileSystemEventHandler):
             time.sleep(1)
             try: processar_arquivo(filepath)
             except Exception as e: log(f"ERRO: {fn}: {e}")
+        elif fn.endswith(".lovelabel"):
+            try: processar_lovelabel(filepath, os.path.basename(filepath))
+            except Exception as e: log(f"ERRO lovelabel: {fn}: {e}")
 
 def main():
     print("=" * 60)
