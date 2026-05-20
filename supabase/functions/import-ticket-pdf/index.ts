@@ -453,14 +453,18 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Filtra lotes pelo mês alvo (data_credito) com offset +1 — Ticket credita
-    // até ~3 semanas após corte, então vendas do mês N podem ter crédito no
-    // mês N+1. Lotes com crédito fora desse range pertencem a outro audit_period.
+    // Filtra lotes pelo mês alvo (data_credito) com offset ZERO — cada lote
+    // pertence ao mês de sua data_credito. ANTES usava [0, 1] (mês alvo + 1),
+    // o que causou vazamento crítico: lotes com data_credito em abril foram
+    // engolidos pelo import de março, e depois ficaram bloqueados pelo
+    // cross-period dup check no reimport correto (mai/26: 16 lotes de abril
+    // ficaram em março). Se o user importou o extrato no período errado,
+    // esses lotes serão descartados aqui e re-importados no período correto.
     const periodFilter = filterToPeriod(
       lots,
       (l: any) => l.data_credito,
       { month: period.month, year: period.year },
-      [0, 1],
+      [0],
     );
     const lotsKept = periodFilter.kept;
 
