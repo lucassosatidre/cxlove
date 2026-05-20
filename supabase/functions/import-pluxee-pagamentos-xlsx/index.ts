@@ -209,20 +209,20 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Nenhum pagamento encontrado no extrato_pagamentos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const periodCheck = validatePeriodMatch(pagamentos.map(p => p.data_pagamento), { month: period.month, year: period.year }, 'Pluxee Pagamentos', [0, 1]);
+    const periodCheck = validatePeriodMatch(pagamentos.map(p => p.data_pagamento), { month: period.month, year: period.year }, 'Pluxee Pagamentos', [0]);
     if (!periodCheck.ok) {
       return new Response(JSON.stringify({ error: periodCheck.error, breakdown_by_month: periodCheck.breakdown }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Filtra pagamentos pelo mês alvo (data_pagamento) com offset +1 — Pluxee
-    // paga D+5/D+10 após corte, então pagamento do mês N pode cair no N+1.
-    // Sem isso, arquivo cobrindo mar+abr criava lotes PLUXEE-PAG nos 2 audit
-    // periods (duplicação cross-período silenciosa).
+    // Filtra pagamentos pelo mês alvo (data_pagamento) com offset ZERO.
+    // ANTES usava [0, 1] (mês alvo + 1) — engolia pagamentos do mês seguinte.
+    // Mesmo padrão de bug do Ticket/VR: arquivo de mar engolia pagamentos
+    // de abril, depois o cross-period dup check bloqueava o reimport correto.
     const periodFilter = filterToPeriod(
       pagamentos,
       (p) => p.data_pagamento,
       { month: period.month, year: period.year },
-      [0, 1],
+      [0],
     );
     const pagamentosKept = periodFilter.kept;
 
