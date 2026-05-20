@@ -4,11 +4,16 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "148"
+VERSION = "149"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+try:
+    from zoneinfo import ZoneInfo
+    _BR_TZ = ZoneInfo("America/Sao_Paulo")
+except Exception:
+    _BR_TZ = timezone(timedelta(hours=-3))
 
 try:
     from watchdog.observers import Observer
@@ -905,6 +910,18 @@ def _prod_data_br(iso_str):
         return f"{d}/{m}/{y}"
     except: return iso_str or ""
 
+def _prod_hora_br(iso_str):
+    """Extrai HH:MM de um timestamp ISO (printed_at) convertendo pra America/Sao_Paulo."""
+    if not iso_str: return ""
+    try:
+        s = iso_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(_BR_TZ).strftime("%H:%M")
+    except Exception:
+        return ""
+
 # Detecta gramatura no final do nome: "PARMESÃO 30G", "ABACAXI 100G", "ALCATRA 130G", etc
 _PORCAO_RE = re.compile(r'\s+(\d+(?:[.,]\d+)?)\s*[Gg]\s*$')
 
@@ -953,6 +970,7 @@ def gerar_etiqueta_producao(payload):
     nome, porcao = _extrair_porcao(nome_raw)
     fab = _prod_data_br(payload.get("manufacture_date") or "")
     val = _prod_data_br(payload.get("expiry_date") or "")
+    hora = _prod_hora_br(payload.get("printed_at") or "")
     resp = (payload.get("responsible_name") or "?").strip().upper()
 
     largura_util = LARGURA_PX - margem_e - margem_d
@@ -991,8 +1009,9 @@ def gerar_etiqueta_producao(payload):
                     draw.text((x, y0 + i * (line_h + 2)), l, fill="white", font=f_tmp)
                 break
 
-    # ---- FAB / VAL (fonte NORMAL preta)
-    label_fab, label_val = f"FAB: {fab}", f"VAL: {val}"
+    # ---- FAB / VAL (fonte NORMAL preta) — hora anexada ao FAB quando disponível
+    label_fab = f"FAB: {fab} {hora}".rstrip() if hora else f"FAB: {fab}"
+    label_val = f"VAL: {val}"
     metade = largura_util // 2
     f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, bold=False, tam_max=40, tam_min=14)
     f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, bold=False, tam_max=40, tam_min=14)
