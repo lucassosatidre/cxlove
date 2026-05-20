@@ -310,50 +310,39 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
 
   // Dedupe items por lote. Quando um lote atravessa quebra de página, a Ticket
   // reimprime a última linha no topo da próxima página (visto em abril/26
-  // lote 429498920). Assinatura: doc + cartão + valor + data_transacao.
-  let dedupedCount = 0;
+  // lote 429498920). Comportamento esperado — não emite warning.
   for (const l of lots) {
     const seen = new Set<string>();
     const filtered: ParsedItem[] = [];
     for (const it of l.items) {
       const sig = `${it.numero_documento ?? ''}|${it.numero_cartao_mascarado ?? ''}|${it.valor.toFixed(2)}|${it.data_transacao}`;
-      if (seen.has(sig)) { dedupedCount++; continue; }
+      if (seen.has(sig)) continue;
       seen.add(sig);
       filtered.push(it);
     }
     l.items = filtered;
   }
-  if (dedupedCount > 0) {
-    warnings.push(`${dedupedCount} item(ns) duplicado(s) removido(s) (reimpresso em quebra de página).`);
-  }
 
   // Reconciliação aritmética (identidade Ticket: liq = subtotal - descontos).
   // O TOTAL_DESC_RE é frágil — pdfjs reordena "Total Descontos" e "Valor
   // Líquido" e o regex acaba capturando o R$ do líquido como total_descontos.
-  // Quando dá pra derivar das outras duas grandezas, derivamos sempre — o
-  // valor do regex é descartado se diverge.
-  let inferredCount = 0;
+  // Sempre que dá pra derivar das outras duas grandezas, derivamos. Roda em
+  // todo import — não emite warning. Só sinaliza quando uma grandeza estava
+  // ausente E não foi derivável (caso anômalo digno de inspeção).
   for (const l of lots) {
     const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
     if (l.subtotal_vendas === 0 && sumItems > 0) {
       l.subtotal_vendas = Math.round(sumItems * 100) / 100;
-      warnings.push(`Lote ${l.numero_reembolso}: subtotal inferido pela soma de items (R$${l.subtotal_vendas.toFixed(2)})`);
-      inferredCount++;
     }
     if (l.subtotal_vendas > 0 && l.valor_liquido > 0 && l.subtotal_vendas >= l.valor_liquido) {
-      const calc = Math.round((l.subtotal_vendas - l.valor_liquido) * 100) / 100;
-      if (Math.abs(calc - l.total_descontos) > 0.05) inferredCount++;
-      l.total_descontos = calc;
+      l.total_descontos = Math.round((l.subtotal_vendas - l.valor_liquido) * 100) / 100;
     } else if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos > 0) {
       l.valor_liquido = Math.round((l.subtotal_vendas - l.total_descontos) * 100) / 100;
-      warnings.push(`Lote ${l.numero_reembolso}: valor_liquido inferido (subtotal - desc = R$${l.valor_liquido.toFixed(2)})`);
-      inferredCount++;
     } else if (l.valor_liquido === 0 && l.subtotal_vendas > 0 && l.total_descontos === 0) {
       l.valor_liquido = l.subtotal_vendas;
+    } else if (l.subtotal_vendas === 0 || l.valor_liquido === 0) {
+      warnings.push(`Lote ${l.numero_reembolso}: grandezas incompletas após parse (sub=${l.subtotal_vendas} desc=${l.total_descontos} liq=${l.valor_liquido}).`);
     }
-  }
-  if (inferredCount > 0) {
-    warnings.unshift(`${inferredCount} valor(es) reconciliados aritmeticamente (regex frágil).`);
   }
 
   // Diagnóstico se o parser não pegou nada de estrutura conhecida
