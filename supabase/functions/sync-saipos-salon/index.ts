@@ -45,16 +45,34 @@ Deno.serve(async (req) => {
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Validate caller
+    // Validate caller: accept either a user JWT or the service role key
+    // (service role key is used by auto-sync-saipos cron for internal calls).
     const token = authHeader.replace("Bearer ", "");
-    const { data: { user: callerUser }, error: userErr } = await supabaseAdmin.auth.getUser(token);
-    if (userErr || !callerUser) {
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let userId: string;
+    if (token === supabaseServiceKey) {
+      const { data: adminRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin")
+        .limit(1)
+        .maybeSingle();
+      if (!adminRole?.user_id) {
+        return new Response(
+          JSON.stringify({ error: "Nenhum admin configurado para chamada interna" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      userId = adminRole.user_id;
+    } else {
+      const { data: { user: callerUser }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+      if (userErr || !callerUser) {
+        return new Response(JSON.stringify({ error: "Não autorizado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = callerUser.id;
     }
-    const userId = callerUser.id;
 
     const { closing_date, salon_closing_id } = await req.json();
     if (!closing_date || !salon_closing_id) {

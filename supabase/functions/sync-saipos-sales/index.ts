@@ -111,19 +111,37 @@ Deno.serve(async (req) => {
     // Use service role key for all DB operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Validate caller using getUser
+    // Validate caller: accept either a user JWT or the service role key
+    // (service role key is used by auto-sync-saipos cron for internal calls).
     const token = authHeader.replace("Bearer ", "");
-    const userResult = await supabaseAdmin.auth.getUser(token);
-    const callerUser = userResult?.data?.user ?? null;
-    const userErr = userResult?.error ?? null;
-    if (userErr || !callerUser) {
-      console.error("Auth error:", userErr?.message);
-      return new Response(JSON.stringify({ error: "Não autorizado" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let userId: string;
+    if (token === supabaseServiceKey) {
+      const { data: adminRole } = await supabaseAdmin
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "admin")
+        .limit(1)
+        .maybeSingle();
+      if (!adminRole?.user_id) {
+        return new Response(
+          JSON.stringify({ error: "Nenhum admin configurado para chamada interna" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      userId = adminRole.user_id;
+    } else {
+      const userResult = await supabaseAdmin.auth.getUser(token);
+      const callerUser = userResult?.data?.user ?? null;
+      const userErr = userResult?.error ?? null;
+      if (userErr || !callerUser) {
+        console.error("Auth error:", userErr?.message);
+        return new Response(JSON.stringify({ error: "Não autorizado" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = callerUser.id;
     }
-    const userId = callerUser.id;
 
     const { closing_date, daily_closing_id } = body;
     if (!closing_date || !daily_closing_id) {
