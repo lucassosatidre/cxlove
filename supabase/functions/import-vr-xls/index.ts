@@ -216,14 +216,17 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Filtra pelo mês alvo (+1 pra capturar vendas do mês creditadas no mês
-    // seguinte). Sem isso, arquivo cobrindo jan-mar gerava 21 lotes idênticos
-    // em cada audit_period — duplicação cross-período silenciosa.
+    // Filtra pelo mês alvo (data_corte fallback data_pagamento) com offset
+    // ZERO. ANTES usava [0, 1] pra "capturar vendas do mês creditadas no
+    // mês seguinte" — mas isso vazava lotes do mês N+1 pro period N, e
+    // depois o cross-period dup check bloqueava o reimport correto. Visto
+    // em mai/26 com `extrato_reembolsos_vr_2026-04-01_a_2026-05-20.xls`:
+    // 12 lotes de maio engolidos pelo period abril.
     const periodFilter = filterToPeriod(
       lots,
       (l) => l.data_corte ?? l.data_pagamento,
       { month: period.month, year: period.year },
-      [0, 1],
+      [0],
     );
     const lotsKept = periodFilter.kept;
     const skippedByMonth = periodFilter.skippedByMonth;
@@ -242,7 +245,6 @@ Deno.serve(async (req) => {
     let insertedLots = 0;
     let updatedLots = 0;
     let skippedDupCrossPeriod = 0;
-    const insertedItems = 0;
 
     for (const lot of lotsKept) {
       const totalDesc = Math.round((lot.bruto - lot.liquido) * 100) / 100;
@@ -308,8 +310,11 @@ Deno.serve(async (req) => {
       // Lote sem items vinculados é normal até o user importar o vendas.xls.
     }
 
+    // Reembolsos VR não criam items próprios (vêm depois via vendas.xls).
+    // imported_rows reflete lotes processados (novos + atualizados) pra UI
+    // não exibir "0 linhas" enganoso.
     await supabase.from('audit_imports').update({
-      status: 'completed', imported_rows: insertedItems, duplicate_rows: 0,
+      status: 'completed', imported_rows: insertedLots + updatedLots, duplicate_rows: 0,
     }).eq('id', importRec.id);
 
     if (period.status === 'aberto') {
@@ -325,7 +330,7 @@ Deno.serve(async (req) => {
       total_lots: lots.length,
       inserted_lots: insertedLots,
       updated_lots: updatedLots,
-      inserted_items: insertedItems,
+      inserted_items: 0,
       skipped_non_pago: skippedNonPago,
       skipped_invalid: skippedInvalid,
       skipped_outside_period: periodFilter.skipped,
