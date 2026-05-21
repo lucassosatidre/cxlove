@@ -367,8 +367,17 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Status: se 0 items vinculados apesar de ter vendas válidas, sinaliza erro
+    // pra UI mostrar (caso clássico: lotes ainda não importados ou produtos
+    // sem correspondência). Antes o status ficava 'completed' silenciosamente.
+    const hasUnlinkedSales = insertedItems === 0 && salesKept.length > 0;
     await supabase.from('audit_imports').update({
-      status: 'completed', imported_rows: insertedItems, duplicate_rows: 0,
+      status: hasUnlinkedSales ? 'error' : 'completed',
+      imported_rows: insertedItems,
+      duplicate_rows: 0,
+      error_message: hasUnlinkedSales
+        ? `Nenhuma venda vinculada a lote (${orphans.length} órfãs). Verifique se o extrato_reembolsos_vr foi importado antes deste arquivo.`
+        : null,
     }).eq('id', importRec.id);
 
     // Diagnóstico de integridade: pra cada lote afetado, compara items_sum

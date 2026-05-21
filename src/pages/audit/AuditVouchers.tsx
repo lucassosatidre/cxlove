@@ -449,9 +449,27 @@ export default function AuditVouchers() {
     const onlyMaq = maqList.filter(m => !usedMaq.has(m.id));
     const onlyPortal = portalList.filter(p => !usedPortal.has(p.id));
 
+    // Janela coberta pelo extrato = última data_transacao vista nos items.
+    // Vendas Maquinona após essa data são esperadas (timing) — virão no próximo
+    // extrato. Vendas Maquinona DENTRO da janela são divergência real (pending
+    // no portal da operadora, parser falhou, ou venda recusada).
+    const extractLastSale = portalList.length > 0
+      ? portalList.reduce((max, p) => p.data_transacao > max ? p.data_transacao : max, portalList[0].data_transacao)
+      : null;
+    const onlyMaqAfterWindow = extractLastSale
+      ? onlyMaq.filter(m => m.sale_date > extractLastSale)
+      : [];
+    const onlyMaqWithinWindow = extractLastSale
+      ? onlyMaq.filter(m => m.sale_date <= extractLastSale)
+      : onlyMaq;
+
     const diffCount = maqCount - opCount;
     const diffBruto = Math.round((maqBruto - opBruto) * 100) / 100;
-    return { maqCount, maqBruto, maqPromo, opCount, opBruto, diffCount, diffBruto, onlyMaq, onlyPortal };
+    return {
+      maqCount, maqBruto, maqPromo, opCount, opBruto, diffCount, diffBruto,
+      onlyMaq, onlyPortal,
+      extractLastSale, onlyMaqAfterWindow, onlyMaqWithinWindow,
+    };
   }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots]);
 
   const lotById = useMemo(() => {
@@ -793,11 +811,18 @@ export default function AuditVouchers() {
             {showCrossDetail && (crossCheck.onlyMaq.length > 0 || crossCheck.onlyPortal.length > 0) && (
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded border bg-card">
-                  <div className="px-3 py-2 text-xs uppercase text-muted-foreground border-b flex justify-between">
-                    <span>Só na Maquinona ({crossCheck.onlyMaq.length})</span>
-                    <span className="font-mono">
-                      {fmt(crossCheck.onlyMaq.reduce((s, m) => s + m.gross_amount, 0))}
-                    </span>
+                  <div className="px-3 py-2 text-xs uppercase text-muted-foreground border-b flex flex-col gap-1">
+                    <div className="flex justify-between">
+                      <span>Só na Maquinona ({crossCheck.onlyMaq.length})</span>
+                      <span className="font-mono">
+                        {fmt(crossCheck.onlyMaq.reduce((s, m) => s + m.gross_amount, 0))}
+                      </span>
+                    </div>
+                    {crossCheck.extractLastSale && (
+                      <div className="text-[10px] normal-case text-muted-foreground/80">
+                        Última venda no extrato: <strong>{fmtDate(crossCheck.extractLastSale)}</strong>
+                      </div>
+                    )}
                   </div>
                   {crossCheck.onlyMaq.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
@@ -807,17 +832,44 @@ export default function AuditVouchers() {
                         <TableRow>
                           <TableHead>Data venda</TableHead>
                           <TableHead className="text-right">Bruto</TableHead>
+                          <TableHead className="text-right">Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {crossCheck.onlyMaq.map(m => (
-                          <TableRow key={m.id}>
-                            <TableCell className="text-xs">{fmtDate(m.sale_date)}</TableCell>
-                            <TableCell className="text-right text-xs">{fmt(m.gross_amount)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {[...crossCheck.onlyMaq]
+                          .sort((a, b) => a.sale_date.localeCompare(b.sale_date))
+                          .map(m => {
+                            const isAfterWindow = crossCheck.extractLastSale && m.sale_date > crossCheck.extractLastSale;
+                            return (
+                              <TableRow key={m.id}>
+                                <TableCell className="text-xs">{fmtDate(m.sale_date)}</TableCell>
+                                <TableCell className="text-right text-xs">{fmt(m.gross_amount)}</TableCell>
+                                <TableCell className="text-right text-[10px]">
+                                  {isAfterWindow ? (
+                                    <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/40">
+                                      próx. extrato
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-rose-700 dark:text-rose-400 border-rose-500/40">
+                                      sem reembolso
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
                       </TableBody>
                     </Table>
+                  )}
+                  {(crossCheck.onlyMaqAfterWindow.length > 0 || crossCheck.onlyMaqWithinWindow.length > 0) && (
+                    <div className="px-3 py-2 text-[10px] border-t bg-muted/30 flex justify-between">
+                      <span>
+                        <span className="text-amber-700 dark:text-amber-400">●</span> próx. extrato: {crossCheck.onlyMaqAfterWindow.length} ({fmt(crossCheck.onlyMaqAfterWindow.reduce((s, m) => s + m.gross_amount, 0))})
+                      </span>
+                      <span>
+                        <span className="text-rose-700 dark:text-rose-400">●</span> sem reembolso: {crossCheck.onlyMaqWithinWindow.length} ({fmt(crossCheck.onlyMaqWithinWindow.reduce((s, m) => s + m.gross_amount, 0))})
+                      </span>
+                    </div>
                   )}
                 </div>
                 <div className="rounded border bg-card">
@@ -855,12 +907,23 @@ export default function AuditVouchers() {
                     </Table>
                   )}
                 </div>
-                <p className="md:col-span-2 text-[11px] text-muted-foreground">
-                  Match feito por <strong>data + valor exato</strong>. Possíveis causas de divergência:
-                  cancelamento parcial (valor diferente), venda de fim do dia que muda de competência
-                  no portal por fuso/corte, venda Maquinona não-aprovada que não foi gravada no portal,
-                  ou vendas duplicadas/repetidas.
-                </p>
+                <div className="md:col-span-2 text-[11px] text-muted-foreground space-y-1">
+                  <p>
+                    Match por <strong>data + valor exato</strong>. Status "Só na Maquinona":
+                  </p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li>
+                      <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/40 text-[10px] align-middle">próx. extrato</Badge>{' '}
+                      — venda após a última data coberta pelo extrato. Vai aparecer no próximo extrato da operadora.
+                    </li>
+                    <li>
+                      <Badge variant="outline" className="text-rose-700 dark:text-rose-400 border-rose-500/40 text-[10px] align-middle">sem reembolso</Badge>{' '}
+                      — venda dentro da janela do extrato mas sem reembolso correspondente.
+                      Investigar no portal da operadora: pode estar pendente de processamento,
+                      recusada (chargeback/fraude), ou registrada pela Maquinona mas não aprovada.
+                    </li>
+                  </ul>
+                </div>
               </div>
             )}
           </CardContent>
