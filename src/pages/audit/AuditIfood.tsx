@@ -251,6 +251,63 @@ export default function AuditIfood() {
         }
       }
 
+      // Pass 2: match agrupado. iFood acumula PIX pequenos e paga em batch
+      // junto com a antecipação semanal. Pra cada dep não pareado, tenta
+      // combinar 2-4 lotes PIX iFood unmatched que somam ± 3% do dep, janela
+      // 7 dias antes. Visto em abr/26: 16/04 R$833,60 + 22/04 R$1.093,95
+      // pagos juntos em 23/04 como R$1.888,39.
+      const unmatchedDeps2 = depPool.filter(d => !d.matched);
+      const unmatchedPixIdx: number[] = [];
+      for (let i = 0; i < lotResults.length; i++) {
+        if (!lotResults[i].matched && lotResults[i].tipo === 'PIX' && !lotResults[i].manual) {
+          unmatchedPixIdx.push(i);
+        }
+      }
+      const daysBetween = (a: string, b: string): number => {
+        const da = new Date(a + 'T00:00:00Z').getTime();
+        const db = new Date(b + 'T00:00:00Z').getTime();
+        return Math.round((db - da) / 86400000);
+      };
+      const findGroupedMatch = (target: number, candIdx: number[], maxK: number, tol: number): number[] | null => {
+        const cands = candIdx.map(i => ({ i, liq: lotResults[i].liq })).sort((a, b) => b.liq - a.liq);
+        const recurse = (start: number, picked: number[], sum: number): number[] | null => {
+          if (picked.length >= 2 && Math.abs(sum - target) <= tol) return [...picked];
+          if (picked.length >= maxK) return null;
+          for (let i = start; i < cands.length; i++) {
+            const nextSum = sum + cands[i].liq;
+            if (nextSum > target + tol) continue;
+            picked.push(cands[i].i);
+            const r = recurse(i + 1, picked, nextSum);
+            picked.pop();
+            if (r) return r;
+          }
+          return null;
+        };
+        return recurse(0, [], 0);
+      };
+      for (const dep of unmatchedDeps2) {
+        const windowIdx = unmatchedPixIdx.filter(i => {
+          if (lotResults[i].matched) return false;
+          const expected = nextBusinessDay(lotResults[i].sale_date);
+          const dd = daysBetween(expected, dep.date);
+          return dd >= 0 && dd <= 7;
+        });
+        if (windowIdx.length < 2) continue;
+        const tol = Math.max(2, dep.amount * 0.03);
+        const combo = findGroupedMatch(dep.amount, windowIdx, 4, tol);
+        if (combo && combo.length >= 2) {
+          dep.matched = true;
+          const groupSum = combo.reduce((s, i) => s + lotResults[i].liq, 0);
+          for (const i of combo) {
+            lotResults[i].matched = true;
+            lotResults[i].cresol_amount = lotResults[i].liq * (dep.amount / groupSum);
+            lotResults[i].cresol_date = dep.date;
+            lotResults[i].cresol_id = dep.id;
+            lotResults[i].diff = (lotResults[i].cresol_amount ?? 0) - lotResults[i].liq;
+          }
+        }
+      }
+
       // Agrupa lotes por sale_date pra montar as rows da tabela
       const lotsBySaleDate = new Map<string, LotMatch[]>();
       for (const lr of lotResults) {

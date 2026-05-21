@@ -167,6 +167,69 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Pass 2: match agrupado. Pra cada dep Cresol não pareado, tenta combinar
+    // 2-4 lotes PIX iFood não pareados que somam o valor do dep (tolerância 3%,
+    // janela 7 dias). iFood acumula PIX pequenos e paga em batch junto com a
+    // antecipação semanal. Visto em abr/26: 16/04 R$833,60 + 22/04 R$1.093,95
+    // foram pagos juntos em 23/04 como R$1.888,39.
+    const unmatchedDeps = depPool.filter(d => !d.matched);
+    const unmatchedPixIdx: number[] = [];
+    for (let i = 0; i < matchedLots.length; i++) {
+      if (!matchedLots[i].matched && matchedLots[i].tipo === 'PIX' && !matchedLots[i].manual) {
+        unmatchedPixIdx.push(i);
+      }
+    }
+
+    function daysBetween(a: string, b: string): number {
+      const da = new Date(a + 'T00:00:00Z').getTime();
+      const db = new Date(b + 'T00:00:00Z').getTime();
+      return Math.round((db - da) / 86400000);
+    }
+
+    function findGroupedMatch(target: number, candIdx: number[], maxK: number, tol: number): number[] | null {
+      const candidates = candIdx.map(i => ({ i, liq: matchedLots[i].liq }));
+      candidates.sort((a, b) => b.liq - a.liq);
+      function recurse(start: number, picked: number[], sum: number): number[] | null {
+        if (picked.length >= 2 && Math.abs(sum - target) <= tol) return [...picked];
+        if (picked.length >= maxK) return null;
+        for (let i = start; i < candidates.length; i++) {
+          const nextSum = sum + candidates[i].liq;
+          if (nextSum > target + tol) continue; // prune: estourou
+          picked.push(candidates[i].i);
+          const r = recurse(i + 1, picked, nextSum);
+          picked.pop();
+          if (r) return r;
+        }
+        return null;
+      }
+      return recurse(0, [], 0);
+    }
+
+    for (const dep of unmatchedDeps) {
+      // Filtra lotes PIX cuja expected_date está dentro de janela [dep.date - 7, dep.date]
+      const windowIdx = unmatchedPixIdx.filter(i => {
+        if (matchedLots[i].matched) return false;
+        const expected = nextBusinessDay(matchedLots[i].sale_date);
+        const dd = daysBetween(expected, dep.date);
+        return dd >= 0 && dd <= 7;
+      });
+      if (windowIdx.length < 2) continue;
+      const tol = Math.max(2, dep.amount * 0.03);
+      const combo = findGroupedMatch(dep.amount, windowIdx, 4, tol);
+      if (combo && combo.length >= 2) {
+        dep.matched = true;
+        const groupSum = combo.reduce((s, i) => s + matchedLots[i].liq, 0);
+        const groupId = `grp:${dep.id}`;
+        for (const i of combo) {
+          matchedLots[i].matched = true;
+          matchedLots[i].cresol_amount = matchedLots[i].liq * (dep.amount / groupSum); // rateio proporcional
+          matchedLots[i].cresol_date = dep.date;
+          matchedLots[i].diff = matchedLots[i].cresol_amount - matchedLots[i].liq;
+          matchedLots[i].group_id = groupId;
+        }
+      }
+    }
+
     // Agrega por sale_date pro audit_daily_matches (1 row por sale_date,
     // somando PIX + CARD do dia). Separa expected_matched (= líq dos lotes
     // que pareou) de expected_unmatched (= líq dos lotes que não pareou).
