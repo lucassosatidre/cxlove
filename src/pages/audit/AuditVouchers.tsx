@@ -64,6 +64,14 @@ type LotItem = {
   valor: number;
 };
 
+// Item de venda no mês de competência cujo lote está em OUTRO audit_period
+// (ex: venda 30/04 com crédito 04/05 — lote vive no period maio).
+type CrossPeriodEntry = LotItem & {
+  lot_operadora: string;
+  lot_numero_reembolso: string;
+  lot_data_credito: string;
+};
+
 type BankDeposit = {
   id: string;
   deposit_date: string;
@@ -157,6 +165,7 @@ export default function AuditVouchers() {
   const [expandedDeposit, setExpandedDeposit] = useState<string | null>(null);
   const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
+  const [crossPeriodItems, setCrossPeriodItems] = useState<CrossPeriodEntry[]>([]);
   const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
   const [showAllLots, setShowAllLots] = useState(false);
   const [selectedOperadora, setSelectedOperadora] = useState<string>(searchParams.get('aba') ?? 'overview');
@@ -230,6 +239,46 @@ export default function AuditVouchers() {
     } else {
       setAllItemsByLot({});
     }
+
+    // Cross-period: items com data_transacao no mês de competência mas cujo lote
+    // vive em OUTRO audit_period (caso clássico Ticket TF/TAE: venda 30/04 com
+    // data_credito 04/05 → lote em audit_period maio mas a venda é abril). Pro
+    // cross-check Maquinona vs Operadora ver essas vendas, carrega o lote+items.
+    const { data: crossItems } = await supabase
+      .from('audit_voucher_lot_items')
+      .select('id, lot_id, data_transacao, data_postagem, numero_documento, numero_cartao_mascarado, valor')
+      .gte('data_transacao', compIni)
+      .lt('data_transacao', compFim);
+    const localLotIdSet = new Set(lotIds);
+    const crossItemsByLot: Record<string, LotItem[]> = {};
+    for (const it of (crossItems ?? []) as LotItem[]) {
+      if (localLotIdSet.has(it.lot_id)) continue;
+      if (!crossItemsByLot[it.lot_id]) crossItemsByLot[it.lot_id] = [];
+      crossItemsByLot[it.lot_id].push(it);
+    }
+    const crossLotIds = Object.keys(crossItemsByLot);
+    if (crossLotIds.length > 0) {
+      const { data: crossLots } = await supabase
+        .from('audit_voucher_lots')
+        .select('id, operadora, numero_reembolso, data_credito')
+        .in('id', crossLotIds)
+        .in('operadora', ['ticket','alelo','vr','pluxee']);
+      const lotMap: Record<string, { operadora: string; numero_reembolso: string; data_credito: string }> = {};
+      for (const l of (crossLots ?? []) as Array<{ id: string; operadora: string; numero_reembolso: string; data_credito: string }>) {
+        lotMap[l.id] = { operadora: l.operadora, numero_reembolso: l.numero_reembolso, data_credito: l.data_credito };
+      }
+      const finalCross: CrossPeriodEntry[] = [];
+      for (const lotId of Object.keys(crossItemsByLot)) {
+        const meta = lotMap[lotId];
+        if (!meta) continue;
+        for (const it of crossItemsByLot[lotId]) {
+          finalCross.push({ ...it, lot_operadora: meta.operadora, lot_numero_reembolso: meta.numero_reembolso, lot_data_credito: meta.data_credito });
+        }
+      }
+      setCrossPeriodItems(finalCross);
+    } else {
+      setCrossPeriodItems([]);
+    }
   };
 
   useEffect(() => {
@@ -243,7 +292,7 @@ export default function AuditVouchers() {
       if (!active) return;
       setPeriod(p);
       if (p) await refresh(p.id);
-      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaVouchers([]); setAllItemsByLot({}); setOverrides([]); }
+      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaVouchers([]); setAllItemsByLot({}); setOverrides([]); setCrossPeriodItems([]); }
       setLoading(false);
     })();
     return () => { active = false; };
@@ -404,7 +453,7 @@ export default function AuditVouchers() {
   // (match por data exata + valor com tolerância R$0,01).
   const crossCheck = useMemo(() => {
     type MaqV = { id: string; sale_date: string; gross_amount: number; promotion_amount: number };
-    type PortalV = { id: string; lot_id: string; data_transacao: string; valor: number; numero_documento: string | null };
+    type PortalV = { id: string; lot_id: string; data_transacao: string; valor: number; numero_documento: string | null; lot_reembolso_override?: string };
 
     const maqFiltered = maquinonaVouchers.filter(m => m.deposit_group === selectedOperadora);
     const maqList: MaqV[] = maqFiltered.map(m => ({
@@ -430,6 +479,20 @@ export default function AuditVouchers() {
           });
         }
       }
+    }
+    // Cross-period: items cujo lote vive em audit_period diferente mas vendas
+    // são no mês de competência (ex: Ticket TF/TAE — venda fim de abril, crédito
+    // primeira quinzena de maio → lote em audit_period maio). Trazidos pela
+    // query em `refresh`.
+    for (const it of crossPeriodItems) {
+      if (it.lot_operadora !== selectedOperadora) continue;
+      portalList.push({
+        id: it.id, lot_id: it.lot_id,
+        data_transacao: it.data_transacao,
+        valor: Number(it.valor || 0),
+        numero_documento: it.numero_documento ?? null,
+        lot_reembolso_override: `${it.lot_numero_reembolso} (cred ${it.lot_data_credito})`,
+      });
     }
     const opCount = portalList.length;
     const opBruto = portalList.reduce((s, p) => s + p.valor, 0);
@@ -470,7 +533,7 @@ export default function AuditVouchers() {
       onlyMaq, onlyPortal,
       extractLastSale, onlyMaqAfterWindow, onlyMaqWithinWindow,
     };
-  }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots]);
+  }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots, crossPeriodItems]);
 
   const lotById = useMemo(() => {
     const m = new Map<string, Lot>();
@@ -894,11 +957,12 @@ export default function AuditVouchers() {
                       <TableBody>
                         {crossCheck.onlyPortal.map(p => {
                           const lot = lotById.get(p.lot_id);
+                          const reembolsoLabel = p.lot_reembolso_override ?? lot?.numero_reembolso ?? '—';
                           return (
                             <TableRow key={p.id}>
                               <TableCell className="text-xs">{fmtDate(p.data_transacao)}</TableCell>
                               <TableCell className="font-mono text-xs">{p.numero_documento ?? '—'}</TableCell>
-                              <TableCell className="font-mono text-xs">{lot?.numero_reembolso ?? '—'}</TableCell>
+                              <TableCell className="font-mono text-xs">{reembolsoLabel}</TableCell>
                               <TableCell className="text-right text-xs">{fmt(p.valor)}</TableCell>
                             </TableRow>
                           );
