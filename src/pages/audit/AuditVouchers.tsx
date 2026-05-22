@@ -206,6 +206,7 @@ export default function AuditVouchers() {
       supabase
         .from('audit_card_transactions')
         .select('id, sale_date, gross_amount, net_amount, brand, deposit_group, promotion_amount')
+        .eq('audit_period_id', periodId)
         .in('deposit_group', ['ticket', 'alelo', 'pluxee', 'vr'])
         .gte('sale_date', compIni)
         .lt('sale_date', compFim),

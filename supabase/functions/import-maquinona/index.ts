@@ -210,6 +210,7 @@ Deno.serve(async (req) => {
     let skippedNoDate = 0;
     let skippedNoTxId = 0;
     let skippedDuplicate = 0;
+    let skippedOutOfPeriod = 0;
     const diagSampleNoDate: any[] = [];
     for (const r of rows) {
       const transactionId = String(pick(r, 'ID da transacao', 'ID da transação') ?? '').trim();
@@ -232,6 +233,15 @@ Deno.serve(async (req) => {
       // Calcula se a venda pertence ao mês de competência do período
       const [yStr, mStr] = saleDateStr.split('-');
       const isCompetencia = Number(mStr) === period.month && Number(yStr) === period.year;
+      // Pula vendas fora do mês alvo. Sem esse filtro, arquivos da Maquinona
+      // que cobrem múltiplos meses (ou foram uploaded no period errado)
+      // duplicavam transações cross-period — cada transaction_id virava 3-4
+      // cópias com mesmo NSU/valor mas audit_period_id diferente. Quebrava o
+      // cross-check Maquinona×Operadora (totais 3x maiores que o real).
+      if (!isCompetencia) {
+        skippedOutOfPeriod++;
+        continue;
+      }
 
       txs.push({
         audit_period_id,
@@ -334,6 +344,7 @@ Deno.serve(async (req) => {
         skipped_no_date: skippedNoDate,
         skipped_no_tx_id: skippedNoTxId,
         skipped_duplicate: skippedDuplicate,
+        skipped_out_of_period: skippedOutOfPeriod,
         sample_no_date: diagSampleNoDate,
       },
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
