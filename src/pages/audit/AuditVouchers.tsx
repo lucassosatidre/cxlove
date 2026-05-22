@@ -70,6 +70,11 @@ type CrossPeriodEntry = LotItem & {
   lot_operadora: string;
   lot_numero_reembolso: string;
   lot_data_credito: string;
+  lot_subtotal_vendas: number;
+  lot_total_descontos: number;
+  lot_valor_liquido: number;
+  lot_total_items_count: number; // items totais do lote (em todos os meses)
+  lot_total_items_sum: number;   // soma valor de TODOS os items do lote
 };
 
 type BankDeposit = {
@@ -259,21 +264,53 @@ export default function AuditVouchers() {
     }
     const crossLotIds = Object.keys(crossItemsByLot);
     if (crossLotIds.length > 0) {
-      const { data: crossLots } = await supabase
-        .from('audit_voucher_lots')
-        .select('id, operadora, numero_reembolso, data_credito')
-        .in('id', crossLotIds)
-        .in('operadora', ['ticket','alelo','vr','pluxee']);
-      const lotMap: Record<string, { operadora: string; numero_reembolso: string; data_credito: string }> = {};
-      for (const l of (crossLots ?? []) as Array<{ id: string; operadora: string; numero_reembolso: string; data_credito: string }>) {
-        lotMap[l.id] = { operadora: l.operadora, numero_reembolso: l.numero_reembolso, data_credito: l.data_credito };
+      const [{ data: crossLots }, { data: allCrossLotItems }] = await Promise.all([
+        supabase
+          .from('audit_voucher_lots')
+          .select('id, operadora, numero_reembolso, data_credito, subtotal_vendas, total_descontos, valor_liquido')
+          .in('id', crossLotIds)
+          .in('operadora', ['ticket','alelo','vr','pluxee']),
+        supabase
+          .from('audit_voucher_lot_items')
+          .select('lot_id, valor')
+          .in('lot_id', crossLotIds),
+      ]);
+      type LotMeta = { operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number };
+      const lotMap: Record<string, LotMeta> = {};
+      for (const l of (crossLots ?? []) as Array<{ id: string; operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number }>) {
+        lotMap[l.id] = {
+          operadora: l.operadora,
+          numero_reembolso: l.numero_reembolso,
+          data_credito: l.data_credito,
+          subtotal_vendas: Number(l.subtotal_vendas ?? 0),
+          total_descontos: Number(l.total_descontos ?? 0),
+          valor_liquido: Number(l.valor_liquido ?? 0),
+        };
+      }
+      // Soma TOTAL de items por cross-lot (todos os meses) pra dar base no rateio
+      const totalItemsByLot: Record<string, { count: number; sum: number }> = {};
+      for (const it of (allCrossLotItems ?? []) as Array<{ lot_id: string; valor: number }>) {
+        if (!totalItemsByLot[it.lot_id]) totalItemsByLot[it.lot_id] = { count: 0, sum: 0 };
+        totalItemsByLot[it.lot_id].count++;
+        totalItemsByLot[it.lot_id].sum += Number(it.valor ?? 0);
       }
       const finalCross: CrossPeriodEntry[] = [];
       for (const lotId of Object.keys(crossItemsByLot)) {
         const meta = lotMap[lotId];
         if (!meta) continue;
+        const lotTotals = totalItemsByLot[lotId] ?? { count: 0, sum: 0 };
         for (const it of crossItemsByLot[lotId]) {
-          finalCross.push({ ...it, lot_operadora: meta.operadora, lot_numero_reembolso: meta.numero_reembolso, lot_data_credito: meta.data_credito });
+          finalCross.push({
+            ...it,
+            lot_operadora: meta.operadora,
+            lot_numero_reembolso: meta.numero_reembolso,
+            lot_data_credito: meta.data_credito,
+            lot_subtotal_vendas: meta.subtotal_vendas,
+            lot_total_descontos: meta.total_descontos,
+            lot_valor_liquido: meta.valor_liquido,
+            lot_total_items_count: lotTotals.count,
+            lot_total_items_sum: lotTotals.sum,
+          });
         }
       }
       setCrossPeriodItems(finalCross);
@@ -445,9 +482,34 @@ export default function AuditVouchers() {
       }
       if (l.bb_deposit_id) matched++;
     }
+    // Cross-period: lotes em OUTROS audit_periods cujas vendas caíram no mês
+    // de competência (ex: Ticket TF/TAE — venda fim de abril com crédito 04/05).
+    // Sem isso, o stat de cada operadora seria menor que o real e não bateria
+    // com Maquinona.
+    const crossByLot = new Map<string, CrossPeriodEntry[]>();
+    for (const cp of crossPeriodItems) {
+      if (cp.lot_operadora !== selectedOperadora) continue;
+      if (!crossByLot.has(cp.lot_id)) crossByLot.set(cp.lot_id, []);
+      crossByLot.get(cp.lot_id)!.push(cp);
+    }
+    for (const [, entries] of crossByLot) {
+      const compValor = entries.reduce((s, e) => s + Number(e.valor), 0);
+      const meta = entries[0];
+      const totalDeclared = meta.lot_subtotal_vendas > 0 ? meta.lot_subtotal_vendas : meta.lot_total_items_sum;
+      const proporcao = totalDeclared > 0 ? compValor / totalDeclared : 0;
+      const liquidoDeclared = meta.lot_valor_liquido;
+      const descontosDeclared = (totalDeclared > 0 && liquidoDeclared > 0 && totalDeclared >= liquidoDeclared)
+        ? totalDeclared - liquidoDeclared
+        : meta.lot_total_descontos;
+      count++;
+      salesCount += entries.length;
+      subtotal += compValor;
+      descontos += descontosDeclared * proporcao;
+      liquido += liquidoDeclared * proporcao;
+    }
     const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
     return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, taxaPct };
-  }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot]);
+  }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot, crossPeriodItems, selectedOperadora]);
 
   // Cross-check Maquinona × operadora atual.
   // Lista também as divergências individuais: vendas que estão só em um dos lados
@@ -808,6 +870,7 @@ export default function AuditVouchers() {
         {/* OVERVIEW: KPIs comparativos lado a lado das 4 operadoras */}
         {selectedOperadora === 'overview' && (
           <OverviewGrid
+            crossPeriodItems={crossPeriodItems}
             lots={lots}
             allItemsByLot={allItemsByLot}
             overrides={overrides}
@@ -1790,7 +1853,7 @@ function CompetenciaOverrideInput({
 // Overview: mini-cards comparativos por operadora pra visão consolidada do mês.
 // Cada card mostra lotes, bruto, descontos, taxa efetiva da operadora.
 function OverviewGrid({
-  lots, allItemsByLot, overrides, month, year, competenciaIni, competenciaFim, onSelectOperadora,
+  lots, allItemsByLot, overrides, month, year, competenciaIni, competenciaFim, onSelectOperadora, crossPeriodItems,
 }: {
   lots: Lot[];
   allItemsByLot: Record<string, LotItem[]>;
@@ -1800,6 +1863,7 @@ function OverviewGrid({
   competenciaIni: string;
   competenciaFim: string;
   onSelectOperadora: (op: string) => void;
+  crossPeriodItems: CrossPeriodEntry[];
 }) {
   const operadoras = ['ticket', 'alelo', 'vr', 'pluxee'];
 
@@ -1873,11 +1937,37 @@ function OverviewGrid({
         }
         if (l.bb_deposit_id) matched++;
       }
+      // Soma a contribuição dos cross-period lots (vendas do mês alvo em lotes
+      // de outros audit_periods). Para cada lote cross-period, agrupa os items
+      // do mês alvo e calcula descontos/liquido proporcionalmente ao subtotal.
+      const crossByLot = new Map<string, CrossPeriodEntry[]>();
+      for (const cp of crossPeriodItems) {
+        if (cp.lot_operadora !== op) continue;
+        if (!crossByLot.has(cp.lot_id)) crossByLot.set(cp.lot_id, []);
+        crossByLot.get(cp.lot_id)!.push(cp);
+      }
+      for (const [, entries] of crossByLot) {
+        const compValor = entries.reduce((s, e) => s + Number(e.valor), 0);
+        const meta = entries[0];
+        const totalDeclared = meta.lot_subtotal_vendas > 0 ? meta.lot_subtotal_vendas : meta.lot_total_items_sum;
+        // Proporção do mês alvo no total do lote (cross-period sempre é parcial
+        // por natureza — o lote tem items fora do mês também)
+        const proporcao = totalDeclared > 0 ? compValor / totalDeclared : 0;
+        const liquidoDeclared = meta.lot_valor_liquido;
+        const descontosDeclared = (totalDeclared > 0 && liquidoDeclared > 0 && totalDeclared >= liquidoDeclared)
+          ? totalDeclared - liquidoDeclared
+          : meta.lot_total_descontos;
+        count++;
+        salesCount += entries.length;
+        subtotal += compValor;
+        descontos += descontosDeclared * proporcao;
+        liquido += liquidoDeclared * proporcao;
+      }
       const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
       result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando };
     }
     return result;
-  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim, operadoraTemItens]);
+  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim, operadoraTemItens, crossPeriodItems]);
 
   // Totais consolidados das 4 operadoras
   const totals = useMemo(() => {
