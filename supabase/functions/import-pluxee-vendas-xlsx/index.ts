@@ -192,9 +192,35 @@ Deno.serve(async (req) => {
       if (delErr) console.warn('cleanup pluxee vendas:', delErr.message);
     }
 
+    // Carrega numero_documento dos items existentes em lotes PAG do período pra
+    // evitar duplicar vendas que já vieram pelo extrato de pagamentos. Os 2
+    // arquivos da Pluxee (vendas e pagamentos) listam as MESMAS vendas — sem
+    // esse skip, items aparecem 2× e inflam os totais (bug histórico fev/mar/26).
+    const { data: pagLots } = await supabase
+      .from('audit_voucher_lots').select('id')
+      .eq('audit_period_id', audit_period_id)
+      .eq('operadora', 'pluxee')
+      .like('numero_reembolso', 'PLUXEE-PAG-%');
+    const docsAlreadyInPag = new Set<string>();
+    if (pagLots && pagLots.length > 0) {
+      const pagLotIds = pagLots.map(l => l.id);
+      const { data: pagItems } = await supabase
+        .from('audit_voucher_lot_items')
+        .select('numero_documento')
+        .in('lot_id', pagLotIds);
+      for (const it of (pagItems ?? [])) {
+        if (it.numero_documento) docsAlreadyInPag.add(String(it.numero_documento).trim());
+      }
+    }
+
     // Agrupa por data_pagamento
     const byPag = new Map<string, Item[]>();
+    let skippedDupOfPag = 0;
     for (const it of itemsKept) {
+      if (docsAlreadyInPag.has(String(it.numero_autorizacao ?? '').trim())) {
+        skippedDupOfPag++;
+        continue;
+      }
       const arr = byPag.get(it.data_pagamento) ?? [];
       arr.push(it);
       byPag.set(it.data_pagamento, arr);
@@ -269,8 +295,9 @@ Deno.serve(async (req) => {
       kept_in_period: itemsKept.length,
       skipped_outside_period: periodFilter.skipped,
       skipped_outside_period_by_month: periodFilter.skippedByMonth,
+      skipped_dup_of_pag: skippedDupOfPag,
       warnings,
-      message: `${insertedLots} lotes (por data_pagamento) com ${insertedItems} vendas${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}`,
+      message: `${insertedLots} lotes (por data_pagamento) com ${insertedItems} vendas${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}${skippedDupOfPag > 0 ? ` (${skippedDupOfPag} já em PAG)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-vendas-xlsx error', e);
