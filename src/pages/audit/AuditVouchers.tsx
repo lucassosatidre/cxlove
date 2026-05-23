@@ -75,6 +75,7 @@ type CrossPeriodEntry = LotItem & {
   lot_valor_liquido: number;
   lot_total_items_count: number; // items totais do lote (em todos os meses)
   lot_total_items_sum: number;   // soma valor de TODOS os items do lote
+  lot_bb_deposit_id: string | null;
 };
 
 type BankDeposit = {
@@ -267,7 +268,7 @@ export default function AuditVouchers() {
       const [{ data: crossLots }, { data: allCrossLotItems }] = await Promise.all([
         supabase
           .from('audit_voucher_lots')
-          .select('id, operadora, numero_reembolso, data_credito, subtotal_vendas, total_descontos, valor_liquido')
+          .select('id, operadora, numero_reembolso, data_credito, subtotal_vendas, total_descontos, valor_liquido, bb_deposit_id')
           .in('id', crossLotIds)
           .in('operadora', ['ticket','alelo','vr','pluxee']),
         supabase
@@ -275,9 +276,9 @@ export default function AuditVouchers() {
           .select('lot_id, valor')
           .in('lot_id', crossLotIds),
       ]);
-      type LotMeta = { operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number };
+      type LotMeta = { operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number; bb_deposit_id: string | null };
       const lotMap: Record<string, LotMeta> = {};
-      for (const l of (crossLots ?? []) as Array<{ id: string; operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number }>) {
+      for (const l of (crossLots ?? []) as Array<{ id: string; operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number; bb_deposit_id: string | null }>) {
         lotMap[l.id] = {
           operadora: l.operadora,
           numero_reembolso: l.numero_reembolso,
@@ -285,6 +286,7 @@ export default function AuditVouchers() {
           subtotal_vendas: Number(l.subtotal_vendas ?? 0),
           total_descontos: Number(l.total_descontos ?? 0),
           valor_liquido: Number(l.valor_liquido ?? 0),
+          bb_deposit_id: l.bb_deposit_id ?? null,
         };
       }
       // Soma TOTAL de items por cross-lot (todos os meses) pra dar base no rateio
@@ -310,6 +312,7 @@ export default function AuditVouchers() {
             lot_valor_liquido: meta.valor_liquido,
             lot_total_items_count: lotTotals.count,
             lot_total_items_sum: lotTotals.sum,
+            lot_bb_deposit_id: meta.bb_deposit_id,
           });
         }
       }
@@ -506,6 +509,7 @@ export default function AuditVouchers() {
       subtotal += compValor;
       descontos += descontosDeclared * proporcao;
       liquido += liquidoDeclared * proporcao;
+      if (meta.lot_bb_deposit_id) matched++;
     }
     const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
     return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, taxaPct };
@@ -1962,6 +1966,7 @@ function OverviewGrid({
         subtotal += compValor;
         descontos += descontosDeclared * proporcao;
         liquido += liquidoDeclared * proporcao;
+        if (meta.lot_bb_deposit_id) matched++;
       }
       const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
       result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando };
