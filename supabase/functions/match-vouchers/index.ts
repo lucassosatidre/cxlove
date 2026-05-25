@@ -79,22 +79,40 @@ Deno.serve(async (req) => {
     }
     const TOLERANCE = TOLERANCE_BY_OPERADORA[operadora] ?? DEFAULT_TOLERANCE;
 
-    // Reset matches automáticos (manual=false) se solicitado
+    // Calcula janela de data_credito centrada no period: do início do mês
+    // anterior até o fim do mês posterior. Cobre todos os lotes cujos deps
+    // PODEM cair nesse period (atravessam de um mês pro outro).
+    const { data: period } = await supabase
+      .from('audit_periods').select('month,year').eq('id', audit_period_id).maybeSingle();
+    if (!period) {
+      return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
+        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const windowMin = new Date(period.year, period.month - 2, 1).toISOString().slice(0, 10);
+    const windowMax = new Date(period.year, period.month + 1, 0).toISOString().slice(0, 10);
+
+    // Reset matches automáticos: zera lotes que poderiam casar com deps deste
+    // period (cross-period, baseado em data_credito na janela do period).
     if (reset) {
       await supabase
         .from('audit_voucher_lots')
         .update({ bb_deposit_id: null, bb_deposit_id_2: null, status: 'pending', diff: null })
-        .eq('audit_period_id', audit_period_id)
         .eq('operadora', operadora)
-        .eq('manual', false);
+        .eq('manual', false)
+        .gte('data_credito', windowMin)
+        .lte('data_credito', windowMax);
     }
 
-    // Carrega lotes pendentes (sem bb_deposit_id e não-manuais)
+    // Carrega lotes na janela (cross-period). Lote pode estar em audit_period
+    // diferente do atual — auditoria por competência de venda separa lote
+    // (period = mês da venda) do depósito BB (period = onde foi importado).
     const { data: lots } = await supabase
       .from('audit_voucher_lots')
-      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual')
-      .eq('audit_period_id', audit_period_id)
+      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual, audit_period_id')
       .eq('operadora', operadora)
+      .gte('data_credito', windowMin)
+      .lte('data_credito', windowMax)
       .order('data_credito', { ascending: true });
 
     if (!lots || lots.length === 0) {
@@ -103,7 +121,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Carrega depósitos BB Ticket — filtramos no app pq janelas variam por lote
+    // Depósitos BB do period atual (deposit_date pode atravessar pra mês seguinte
+    // porque user importa BB de X + X+1 no period X).
     const { data: deposits } = await supabase
       .from('audit_bank_deposits')
       .select('id, deposit_date, amount')
@@ -117,17 +136,20 @@ Deno.serve(async (req) => {
       id: d.id, deposit_date: d.deposit_date, amount: Number(d.amount),
     }));
 
-    // Marca depósitos já usados por lotes manuais ou pré-existentes (em
-    // bb_deposit_id ou bb_deposit_id_2)
-    const { data: alreadyMatched } = await supabase
-      .from('audit_voucher_lots')
-      .select('id, bb_deposit_id, bb_deposit_id_2')
-      .eq('audit_period_id', audit_period_id)
-      .eq('operadora', operadora);
+    // Depósitos já usados (por lotes manuais OU lotes em outros periods que
+    // foram match em rodadas anteriores) — não devem ser reusados.
+    const depIds = depPool.map(d => d.id);
     const usedIds = new Set<string>();
-    for (const r of (alreadyMatched ?? [])) {
-      if (r.bb_deposit_id) usedIds.add(r.bb_deposit_id as string);
-      if (r.bb_deposit_id_2) usedIds.add(r.bb_deposit_id_2 as string);
+    if (depIds.length > 0) {
+      const { data: alreadyMatched } = await supabase
+        .from('audit_voucher_lots')
+        .select('id, bb_deposit_id, bb_deposit_id_2')
+        .eq('operadora', operadora)
+        .or(`bb_deposit_id.in.(${depIds.join(',')}),bb_deposit_id_2.in.(${depIds.join(',')})`);
+      for (const r of (alreadyMatched ?? [])) {
+        if (r.bb_deposit_id) usedIds.add(r.bb_deposit_id as string);
+        if (r.bb_deposit_id_2) usedIds.add(r.bb_deposit_id_2 as string);
+      }
     }
     for (const d of depPool) if (usedIds.has(d.id)) d.usedBy = 'preexisting';
 
