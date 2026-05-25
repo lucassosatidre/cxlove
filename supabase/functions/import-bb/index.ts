@@ -56,8 +56,12 @@ function categorizeBB(detail: string): string {
     .toUpperCase();
   // Alelo: nome ou CNPJ 04.740.876/0001-25
   if (/ALELO/.test(d) || /04\.?740\.?876/.test(d)) return 'alelo';
-  // Ticket Edenred: nome ou CNPJ 47.866.934/0001-74
+  // Ticket Edenred: nome direto ou CNPJ 47.866.934/0001-74.
+  // Antecipação Ticket via cessão de crédito vem como "BANCO TOPAZIO 976
+  // Cessão Créd Liquid Princ" + CNPJ 07.679.404/0001-00 (Banco Topázio).
+  // Tratamos como ticket pra entrar no auto-match.
   if (/TICKET|EDENRED/.test(d) || /47\.?866\.?934/.test(d)) return 'ticket';
+  if (/TOPAZIO/.test(d) || /07\.?679\.?404/.test(d)) return 'ticket';
   // Pluxee/Sodexo
   if (/PLUXEE|SODEXO/.test(d)) return 'pluxee';
   // VR — várias formas: Banco VR, VR Benefícios, VR Refeição, CNPJ 78626983

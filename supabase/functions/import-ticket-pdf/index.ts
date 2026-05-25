@@ -32,14 +32,25 @@ function parseValor(s: string): number | null {
 }
 
 function normalizeDiscountKey(descricao: string): string {
-  const d = descricao.toLowerCase().trim();
-  if (d.includes('tarifa de gestão') || d.includes('tarifa de gestao')) return 'tarifa_gestao';
-  if (d.includes('tarifa por transação') || d.includes('tarifa por transacao')) return 'tarifa_transacao';
-  if (d === 'tarifa por') return 'tarifa_transacao'; // fragmento da quebra de página (raro)
-  if (d.includes('taxa tpe')) return 'taxa_tpe';
-  if (d.includes('anuidade')) return 'anuidade';
-  if (d.includes('taxa manutencao') || d.includes('taxa manutenção')) return 'taxa_manutencao';
+  // Normalize: lowercase + remove accents.
+  const d = descricao.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  // Matches por fragmento — robusto contra reordering de pdfjs que pode comer
+  // primeira letra ou separar palavras (ex: "axa Manutencao" sem o T).
+  if (/manuten/.test(d)) return 'taxa_manutencao';
+  if (/tpe/.test(d)) return 'taxa_tpe';
+  if (/gestao|gestão/.test(d)) return 'tarifa_gestao';
+  if (/transa/.test(d)) return 'tarifa_transacao';
+  if (/anuid/.test(d)) return 'anuidade';
+  if (/adiantamento/.test(d) || /serpar/.test(d)) return 'tarifa_adiantamento';
   return 'outros';
+}
+
+// Descrições que NÃO são descontos — são lançamentos informativos sobre
+// antecipação. "Valor Antecipado" é o valor PAGO antecipadamente (igual ao
+// líquido em lotes antecipados), não custo.
+function isInformationalNotDiscount(descricao: string): boolean {
+  const d = descricao.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  return /^valor\s+antecipado/.test(d);
 }
 
 // ============================================================
@@ -98,9 +109,10 @@ const SUBTOTAL_RE = /(\d{8,9})\s+Subtotal[\s\S]{0,40}?(R\$[\d.,]+)/g;
 // Descontos: "<contrato> <data> <descrição até "R$"> R$X"
 // Bound o miolo da descrição em até 60 chars pra prevenir ReDoS
 // (catastrophic backtracking em PDFs grandes com muitos R$ na string).
-// Aceita também "-" e dígitos pra cobrir "Anuidade Cartao Tre Ref."
-// e "Taxa Manutencao Mensal - Tre".
-const DISCOUNT_RE = /(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s.\-]{0,60}?)\s+(R\$[\d.,]+)/g;
+// Aceita também "-", ".", "(", ")", dígitos pra cobrir descrições como
+// "Anuidade Cartao Tre Ref.", "Taxa Manutencao Mensal - Tre" e
+// "Tarifa Sobre Adiantamento (Serpar)".
+const DISCOUNT_RE = /(\d{10,12})\s+(\d{2}\/\d{2}\/\d{4})\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s.\-()]{0,60}?)\s+(R\$[\d.,]+)/g;
 
 // Total Descontos — flexível também (pdfjs pode separar "Total de" de "Descontos")
 const TOTAL_DESC_RE = /Total[\s\S]{0,20}?Descontos[\s\S]{0,30}?(R\$[\d.,]+)/g;
@@ -238,6 +250,8 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
     if (valor == null) continue;
     // Filtra descrições muito curtas ou que parecem números (false positives)
     if (descricao.length < 3) continue;
+    // Pula lançamentos informativos (Valor Antecipado é o valor pago, não custo)
+    if (isInformationalNotDiscount(descricao)) continue;
     events.push({ kind: 'discount', pos: m.index!, numContrato: m[1], descricao, valor });
   }
 
@@ -339,6 +353,14 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
     const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
     if (l.subtotal_vendas === 0 && sumItems > 0) {
       l.subtotal_vendas = Math.round(sumItems * 100) / 100;
+    }
+    // Quando TOTAL_DESC_RE falha (pdfjs reordena Total/Descontos em PDFs
+    // longos), derivamos total_descontos da SOMA dos descontos individuais
+    // capturados (taxa_tpe + taxa_manutencao + tarifa_gestao + ...). Essa é
+    // a fonte mais confiável porque cada discount vem com contrato+data+desc+R$.
+    if (l.total_descontos === 0) {
+      const sumIndiv = Object.values(l.descontos).reduce((s, v) => s + (Number(v) || 0), 0);
+      if (sumIndiv > 0) l.total_descontos = Math.round(sumIndiv * 100) / 100;
     }
     if (l.subtotal_vendas > 0 && l.valor_liquido > 0 && l.subtotal_vendas >= l.valor_liquido) {
       l.total_descontos = Math.round((l.subtotal_vendas - l.valor_liquido) * 100) / 100;
@@ -577,6 +599,12 @@ Deno.serve(async (req) => {
         const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
         if (l.subtotal_vendas === 0 && sumItems > 0) {
           l.subtotal_vendas = Math.round(sumItems * 100) / 100;
+        }
+        // Mesma derivação aplicada no parser — total_descontos = soma dos
+        // descontos individuais quando o regex de "Total Descontos" falhou.
+        if (l.total_descontos === 0) {
+          const sumIndiv = Object.values(l.descontos ?? {}).reduce((s: number, v: any) => s + (Number(v) || 0), 0);
+          if (sumIndiv > 0) l.total_descontos = Math.round(sumIndiv * 100) / 100;
         }
         if (l.subtotal_vendas > 0 && l.valor_liquido > 0 && l.subtotal_vendas >= l.valor_liquido) {
           l.total_descontos = Math.round((l.subtotal_vendas - l.valor_liquido) * 100) / 100;
