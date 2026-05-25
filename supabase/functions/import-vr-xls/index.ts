@@ -202,14 +202,22 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Validação de competência: aceita mês alvo + até 3 meses futuros.
-    // VR pode gerar reembolsos "de X até hoje" cobrindo data_pagamento em
-    // múltiplos meses. Bloqueia só se 0% das datas caírem na janela.
+    // Cada lote vai pro audit_period do MÊS DAS VENDAS, não do crédito.
+    // VR não tem item-level no reembolsos.xls (vendas vêm depois via
+    // vendas-xls), então usamos data_corte como proxy do mês de competência
+    // (corte = último dia das vendas do ciclo). Quando vendas-xls é importado,
+    // se o binding revelar que a maioria das vendas tá em outro mês, o lote
+    // é movido pro period correto (ver import-vr-vendas-xls).
+    function lotCompYM(l: any): string | null {
+      return (l.data_corte ?? l.data_pagamento)?.slice(0, 7) ?? null;
+    }
+
+    // Validação de competência: aceita mês alvo + ±3 meses adjacentes.
     const periodCheck = validatePeriodMatch(
-      lots.map(l => l.data_pagamento),
+      lots.map(l => lotCompYM(l) ? `${lotCompYM(l)}-01` : null),
       { month: period.month, year: period.year },
       'VR',
-      [0, 1, 2, 3],
+      [-2, -1, 0, 1, 2, 3],
     );
     if (!periodCheck.ok) {
       return new Response(JSON.stringify({
@@ -218,22 +226,16 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Resolve target audit_period_id pra cada lote pela data_pagamento (=
-    // data_credito no schema). Mesmo padrão do import-ticket-pdf (commit
-    // 84d993e): cria audit_period sob demanda; bloqueia se destino fechado.
-    // Antes descartava silenciosamente lotes fora do mês alvo, perdendo
-    // vínculo de vendas: venda 28/04 cujo lote (Auxílio Alimentação) é
-    // pago em 06/05 ficava órfã porque o lote era descartado no import
-    // de abril (visto em mai/26 — venda R$89 sumiu do Portal VR).
+    // Resolve target audit_period_id pra cada lote.
     const targetPeriodIdByYM: Record<string, string> = {};
     const closedPeriodsBlocked: string[] = [];
     for (const l of lots) {
-      const ym = l.data_pagamento?.match(/^(\d{4})-(\d{2})/);
-      if (!ym) continue;
-      const key = `${ym[1]}-${ym[2]}`;
+      const key = lotCompYM(l);
+      if (!key) continue;
       if (targetPeriodIdByYM[key]) continue;
-      const lotMonth = Number(ym[2]);
-      const lotYear = Number(ym[1]);
+      const [yStr, mStr] = key.split('-');
+      const lotMonth = Number(mStr);
+      const lotYear = Number(yStr);
       if (lotMonth === period.month && lotYear === period.year) {
         targetPeriodIdByYM[key] = audit_period_id;
         continue;
@@ -261,13 +263,13 @@ Deno.serve(async (req) => {
     }
     if (closedPeriodsBlocked.length > 0) {
       return new Response(JSON.stringify({
-        error: `O extrato contém lotes com crédito em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
+        error: `O extrato contém lotes com competência em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const lotsKept = lots;
     const lotsByTargetPeriod: Record<string, number> = {};
     for (const l of lots) {
-      const ym = l.data_pagamento?.slice(0, 7) ?? '';
+      const ym = lotCompYM(l) ?? '';
       lotsByTargetPeriod[ym] = (lotsByTargetPeriod[ym] ?? 0) + 1;
     }
 
@@ -287,8 +289,8 @@ Deno.serve(async (req) => {
 
     for (const lot of lotsKept) {
       const totalDesc = Math.round((lot.bruto - lot.liquido) * 100) / 100;
-      // Cada lote vai pro audit_period correspondente à sua data_pagamento.
-      const lotPeriodKey = lot.data_pagamento?.slice(0, 7) ?? '';
+      // Cada lote vai pro audit_period do MÊS DAS VENDAS (via data_corte).
+      const lotPeriodKey = lotCompYM(lot) ?? '';
       const lotTargetPeriodId = targetPeriodIdByYM[lotPeriodKey] ?? audit_period_id;
 
       // Checagem GLOBAL pelo numero_reembolso: cada guia vive em UM período

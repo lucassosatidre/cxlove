@@ -139,7 +139,8 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
     if (!cardMatch) continue;
 
     // Valor APÓS o cartão
-    const afterCard = slice.substring((cardMatch.index ?? 0) + cardMatch[0].length);
+    const afterCardOffsetInSlice = (cardMatch.index ?? 0) + cardMatch[0].length;
+    const afterCard = slice.substring(afterCardOffsetInSlice);
     const valorMatch = afterCard.match(VALOR_RE);
     if (!valorMatch) continue;
     const valor = parseValor('R$' + valorMatch[1]);
@@ -148,6 +149,15 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
     // CNPJ (opcional, só pra registro)
     const cnpjMatch = afterCard.match(CNPJ_RE);
     const cnpj = cnpjMatch ? cnpjMatch[1] : null;
+
+    // Fim REAL da venda (posição absoluta no text): se temos CNPJ, fim é
+    // o fim do CNPJ; senão, fim é o fim do R$valor. Sem isso, o span da
+    // venda usava +250 chars fixo, que engolia o 1º desconto em lotes com
+    // 1 só venda (caso real abr/26: lotes 430184475 e 431352611 perderam
+    // a linha "Taxa Manutenção Mensal" → total_descontos viraram 0).
+    const valorEndInAfterCard = (valorMatch.index ?? 0) + valorMatch[0].length;
+    const cnpjEndInAfterCard = cnpjMatch ? (cnpjMatch.index ?? 0) + cnpjMatch[0].length : valorEndInAfterCard;
+    const saleEndPos = startPos + afterCardOffsetInSlice + cnpjEndInAfterCard;
 
     // Datas: até 4 esperadas (corte, credito, transacao, postagem)
     // Usa só as que aparecem ANTES do cartão pra evitar capturar datas
@@ -186,6 +196,7 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
     events.push({
       kind: 'sale',
       pos: startPos,
+      posEnd: saleEndPos,
       numReembolso,
       numContrato,
       produto,
@@ -214,12 +225,7 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
   // intervalo de venda já capturado.
   const saleSpans: Array<[number, number]> = events
     .filter(e => e.kind === 'sale')
-    .map(e => {
-      // m[0] da venda — não temos guardado. Mas a venda vai do reembolso até o CNPJ.
-      // O CNPJ aparece logo no fim, então estimamos um span generoso usando o
-      // próximo evento. Pra simplificar: span = [pos, pos + 250] (tamanho típico de uma linha de venda).
-      return [(e as any).pos, (e as any).pos + 250] as [number, number];
-    });
+    .map(e => [(e as any).pos, (e as any).posEnd ?? (e as any).pos + 250] as [number, number]);
 
   function isInsideSale(start: number): boolean {
     return saleSpans.some(([s, e]) => start >= s && start <= e);
@@ -440,18 +446,34 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validação de competência: aceita mês alvo + até 3 meses futuros. PDFs
-    // Ticket são gerados pela operadora cobrindo "de X em diante", então um
-    // PDF "abril - 25 de maio" inclui lotes com data_credito em abril E em
-    // maio (vendas de fim de abril têm crédito ~D+15 caindo em maio). Bloqueia
-    // só se 0% das datas caírem na janela (ex: PDF de janeiro importado em
-    // setembro). Lotes fora do mês alvo NÃO são descartados — são roteados
-    // pro audit_period correto baseado em sua data_credito (ver fluxo abaixo).
+    // Cada lote vai pro audit_period do MÊS DAS VENDAS (data_transacao dos
+    // items), NÃO da data_credito. A auditoria é por competência da venda:
+    // o que vendi em abril deve estar visível em abril, mesmo que o crédito
+    // caia em maio. Pra cobrir o crédito atravessado, o user importa 2 meses
+    // de extrato BB (X + X+1) no mesmo period.
+    //
+    // Critério: mês com MAIOR VALOR de items (não count). Lote misto (vendas
+    // em 2 meses) recebe o mês predominante e marca a porção do outro mês
+    // via overrides na UI. Sem items (raro): cai em data_credito.
+    function lotCompYM(l: any): string | null {
+      if (!l.items || l.items.length === 0) return l.data_credito?.slice(0, 7) ?? null;
+      const byMonth: Record<string, number> = {};
+      for (const it of l.items) {
+        const ym = it.data_transacao?.slice(0, 7);
+        if (!ym) continue;
+        byMonth[ym] = (byMonth[ym] ?? 0) + Number(it.valor ?? 0);
+      }
+      const sorted = Object.entries(byMonth).sort(([, a], [, b]) => b - a);
+      return sorted[0]?.[0] ?? l.data_credito?.slice(0, 7) ?? null;
+    }
+
+    // Validação de competência: aceita PDFs que cobrem mês alvo + ±3 meses
+    // adjacentes. Bloqueia 100% mismatch (ex: PDF janeiro importado em setembro).
     const periodCheck = validatePeriodMatch(
-      lots.map((l: any) => l.data_credito),
+      lots.map((l: any) => lotCompYM(l) ? `${lotCompYM(l)}-01` : null),
       { month: period.month, year: period.year },
       'Ticket',
-      [0, 1, 2, 3],
+      [-2, -1, 0, 1, 2, 3],
     );
     if (!periodCheck.ok) {
       return new Response(JSON.stringify({
@@ -460,22 +482,18 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Resolve target audit_period_id pra cada lote pela sua data_credito.
-    // Cria audit_period sob demanda (status 'aberto') quando ainda não existe.
-    // Bloqueia se o destino tá 'fechado' (não permite gravar em period fechado).
-    // ANTES: lotes fora do mês alvo eram descartados via filterToPeriod —
-    // resultado: PDF cobrindo abril+maio importado em abril perdia silenciosamente
-    // as vendas de fim de abril cujo crédito caía em maio (~R$ 1.2k de vendas
-    // abril/26 sumiram em 25/05). Causa do retrabalho recorrente.
+    // Resolve target audit_period_id pra cada lote pelo mês de competência
+    // das vendas. Cria audit_period sob demanda. Bloqueia se o destino tá
+    // 'fechado'.
     const targetPeriodIdByYM: Record<string, string> = {};
     const closedPeriodsBlocked: string[] = [];
     for (const l of lots) {
-      const ym = l.data_credito?.match(/^(\d{4})-(\d{2})/);
-      if (!ym) continue;
-      const key = `${ym[1]}-${ym[2]}`;
+      const key = lotCompYM(l);
+      if (!key) continue;
       if (targetPeriodIdByYM[key]) continue;
-      const lotMonth = Number(ym[2]);
-      const lotYear = Number(ym[1]);
+      const [yStr, mStr] = key.split('-');
+      const lotMonth = Number(mStr);
+      const lotYear = Number(yStr);
       if (lotMonth === period.month && lotYear === period.year) {
         targetPeriodIdByYM[key] = audit_period_id;
         continue;
@@ -503,13 +521,13 @@ Deno.serve(async (req) => {
     }
     if (closedPeriodsBlocked.length > 0) {
       return new Response(JSON.stringify({
-        error: `O PDF contém lotes com crédito em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
+        error: `O PDF contém lotes com competência em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const lotsKept = lots;
     const lotsByTargetPeriod: Record<string, number> = {};
     for (const l of lots) {
-      const ym = l.data_credito?.slice(0, 7) ?? '';
+      const ym = lotCompYM(l) ?? '';
       lotsByTargetPeriod[ym] = (lotsByTargetPeriod[ym] ?? 0) + 1;
     }
 
@@ -569,11 +587,12 @@ Deno.serve(async (req) => {
           l.valor_liquido = l.subtotal_vendas;
         }
 
-        // Cada lote vai pro audit_period correspondente à sua data_credito.
-        // PDF cobrindo abril+maio importado em abril distribui lotes nos 2
-        // periods automaticamente — UI de abril vê vendas de abril via
-        // cross-period query (AuditVouchers.tsx), e maio já fica pronto.
-        const lotPeriodKey = l.data_credito?.slice(0, 7) ?? '';
+        // Cada lote vai pro audit_period correspondente ao MÊS DAS VENDAS
+        // (data_transacao predominante). PDF cobrindo abril+maio importado
+        // em abril: lotes com vendas em março → period março; vendas em abril
+        // → period abril; vendas em maio → period maio. Auditoria por
+        // competência da venda, independente do crédito.
+        const lotPeriodKey = lotCompYM(l) ?? '';
         const lotTargetPeriodId = targetPeriodIdByYM[lotPeriodKey] ?? audit_period_id;
 
         // Checagem GLOBAL pelo numero_reembolso: se o lote já existe em

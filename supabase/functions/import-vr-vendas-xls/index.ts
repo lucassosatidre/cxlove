@@ -376,6 +376,60 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Após o binding venda→lote, recalcula o audit_period correto de cada
+    // lote afetado pelo MÊS DAS VENDAS predominante. Lote pode ter sido
+    // importado em period diferente baseado em data_corte (heurística) —
+    // agora corrige com a verdade dos items. Cria audit_period destino sob
+    // demanda. Auditoria por competência de venda exige isso.
+    const lotMovedTo: Record<string, string> = {};
+    if (linked.length > 0) {
+      const valuesByLotMonth = new Map<string, Record<string, number>>();
+      for (const l of linked) {
+        const ym = l.sale.data_venda?.slice(0, 7);
+        if (!ym) continue;
+        if (!valuesByLotMonth.has(l.lot_id)) valuesByLotMonth.set(l.lot_id, {});
+        const m = valuesByLotMonth.get(l.lot_id)!;
+        m[ym] = (m[ym] ?? 0) + Number(l.sale.valor ?? 0);
+      }
+      const periodCache = new Map<string, string>();
+      const existingLotMeta = new Map<string, { audit_period_id: string; data_corte: string | null }>();
+      for (const lot of (vrLots as any[])) {
+        existingLotMeta.set(lot.id, { audit_period_id: lot.audit_period_id, data_corte: lot.data_corte });
+      }
+      for (const [lotId, byMonth] of valuesByLotMonth.entries()) {
+        const sorted = Object.entries(byMonth).sort(([, a], [, b]) => b - a);
+        const targetYM = sorted[0]?.[0];
+        if (!targetYM) continue;
+        const meta = existingLotMeta.get(lotId);
+        if (!meta) continue;
+        // Já está no period correto? checa via audit_periods cache
+        let targetPeriodId = periodCache.get(targetYM) ?? null;
+        if (!targetPeriodId) {
+          const [yStr, mStr] = targetYM.split('-');
+          const { data: existing } = await supabase
+            .from('audit_periods').select('id,status').eq('month', Number(mStr)).eq('year', Number(yStr)).maybeSingle();
+          if (existing) {
+            if (existing.status === 'fechado') continue; // não move pra period fechado
+            targetPeriodId = existing.id;
+          } else {
+            const { data: created } = await supabase
+              .from('audit_periods').insert({ month: Number(mStr), year: Number(yStr), status: 'aberto' })
+              .select('id').single();
+            if (!created) continue;
+            targetPeriodId = created.id;
+          }
+          periodCache.set(targetYM, targetPeriodId);
+        }
+        if (meta.audit_period_id !== targetPeriodId) {
+          await supabase
+            .from('audit_voucher_lots')
+            .update({ audit_period_id: targetPeriodId })
+            .eq('id', lotId);
+          lotMovedTo[lotId] = targetYM;
+        }
+      }
+    }
+
     // Status: se 0 items vinculados apesar de ter vendas válidas, sinaliza erro
     // pra UI mostrar (caso clássico: lotes ainda não importados ou produtos
     // sem correspondência). Antes o status ficava 'completed' silenciosamente.
@@ -437,9 +491,10 @@ Deno.serve(async (req) => {
       })),
       affected_lots: affectedLotIds.length,
       inserted_items: insertedItems,
+      lots_moved_count: Object.keys(lotMovedTo).length,
       integrity_warnings_count: integrityWarnings.length,
       integrity_warnings: integrityWarnings,
-      message: `${linked.length} vendas vinculadas a ${affectedLotIds.length} lotes${orphans.length > 0 ? ` (${orphans.length} órfãs)` : ''}${integrityWarnings.length > 0 ? ` · ${integrityWarnings.length} lote(s) com gap subtotal×items` : ''}`,
+      message: `${linked.length} vendas vinculadas a ${affectedLotIds.length} lotes${Object.keys(lotMovedTo).length > 0 ? ` · ${Object.keys(lotMovedTo).length} lote(s) movido(s) pro mês das vendas` : ''}${orphans.length > 0 ? ` (${orphans.length} órfãs)` : ''}${integrityWarnings.length > 0 ? ` · ${integrityWarnings.length} lote(s) com gap subtotal×items` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-vr-vendas-xls error', e);
