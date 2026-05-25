@@ -448,12 +448,17 @@ export default function AuditVouchers() {
     let descontos = 0;       // taxa relevante (com override quando parcial)
     let liquido = 0;
     let matched = 0;
+    let expectMatch = 0;
     let salesCount = 0;
     for (const l of allOperadoraLots) {
       const comp = competenciaByLot[l.id];
       if (!comp) continue;
       count++;
       salesCount += comp.count;
+      // Lote com líquido > 0 espera match contra depósito BB. Líquido === 0
+      // (caso Taxa Manutenção pura — total descontos = subtotal) não tem
+      // crédito esperado e não entra no denominador de "Pareados".
+      if (Number(l.valor_liquido ?? 0) > 0) expectMatch++;
 
       const items = allItemsByLot[l.id] ?? [];
       const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
@@ -509,10 +514,11 @@ export default function AuditVouchers() {
       subtotal += compValor;
       descontos += descontosDeclared * proporcao;
       liquido += liquidoDeclared * proporcao;
+      if (Number(liquidoDeclared) > 0) expectMatch++;
       if (meta.lot_bb_deposit_id) matched++;
     }
     const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
-    return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, taxaPct };
+    return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, expectMatch, taxaPct };
   }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot, crossPeriodItems, selectedOperadora]);
 
   // Cross-check Maquinona × operadora atual.
@@ -1114,7 +1120,7 @@ export default function AuditVouchers() {
                 value={fmtPct(operadoraStats.taxaPct)}
                 className="text-rose-700 dark:text-rose-400"
                 hint={operadoraStats.countAguardando > 0 ? 'parciais sem override fora do total' : undefined} />
-              <Stat label="Pareados c/ BB" value={`${operadoraStats.matched} / ${operadoraStats.count}`} />
+              <Stat label="Pareados c/ BB" value={`${operadoraStats.matched} / ${operadoraStats.expectMatch}`} />
             </div>
 
             {visibleOperadoraLots.length === 0 ? (
