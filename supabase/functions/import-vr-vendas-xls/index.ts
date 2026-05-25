@@ -212,19 +212,28 @@ Deno.serve(async (req) => {
     );
     const salesKept = periodFilter.kept;
 
-    // Carrega TODOS os lotes VR do período (não só do mês de competência —
-    // venda de fev pode estar em lote com corte em mar). Inclui subtotal_vendas
-    // pra respeitar capacidade do lote no binding.
+    // Carrega lotes VR de QUALQUER audit_period cuja data_corte esteja no
+    // intervalo plausível pra vendas deste mês. Sem isso, venda 28/04 com
+    // lote pagamento 06/05 (que vive no audit_period maio) ficava órfã —
+    // bug encontrado em 25/05/26: R$89 VR Auxílio Alimentação não vinculava.
+    // Janela: 5 dias antes do mês alvo (vendas dos últimos dias do mês
+    // anterior podem estar em lote com corte ≥ início do mês alvo) até 45
+    // dias depois (cobre todo o ciclo de corte VR D+15 + folga).
+    const compIni = `${period.year}-${String(period.month).padStart(2, '0')}-01`;
+    const compFimDate = new Date(period.year, period.month, 1);
+    const cutoffMin = new Date(period.year, period.month - 1, -5).toISOString().slice(0, 10);
+    const cutoffMax = new Date(compFimDate.getFullYear(), compFimDate.getMonth(), 45).toISOString().slice(0, 10);
     const { data: vrLots } = await supabase
       .from('audit_voucher_lots')
-      .select('id, numero_reembolso, produto, data_corte, subtotal_vendas')
-      .eq('audit_period_id', audit_period_id)
+      .select('id, numero_reembolso, produto, data_corte, subtotal_vendas, audit_period_id')
       .eq('operadora', 'vr')
+      .gte('data_corte', cutoffMin)
+      .lte('data_corte', cutoffMax)
       .order('data_corte', { ascending: true });
 
     if (!vrLots || vrLots.length === 0) {
       return new Response(JSON.stringify({
-        error: 'Nenhum lote VR encontrado neste período. Importe o extrato de Reembolsos VR primeiro.',
+        error: 'Nenhum lote VR encontrado na janela pra vincular vendas. Importe o extrato de Reembolsos VR primeiro.',
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
