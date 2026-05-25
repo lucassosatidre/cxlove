@@ -6,7 +6,7 @@
 // os matches por posição pra reconstruir a sequência lógica.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
+import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -440,11 +440,18 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Validação de competência: bloqueia 100% mismatch.
+    // Validação de competência: aceita mês alvo + até 3 meses futuros. PDFs
+    // Ticket são gerados pela operadora cobrindo "de X em diante", então um
+    // PDF "abril - 25 de maio" inclui lotes com data_credito em abril E em
+    // maio (vendas de fim de abril têm crédito ~D+15 caindo em maio). Bloqueia
+    // só se 0% das datas caírem na janela (ex: PDF de janeiro importado em
+    // setembro). Lotes fora do mês alvo NÃO são descartados — são roteados
+    // pro audit_period correto baseado em sua data_credito (ver fluxo abaixo).
     const periodCheck = validatePeriodMatch(
       lots.map((l: any) => l.data_credito),
       { month: period.month, year: period.year },
       'Ticket',
+      [0, 1, 2, 3],
     );
     if (!periodCheck.ok) {
       return new Response(JSON.stringify({
@@ -453,20 +460,58 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Filtra lotes pelo mês alvo (data_credito) com offset ZERO — cada lote
-    // pertence ao mês de sua data_credito. ANTES usava [0, 1] (mês alvo + 1),
-    // o que causou vazamento crítico: lotes com data_credito em abril foram
-    // engolidos pelo import de março, e depois ficaram bloqueados pelo
-    // cross-period dup check no reimport correto (mai/26: 16 lotes de abril
-    // ficaram em março). Se o user importou o extrato no período errado,
-    // esses lotes serão descartados aqui e re-importados no período correto.
-    const periodFilter = filterToPeriod(
-      lots,
-      (l: any) => l.data_credito,
-      { month: period.month, year: period.year },
-      [0],
-    );
-    const lotsKept = periodFilter.kept;
+    // Resolve target audit_period_id pra cada lote pela sua data_credito.
+    // Cria audit_period sob demanda (status 'aberto') quando ainda não existe.
+    // Bloqueia se o destino tá 'fechado' (não permite gravar em period fechado).
+    // ANTES: lotes fora do mês alvo eram descartados via filterToPeriod —
+    // resultado: PDF cobrindo abril+maio importado em abril perdia silenciosamente
+    // as vendas de fim de abril cujo crédito caía em maio (~R$ 1.2k de vendas
+    // abril/26 sumiram em 25/05). Causa do retrabalho recorrente.
+    const targetPeriodIdByYM: Record<string, string> = {};
+    const closedPeriodsBlocked: string[] = [];
+    for (const l of lots) {
+      const ym = l.data_credito?.match(/^(\d{4})-(\d{2})/);
+      if (!ym) continue;
+      const key = `${ym[1]}-${ym[2]}`;
+      if (targetPeriodIdByYM[key]) continue;
+      const lotMonth = Number(ym[2]);
+      const lotYear = Number(ym[1]);
+      if (lotMonth === period.month && lotYear === period.year) {
+        targetPeriodIdByYM[key] = audit_period_id;
+        continue;
+      }
+      const { data: existing } = await supabase
+        .from('audit_periods').select('id,status').eq('month', lotMonth).eq('year', lotYear).maybeSingle();
+      if (existing) {
+        if (existing.status === 'fechado') {
+          closedPeriodsBlocked.push(key);
+          continue;
+        }
+        targetPeriodIdByYM[key] = existing.id;
+      } else {
+        const { data: created, error: createErr } = await supabase
+          .from('audit_periods')
+          .insert({ month: lotMonth, year: lotYear, status: 'aberto' })
+          .select('id').single();
+        if (createErr || !created) {
+          return new Response(JSON.stringify({
+            error: `Erro ao criar audit_period ${key}: ${createErr?.message ?? 'sem dado'}`,
+          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        targetPeriodIdByYM[key] = created.id;
+      }
+    }
+    if (closedPeriodsBlocked.length > 0) {
+      return new Response(JSON.stringify({
+        error: `O PDF contém lotes com crédito em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+    const lotsKept = lots;
+    const lotsByTargetPeriod: Record<string, number> = {};
+    for (const l of lots) {
+      const ym = l.data_credito?.slice(0, 7) ?? '';
+      lotsByTargetPeriod[ym] = (lotsByTargetPeriod[ym] ?? 0) + 1;
+    }
 
     // Sanity: subtotal_vendas == soma items, e (subtotal - total_descontos) == valor_liquido.
     const integrityErrors: string[] = [];
@@ -503,7 +548,6 @@ Deno.serve(async (req) => {
     let insertedItems = 0;
     const lotErrors: string[] = [];
 
-    let skippedDupCrossPeriod = 0;
     for (const l of lotsKept) {
       try {
         // Reconciliação aritmética. O TOTAL_DESC_RE é frágil — pdfjs reordena
@@ -525,24 +569,27 @@ Deno.serve(async (req) => {
           l.valor_liquido = l.subtotal_vendas;
         }
 
-        // Checagem GLOBAL pelo numero_reembolso (não só do período): se o lote
-        // já existe em outro audit_period, pula — cada reembolso vive em UM
-        // só mês (o da venda). Sem isso, arquivo cobrindo fev+mar gerava o
-        // mesmo lote nos 2 periods.
+        // Cada lote vai pro audit_period correspondente à sua data_credito.
+        // PDF cobrindo abril+maio importado em abril distribui lotes nos 2
+        // periods automaticamente — UI de abril vê vendas de abril via
+        // cross-period query (AuditVouchers.tsx), e maio já fica pronto.
+        const lotPeriodKey = l.data_credito?.slice(0, 7) ?? '';
+        const lotTargetPeriodId = targetPeriodIdByYM[lotPeriodKey] ?? audit_period_id;
+
+        // Checagem GLOBAL pelo numero_reembolso: se o lote já existe em
+        // audit_period DIFERENTE do destino calculado, atualiza no lugar
+        // (re-import legítimo após correção de dados). Cada reembolso vive
+        // em UM período — o da sua data_credito.
         const { data: anyExisting } = await supabase
           .from('audit_voucher_lots')
           .select('id, audit_period_id')
           .eq('operadora', 'ticket')
           .eq('numero_reembolso', l.numero_reembolso)
           .maybeSingle();
-        if (anyExisting && anyExisting.audit_period_id !== audit_period_id) {
-          skippedDupCrossPeriod++;
-          continue;
-        }
-        const existing = anyExisting && anyExisting.audit_period_id === audit_period_id ? anyExisting : null;
+        const existing = anyExisting ?? null;
 
         const lotPayload = {
-          audit_period_id,
+          audit_period_id: lotTargetPeriodId,
           operadora: 'ticket',
           numero_reembolso: String(l.numero_reembolso ?? ''),
           numero_contrato: l.numero_contrato ?? null,
@@ -626,13 +673,15 @@ Deno.serve(async (req) => {
         .eq('id', audit_period_id);
     }
 
+    const periodsTouched = Object.entries(lotsByTargetPeriod)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([ym, n]) => `${ym}: ${n} lote(s)`).join(' / ');
+
     return new Response(JSON.stringify({
       success: true,
       total_lots: lots.length,
       kept_in_period: lotsKept.length,
-      skipped_outside_period: periodFilter.skipped,
-      skipped_outside_period_by_month: periodFilter.skippedByMonth,
-      skipped_dup_cross_period: skippedDupCrossPeriod,
+      lots_by_target_period: lotsByTargetPeriod,
       inserted_lots: insertedLots,
       updated_lots: updatedLots,
       total_items: totalItems,
@@ -641,7 +690,7 @@ Deno.serve(async (req) => {
       lot_errors: lotErrors.slice(0, 10),
       lot_errors_count: lotErrors.length,
       warnings: warnings.slice(0, 20),
-      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas)${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}${skippedDupCrossPeriod > 0 ? ` (${skippedDupCrossPeriod} já em outro período)` : ''}`,
+      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas) — distribuído em ${periodsTouched}${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-ticket-pdf error', e);
