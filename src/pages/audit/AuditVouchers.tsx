@@ -150,18 +150,31 @@ function hasAntecipacao(lot: Lot): boolean {
   return Object.keys(lot.descontos).some(k => /antecip|adiantament/i.test(k));
 }
 
+// Valor líquido EFETIVO: quando o usuário preencheu `valor_creditado_bb`
+// (crédito real no BB diverge do `valor_liquido` declarado — taxa extra na
+// cessão, tarifa surpresa, antecipação), usa esse override. Senão cai no
+// `valor_liquido` do PDF. Sem isso, taxa efetiva fica subestimada porque
+// o sistema assume que o declarado bateu certinho com o que caiu no banco.
+function effectiveLiquido(lot: Lot): number {
+  return lot.valor_creditado_bb != null ? Number(lot.valor_creditado_bb) : Number(lot.valor_liquido);
+}
+function hasLiquidoOverride(lot: Lot): boolean {
+  return lot.valor_creditado_bb != null;
+}
+
 
 // Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
 // Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
 // `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
 // Ticket importados antes do commit 738af54 gravavam total_descontos ==
 // valor_liquido por causa de regex frágil contra reorder do pdfjs).
+// Usa `effectiveLiquido` pra refletir override manual quando preenchido.
 function computedLot(lot: Lot, items: LotItem[]) {
   const sumItems = items.reduce((s, i) => s + Number(i.valor || 0), 0);
   const subtotal = Number(lot.subtotal_vendas) > 0
     ? Number(lot.subtotal_vendas)
     : Math.round(sumItems * 100) / 100;
-  const liquido = Number(lot.valor_liquido);
+  const liquido = effectiveLiquido(lot);
   const totalDesc = (subtotal > 0 && liquido > 0 && subtotal >= liquido)
     ? Math.round((subtotal - liquido) * 100) / 100
     : Number(lot.total_descontos);
