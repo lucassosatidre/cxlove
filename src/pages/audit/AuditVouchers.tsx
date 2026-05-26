@@ -198,7 +198,7 @@ export default function AuditVouchers() {
     const [lotsRes, importsRes, depRes, maqRes, ovrRes] = await Promise.all([
       supabase
         .from('audit_voucher_lots')
-        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, bb_deposit_id_2, status, manual')
+        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, bb_deposit_id_2, status, manual, data_transacao_bb, valor_creditado_bb, banco_credito')
         .eq('audit_period_id', periodId)
         .order('data_credito', { ascending: true }),
       supabase
