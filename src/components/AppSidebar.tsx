@@ -57,7 +57,8 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
+    // exact match or descendant path (so /admin/auditoria doesn't claim /admin/auditoria-v2)
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   const handleNav = (path: string) => {
