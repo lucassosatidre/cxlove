@@ -342,14 +342,15 @@ Deno.serve(async (req) => {
       }
 
       for (const [date, dayLots] of byDate.entries()) {
-        // Busca depósitos BB no dia, ainda não casados, com descrição cessão/topázio.
+        // Busca depósitos BB no dia com descrição cessão/topázio (independente
+        // de matched — pool é idempotente, reanexa todos os deps do dia).
         const { data: poolDeps } = await supabase
           .from('audit_bank_deposits')
           .select('id, deposit_date, amount, description, detail')
           .eq('audit_period_id', audit_period_id)
           .eq('bank', 'bb')
-          .eq('deposit_date', date)
-          .eq('matched', false);
+          .eq('deposit_date', date);
+
         const candidates = (poolDeps ?? []).filter((d: any) => {
           const desc = String(d.description ?? '').toLowerCase();
           const det = String(d.detail ?? '').toLowerCase();
