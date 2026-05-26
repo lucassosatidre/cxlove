@@ -1,0 +1,2309 @@
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import AppLayout from '@/components/AppLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { supabase } from '@/integrations/supabase/client';
+import { useUserRole } from '@/hooks/useUserRole';
+import { toast } from 'sonner';
+import {
+  ArrowLeft, ChevronDown, ChevronRight, Loader2, Zap,
+} from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+
+import {
+  UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
+  UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
+  dispatchAutoMatchVouchers,
+} from '@/components/audit/UploadCards';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
+
+type AuditPeriod = { id: string; month: number; year: number; status: string };
+
+type AuditImport = {
+  id: string;
+  file_type: string;
+  file_name: string;
+  status: string;
+  imported_rows: number;
+  total_rows: number;
+  created_at: string;
+  error_message?: string | null;
+};
+
+type Lot = {
+  id: string;
+  operadora: string;
+  numero_reembolso: string;
+  numero_contrato: string | null;
+  produto: string | null;
+  data_corte: string | null;
+  data_credito: string;
+  subtotal_vendas: number;
+  total_descontos: number;
+  valor_liquido: number;
+  descontos: Record<string, number> | null;
+  bb_deposit_id: string | null;
+  bb_deposit_id_2: string | null;
+  status: string;
+  manual: boolean;
+  data_transacao_bb: string | null;
+  valor_creditado_bb: number | null;
+  banco_credito: string | null;
+};
+
+
+type LotItem = {
+  id: string;
+  lot_id: string;
+  data_transacao: string;
+  data_postagem: string | null;
+  numero_documento: string | null;
+  numero_cartao_mascarado: string | null;
+  valor: number;
+};
+
+// Item de venda no mês de competência cujo lote está em OUTRO audit_period
+// (ex: venda 30/04 com crédito 04/05 — lote vive no period maio).
+type CrossPeriodEntry = LotItem & {
+  lot_operadora: string;
+  lot_numero_reembolso: string;
+  lot_data_credito: string;
+  lot_subtotal_vendas: number;
+  lot_total_descontos: number;
+  lot_valor_liquido: number;
+  lot_total_items_count: number; // items totais do lote (em todos os meses)
+  lot_total_items_sum: number;   // soma valor de TODOS os items do lote
+  lot_bb_deposit_id: string | null;
+};
+
+type BankDeposit = {
+  id: string;
+  deposit_date: string;
+  description: string | null;
+  detail: string | null;
+  category: string | null;
+  amount: number;
+};
+
+type MaquinonaSale = {
+  id: string;
+  sale_date: string;
+  gross_amount: number;
+  net_amount: number;
+  brand: string | null;
+  deposit_group: string;
+  promotion_amount: number | null;
+};
+
+type CompOverride = {
+  id: string;
+  lot_id: string;
+  year: number;
+  month: number;
+  taxa_competencia: number;
+  note: string | null;
+};
+
+const MONTHS = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const DISCOUNT_LABELS: Record<string, string> = {
+  tarifa_gestao: 'Tarifa de gestão',
+  tarifa_transacao: 'Tarifa por transação',
+  taxa_tpe: 'Taxa TPE',
+  anuidade: 'Anuidade',
+  outros: 'Outros',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  ticket: 'Ticket',
+  alelo: 'Alelo',
+  pluxee: 'Pluxee',
+  vr: 'VR',
+  brendi: 'Brendi',
+  outro: 'Outro',
+};
+
+const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+// Detecta lote com antecipação Banco Topázio — Edenred cede o crédito antes
+// do prazo (data_credito do PDF) e a chave `tarifa_adiantamento` aparece no
+// descontos JSONB. Crédito real chega via "Cessão Créd Liquid Princ" no BB.
+function hasAntecipacao(lot: Lot): boolean {
+  if (!lot.descontos) return false;
+  return Object.keys(lot.descontos).some(k => /antecip|adiantament/i.test(k));
+}
+
+// Valor líquido EFETIVO: quando o usuário preencheu `valor_creditado_bb`
+// (crédito real no BB diverge do `valor_liquido` declarado — taxa extra na
+// cessão, tarifa surpresa, antecipação), usa esse override. Senão cai no
+// `valor_liquido` do PDF. Sem isso, taxa efetiva fica subestimada porque
+// o sistema assume que o declarado bateu certinho com o que caiu no banco.
+function effectiveLiquido(lot: Lot): number {
+  return lot.valor_creditado_bb != null ? Number(lot.valor_creditado_bb) : Number(lot.valor_liquido);
+}
+function hasLiquidoOverride(lot: Lot): boolean {
+  return lot.valor_creditado_bb != null;
+}
+
+
+// Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
+// Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
+// `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
+// Ticket importados antes do commit 738af54 gravavam total_descontos ==
+// valor_liquido por causa de regex frágil contra reorder do pdfjs).
+// Usa `effectiveLiquido` pra refletir override manual quando preenchido.
+function computedLot(lot: Lot, items: LotItem[]) {
+  const sumItems = items.reduce((s, i) => s + Number(i.valor || 0), 0);
+  const subtotal = Number(lot.subtotal_vendas) > 0
+    ? Number(lot.subtotal_vendas)
+    : Math.round(sumItems * 100) / 100;
+  const liquido = effectiveLiquido(lot);
+  const totalDesc = (subtotal > 0 && liquido > 0 && subtotal >= liquido)
+    ? Math.round((subtotal - liquido) * 100) / 100
+    : Number(lot.total_descontos);
+  return { subtotal, totalDesc, liquido };
+}
+
+export default function AuditVouchersV2() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { isAdmin, loading: roleLoading } = useUserRole();
+
+  const now = new Date();
+  const [month, setMonth] = useState<number>(Number(searchParams.get('month')) || now.getMonth() + 1);
+  const [year, setYear] = useState<number>(Number(searchParams.get('year')) || now.getFullYear());
+
+  const [period, setPeriod] = useState<AuditPeriod | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lots, setLots] = useState<Lot[]>([]);
+  const [imports, setImports] = useState<AuditImport[]>([]);
+  const [deposits, setDeposits] = useState<BankDeposit[]>([]);
+  const [maquinonaVouchers, setMaquinonaVouchers] = useState<MaquinonaSale[]>([]);
+  const [overrides, setOverrides] = useState<CompOverride[]>([]);
+  const [expandedLot, setExpandedLot] = useState<string | null>(null);
+  const [matching, setMatching] = useState(false);
+  const [expandedDeposit, setExpandedDeposit] = useState<string | null>(null);
+  const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
+  const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
+  const [crossPeriodItems, setCrossPeriodItems] = useState<CrossPeriodEntry[]>([]);
+  const [categoryFilter, setCategoryFilter] = useState<string>('ticket');
+  const [showAllLots, setShowAllLots] = useState(false);
+  const [selectedOperadora, setSelectedOperadora] = useState<string>(searchParams.get('aba') ?? 'overview');
+  const [showCrossDetail, setShowCrossDetail] = useState(false);
+
+  // Sincroniza tab corrente com URL
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if (selectedOperadora === 'overview') next.delete('aba');
+    else next.set('aba', selectedOperadora);
+    setSearchParams(next, { replace: true });
+  }, [selectedOperadora]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [showAdjacentes, setShowAdjacentes] = useState(false);
+
+  const refresh = async (periodId: string) => {
+    const compIni = `${year}-${String(month).padStart(2, '0')}-01`;
+    const next = new Date(year, month, 1);
+    const compFim = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+
+    const [lotsRes, importsRes, depRes, maqRes, ovrRes] = await Promise.all([
+      supabase
+        .from('audit_voucher_lots')
+        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, bb_deposit_id_2, status, manual, data_transacao_bb, valor_creditado_bb, banco_credito')
+        .eq('audit_period_id', periodId)
+        .order('data_credito', { ascending: true }),
+      supabase
+        .from('audit_imports')
+        .select('id, file_type, file_name, status, imported_rows, total_rows, created_at, error_message')
+        .eq('audit_period_id', periodId)
+        .in('file_type', ['bb', 'ticket', 'alelo', 'pluxee', 'vr'])
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('audit_bank_deposits')
+        .select('id, deposit_date, description, detail, category, amount')
+        .eq('audit_period_id', periodId)
+        .eq('bank', 'bb')
+        .order('deposit_date', { ascending: true }),
+      supabase
+        .from('audit_card_transactions')
+        .select('id, sale_date, gross_amount, net_amount, brand, deposit_group, promotion_amount')
+        .eq('audit_period_id', periodId)
+        .in('deposit_group', ['ticket', 'alelo', 'pluxee', 'vr'])
+        .gte('sale_date', compIni)
+        .lt('sale_date', compFim),
+      supabase
+        .from('audit_voucher_lot_competencia_overrides')
+        .select('id, lot_id, year, month, taxa_competencia, note')
+        .eq('year', year)
+        .eq('month', month),
+    ]);
+    const fetchedLots = (lotsRes.data ?? []) as Lot[];
+    setLots(fetchedLots);
+    setImports((importsRes.data ?? []) as AuditImport[]);
+    setDeposits((depRes.data ?? []) as BankDeposit[]);
+    setMaquinonaVouchers((maqRes.data ?? []) as MaquinonaSale[]);
+    setOverrides((ovrRes.data ?? []) as CompOverride[]);
+
+    // Carrega TODOS os items de TODOS os lotes (em batch) pra calcular competência
+    // de venda. lot_items é compacto (10-50 rows por lote típico), 19 lotes ~= 50-200 rows.
+    const lotIds = fetchedLots.map(l => l.id);
+    if (lotIds.length > 0) {
+      const { data: allItems } = await supabase
+        .from('audit_voucher_lot_items')
+        .select('id, lot_id, data_transacao, data_postagem, numero_documento, numero_cartao_mascarado, valor')
+        .in('lot_id', lotIds);
+      const grouped: Record<string, LotItem[]> = {};
+      for (const it of (allItems ?? []) as LotItem[]) {
+        if (!grouped[it.lot_id]) grouped[it.lot_id] = [];
+        grouped[it.lot_id].push(it);
+      }
+      setAllItemsByLot(grouped);
+    } else {
+      setAllItemsByLot({});
+    }
+
+    // Cross-period: items com data_transacao no mês de competência mas cujo lote
+    // vive em OUTRO audit_period (caso clássico Ticket TF/TAE: venda 30/04 com
+    // data_credito 04/05 → lote em audit_period maio mas a venda é abril). Pro
+    // cross-check Maquinona vs Operadora ver essas vendas, carrega o lote+items.
+    const { data: crossItems } = await supabase
+      .from('audit_voucher_lot_items')
+      .select('id, lot_id, data_transacao, data_postagem, numero_documento, numero_cartao_mascarado, valor')
+      .gte('data_transacao', compIni)
+      .lt('data_transacao', compFim);
+    const localLotIdSet = new Set(lotIds);
+    const crossItemsByLot: Record<string, LotItem[]> = {};
+    for (const it of (crossItems ?? []) as LotItem[]) {
+      if (localLotIdSet.has(it.lot_id)) continue;
+      if (!crossItemsByLot[it.lot_id]) crossItemsByLot[it.lot_id] = [];
+      crossItemsByLot[it.lot_id].push(it);
+    }
+    const crossLotIds = Object.keys(crossItemsByLot);
+    if (crossLotIds.length > 0) {
+      const [{ data: crossLots }, { data: allCrossLotItems }] = await Promise.all([
+        supabase
+          .from('audit_voucher_lots')
+          .select('id, operadora, numero_reembolso, data_credito, subtotal_vendas, total_descontos, valor_liquido, bb_deposit_id')
+          .in('id', crossLotIds)
+          .in('operadora', ['ticket','alelo','vr','pluxee']),
+        supabase
+          .from('audit_voucher_lot_items')
+          .select('lot_id, valor')
+          .in('lot_id', crossLotIds),
+      ]);
+      type LotMeta = { operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number; bb_deposit_id: string | null };
+      const lotMap: Record<string, LotMeta> = {};
+      for (const l of (crossLots ?? []) as Array<{ id: string; operadora: string; numero_reembolso: string; data_credito: string; subtotal_vendas: number; total_descontos: number; valor_liquido: number; bb_deposit_id: string | null }>) {
+        lotMap[l.id] = {
+          operadora: l.operadora,
+          numero_reembolso: l.numero_reembolso,
+          data_credito: l.data_credito,
+          subtotal_vendas: Number(l.subtotal_vendas ?? 0),
+          total_descontos: Number(l.total_descontos ?? 0),
+          valor_liquido: Number(l.valor_liquido ?? 0),
+          bb_deposit_id: l.bb_deposit_id ?? null,
+        };
+      }
+      // Soma TOTAL de items por cross-lot (todos os meses) pra dar base no rateio
+      const totalItemsByLot: Record<string, { count: number; sum: number }> = {};
+      for (const it of (allCrossLotItems ?? []) as Array<{ lot_id: string; valor: number }>) {
+        if (!totalItemsByLot[it.lot_id]) totalItemsByLot[it.lot_id] = { count: 0, sum: 0 };
+        totalItemsByLot[it.lot_id].count++;
+        totalItemsByLot[it.lot_id].sum += Number(it.valor ?? 0);
+      }
+      const finalCross: CrossPeriodEntry[] = [];
+      for (const lotId of Object.keys(crossItemsByLot)) {
+        const meta = lotMap[lotId];
+        if (!meta) continue;
+        const lotTotals = totalItemsByLot[lotId] ?? { count: 0, sum: 0 };
+        for (const it of crossItemsByLot[lotId]) {
+          finalCross.push({
+            ...it,
+            lot_operadora: meta.operadora,
+            lot_numero_reembolso: meta.numero_reembolso,
+            lot_data_credito: meta.data_credito,
+            lot_subtotal_vendas: meta.subtotal_vendas,
+            lot_total_descontos: meta.total_descontos,
+            lot_valor_liquido: meta.valor_liquido,
+            lot_total_items_count: lotTotals.count,
+            lot_total_items_sum: lotTotals.sum,
+            lot_bb_deposit_id: meta.bb_deposit_id,
+          });
+        }
+      }
+      setCrossPeriodItems(finalCross);
+    } else {
+      setCrossPeriodItems([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase
+        .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+      const p = (data as AuditPeriod) ?? null;
+      if (!active) return;
+      setPeriod(p);
+      if (p) await refresh(p.id);
+      else { setLots([]); setImports([]); setDeposits([]); setMaquinonaVouchers([]); setAllItemsByLot({}); setOverrides([]); setCrossPeriodItems([]); }
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [isAdmin, month, year]);
+
+  // Sincroniza search params
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    next.set('month', String(month));
+    next.set('year', String(year));
+    setSearchParams(next, { replace: true });
+  }, [month, year]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadItems = (lotId: string) => {
+    if (itemsByLot[lotId] || allItemsByLot[lotId]) {
+      if (!itemsByLot[lotId] && allItemsByLot[lotId]) {
+        const sorted = [...allItemsByLot[lotId]].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao));
+        setItemsByLot(s => ({ ...s, [lotId]: sorted }));
+      }
+      setExpandedLot(expandedLot === lotId ? null : lotId);
+      return;
+    }
+    setExpandedLot(lotId);
+  };
+
+  // Cria período se não existir
+  const ensurePeriod = async (): Promise<AuditPeriod | null> => {
+    if (period) return period;
+    const { data, error } = await supabase
+      .from('audit_periods')
+      .insert({ month, year, status: 'aberto' })
+      .select()
+      .single();
+    if (error) {
+      toast.error('Erro ao criar período', { description: error.message });
+      return null;
+    }
+    const p = data as AuditPeriod;
+    setPeriod(p);
+    return p;
+  };
+
+  // Janela do mês de competência (vendas) — YYYY-MM-DD
+  const competenciaIni = useMemo(() => `${year}-${String(month).padStart(2, '0')}-01`, [year, month]);
+  const competenciaFim = useMemo(() => {
+    const next = new Date(year, month, 1); // mês seguinte
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`;
+  }, [year, month]);
+  // Janela do BB: começa no início da competência, vai até +60 dias depois do fim do mês de competência (cobre defasagem Ticket de até 26d + folga)
+  const bbWindowFim = useMemo(() => {
+    const fim = new Date(competenciaFim + 'T00:00:00');
+    fim.setDate(fim.getDate() + 60);
+    return fim.toISOString().slice(0, 10);
+  }, [competenciaFim]);
+
+  // Agrega valor de vendas DENTRO da competência por lote.
+  // saleByLotInCompetencia[lotId] = { count, valor } (só items com data_transacao no mês X)
+  const competenciaByLot = useMemo(() => {
+    const map: Record<string, { count: number; valor: number }> = {};
+    for (const [lotId, items] of Object.entries(allItemsByLot)) {
+      let count = 0; let valor = 0;
+      for (const it of items) {
+        if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
+          count++;
+          valor += Number(it.valor);
+        }
+      }
+      if (count > 0) map[lotId] = { count, valor };
+    }
+    return map;
+  }, [allItemsByLot, competenciaIni, competenciaFim]);
+
+  // Operadoras com lotes (pra mostrar seletor dinâmico)
+  const operadorasAtivas = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of lots) set.add(l.operadora);
+    return Array.from(set).sort();
+  }, [lots]);
+
+  const allOperadoraLots = useMemo(
+    () => lots.filter(l => l.operadora === selectedOperadora),
+    [lots, selectedOperadora],
+  );
+
+  const operadoraLotsCompetencia = useMemo(
+    () => allOperadoraLots.filter(l => competenciaByLot[l.id]),
+    [allOperadoraLots, competenciaByLot],
+  );
+
+  const visibleOperadoraLots = useMemo(
+    () => showAllLots ? allOperadoraLots : operadoraLotsCompetencia,
+    [showAllLots, allOperadoraLots, operadoraLotsCompetencia],
+  );
+
+  // Override de competência indexado por lot_id
+  const overrideByLot = useMemo(() => {
+    const map = new Map<string, CompOverride>();
+    for (const o of overrides) map.set(o.lot_id, o);
+    return map;
+  }, [overrides]);
+
+  // Stats refletem competência (vendas no mês X). Regras:
+  // - Lote 100% no mês: usa total_descontos do lote inteiro
+  // - Lote parcial COM override: usa override.taxa_competencia
+  // - Lote parcial SEM override: NÃO contribui pro KPI (countAguardando) e
+  //   precisa input manual; o usuário consulta portal Ticket pra digitar.
+  const operadoraStats = useMemo(() => {
+    let count = 0;
+    let countParcial = 0;
+    let countAguardando = 0; // parciais sem override
+    let subtotal = 0;        // bruto vendido na competência
+    let descontos = 0;       // taxa relevante (com override quando parcial)
+    let liquido = 0;
+    let matched = 0;
+    let expectMatch = 0;
+    let salesCount = 0;
+    for (const l of allOperadoraLots) {
+      const comp = competenciaByLot[l.id];
+      if (!comp) continue;
+      count++;
+      salesCount += comp.count;
+      // Lote com líquido > 0 espera match contra depósito BB. Líquido === 0
+      // (caso Taxa Manutenção pura — total descontos = subtotal) não tem
+      // crédito esperado e não entra no denominador de "Pareados".
+      if (effectiveLiquido(l) > 0) expectMatch++;
+
+      const items = allItemsByLot[l.id] ?? [];
+      const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
+      const isParcial = items.length > comp.count;
+
+      if (!isParcial) {
+        // 100% no mês: vendido = soma items no mês (bate com Maquinona/POS).
+        // Custo/líquido proporcionais pelo gap entre items_sum e subtotal
+        // declarado — porque o lote pode incluir vendas de mês anterior que
+        // o usuário não importou (caso real fev/26 VR: lote 695394978 declara
+        // R$ 552,58 mas só R$ 95,81 caiu em fev — o resto é jan que ficou
+        // fora do upload). Sem proporção, inflava o vendido VR em R$ 676,77
+        // vs Maquinona.
+        subtotal += comp.valor;
+        const proporcao = lotSubtotal > 0 ? comp.valor / lotSubtotal : 1;
+        descontos += totalDesc * proporcao;
+        liquido += lotLiquido * proporcao;
+      } else {
+        countParcial++;
+        subtotal += comp.valor; // parcial: só a porção do mês
+        const ovr = overrideByLot.get(l.id);
+        if (ovr) {
+          descontos += Number(ovr.taxa_competencia);
+          liquido += comp.valor - Number(ovr.taxa_competencia);
+        } else {
+          countAguardando++;
+          // não contribui pra KPI até input manual
+        }
+      }
+      if (l.bb_deposit_id) matched++;
+    }
+    // Cross-period: lotes em OUTROS audit_periods cujas vendas caíram no mês
+    // de competência (ex: Ticket TF/TAE — venda fim de abril com crédito 04/05).
+    // Sem isso, o stat de cada operadora seria menor que o real e não bateria
+    // com Maquinona.
+    const crossByLot = new Map<string, CrossPeriodEntry[]>();
+    for (const cp of crossPeriodItems) {
+      if (cp.lot_operadora !== selectedOperadora) continue;
+      if (!crossByLot.has(cp.lot_id)) crossByLot.set(cp.lot_id, []);
+      crossByLot.get(cp.lot_id)!.push(cp);
+    }
+    for (const [, entries] of crossByLot) {
+      const compValor = entries.reduce((s, e) => s + Number(e.valor), 0);
+      const meta = entries[0];
+      const totalDeclared = meta.lot_subtotal_vendas > 0 ? meta.lot_subtotal_vendas : meta.lot_total_items_sum;
+      const proporcao = totalDeclared > 0 ? compValor / totalDeclared : 0;
+      const liquidoDeclared = meta.lot_valor_liquido;
+      const descontosDeclared = (totalDeclared > 0 && liquidoDeclared > 0 && totalDeclared >= liquidoDeclared)
+        ? totalDeclared - liquidoDeclared
+        : meta.lot_total_descontos;
+      count++;
+      salesCount += entries.length;
+      subtotal += compValor;
+      descontos += descontosDeclared * proporcao;
+      liquido += liquidoDeclared * proporcao;
+      if (Number(liquidoDeclared) > 0) expectMatch++;
+      if (meta.lot_bb_deposit_id) matched++;
+    }
+    const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
+    return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, expectMatch, taxaPct };
+  }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot, crossPeriodItems, selectedOperadora]);
+
+  // Cross-check Maquinona × operadora atual.
+  // Lista também as divergências individuais: vendas que estão só em um dos lados
+  // (match por data exata + valor com tolerância R$0,01).
+  const crossCheck = useMemo(() => {
+    type MaqV = { id: string; sale_date: string; gross_amount: number; promotion_amount: number };
+    type PortalV = { id: string; lot_id: string; data_transacao: string; valor: number; numero_documento: string | null; lot_reembolso_override?: string };
+
+    const maqFiltered = maquinonaVouchers.filter(m => m.deposit_group === selectedOperadora);
+    const maqList: MaqV[] = maqFiltered.map(m => ({
+      id: m.id, sale_date: m.sale_date,
+      gross_amount: Number(m.gross_amount || 0),
+      promotion_amount: Number(m.promotion_amount || 0),
+    }));
+    const maqCount = maqList.length;
+    const maqBruto = maqList.reduce((s, m) => s + m.gross_amount, 0);
+    const maqPromo = maqList.reduce((s, m) => s + m.promotion_amount, 0);
+
+    const operadoraLotIds = new Set(allOperadoraLots.map(l => l.id));
+    const portalList: PortalV[] = [];
+    for (const [lotId, items] of Object.entries(allItemsByLot)) {
+      if (!operadoraLotIds.has(lotId)) continue;
+      for (const it of items) {
+        if (it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim) {
+          portalList.push({
+            id: it.id, lot_id: lotId,
+            data_transacao: it.data_transacao,
+            valor: Number(it.valor || 0),
+            numero_documento: it.numero_documento ?? null,
+          });
+        }
+      }
+    }
+    // Cross-period: items cujo lote vive em audit_period diferente mas vendas
+    // são no mês de competência (ex: Ticket TF/TAE — venda fim de abril, crédito
+    // primeira quinzena de maio → lote em audit_period maio). Trazidos pela
+    // query em `refresh`.
+    for (const it of crossPeriodItems) {
+      if (it.lot_operadora !== selectedOperadora) continue;
+      portalList.push({
+        id: it.id, lot_id: it.lot_id,
+        data_transacao: it.data_transacao,
+        valor: Number(it.valor || 0),
+        numero_documento: it.numero_documento ?? null,
+        lot_reembolso_override: `${it.lot_numero_reembolso} (cred ${it.lot_data_credito})`,
+      });
+    }
+    const opCount = portalList.length;
+    const opBruto = portalList.reduce((s, p) => s + p.valor, 0);
+
+    // Match: pra cada venda portal, procura UMA venda Maquinona com mesma data + valor (±0.01)
+    const usedMaq = new Set<string>();
+    const usedPortal = new Set<string>();
+    for (const p of portalList) {
+      const candidate = maqList.find(m =>
+        !usedMaq.has(m.id) && m.sale_date === p.data_transacao && Math.abs(m.gross_amount - p.valor) <= 0.01
+      );
+      if (candidate) {
+        usedMaq.add(candidate.id);
+        usedPortal.add(p.id);
+      }
+    }
+    const onlyMaq = maqList.filter(m => !usedMaq.has(m.id));
+    const onlyPortal = portalList.filter(p => !usedPortal.has(p.id));
+
+    // Janela coberta pelo extrato = última data_transacao vista nos items.
+    // Vendas Maquinona após essa data são esperadas (timing) — virão no próximo
+    // extrato. Vendas Maquinona DENTRO da janela são divergência real (pending
+    // no portal da operadora, parser falhou, ou venda recusada).
+    const extractLastSale = portalList.length > 0
+      ? portalList.reduce((max, p) => p.data_transacao > max ? p.data_transacao : max, portalList[0].data_transacao)
+      : null;
+    const onlyMaqAfterWindow = extractLastSale
+      ? onlyMaq.filter(m => m.sale_date > extractLastSale)
+      : [];
+    const onlyMaqWithinWindow = extractLastSale
+      ? onlyMaq.filter(m => m.sale_date <= extractLastSale)
+      : onlyMaq;
+
+    const diffCount = maqCount - opCount;
+    const diffBruto = Math.round((maqBruto - opBruto) * 100) / 100;
+    return {
+      maqCount, maqBruto, maqPromo, opCount, opBruto, diffCount, diffBruto,
+      onlyMaq, onlyPortal,
+      extractLastSale, onlyMaqAfterWindow, onlyMaqWithinWindow,
+    };
+  }, [maquinonaVouchers, allItemsByLot, competenciaIni, competenciaFim, selectedOperadora, allOperadoraLots, crossPeriodItems]);
+
+  const lotById = useMemo(() => {
+    const m = new Map<string, Lot>();
+    for (const l of lots) m.set(l.id, l);
+    return m;
+  }, [lots]);
+
+  // Depósitos BB filtrados pela janela do mês de competência (até +60 dias) e categoria.
+  const filteredDeposits = useMemo(() => {
+    let arr = deposits.filter(d => d.deposit_date >= competenciaIni && d.deposit_date < bbWindowFim);
+    if (categoryFilter !== 'todos') arr = arr.filter(d => d.category === categoryFilter);
+    return arr;
+  }, [deposits, categoryFilter, competenciaIni, bbWindowFim]);
+
+  // Separa depósitos em "competência" (paga vendas do mês) vs "adjacentes" (sem
+  // match com competência ou paga vendas de outro mês).
+  // - Competência: depósito pareado com lote que tem vendas no mês selecionado
+  // - Adjacentes: o resto (sem match, ou pareado com lote sem vendas no mês)
+  const competenciaLotIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const lotId of Object.keys(allItemsByLot)) {
+      const items = allItemsByLot[lotId];
+      if (items.some(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim)) {
+        set.add(lotId);
+      }
+    }
+    return set;
+  }, [allItemsByLot, competenciaIni, competenciaFim]);
+
+  const depositsGroups = useMemo(() => {
+    const competencia: BankDeposit[] = [];
+    const adjacentes: BankDeposit[] = [];
+    for (const d of filteredDeposits) {
+      const matchedLots = lots.filter(l =>
+        (l.bb_deposit_id === d.id || l.bb_deposit_id_2 === d.id)
+        && competenciaLotIds.has(l.id),
+      );
+      if (matchedLots.length > 0) competencia.push(d);
+      else adjacentes.push(d);
+    }
+    return { competencia, adjacentes };
+  }, [filteredDeposits, lots, competenciaLotIds]);
+
+  // Numeração #N por depósito BB DENTRO da categoria (na janela do mês). Usado
+  // pra exibir "operação N - data" no resumo do lote pareado.
+  const depositNumberById = useMemo(() => {
+    const map = new Map<string, { n: number; deposit: BankDeposit }>();
+    const byCat: Record<string, BankDeposit[]> = {};
+    for (const d of deposits) {
+      if (d.deposit_date < competenciaIni || d.deposit_date >= bbWindowFim) continue;
+      const cat = d.category ?? 'outro';
+      if (!byCat[cat]) byCat[cat] = [];
+      byCat[cat].push(d);
+    }
+    for (const cat of Object.keys(byCat)) {
+      byCat[cat].sort((a, b) => a.deposit_date.localeCompare(b.deposit_date));
+      byCat[cat].forEach((d, idx) => map.set(d.id, { n: idx + 1, deposit: d }));
+    }
+    return map;
+  }, [deposits, competenciaIni, bbWindowFim]);
+
+
+  // Lotes pareados agrupados por bb_deposit_id (depósito BB pode ter N lotes
+  // apontando, e 1 lote pode estar em 2 depósitos via bb_deposit_id_2).
+  const lotsByDeposit = useMemo(() => {
+    const map = new Map<string, Lot[]>();
+    for (const l of lots) {
+      for (const depId of [l.bb_deposit_id, l.bb_deposit_id_2]) {
+        if (!depId) continue;
+        const arr = map.get(depId) ?? [];
+        arr.push(l);
+        map.set(depId, arr);
+      }
+    }
+    return map;
+  }, [lots]);
+
+  const handleAutoMatch = async () => {
+    if (!period) return;
+    setMatching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('match-vouchers', {
+        // reset: true — limpa auto-matches anteriores (preserva manuais via
+        // eq manual=false) e re-roda do zero. Garante que mudanças de
+        // tolerância ou ordem de passes refletem na conciliação atual.
+        body: { audit_period_id: period.id, operadora: selectedOperadora, reset: true },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Falha no match');
+      const ambig = (data.ambiguous ?? []) as string[];
+      toast.success(data.message ?? `${data.matched} pareados`, {
+        description: ambig.length > 0 ? `${ambig.length} ambíguos (resolva manualmente)` : 'OK',
+      });
+      if (ambig.length > 0) console.warn('Match ambíguos:', ambig);
+      await refresh(period.id);
+    } catch (e: any) {
+      toast.error('Erro no auto-match', { description: e?.message ?? 'Erro inesperado' });
+    } finally {
+      setMatching(false);
+    }
+  };
+
+  const setLotMatchSecondary = async (lotId: string, depositId: string | null) => {
+    const lot = lots.find(l => l.id === lotId);
+    const dep1 = lot?.bb_deposit_id ? deposits.find(d => d.id === lot.bb_deposit_id) : null;
+    const dep2 = depositId ? deposits.find(d => d.id === depositId) : null;
+    const sumDeps = (dep1 ? Number(dep1.amount) : 0) + (dep2 ? Number(dep2.amount) : 0);
+    const subtotal = Number(lot?.subtotal_vendas ?? 0);
+    // Recalcula descontos a partir do BB real (manual = BB é a verdade)
+    let extra: Record<string, any> = {};
+    let diff = lot ? sumDeps - Number(lot.valor_liquido) : 0;
+    if (lot && subtotal > 0 && sumDeps > 0) {
+      const newLiq = Math.round(sumDeps * 100) / 100;
+      const newDesc = Math.round((subtotal - sumDeps) * 100) / 100;
+      extra = { total_descontos: newDesc, valor_liquido: newLiq };
+      diff = 0;
+    }
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update({ bb_deposit_id_2: depositId, manual: true, diff, ...extra })
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao atualizar 2º match', { description: error.message }); return; }
+    toast.success(depositId ? '2º depósito vinculado · descontos recalculados' : '2º depósito removido');
+    if (period) await refresh(period.id);
+  };
+
+  const setLotMatch = async (lotId: string, depositId: string | null) => {
+    if (!depositId) {
+      // Remove match: zera descontos/liquido (serão recalculados quando re-pareado).
+      // subtotal_vendas é preservado (reflete o bruto importado real).
+      const { error } = await supabase
+        .from('audit_voucher_lots')
+        .update({
+          bb_deposit_id: null, bb_deposit_id_2: null,
+          status: 'pending', manual: false, diff: null,
+          total_descontos: 0, valor_liquido: 0,
+        })
+        .eq('id', lotId);
+      if (error) { toast.error('Erro ao remover match', { description: error.message }); return; }
+      toast.success('Match removido');
+      if (period) await refresh(period.id);
+      return;
+    }
+    const dep = deposits.find(d => d.id === depositId);
+    const lot = lots.find(l => l.id === lotId);
+    const otherLotsOnSameDep = lots.filter(l => l.bb_deposit_id === depositId && l.id !== lotId);
+    const isMultiLot = otherLotsOnSameDep.length > 0;
+    const sumDeps = Number(dep?.amount ?? 0);
+    const subtotal = Number(lot?.subtotal_vendas ?? 0);
+    // Recalcula descontos/líquido a partir do BB real quando 1:1.
+    // Multi-lot: agregação resolve em outro lugar; só registra diff sem recalcular.
+    let extra: Record<string, any> = {};
+    let diff = 0;
+    if (!isMultiLot && dep && lot && subtotal > 0) {
+      const newLiq = Math.round(sumDeps * 100) / 100;
+      const newDesc = Math.round((subtotal - sumDeps) * 100) / 100;
+      extra = { total_descontos: newDesc, valor_liquido: newLiq };
+      diff = 0;
+    } else if (dep && lot && !isMultiLot) {
+      diff = sumDeps - Number(lot.valor_liquido);
+    }
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update({ bb_deposit_id: depositId, bb_deposit_id_2: null, status: 'matched', manual: true, diff, ...extra })
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao atualizar match', { description: error.message }); return; }
+    toast.success(isMultiLot
+      ? `Match agregado (depósito agora paga ${otherLotsOnSameDep.length + 1} lotes)`
+      : 'Match atualizado · descontos recalculados');
+    if (period) await refresh(period.id);
+  };
+
+  // Salva entrada manual de antecipação Banco Topázio (Ticket).
+  const saveAntecipacao = async (
+    lotId: string,
+    payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null },
+  ) => {
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update(payload)
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao salvar antecipação', { description: error.message }); return; }
+    toast.success('Antecipação salva · re-rodando match…');
+    if (period) {
+      await dispatchAutoMatchVouchers(period.id, ['ticket']);
+      await refresh(period.id);
+    }
+  };
+
+  const saveOverride = async (lotId: string, taxaCompetencia: number, note: string | null) => {
+    const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
+    if (existing) {
+      const { error } = await supabase
+        .from('audit_voucher_lot_competencia_overrides')
+        .update({ taxa_competencia: taxaCompetencia, note, updated_by: null })
+        .eq('id', existing.id);
+      if (error) { toast.error('Erro ao salvar', { description: error.message }); return; }
+    } else {
+      const { error } = await supabase
+        .from('audit_voucher_lot_competencia_overrides')
+        .insert({ lot_id: lotId, year, month, taxa_competencia: taxaCompetencia, note });
+      if (error) { toast.error('Erro ao salvar', { description: error.message }); return; }
+    }
+    toast.success('Taxa da competência salva');
+    if (period) await refresh(period.id);
+  };
+
+  const deleteOverride = async (lotId: string) => {
+    const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
+    if (!existing) return;
+    const { error } = await supabase
+      .from('audit_voucher_lot_competencia_overrides')
+      .delete()
+      .eq('id', existing.id);
+    if (error) { toast.error('Erro ao remover', { description: error.message }); return; }
+    toast.success('Override removido');
+    if (period) await refresh(period.id);
+  };
+
+  if (roleLoading || loading) {
+    return (
+      <AppLayout title="Vouchers" subtitle="Auditoria de Taxas (Estágio 2)">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <AppLayout title="Vouchers">
+        <Card><CardContent className="py-10 text-center text-muted-foreground">Acesso restrito a administradores.</CardContent></Card>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout title="Vouchers" subtitle="Auditoria de Taxas">
+      <div className="space-y-4">
+        <AuditNavTabsV2 />
+
+        {/* Seletor de período */}
+        <Card>
+          <CardContent className="py-4 flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Mês</span>
+              <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (
+                    <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase text-muted-foreground">Ano</span>
+              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+                <SelectTrigger className="w-[110px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {[year - 1, year, year + 1].map(y => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {period ? (
+              <Badge variant="outline" className="font-medium">
+                Período {MONTHS[period.month - 1]} {period.year} — {period.status}
+              </Badge>
+            ) : (
+              <Badge variant="secondary">Sem período (será criado no primeiro upload)</Badge>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Sub-abas por operadora — substitui o seletor inline */}
+        <Tabs value={selectedOperadora} onValueChange={(v) => { setSelectedOperadora(v); setExpandedLot(null); setCategoryFilter(v === 'overview' ? 'ticket' : v); }}>
+          <TabsList className="grid grid-cols-5 w-full md:w-auto">
+            <TabsTrigger value="overview">Geral</TabsTrigger>
+            <TabsTrigger value="ticket">Ticket</TabsTrigger>
+            <TabsTrigger value="alelo">Alelo</TabsTrigger>
+            <TabsTrigger value="vr">VR</TabsTrigger>
+            <TabsTrigger value="pluxee">Pluxee</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {/* OVERVIEW: KPIs comparativos lado a lado das 4 operadoras */}
+        {selectedOperadora === 'overview' && (
+          <OverviewGrid
+            crossPeriodItems={crossPeriodItems}
+            lots={lots}
+            allItemsByLot={allItemsByLot}
+            overrides={overrides}
+            month={month}
+            year={year}
+            competenciaIni={competenciaIni}
+            competenciaFim={competenciaFim}
+            onSelectOperadora={(op) => { setSelectedOperadora(op); setCategoryFilter(op); }}
+          />
+        )}
+
+        {/* Cross-check Maquinona × operadora atual (só em tab de operadora) */}
+        {selectedOperadora !== 'overview' && (<>
+        {/* Cross-check Maquinona × operadora atual */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              Cross-check Maquinona × {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} — vendas em {MONTHS[month - 1]} {year}
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Vendas {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} no extrato Maquinona devem
+              bater com vendas do extrato da operadora (data_transacao no mês).
+              Diferença pequena pode ser "Valor da promoção" da Maquinona (não cobra do voucher).
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-5 text-sm">
+              <Stat label={`Maquinona ${CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora}`} value={fmt(crossCheck.maqBruto)} hint={`${crossCheck.maqCount} vendas`} />
+              <Stat label={`Portal ${CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} (lotes)`} value={fmt(crossCheck.opBruto)} hint={`${crossCheck.opCount} vendas`} />
+              <Stat
+                label="Diferença"
+                value={fmt(crossCheck.diffBruto)}
+                hint={`${crossCheck.diffCount > 0 ? '+' : ''}${crossCheck.diffCount} venda(s)${crossCheck.maqPromo > 0 ? ` · promo ${fmt(crossCheck.maqPromo)}` : ''}`}
+                className={Math.abs(crossCheck.diffBruto - crossCheck.maqPromo) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}
+              />
+              <Stat
+                label="Promoção concedida"
+                value={fmt(crossCheck.maqPromo)}
+                className={crossCheck.maqPromo > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}
+                hint={crossCheck.maqPromo > 0
+                  ? 'cashback/desconto ao cliente (custo da pizzaria)'
+                  : 'reimporte Maquinona após aplicar migration'}
+              />
+              <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
+                {crossCheck.maqCount === 0 && crossCheck.opCount === 0 ? (
+                  <Badge variant="outline" className="text-muted-foreground">Sem dados</Badge>
+                ) : Math.abs(crossCheck.diffBruto - crossCheck.maqPromo) < 0.05 && crossCheck.diffCount === 0
+                    && crossCheck.onlyMaq.length === 0 && crossCheck.onlyPortal.length === 0 ? (
+                  <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
+                    ✓ Vendas batem{crossCheck.maqPromo > 0 ? ' (após promoção)' : ''}
+                  </Badge>
+                ) : (
+                  <>
+                    <Badge className="bg-rose-500/15 text-rose-700 dark:text-rose-400">⚠ Divergência</Badge>
+                    {(crossCheck.onlyMaq.length > 0 || crossCheck.onlyPortal.length > 0) && (
+                      <Button size="sm" variant="outline" onClick={() => setShowCrossDetail(s => !s)}>
+                        {showCrossDetail ? 'Ocultar' : 'Detalhar'} ({crossCheck.onlyMaq.length + crossCheck.onlyPortal.length})
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+
+            {showCrossDetail && (crossCheck.onlyMaq.length > 0 || crossCheck.onlyPortal.length > 0) && (
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="rounded border bg-card">
+                  <div className="px-3 py-2 text-xs uppercase text-muted-foreground border-b flex flex-col gap-1">
+                    <div className="flex justify-between">
+                      <span>Só na Maquinona ({crossCheck.onlyMaq.length})</span>
+                      <span className="font-mono">
+                        {fmt(crossCheck.onlyMaq.reduce((s, m) => s + m.gross_amount, 0))}
+                      </span>
+                    </div>
+                    {crossCheck.extractLastSale && (
+                      <div className="text-[10px] normal-case text-muted-foreground/80">
+                        Última venda no extrato: <strong>{fmtDate(crossCheck.extractLastSale)}</strong>
+                      </div>
+                    )}
+                  </div>
+                  {crossCheck.onlyMaq.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data venda</TableHead>
+                          <TableHead className="text-right">Bruto</TableHead>
+                          <TableHead className="text-right">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {[...crossCheck.onlyMaq]
+                          .sort((a, b) => a.sale_date.localeCompare(b.sale_date))
+                          .map(m => {
+                            const isAfterWindow = crossCheck.extractLastSale && m.sale_date > crossCheck.extractLastSale;
+                            return (
+                              <TableRow key={m.id}>
+                                <TableCell className="text-xs">{fmtDate(m.sale_date)}</TableCell>
+                                <TableCell className="text-right text-xs">{fmt(m.gross_amount)}</TableCell>
+                                <TableCell className="text-right text-[10px]">
+                                  {isAfterWindow ? (
+                                    <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/40">
+                                      próx. extrato
+                                    </Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-rose-700 dark:text-rose-400 border-rose-500/40">
+                                      sem reembolso
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                      </TableBody>
+                    </Table>
+                  )}
+                  {(crossCheck.onlyMaqAfterWindow.length > 0 || crossCheck.onlyMaqWithinWindow.length > 0) && (
+                    <div className="px-3 py-2 text-[10px] border-t bg-muted/30 flex justify-between">
+                      <span>
+                        <span className="text-amber-700 dark:text-amber-400">●</span> próx. extrato: {crossCheck.onlyMaqAfterWindow.length} ({fmt(crossCheck.onlyMaqAfterWindow.reduce((s, m) => s + m.gross_amount, 0))})
+                      </span>
+                      <span>
+                        <span className="text-rose-700 dark:text-rose-400">●</span> sem reembolso: {crossCheck.onlyMaqWithinWindow.length} ({fmt(crossCheck.onlyMaqWithinWindow.reduce((s, m) => s + m.gross_amount, 0))})
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="rounded border bg-card">
+                  <div className="px-3 py-2 text-xs uppercase text-muted-foreground border-b flex justify-between">
+                    <span>Só no portal {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} ({crossCheck.onlyPortal.length})</span>
+                    <span className="font-mono">
+                      {fmt(crossCheck.onlyPortal.reduce((s, p) => s + p.valor, 0))}
+                    </span>
+                  </div>
+                  {crossCheck.onlyPortal.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">—</div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Data venda</TableHead>
+                          <TableHead>Doc</TableHead>
+                          <TableHead>Lote</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {crossCheck.onlyPortal.map(p => {
+                          const lot = lotById.get(p.lot_id);
+                          const reembolsoLabel = p.lot_reembolso_override ?? lot?.numero_reembolso ?? '—';
+                          return (
+                            <TableRow key={p.id}>
+                              <TableCell className="text-xs">{fmtDate(p.data_transacao)}</TableCell>
+                              <TableCell className="font-mono text-xs">{p.numero_documento ?? '—'}</TableCell>
+                              <TableCell className="font-mono text-xs">{reembolsoLabel}</TableCell>
+                              <TableCell className="text-right text-xs">{fmt(p.valor)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+                <div className="md:col-span-2 text-[11px] text-muted-foreground space-y-1">
+                  <p>
+                    Match por <strong>data + valor exato</strong>. Status "Só na Maquinona":
+                  </p>
+                  <ul className="list-disc pl-4 space-y-0.5">
+                    <li>
+                      <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-500/40 text-[10px] align-middle">próx. extrato</Badge>{' '}
+                      — venda após a última data coberta pelo extrato. Vai aparecer no próximo extrato da operadora.
+                    </li>
+                    <li>
+                      <Badge variant="outline" className="text-rose-700 dark:text-rose-400 border-rose-500/40 text-[10px] align-middle">sem reembolso</Badge>{' '}
+                      — venda dentro da janela do extrato mas sem reembolso correspondente.
+                      Investigar no portal da operadora: pode estar pendente de processamento,
+                      recusada (chargeback/fraude), ou registrada pela Maquinona mas não aprovada.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Stats da operadora corrente */}
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
+            <div>
+              <CardTitle className="text-base">
+                {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} — Competência {MONTHS[month - 1]} {year}
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Vendas {CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora} no mês selecionado.
+                Lotes podem ter sido pagos no BB em meses seguintes.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {allOperadoraLots.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAllLots(s => !s)}
+                >
+                  {showAllLots
+                    ? `Mostrar só competência (${operadoraLotsCompetencia.length})`
+                    : `Ver todos os lotes (${allOperadoraLots.length})`}
+                </Button>
+              )}
+              {allOperadoraLots.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleAutoMatch}
+                  disabled={matching || !period}
+                  className="gap-2 text-xs text-muted-foreground"
+                  title="Re-rodar auto-match (já roda automático ao subir extrato BB ou voucher — use só se algo ficou pendente)"
+                >
+                  {matching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  🔧 Re-rodar match
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-6 mb-4 text-sm">
+              <Stat label="Lotes" value={`${operadoraStats.count} (${operadoraStats.salesCount} vendas)`}
+                hint={operadoraStats.countParcial > 0 ? `${operadoraStats.countParcial} parcial(is)` : undefined} />
+              <Stat label="Vendido (bruto)" value={fmt(operadoraStats.subtotal)} />
+              <Stat label="Descontos"
+                value={fmt(operadoraStats.descontos)}
+                className="text-amber-700 dark:text-amber-400"
+                hint={operadoraStats.countAguardando > 0 ? `${operadoraStats.countAguardando} aguardando manual` : undefined} />
+              <Stat label="Líquido" value={fmt(operadoraStats.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+              <Stat label="Taxa efetiva"
+                value={fmtPct(operadoraStats.taxaPct)}
+                className="text-rose-700 dark:text-rose-400"
+                hint={operadoraStats.countAguardando > 0 ? 'parciais sem override fora do total' : undefined} />
+              <Stat label="Pareados c/ BB" value={`${operadoraStats.matched} / ${operadoraStats.expectMatch}`} />
+            </div>
+
+            {visibleOperadoraLots.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">
+                {allOperadoraLots.length === 0
+                  ? 'Nenhum lote Ticket importado neste período.'
+                  : `Nenhum lote com vendas em ${MONTHS[month - 1]}/${year}. Use "Ver todos os lotes" pra inspecionar os ${allOperadoraLots.length} importados.`}
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead>Reembolso</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead>Corte</TableHead>
+                    <TableHead>Crédito BB</TableHead>
+                    <TableHead>Vendas no mês</TableHead>
+                    <TableHead className="text-right">Subtotal</TableHead>
+                    <TableHead className="text-right">Descontos</TableHead>
+                    <TableHead className="text-right">Líquido</TableHead>
+                    <TableHead>Match BB</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleOperadoraLots.map(l => {
+                    const expanded = expandedLot === l.id;
+                    const comp = competenciaByLot[l.id];
+                    const allItems = allItemsByLot[l.id] ?? [];
+                    const totalItems = allItems.length;
+                    const inCompetencia = comp?.count ?? 0;
+                    const isParcial = inCompetencia > 0 && inCompetencia < totalItems;
+                    const { subtotal, totalDesc, liquido } = computedLot(l, allItems);
+                    const ovr = overrideByLot.get(l.id);
+                    // Pra lotes parciais: mostra override (taxa de competência) na coluna
+                    // Descontos. Pra lotes 100%: mostra total do lote. Sem override em
+                    // lote parcial: célula em itálico "manual".
+                    const colDesc = isParcial
+                      ? (ovr ? Number(ovr.taxa_competencia) : null)
+                      : totalDesc;
+                    return (
+                      <Fragment key={l.id}>
+                        <TableRow className="cursor-pointer hover:bg-muted/30" onClick={() => loadItems(l.id)}>
+                          <TableCell>
+                            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span>{l.numero_reembolso}</span>
+                              {hasAntecipacao(l) && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Zap className={`h-3.5 w-3.5 ${l.data_transacao_bb && l.valor_creditado_bb != null ? 'text-emerald-500' : 'text-amber-500'}`} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {l.data_transacao_bb && l.valor_creditado_bb != null
+                                        ? `Antecipado via ${l.banco_credito ?? 'Banco Topázio'} em ${fmtDate(l.data_transacao_bb)} — ${fmt(Number(l.valor_creditado_bb))}`
+                                        : 'Antecipação detectada — preencha Data/Valor reais no detalhe do lote'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono">{l.produto ?? '—'}</Badge>
+                          </TableCell>
+
+                          <TableCell>{fmtDate(l.data_corte)}</TableCell>
+                          <TableCell>{fmtDate(l.data_credito)}</TableCell>
+                          <TableCell className="text-xs">
+                            {inCompetencia === 0 ? (
+                              <span className="text-muted-foreground">— / {totalItems}</span>
+                            ) : inCompetencia === totalItems ? (
+                              <Badge variant="outline" className="font-mono">{inCompetencia} / {totalItems}</Badge>
+                            ) : (
+                              <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 font-mono" title="Lote parcial — taxa precisa input manual">
+                                {inCompetencia} / {totalItems} ⚠
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">{fmt(isParcial ? Number(comp?.valor ?? 0) : subtotal)}</TableCell>
+                          <TableCell className="text-right text-amber-700 dark:text-amber-400">
+                            {colDesc === null ? (
+                              <span className="italic text-muted-foreground text-xs">manual</span>
+                            ) : fmt(colDesc)}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {isParcial
+                              ? (ovr
+                                  ? fmt(Number(comp?.valor ?? 0) - Number(ovr.taxa_competencia))
+                                  : <span className="italic text-muted-foreground text-xs">manual</span>)
+                              : (
+                                <span className="inline-flex items-center gap-1">
+                                  {fmt(liquido)}
+                                  {hasLiquidoOverride(l) && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono">✎</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Valor recebido manualmente em {fmtDate(l.data_transacao_bb)} ({l.banco_credito ?? 'BB'})
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </span>
+                              )}
+                          </TableCell>
+                          <TableCell>
+                            {l.bb_deposit_id ? (() => {
+                              const d1 = depositNumberById.get(l.bb_deposit_id);
+                              const d2 = l.bb_deposit_id_2 ? depositNumberById.get(l.bb_deposit_id_2) : null;
+                              return (
+                                <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
+                                  {d1 && d2
+                                    ? `✓ #${d1.n}+#${d2.n}`
+                                    : `✓ ${d1 ? `#${d1.n} ${fmtDate(d1.deposit.deposit_date)}` : 'Pareado'}`}
+                                  {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
+                                </Badge>
+                              );
+                            })() : l.status === 'matched' && l.manual ? (
+                              <Badge variant="outline" className="bg-muted/40 text-muted-foreground">Manual ✓</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                        {expanded && (
+                          <TableRow className="bg-muted/20 hover:bg-muted/20">
+                            <TableCell colSpan={10} className="p-0">
+                              <LotDetail
+                                lot={l}
+                                items={itemsByLot[l.id] ?? allItemsByLot[l.id] ?? []}
+                                competenciaIni={competenciaIni}
+                                competenciaFim={competenciaFim}
+                                deposits={deposits}
+                                depositNumberById={depositNumberById}
+                                lotsByDeposit={lotsByDeposit}
+                                override={overrideByLot.get(l.id) ?? null}
+                                onSetMatch={(depId) => setLotMatch(l.id, depId)}
+                                onSetMatchSecondary={(depId) => setLotMatchSecondary(l.id, depId)}
+                                onSaveOverride={(taxa, note) => saveOverride(l.id, taxa, note)}
+                                onDeleteOverride={() => deleteOverride(l.id)}
+                                onSaveAntecipacao={(payload) => saveAntecipacao(l.id, payload)}
+
+                                month={month}
+                                year={year}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Depósitos BB */}
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between gap-2 flex-wrap space-y-0">
+            <div>
+              <CardTitle className="text-base">
+                Depósitos BB ({CATEGORY_LABELS[selectedOperadora] ?? selectedOperadora}) — janela {MONTHS[month - 1]} {year} + 60d
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Inclui pagamentos de vendas do mês que caíram até 60 dias depois (defasagem da operadora).
+                Use o seletor pra ver outras categorias.
+              </p>
+            </div>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="w-[160px] h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas categorias</SelectItem>
+                <SelectItem value="ticket">Ticket</SelectItem>
+                <SelectItem value="alelo">Alelo</SelectItem>
+                <SelectItem value="pluxee">Pluxee</SelectItem>
+                <SelectItem value="vr">VR</SelectItem>
+                <SelectItem value="brendi">Brendi</SelectItem>
+                <SelectItem value="outro">Outros</SelectItem>
+              </SelectContent>
+            </Select>
+          </CardHeader>
+          <CardContent>
+            {filteredDeposits.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">Nenhum depósito BB nesta categoria.</p>
+            ) : (
+              <>
+                <div className="text-xs uppercase text-muted-foreground mb-2">
+                  Pagamentos da competência ({depositsGroups.competencia.length}) — total {fmt(depositsGroups.competencia.reduce((s, d) => s + Number(d.amount), 0))}
+                </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8"></TableHead>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Lotes pareados</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {depositsGroups.competencia.map(d => {
+                    const numbered = depositNumberById.get(d.id);
+                    const matchedLots = lotsByDeposit.get(d.id) ?? [];
+                    const sumLots = matchedLots.reduce((s, l) => s + Number(l.valor_liquido), 0);
+                    const diff = Number(d.amount) - sumLots;
+                    const isExpanded = expandedDeposit === d.id;
+                    return (
+                      <Fragment key={d.id}>
+                        <TableRow
+                          className={matchedLots.length > 0 ? 'cursor-pointer hover:bg-muted/30' : ''}
+                          onClick={() => matchedLots.length > 0 && setExpandedDeposit(isExpanded ? null : d.id)}
+                        >
+                          <TableCell>
+                            {matchedLots.length > 0 ? (
+                              isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{numbered ? `#${numbered.n}` : '—'}</TableCell>
+                          <TableCell>{fmtDate(d.deposit_date)}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[280px] truncate text-xs">{d.description ?? '—'}</TableCell>
+                          <TableCell className="text-xs">
+                            {matchedLots.length === 0 ? (
+                              <Badge variant="outline" className="text-muted-foreground">Sem match</Badge>
+                            ) : matchedLots.length === 1 ? (
+                              <Badge className="bg-green-500/15 text-green-700 dark:text-green-400">
+                                1 lote{Math.abs(diff) > 0.05 ? ` ⚠ diff ${fmt(diff)}` : ' ✓'}
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400">
+                                {matchedLots.length} lotes somados{Math.abs(diff) > 0.05 ? ` ⚠ diff ${fmt(diff)}` : ' ✓'}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right font-medium">{fmt(Number(d.amount))}</TableCell>
+                        </TableRow>
+                        {isExpanded && matchedLots.length > 0 && (
+                          <TableRow className="bg-muted/20 hover:bg-muted/20">
+                            <TableCell colSpan={7} className="p-0">
+                              <div className="px-6 py-3 space-y-2">
+                                <div className="text-xs uppercase text-muted-foreground">
+                                  Lotes pagos por este depósito
+                                </div>
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Reembolso</TableHead>
+                                      <TableHead>Produto</TableHead>
+                                      <TableHead>Crédito previsto</TableHead>
+                                      <TableHead>Manual?</TableHead>
+                                      <TableHead className="text-right">Valor líquido</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {matchedLots.map(l => (
+                                      <TableRow key={l.id}>
+                                        <TableCell className="font-mono text-xs">{l.numero_reembolso}</TableCell>
+                                        <TableCell>
+                                          <Badge variant="outline" className="font-mono">{l.produto ?? '—'}</Badge>
+                                        </TableCell>
+                                        <TableCell className="text-xs">{fmtDate(l.data_credito)}</TableCell>
+                                        <TableCell className="text-xs">
+                                          {l.manual ? (
+                                            <Badge variant="outline" className="text-[10px]">Manual</Badge>
+                                          ) : (
+                                            <span className="text-muted-foreground text-[10px]">Auto</span>
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-right text-xs">{fmt(Number(l.valor_liquido))}</TableCell>
+                                      </TableRow>
+                                    ))}
+                                    <TableRow className="bg-muted/30">
+                                      <TableCell colSpan={4} className="text-xs font-semibold">Σ lotes</TableCell>
+                                      <TableCell className="text-right text-xs font-semibold">{fmt(sumLots)}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="text-xs font-semibold">Depósito BB</TableCell>
+                                      <TableCell className="text-right text-xs font-semibold">{fmt(Number(d.amount))}</TableCell>
+                                    </TableRow>
+                                    <TableRow>
+                                      <TableCell colSpan={4} className="text-xs font-semibold">Diferença</TableCell>
+                                      <TableCell className={`text-right text-xs font-semibold ${Math.abs(diff) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                                        {fmt(diff)} {Math.abs(diff) < 0.05 ? '✓' : '⚠'}
+                                      </TableCell>
+                                    </TableRow>
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {depositsGroups.competencia.length === 0 && (
+                <p className="text-sm text-muted-foreground py-4">Nenhum depósito BB pagando vendas da competência.</p>
+              )}
+
+              {depositsGroups.adjacentes.length > 0 && (
+                <div className="mt-4 border-t pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdjacentes(s => !s)}
+                    className="flex items-center gap-2 text-xs uppercase text-muted-foreground hover:text-foreground"
+                  >
+                    {showAdjacentes ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    Adjacentes ({depositsGroups.adjacentes.length}) — depósitos sem match na competência
+                    <span className="font-mono ml-1">
+                      {fmt(depositsGroups.adjacentes.reduce((s, d) => s + Number(d.amount), 0))}
+                    </span>
+                  </button>
+                  {showAdjacentes && (
+                    <div className="mt-2 opacity-80">
+                      <Table>
+                        <TableBody>
+                          {depositsGroups.adjacentes.map(d => {
+                            const numbered = depositNumberById.get(d.id);
+                            const matched = lotsByDeposit.get(d.id) ?? [];
+                            return (
+                              <TableRow key={d.id}>
+                                <TableCell className="font-mono text-xs w-12">{numbered ? `#${numbered.n}` : '—'}</TableCell>
+                                <TableCell className="text-xs">{fmtDate(d.deposit_date)}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="text-[10px]">{d.category ? (CATEGORY_LABELS[d.category] ?? d.category) : '—'}</Badge>
+                                </TableCell>
+                                <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">{d.description ?? '—'}</TableCell>
+                                <TableCell className="text-xs">
+                                  {matched.length === 0
+                                    ? <Badge variant="outline" className="text-[10px] text-muted-foreground">Sem match</Badge>
+                                    : <Badge variant="outline" className="text-[10px]">Outro mês</Badge>}
+                                </TableCell>
+                                <TableCell className="text-right text-xs font-mono">{fmt(Number(d.amount))}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+        </>)}
+
+        {/* Histórico de imports — collapsible (fechado por padrão) */}
+        <details className="rounded-lg border bg-card">
+          <summary className="cursor-pointer select-none px-4 py-2 text-sm flex items-center justify-between hover:bg-muted/30">
+            <span>Histórico de imports {imports.length > 0 && <span className="text-muted-foreground">({imports.length})</span>}</span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          </summary>
+          <div className="px-4 pb-3">
+            {imports.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-2">Sem imports voucher neste período.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Arquivo</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Linhas</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {imports.map(i => (
+                    <TableRow key={i.id}>
+                      <TableCell className="text-xs">{fmtDateTime(i.created_at)}</TableCell>
+                      <TableCell><Badge variant="outline" className="text-[10px]">{i.file_type}</Badge></TableCell>
+                      <TableCell className="max-w-[280px] truncate text-xs">{i.file_name}</TableCell>
+                      <TableCell>
+                        {i.status === 'completed' ? (
+                          <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 text-[10px]">completed</Badge>
+                        ) : i.status === 'error' ? (
+                          <Badge variant="destructive" className="text-[10px]">error</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[10px]">{i.status}</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-xs">
+                        {i.imported_rows} / {i.total_rows}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </details>
+
+        <Button variant="outline" onClick={() => navigate('/admin/auditoria')} className="gap-2">
+          <ArrowLeft className="h-4 w-4" /> Voltar à Auditoria principal
+        </Button>
+      </div>
+    </AppLayout>
+  );
+}
+
+function Stat({ label, value, className, hint }: { label: string; value: string; className?: string; hint?: string }) {
+  return (
+    <div className="rounded-md border bg-card px-3 py-2">
+      <div className="text-[10px] uppercase text-muted-foreground tracking-wide">{label}</div>
+      <div className={`text-base font-semibold ${className ?? ''}`}>{value}</div>
+      {hint && <div className="text-[10px] text-muted-foreground mt-0.5">{hint}</div>}
+    </div>
+  );
+}
+
+function LotDetail({
+  lot, items, competenciaIni, competenciaFim,
+  deposits, depositNumberById, lotsByDeposit, override,
+  onSetMatch, onSetMatchSecondary, onSaveOverride, onDeleteOverride, onSaveAntecipacao,
+  month, year,
+}: {
+  lot: Lot;
+  items: LotItem[];
+  competenciaIni: string;
+  competenciaFim: string;
+  deposits: BankDeposit[];
+  depositNumberById: Map<string, { n: number; deposit: BankDeposit }>;
+  lotsByDeposit: Map<string, Lot[]>;
+  override: CompOverride | null;
+  onSetMatch: (depositId: string | null) => Promise<void>;
+  onSetMatchSecondary: (depositId: string | null) => Promise<void>;
+  onSaveOverride: (taxa: number, note: string | null) => Promise<void>;
+  onDeleteOverride: () => Promise<void>;
+  onSaveAntecipacao: (payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null }) => Promise<void>;
+  month: number;
+  year: number;
+}) {
+
+  const sortedItems = useMemo(
+    () => [...items].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao)),
+    [items],
+  );
+  const { subtotal, totalDesc, liquido } = computedLot(lot, items);
+  const liquidoTeorico = subtotal - totalDesc;
+  const taxaPct = subtotal > 0 ? (totalDesc / subtotal) * 100 : 0;
+  const itensComp = sortedItems.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
+  const isParcial = itensComp.length > 0 && itensComp.length < sortedItems.length;
+  const compValor = itensComp.reduce((s, i) => s + Number(i.valor), 0);
+  const matchedDep = lot.bb_deposit_id ? depositNumberById.get(lot.bb_deposit_id) : null;
+  const matchedDep2 = lot.bb_deposit_id_2 ? depositNumberById.get(lot.bb_deposit_id_2) : null;
+  const matchedSumAmount = (matchedDep ? Number(matchedDep.deposit.amount) : 0)
+    + (matchedDep2 ? Number(matchedDep2.deposit.amount) : 0);
+
+  // Candidatos pra match manual: BB Ticket dentro da janela do mês (+60d)
+  const ticketCategoryMatch = lot.operadora;
+  const matchCandidates = useMemo(() => {
+    return deposits
+      .filter(d => d.category === ticketCategoryMatch)
+      .filter(d => depositNumberById.has(d.id))
+      .sort((a, b) => a.deposit_date.localeCompare(b.deposit_date));
+  }, [deposits, ticketCategoryMatch, depositNumberById]);
+
+  return (
+    <div className="px-4 py-3 space-y-3">
+      <div className="grid gap-3 md:grid-cols-2">
+        <div>
+          <div className="text-xs uppercase text-muted-foreground mb-1">Vendas do lote ({items.length})</div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Doc</TableHead>
+                <TableHead>Cartão</TableHead>
+                <TableHead className="text-right">Valor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedItems.map(it => {
+                const inComp = it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim;
+                return (
+                  <TableRow key={it.id} className={inComp ? '' : 'opacity-60'}>
+                    <TableCell className="text-xs">
+                      {fmtDate(it.data_transacao)}
+                      {!inComp && <span className="ml-1 text-[10px] text-muted-foreground">(fora)</span>}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{it.numero_documento ?? '—'}</TableCell>
+                    <TableCell className="font-mono text-xs">{it.numero_cartao_mascarado ?? '—'}</TableCell>
+                    <TableCell className="text-right text-xs">{fmt(Number(it.valor))}</TableCell>
+                  </TableRow>
+                );
+              })}
+              <TableRow className="bg-muted/30">
+                <TableCell colSpan={3} className="text-xs font-semibold">Total das vendas</TableCell>
+                <TableCell className="text-right text-xs font-semibold">{fmt(subtotal)}</TableCell>
+              </TableRow>
+              {isParcial && (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-[10px] text-muted-foreground">Vendas na competência ({itensComp.length})</TableCell>
+                  <TableCell className="text-right text-[10px] text-muted-foreground">{fmt(compValor)}</TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">
+              Resumo do lote{isParcial ? ' (visão competência)' : ''}
+            </div>
+            <div className="rounded border bg-card divide-y">
+              {isParcial ? (
+                <>
+                  <ResumoLine
+                    label="Total das vendas (competência)"
+                    value={fmt(compValor)}
+                    hint={`${itensComp.length} de ${sortedItems.length} vendas | lote inteiro: ${fmt(subtotal)}`}
+                  />
+                  <ResumoLine
+                    label="Taxa da competência"
+                    value={override ? fmt(Number(override.taxa_competencia)) : '— preencher'}
+                    valueClass={override ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground italic'}
+                    hint={`consulte portal pra obter taxa real | lote inteiro desc: ${fmt(totalDesc)}`}
+                  />
+                  <ResumoLine
+                    label="Taxa efetiva (competência)"
+                    value={override && compValor > 0
+                      ? fmtPct((Number(override.taxa_competencia) / compValor) * 100)
+                      : '—'}
+                    valueClass="text-rose-700 dark:text-rose-400"
+                  />
+                  <ResumoLine
+                    label="Líquido competência"
+                    value={override
+                      ? fmt(compValor - Number(override.taxa_competencia))
+                      : '— preencher'}
+                    valueClass={override ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground italic'}
+                    hint="vendas competência − taxa competência"
+                  />
+                  <ResumoLine
+                    label="Líquido recebido (lote inteiro)"
+                    value={matchedDep ? fmt(matchedSumAmount) : fmt(liquido)}
+                    valueClass="text-muted-foreground"
+                    hint={matchedDep && matchedDep2
+                      ? `operações #${matchedDep.n} + #${matchedDep2.n}${lot.manual ? ' — manual' : ''}`
+                      : matchedDep
+                        ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
+                        : 'lote completo (inclui vendas fora da competência)'}
+                  />
+                </>
+              ) : (
+                <>
+                  <ResumoLine label="Total das vendas" value={fmt(subtotal)} />
+                  <ResumoLine label="Total de descontos" value={fmt(totalDesc)} valueClass="text-amber-700 dark:text-amber-400" />
+                  <ResumoLine label="Taxa efetiva" value={fmtPct(taxaPct)} valueClass="text-rose-700 dark:text-rose-400" />
+                  <ResumoLine label="Líquido teórico" value={fmt(liquidoTeorico)} valueClass="text-emerald-700 dark:text-emerald-400" hint="subtotal − descontos" />
+                  <ResumoLine
+                    label="Líquido recebido"
+                    value={matchedDep ? fmt(matchedSumAmount) : fmt(liquido)}
+                    valueClass={
+                      matchedDep
+                        ? (Math.abs(matchedSumAmount - liquido) < 0.5 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
+                        : (Math.abs(liquidoTeorico - liquido) < 0.05 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400')
+                    }
+                    hint={matchedDep && matchedDep2
+                      ? `operações #${matchedDep.n} (${fmtDate(matchedDep.deposit.deposit_date)}) + #${matchedDep2.n} (${fmtDate(matchedDep2.deposit.deposit_date)})${lot.manual ? ' — manual' : ''}`
+                      : matchedDep
+                        ? `operação #${matchedDep.n} — ${fmtDate(matchedDep.deposit.deposit_date)}${lot.manual ? ' (manual)' : ''}`
+                        : Math.abs(liquidoTeorico - liquido) < 0.05 ? '(extrato operadora) ✓ bate' : `(extrato operadora) ✗ diff ${fmt(liquido - liquidoTeorico)}`
+                    }
+                  />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Match BB */}
+          <div>
+            <div className="text-xs uppercase text-muted-foreground mb-1">Match Banco do Brasil</div>
+            <MatchSelector
+              currentDepositId={lot.bb_deposit_id}
+              candidates={matchCandidates}
+              expectedAmount={Number(lot.valor_liquido)}
+              depositNumberById={depositNumberById}
+              lotsByDeposit={lotsByDeposit}
+              myLotId={lot.id}
+              onSet={onSetMatch}
+            />
+            {/* 2º depósito (caso 1 lote pago em 2 TEDs separados — Alelo) */}
+            {lot.bb_deposit_id && (
+              <div className="mt-2 space-y-1">
+                <div className="text-[11px] text-muted-foreground">
+                  + 2º depósito (opcional, quando lote foi pago em 2 TEDs)
+                </div>
+                <MatchSelector
+                  currentDepositId={lot.bb_deposit_id_2}
+                  candidates={matchCandidates.filter(d => d.id !== lot.bb_deposit_id)}
+                  expectedAmount={Number(lot.valor_liquido) - Number(deposits.find(d => d.id === lot.bb_deposit_id)?.amount ?? 0)}
+                  depositNumberById={depositNumberById}
+                  lotsByDeposit={lotsByDeposit}
+                  myLotId={lot.id}
+                  onSet={onSetMatchSecondary}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Crédito real BB: editor sempre disponível pra qualquer lote, com
+              ênfase visual diferente quando há antecipação detectada. Permite
+              registrar valor recebido REAL no banco quando diverge do declarado
+              (taxa surpresa, cessão Topázio, tarifa extra). Sem isso, taxa
+              efetiva nos KPIs fica subestimada. */}
+          {(hasAntecipacao(lot) || !lot.bb_deposit_id || hasLiquidoOverride(lot)) && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">
+                {hasAntecipacao(lot) ? 'Crédito real BB (antecipação detectada)' : 'Crédito real BB'}
+              </div>
+              <AntecipacaoEditor lot={lot} onSave={onSaveAntecipacao} />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {hasAntecipacao(lot)
+                  ? 'Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred pra obter Data da Transação, Valor creditado e Banco de Crédito reais.'
+                  : 'Preencha se o valor recebido no BB diverge do líquido declarado (taxa surpresa, cessão antecipada, etc) — a taxa efetiva é recalculada com base no valor real.'}
+              </p>
+            </div>
+          )}
+
+
+
+          {/* Override de taxa quando lote parcial */}
+          {isParcial && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">
+                Taxa referente às vendas da competência ({MONTHS[month - 1]} {year})
+              </div>
+              <CompetenciaOverrideInput
+                override={override}
+                onSave={onSaveOverride}
+                onDelete={onDeleteOverride}
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Consulte o portal Ticket pra obter a taxa real desta(s) venda(s). O sistema usa este
+                valor no KPI mensal em vez de ratear proporcional o desconto do lote inteiro.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded border px-2 py-1">
+              <div className="text-muted-foreground">Contrato</div>
+              <div className="font-mono">{lot.numero_contrato ?? '—'}</div>
+            </div>
+            <div className="rounded border px-2 py-1">
+              <div className="text-muted-foreground">Crédito previsto BB</div>
+              <div>{fmtDate(lot.data_credito)}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResumoLine({ label, value, valueClass, hint }: { label: string; value: string; valueClass?: string; hint?: string }) {
+  return (
+    <div className="flex items-center justify-between px-3 py-1.5 text-xs gap-2">
+      <div>
+        <div>{label}</div>
+        {hint && <div className="text-[10px] text-muted-foreground">{hint}</div>}
+      </div>
+      <div className={`font-semibold tabular-nums ${valueClass ?? ''}`}>{value}</div>
+    </div>
+  );
+}
+
+function MatchSelector({
+  currentDepositId, candidates, expectedAmount, depositNumberById, lotsByDeposit, myLotId, onSet,
+}: {
+  currentDepositId: string | null;
+  candidates: BankDeposit[];
+  expectedAmount: number;
+  depositNumberById: Map<string, { n: number; deposit: BankDeposit }>;
+  lotsByDeposit: Map<string, Lot[]>;
+  myLotId: string;
+  onSet: (depositId: string | null) => Promise<void>;
+}) {
+  const [saving, setSaving] = useState(false);
+  const handleChange = async (val: string) => {
+    setSaving(true);
+    try {
+      await onSet(val === '__none__' ? null : val);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-2">
+      <Select value={currentDepositId ?? '__none__'} onValueChange={handleChange} disabled={saving}>
+        <SelectTrigger className="h-9 text-xs">
+          <SelectValue placeholder="Selecionar depósito BB" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">— Sem match (pendente)</SelectItem>
+          {candidates.map(d => {
+            const num = depositNumberById.get(d.id);
+            // Outros lotes já apontando pra este depósito (excluindo o lote atual)
+            const others = (lotsByDeposit.get(d.id) ?? []).filter(l => l.id !== myLotId);
+            const otherSum = others.reduce((s, l) => s + Number(l.valor_liquido), 0);
+            // Pra esta venda fazer "soma exata" com os outros lotes:
+            const expectedTotal = otherSum + expectedAmount;
+            const diffSoma = Number(d.amount) - expectedTotal;
+            const exactSoma = Math.abs(diffSoma) < 0.05;
+            return (
+              <SelectItem key={d.id} value={d.id}>
+                #{num?.n ?? '?'} — {fmtDate(d.deposit_date)} — {fmt(Number(d.amount))}
+                {others.length === 0
+                  ? (exactSoma ? ' ✓' : ` (diff ${diffSoma > 0 ? '+' : ''}${fmt(diffSoma)})`)
+                  : ` · já tem ${others.length} lote(s) (soma${exactSoma ? ' ✓' : ` diff ${fmt(diffSoma)}`})`
+                }
+              </SelectItem>
+            );
+          })}
+        </SelectContent>
+      </Select>
+      {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+    </div>
+  );
+}
+
+function CompetenciaOverrideInput({
+  override, onSave, onDelete,
+}: {
+  override: CompOverride | null;
+  onSave: (taxa: number, note: string | null) => Promise<void>;
+  onDelete: () => Promise<void>;
+}) {
+  const [value, setValue] = useState<string>(override ? String(override.taxa_competencia) : '');
+  const [note, setNote] = useState<string>(override?.note ?? '');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(override ? String(override.taxa_competencia) : '');
+    setNote(override?.note ?? '');
+  }, [override]);
+
+  const handleSave = async () => {
+    const num = Number(value.replace(',', '.'));
+    if (!isFinite(num) || num < 0) {
+      toast.error('Valor inválido');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave(num, note.trim() || null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="flex-1 min-w-[120px]">
+        <input
+          type="text"
+          inputMode="decimal"
+          placeholder="Ex: 13,85"
+          className="w-full h-9 rounded-md border bg-background px-2 text-xs"
+          value={value}
+          onChange={e => setValue(e.target.value)}
+        />
+      </div>
+      <div className="flex-1 min-w-[180px]">
+        <input
+          type="text"
+          placeholder="Nota (opcional)"
+          className="w-full h-9 rounded-md border bg-background px-2 text-xs"
+          value={note}
+          onChange={e => setNote(e.target.value)}
+        />
+      </div>
+      <Button size="sm" variant="default" onClick={handleSave} disabled={saving || !value}>
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+        Salvar
+      </Button>
+      {override && (
+        <Button size="sm" variant="outline" onClick={onDelete} disabled={saving}>
+          Remover
+        </Button>
+      )}
+    </div>
+  );
+}
+
+
+// Overview: mini-cards comparativos por operadora pra visão consolidada do mês.
+// Cada card mostra lotes, bruto, descontos, taxa efetiva da operadora.
+function OverviewGrid({
+  lots, allItemsByLot, overrides, month, year, competenciaIni, competenciaFim, onSelectOperadora, crossPeriodItems,
+}: {
+  lots: Lot[];
+  allItemsByLot: Record<string, LotItem[]>;
+  overrides: CompOverride[];
+  month: number;
+  year: number;
+  competenciaIni: string;
+  competenciaFim: string;
+  onSelectOperadora: (op: string) => void;
+  crossPeriodItems: CrossPeriodEntry[];
+}) {
+  const operadoras = ['ticket', 'alelo', 'vr', 'pluxee'];
+
+  // Pra cada operadora, marca se tem QUALQUER item importado. Se sim, lotes
+  // sem items são vendas de outro mês (NÃO devem usar fallback do subtotal
+  // declarado, senão inflam o "Vendido (bruto)" — caso real VR mar/26).
+  const operadoraTemItens = useMemo(() => {
+    const has: Record<string, boolean> = {};
+    for (const l of lots) {
+      if ((allItemsByLot[l.id]?.length ?? 0) > 0) has[l.operadora] = true;
+    }
+    return has;
+  }, [lots, allItemsByLot]);
+
+  const statsPorOperadora = useMemo(() => {
+    const result: Record<string, { count: number; salesCount: number; subtotal: number; descontos: number; liquido: number; taxaPct: number; matched: number; aguardando: number }> = {};
+    const overrideByLot = new Map<string, CompOverride>();
+    for (const o of overrides) overrideByLot.set(o.lot_id, o);
+
+    for (const op of operadoras) {
+      const opLots = lots.filter(l => l.operadora === op);
+      const operadoraJaImportada = operadoraTemItens[op] === true;
+      let count = 0, salesCount = 0, subtotal = 0, descontos = 0, liquido = 0, matched = 0, aguardando = 0;
+      for (const l of opLots) {
+        const items = allItemsByLot[l.id] ?? [];
+        const itemsComp = items.filter(it => it.data_transacao >= competenciaIni && it.data_transacao < competenciaFim);
+        // Fallback pra lote sem items mas com data_corte no mês — SÓ quando a
+        // operadora inteira não tem items (user não importou vendas ainda).
+        // Se tem items mas este lote está vazio, é venda de mês anterior.
+        const corteNoMes = l.data_corte != null
+          && l.data_corte >= competenciaIni
+          && l.data_corte < competenciaFim;
+        const hasComp = itemsComp.length > 0
+          || (items.length === 0 && corteNoMes && !operadoraJaImportada);
+        if (!hasComp) continue;
+        count++;
+        salesCount += itemsComp.length;
+        const compValor = itemsComp.reduce((s, it) => s + Number(it.valor), 0);
+        const isParcial = items.length > 0 && items.length > itemsComp.length;
+        const lotSubtotal = Number(l.subtotal_vendas) > 0 ? Number(l.subtotal_vendas) : items.reduce((s, it) => s + Number(it.valor), 0);
+        // Sempre deriva via identidade liquido = subtotal - descontos (mesma
+        // razão do computedLot — DB pode ter total_descontos errado herdado
+        // de import-ticket-pdf antes do commit 738af54).
+        const lotLiquido = effectiveLiquido(l);
+        const lotDesc = (lotSubtotal > 0 && lotLiquido > 0 && lotSubtotal >= lotLiquido)
+          ? lotSubtotal - lotLiquido
+          : Number(l.total_descontos);
+        if (items.length === 0) {
+          // Sem items: usa declarado inteiro (fallback pra lote sem vendas
+          // vinculadas mas com data_corte no mês).
+          subtotal += lotSubtotal;
+          descontos += lotDesc;
+          liquido += lotLiquido;
+        } else if (!isParcial) {
+          // 100% no mês: vendido = items reais (bate com POS), custo e
+          // líquido proporcionalizam quando há gap (ver comentário em
+          // operadoraStats acima).
+          subtotal += compValor;
+          const proporcao = lotSubtotal > 0 ? compValor / lotSubtotal : 1;
+          descontos += lotDesc * proporcao;
+          liquido += lotLiquido * proporcao;
+        } else {
+          subtotal += compValor;
+          const ovr = overrideByLot.get(l.id);
+          if (ovr) {
+            descontos += Number(ovr.taxa_competencia);
+            liquido += compValor - Number(ovr.taxa_competencia);
+          } else {
+            aguardando++;
+          }
+        }
+        if (l.bb_deposit_id) matched++;
+      }
+      // Soma a contribuição dos cross-period lots (vendas do mês alvo em lotes
+      // de outros audit_periods). Para cada lote cross-period, agrupa os items
+      // do mês alvo e calcula descontos/liquido proporcionalmente ao subtotal.
+      const crossByLot = new Map<string, CrossPeriodEntry[]>();
+      for (const cp of crossPeriodItems) {
+        if (cp.lot_operadora !== op) continue;
+        if (!crossByLot.has(cp.lot_id)) crossByLot.set(cp.lot_id, []);
+        crossByLot.get(cp.lot_id)!.push(cp);
+      }
+      for (const [, entries] of crossByLot) {
+        const compValor = entries.reduce((s, e) => s + Number(e.valor), 0);
+        const meta = entries[0];
+        const totalDeclared = meta.lot_subtotal_vendas > 0 ? meta.lot_subtotal_vendas : meta.lot_total_items_sum;
+        // Proporção do mês alvo no total do lote (cross-period sempre é parcial
+        // por natureza — o lote tem items fora do mês também)
+        const proporcao = totalDeclared > 0 ? compValor / totalDeclared : 0;
+        const liquidoDeclared = meta.lot_valor_liquido;
+        const descontosDeclared = (totalDeclared > 0 && liquidoDeclared > 0 && totalDeclared >= liquidoDeclared)
+          ? totalDeclared - liquidoDeclared
+          : meta.lot_total_descontos;
+        count++;
+        salesCount += entries.length;
+        subtotal += compValor;
+        descontos += descontosDeclared * proporcao;
+        liquido += liquidoDeclared * proporcao;
+        if (meta.lot_bb_deposit_id) matched++;
+      }
+      const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
+      result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando };
+    }
+    return result;
+  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim, operadoraTemItens, crossPeriodItems]);
+
+  // Totais consolidados das 4 operadoras
+  const totals = useMemo(() => {
+    let count = 0, salesCount = 0, subtotal = 0, descontos = 0, liquido = 0;
+    for (const op of operadoras) {
+      const s = statsPorOperadora[op];
+      if (!s) continue;
+      count += s.count;
+      salesCount += s.salesCount;
+      subtotal += s.subtotal;
+      descontos += s.descontos;
+      liquido += s.liquido;
+    }
+    return { count, salesCount, subtotal, descontos, liquido, taxaPct: subtotal > 0 ? (descontos / subtotal) * 100 : 0 };
+  }, [statsPorOperadora]);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Geral — Vouchers em {MONTHS[month - 1]} {year}</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Visão consolidada das 4 operadoras. Clique no card pra ver detalhes.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-5 mb-4 text-sm">
+            <Stat label="Total lotes" value={`${totals.count} (${totals.salesCount} vendas)`} />
+            <Stat label="Vendido (bruto)" value={fmt(totals.subtotal)} />
+            <Stat label="Descontos" value={fmt(totals.descontos)} className="text-amber-700 dark:text-amber-400" />
+            <Stat label="Líquido" value={fmt(totals.liquido)} className="text-emerald-700 dark:text-emerald-400" />
+            <Stat label="Taxa efetiva geral" value={fmtPct(totals.taxaPct)} className="text-rose-700 dark:text-rose-400" />
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {operadoras.map(op => {
+              const s = statsPorOperadora[op];
+              if (!s) return null;
+              return (
+                <button
+                  key={op}
+                  onClick={() => onSelectOperadora(op)}
+                  className="text-left rounded-lg border bg-card p-3 hover:bg-muted/30 transition-colors space-y-2"
+                >
+                  <div className="flex items-center justify-between">
+                    <strong className="text-sm">{CATEGORY_LABELS[op] ?? op}</strong>
+                    {s.count === 0 ? (
+                      <Badge variant="outline" className="text-[10px] text-muted-foreground">sem dados</Badge>
+                    ) : s.aguardando > 0 ? (
+                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 text-[10px]">
+                        {s.aguardando} pendente
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 text-[10px]">✓ ok</Badge>
+                    )}
+                  </div>
+                  {s.count === 0 ? (
+                    <p className="text-xs text-muted-foreground">Nenhum lote nesta competência.</p>
+                  ) : (
+                    <>
+                      <div className="text-xs text-muted-foreground">
+                        {s.count} lote(s) · {s.salesCount} venda(s)
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Vendido</span>
+                          <span className="font-medium">{fmt(s.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Descontos</span>
+                          <span className="font-medium text-amber-700 dark:text-amber-400">{fmt(s.descontos)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Líquido</span>
+                          <span className="font-medium text-emerald-700 dark:text-emerald-400">{fmt(s.liquido)}</span>
+                        </div>
+                        <div className="flex justify-between border-t pt-1">
+                          <span className="text-muted-foreground">Taxa efetiva</span>
+                          <span className="font-semibold text-rose-700 dark:text-rose-400">{fmtPct(s.taxaPct)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Pareados c/ BB</span>
+                          <span>{s.matched} / {s.count}</span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AntecipacaoEditor({
+  lot,
+  onSave,
+}: {
+  lot: Lot;
+  onSave: (payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null }) => Promise<void>;
+}) {
+  const filled = !!(lot.data_transacao_bb && lot.valor_creditado_bb != null);
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState<string>(lot.data_transacao_bb ?? '');
+  const [valor, setValor] = useState<string>(lot.valor_creditado_bb != null ? String(lot.valor_creditado_bb) : '');
+  const [banco, setBanco] = useState<string>(lot.banco_credito ?? '1 - BANCO DO BRASIL');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDate(lot.data_transacao_bb ?? '');
+    setValor(lot.valor_creditado_bb != null ? String(lot.valor_creditado_bb) : '');
+    setBanco(lot.banco_credito ?? '1 - BANCO DO BRASIL');
+  }, [lot.data_transacao_bb, lot.valor_creditado_bb, lot.banco_credito]);
+
+  const handleSave = async () => {
+    const v = valor.replace(',', '.').trim();
+    const num = v ? Number(v) : null;
+    if (v && (!isFinite(num as number) || (num as number) < 0)) {
+      toast.error('Valor inválido');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        data_transacao_bb: date || null,
+        valor_creditado_bb: num,
+        banco_credito: banco.trim() || null,
+      });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    try {
+      await onSave({ data_transacao_bb: null, valor_creditado_bb: null, banco_credito: null });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isAntecipado = hasAntecipacao(lot);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant={filled ? 'outline' : isAntecipado ? 'default' : 'outline'}
+          className={
+            filled
+              ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400'
+              : isAntecipado
+                ? 'gap-1.5'
+                : 'gap-1.5 text-muted-foreground'
+          }
+        >
+          <Zap className={`h-3.5 w-3.5 ${!filled && isAntecipado ? 'text-amber-300' : ''}`} />
+          {filled
+            ? `Valor recebido ${fmt(Number(lot.valor_creditado_bb))} em ${fmtDate(lot.data_transacao_bb)} ✓`
+            : isAntecipado
+              ? 'Antecipação BB — preencher'
+              : 'Crédito real BB'}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="antec-date" className="text-xs">Data da Transação (BB)</Label>
+          <Input id="antec-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="antec-valor" className="text-xs">Valor creditado (R$)</Label>
+          <Input
+            id="antec-valor"
+            type="text"
+            inputMode="decimal"
+            placeholder="Ex: 118.41"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="antec-banco" className="text-xs">Banco de Crédito</Label>
+          <Input
+            id="antec-banco"
+            list="antec-banco-options"
+            value={banco}
+            onChange={(e) => setBanco(e.target.value)}
+          />
+          <datalist id="antec-banco-options">
+            <option value="1 - BANCO DO BRASIL" />
+            <option value="082 - BANCO TOPAZIO" />
+          </datalist>
+        </div>
+        <div className="flex justify-between gap-2">
+          {filled && (
+            <Button variant="ghost" size="sm" onClick={handleClear} disabled={saving} className="text-rose-600">
+              Limpar
+            </Button>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+

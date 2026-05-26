@@ -1,0 +1,67 @@
+import { useNavigate, useLocation } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+
+type Tab = {
+  id: string;
+  label: string;
+  path: string;
+  matchPaths?: string[];
+};
+
+const TABS: Tab[] = [
+  { id: 'importacoes', label: 'Importações', path: '/admin/auditoria-v2/importacoes' },
+  { id: 'maquinona', label: 'Maquinona', path: '/admin/auditoria-v2/maquinona', matchPaths: ['/admin/auditoria-v2/maquinona'] },
+  { id: 'vouchers', label: 'Vouchers', path: '/admin/auditoria-v2/vouchers' },
+  { id: 'brendi', label: 'Brendi', path: '/admin/auditoria-v2/brendi' },
+  { id: 'ifood', label: 'iFood Marketplace', path: '/admin/auditoria-v2/ifood-marketplace' },
+  { id: 'relatorios', label: 'Relatórios', path: '/admin/auditoria-v2/relatorios' },
+];
+
+type Props = {
+  /** Período opcional pra preservar query params month/year ao navegar */
+  preserveParams?: boolean;
+};
+
+export default function AuditNavTabsV2({ preserveParams = true }: Props) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const search = preserveParams ? location.search : '';
+
+  const isActive = (tab: Tab) => {
+    if (tab.matchPaths) {
+      return tab.matchPaths.some(p => location.pathname === p);
+    }
+    return location.pathname.startsWith(tab.path);
+  };
+
+  return (
+    <div className="border-b border-border mb-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+          🧪 v2 (rascunho)
+        </span>
+        <span className="text-[11px] text-muted-foreground">Versão paralela em testes — a v1 segue intacta.</span>
+      </div>
+      <nav className="flex gap-1 -mb-px overflow-x-auto" aria-label="Navegação de auditoria v2">
+        {TABS.map(tab => {
+          const active = isActive(tab);
+          return (
+            <button
+              key={tab.id}
+              onClick={() => navigate(`${tab.path}${search}`)}
+              className={cn(
+                'px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2',
+                active
+                  ? 'border-primary text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+              )}
+              aria-current={active ? 'page' : undefined}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
