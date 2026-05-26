@@ -402,7 +402,9 @@ Deno.serve(async (req) => {
         skipped_duplicate: skippedDuplicate,
         skipped_out_of_period: skippedOutOfPeriod,
         sample_no_date: diagSampleNoDate,
+        summary: summaryDiag,
       },
+
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-maquinona error', e);
