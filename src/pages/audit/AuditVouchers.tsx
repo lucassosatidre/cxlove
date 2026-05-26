@@ -142,6 +142,15 @@ const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigi
 const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
+// Detecta lote com antecipação Banco Topázio — Edenred cede o crédito antes
+// do prazo (data_credito do PDF) e a chave `tarifa_adiantamento` aparece no
+// descontos JSONB. Crédito real chega via "Cessão Créd Liquid Princ" no BB.
+function hasAntecipacao(lot: Lot): boolean {
+  if (!lot.descontos) return false;
+  return Object.keys(lot.descontos).some(k => /antecip|adiantament/i.test(k));
+}
+
+
 // Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
 // Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
 // `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
