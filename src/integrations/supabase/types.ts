@@ -1217,6 +1217,7 @@ export type Database = {
           id: string
           import_id: string | null
           manual: boolean
+          match_reason: string | null
           numero_contrato: string | null
           numero_reembolso: string
           operadora: string
@@ -1241,6 +1242,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           manual?: boolean
+          match_reason?: string | null
           numero_contrato?: string | null
           numero_reembolso: string
           operadora: string
@@ -1265,6 +1267,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           manual?: boolean
+          match_reason?: string | null
           numero_contrato?: string | null
           numero_reembolso?: string
           operadora?: string
