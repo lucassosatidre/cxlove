@@ -2237,18 +2237,27 @@ function AntecipacaoEditor({
     }
   };
 
+  const isAntecipado = hasAntecipacao(lot);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           size="sm"
-          variant={filled ? 'outline' : 'default'}
-          className={filled ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400' : 'gap-1.5'}
+          variant={filled ? 'outline' : isAntecipado ? 'default' : 'outline'}
+          className={
+            filled
+              ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400'
+              : isAntecipado
+                ? 'gap-1.5'
+                : 'gap-1.5 text-muted-foreground'
+          }
         >
-          <Zap className="h-3.5 w-3.5" />
+          <Zap className={`h-3.5 w-3.5 ${!filled && isAntecipado ? 'text-amber-300' : ''}`} />
           {filled
-            ? `Antecipação ✓ ${fmtDate(lot.data_transacao_bb)} · ${fmt(Number(lot.valor_creditado_bb))}`
-            : 'Antecipação BB — preencher'}
+            ? `Valor recebido ${fmt(Number(lot.valor_creditado_bb))} em ${fmtDate(lot.data_transacao_bb)} ✓`
+            : isAntecipado
+              ? 'Antecipação BB — preencher'
+              : 'Crédito real BB'}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 space-y-3">
