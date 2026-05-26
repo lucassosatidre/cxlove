@@ -3204,6 +3204,19 @@ export type Database = {
         }
         Returns: Json
       }
+      audit_intake_by_month: {
+        Args: { p_period: string }
+        Returns: {
+          data_max: string
+          data_min: string
+          doc: string
+          doc_id: string
+          grupo: string
+          linhas: number
+          valor: number
+          ym: string
+        }[]
+      }
       classify_ifood_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
