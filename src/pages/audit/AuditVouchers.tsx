@@ -796,6 +796,24 @@ export default function AuditVouchers() {
       : 'Match atualizado · descontos recalculados');
     if (period) await refresh(period.id);
   };
+
+  // Salva entrada manual de antecipação Banco Topázio (Ticket).
+  const saveAntecipacao = async (
+    lotId: string,
+    payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null },
+  ) => {
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update(payload)
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao salvar antecipação', { description: error.message }); return; }
+    toast.success('Antecipação salva · re-rodando match…');
+    if (period) {
+      await dispatchAutoMatchVouchers(period.id, ['ticket']);
+      await refresh(period.id);
+    }
+  };
+
   const saveOverride = async (lotId: string, taxaCompetencia: number, note: string | null) => {
     const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
     if (existing) {
