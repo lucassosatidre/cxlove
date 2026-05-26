@@ -1,0 +1,626 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import AppLayout from '@/components/AppLayout';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { supabase } from '@/integrations/supabase/client';
+import { useUserRole } from '@/hooks/useUserRole';
+import { toast } from 'sonner';
+import { ArrowLeft, FileSpreadsheet, Loader2, UploadCloud, CheckCircle2, Landmark, Trash2 } from 'lucide-react';
+
+type AuditImport = {
+  id: string;
+  file_type: string;
+  file_name: string;
+  status: string;
+  imported_rows: number;
+  duplicate_rows: number;
+  total_rows: number;
+  created_at: string;
+};
+
+type AuditPeriod = { id: string; month: number; year: number; status: string };
+
+type FileType = 'maquinona' | 'cresol';
+
+const MONTHS = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
+
+const CARD_META: Record<FileType, { title: string; functionName: string; tip: React.ReactNode; icon: any; multi: boolean }> = {
+  maquinona: {
+    title: 'Maquinona (iFood Portal)',
+    functionName: 'import-maquinona',
+    tip: (
+      <>
+        💡 <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        <span className="text-muted-foreground/80">
+          Apenas as vendas do mês de competência entram no <strong>Vendido</strong> do dashboard.
+          As vendas adjacentes servem apenas para o sistema casar corretamente os depósitos bancários
+          (vendas de fim de mês que recebem no mês seguinte).
+        </span>
+        <br />
+        <span className="text-muted-foreground/80">Como exportar: Portal iFood → Financeiro → Relatório de Transações → Exportar em xlsx.</span>
+      </>
+    ),
+    icon: FileSpreadsheet,
+    multi: true,
+  },
+  cresol: {
+    title: 'Cresol (Extrato iFood)',
+    functionName: 'import-cresol',
+    tip: (
+      <>
+        💡 <strong>Aceita .xlsx OU .pdf</strong> — o sistema detecta automaticamente.
+        <br />
+        <strong>Para auditoria precisa, importe 3 meses</strong>: mês ANTERIOR + mês de COMPETÊNCIA + mês POSTERIOR.
+        <br />
+        Ex: para auditar Março → importe Fevereiro + Março + Abril.
+        <br />
+        Isso captura vendas que atravessam o mês:
+        <ul className="list-disc list-inside mt-1 space-y-0.5">
+          <li>Vendas de fim de Fev → caem em Mar (não contam para Março)</li>
+          <li>Vendas de fim de Mar → caem em Abr (contam para Março)</li>
+        </ul>
+        <span className="text-muted-foreground/80">O sistema classifica automaticamente cada depósito por competência.</span>
+      </>
+    ),
+    icon: Landmark,
+    multi: true,
+  },
+};
+
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+async function parseXlsxFile(file: File, type: FileType): Promise<{ rows: any[]; error?: string }> {
+  const buf = await file.arrayBuffer();
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+  } catch {
+    return { rows: [], error: 'Não foi possível ler o arquivo .xlsx' };
+  }
+
+  if (type === 'maquinona') {
+    const sheetName = workbook.SheetNames.find(
+      n => n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'transacoes',
+    );
+    if (!sheetName) {
+      return { rows: [], error: 'Aba "Transações" não encontrada. Exporte novamente do Portal iFood em Financeiro > Relatório de Transações.' };
+    }
+    const sheet = workbook.Sheets[sheetName];
+    // raw:true → números vêm como Number JS e datas como Date JS (cellDates já ativo).
+    // Evita que o XLSX devolva strings formatadas em locale en-US ("R$ 1,023.10"),
+    // o que quebrava o parseNumber do edge para valores >= R$ 1.000.
+    const rows = XLSX.utils.sheet_to_json<any>(sheet, { defval: null, raw: true });
+    if (!rows.length) return { rows: [], error: 'Aba "Transações" está vazia' };
+    return { rows };
+  }
+
+  const sheetName = workbook.SheetNames[0];
+  if (!sheetName) return { rows: [], error: 'Arquivo sem abas' };
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+  if (!rows.length) return { rows: [], error: 'Arquivo vazio' };
+  return { rows };
+}
+
+export default function AuditImport() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const tipoParam = searchParams.get('tipo') as FileType | null;
+  const periodIdParam = searchParams.get('period');
+  const monthParam = searchParams.get('month');
+  const yearParam = searchParams.get('year');
+  const { isAdmin, loading: roleLoading } = useUserRole();
+
+  const now = new Date();
+  const [period, setPeriod] = useState<AuditPeriod | null>(null);
+  const [imports, setImports] = useState<AuditImport[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [lastDiagnostic, setLastDiagnostic] = useState<any | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const backUrl = useMemo(() => {
+    const m = monthParam ?? (period ? String(period.month) : '');
+    const y = yearParam ?? (period ? String(period.year) : '');
+    return m && y ? `/admin/auditoria?month=${m}&year=${y}` : '/admin/auditoria';
+  }, [monthParam, yearParam, period]);
+
+  const refresh = async (periodId: string) => {
+    const { data: imps } = await supabase
+      .from('audit_imports').select('*').eq('audit_period_id', periodId)
+      .order('created_at', { ascending: false });
+    setImports((imps as AuditImport[]) ?? []);
+  };
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    (async () => {
+      setLoading(true);
+      let p: AuditPeriod | null = null;
+      if (periodIdParam) {
+        const { data } = await supabase
+          .from('audit_periods').select('*').eq('id', periodIdParam).maybeSingle();
+        p = (data as AuditPeriod) ?? null;
+      } else {
+        const month = now.getMonth() + 1;
+        const year = now.getFullYear();
+        const { data } = await supabase
+          .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
+        p = (data as AuditPeriod) ?? null;
+      }
+      if (!active) return;
+      setPeriod(p);
+      if (p) await refresh(p.id);
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [isAdmin, periodIdParam]);
+
+  const importsByType = useMemo(() => {
+    const map: Record<FileType, AuditImport[]> = { maquinona: [], cresol: [] };
+    for (const i of imports) {
+      if (i.status === 'completed' && (i.file_type === 'maquinona' || i.file_type === 'cresol')) {
+        map[i.file_type as FileType].push(i);
+      }
+    }
+    return map;
+  }, [imports]);
+
+  if (roleLoading || loading) {
+    return (
+      <AppLayout title="Importação">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <AppLayout title="Importação">
+        <Card><CardContent className="py-10 text-center text-muted-foreground">Acesso restrito a administradores.</CardContent></Card>
+      </AppLayout>
+    );
+  }
+
+  const doImport = async (type: FileType, file: File) => {
+    if (!period) throw new Error('Sem período ativo');
+
+    // Cresol: aceita .pdf via import-cresol-pdf (parser textual) ou .xlsx
+    // via import-cresol (parser de rows). Detecta pela extensão.
+    if (type === 'cresol' && /\.pdf$/i.test(file.name)) {
+      const { extractPdfText } = await import('@/lib/pdf-text-extract');
+      const raw_text = await extractPdfText(file);
+      const { data, error } = await supabase.functions.invoke('import-cresol-pdf', {
+        body: { audit_period_id: period.id, file_name: file.name, raw_text },
+      });
+      if (error) throw new Error(error.message);
+      if (!data?.success) throw new Error(data?.error || 'Falha na importação PDF');
+      return {
+        description: `${data.imported_rows} depósitos iFood importados (PDF). ${data.duplicate_rows} duplicados.`,
+      };
+    }
+
+    const { rows, error: parseErr } = await parseXlsxFile(file, type);
+    if (parseErr) throw new Error(parseErr);
+
+    const { data, error } = await supabase.functions.invoke(CARD_META[type].functionName, {
+      body: { audit_period_id: period.id, rows, file_name: file.name },
+    });
+    if (error) throw new Error(error.message);
+    if (!data?.success) throw new Error(data?.error || 'Falha na importação');
+
+    let description = '';
+    if (type === 'maquinona') {
+      const upd = Number(data.updated_rows ?? 0);
+      description = upd > 0
+        ? `${data.imported_rows} novas + ${upd} atualizadas`
+        : `${data.imported_rows} novas transações, ${data.duplicate_rows} duplicadas ignoradas`;
+      console.log('[import-maquinona] diagnostic:', data.diagnostic);
+      setLastDiagnostic(data.diagnostic ?? { _missing: true });
+    } else if (type === 'cresol') {
+      description = `${data.imported_rows} depósitos iFood importados. ${data.duplicate_rows} duplicadas, ${data.skipped_non_ifood} não-iFood ignorados.`;
+    }
+    return { description };
+  };
+
+  const removeImport = async (importId: string) => {
+    setRemovingId(importId);
+    try {
+      // Cascade deletes deposits via FK ON DELETE CASCADE for cresol (import_id column)
+      const { error } = await supabase.from('audit_imports').delete().eq('id', importId);
+      if (error) throw error;
+      toast.success('✓ Importação removida');
+      if (period) await refresh(period.id);
+    } catch (e: any) {
+      toast.error('Erro ao remover', { description: e?.message ?? 'Erro inesperado' });
+    } finally {
+      setRemovingId(null);
+    }
+  };
+
+  return (
+    <AppLayout title="Importação" subtitle="Auditoria de Taxas">
+      <div className="space-y-4">
+        <Breadcrumb>
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink onClick={() => navigate(backUrl)} className="cursor-pointer">
+                Auditoria
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem><BreadcrumbPage>Importação</BreadcrumbPage></BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
+
+        {lastDiagnostic && (
+          <Card className="border-amber-500/40 bg-amber-500/5">
+            <CardContent className="py-4 space-y-3 text-sm">
+              <div className="flex justify-between items-start">
+                <strong className="text-amber-700 dark:text-amber-400">🔍 Diagnóstico do último import Maquinona</strong>
+                <button
+                  onClick={() => setLastDiagnostic(null)}
+                  className="text-xs underline text-muted-foreground hover:text-foreground"
+                >fechar</button>
+              </div>
+              {lastDiagnostic._missing ? (
+                <p className="text-xs">SEM diagnostic na resposta — edge ainda não foi redeployada com o código novo.</p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>Linhas com promoção &gt; 0: <strong>{lastDiagnostic.promotion_nonzero_count ?? 0}</strong></div>
+                    <div>Linhas com incentivo &gt; 0: <strong>{lastDiagnostic.incentivo_nonzero_count ?? 0}</strong></div>
+                    <div>Promotion raw (1ª linha): <code className="font-mono">{JSON.stringify(lastDiagnostic.first_row_promotion_raw)}</code></div>
+                    <div>Incentivo raw (1ª linha): <code className="font-mono">{JSON.stringify(lastDiagnostic.first_row_incentivo_raw)}</code></div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground mb-1">
+                      Colunas detectadas no XLSX ({(lastDiagnostic.first_row_keys ?? []).length}):
+                    </div>
+                    <pre className="bg-muted text-xs p-2 rounded max-h-64 overflow-auto whitespace-pre-wrap break-all">
+{(lastDiagnostic.first_row_keys ?? []).map((k: string, i: number) => `${i}: ${JSON.stringify(k)}`).join('\n')}
+                    </pre>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const text = JSON.stringify(lastDiagnostic, null, 2);
+                      navigator.clipboard.writeText(text).then(
+                        () => toast.success('Diagnóstico copiado'),
+                        () => toast.error('Falha ao copiar'),
+                      );
+                    }}
+                    className="text-xs underline text-blue-600 hover:text-blue-800"
+                  >
+                    📋 Copiar JSON do diagnostic
+                  </button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {period ? (
+          <p className="text-sm text-muted-foreground">
+            Período: <span className="font-medium text-foreground">{MONTHS[period.month - 1]} {period.year}</span>
+          </p>
+        ) : (
+          <Card>
+            <CardContent className="py-6 text-center text-sm text-muted-foreground">
+              Nenhum período aberto para o mês atual. Crie um período no Dashboard primeiro.
+            </CardContent>
+          </Card>
+        )}
+
+        {(['maquinona', 'cresol'] as FileType[]).map((t) => (
+          <ImportCard
+            key={t}
+            type={t}
+            highlight={tipoParam === t}
+            disabled={!period}
+            existingImports={importsByType[t]}
+            onImport={(file) => doImport(t, file)}
+            onRemove={removeImport}
+            removingId={removingId}
+            onAfterImport={async () => {
+              if (!period) return;
+              await refresh(period.id);
+              // Auto-dispatch run-audit-match (cross-check Maquinona × Cresol)
+              // após cada import bem-sucedido — elimina passo manual.
+              try {
+                const { data, error } = await supabase.functions.invoke('run-audit-match', {
+                  body: { audit_period_id: period.id },
+                });
+                if (error) {
+                  toast.error('Auto-match Maquinona×Cresol falhou', { description: error.message });
+                } else if (data?.success) {
+                  toast.success(`Auto-match: ${data.daily_matches_count ?? 0} dias casados`, {
+                    description: `Diff iFood R$ ${(data.total_difference_ifood ?? 0).toFixed(2)}`,
+                  });
+                }
+              } catch (e: any) {
+                toast.error('Auto-match erro', { description: e?.message ?? 'Erro inesperado' });
+              }
+              await refresh(period.id);
+            }}
+          />
+        ))}
+
+        <Button variant="outline" onClick={() => navigate(backUrl)} className="gap-2">
+          <ArrowLeft className="h-4 w-4" /> Voltar ao Dashboard
+        </Button>
+      </div>
+    </AppLayout>
+  );
+}
+
+function ImportCard({
+  type, highlight, disabled, existingImports, onImport,
+  onRemove, removingId, onAfterImport,
+}: {
+  type: FileType;
+  highlight: boolean;
+  disabled: boolean;
+  existingImports: AuditImport[];
+  onImport: (file: File) => Promise<{ description: string }>;
+  onRemove: (importId: string) => Promise<void>;
+  removingId: string | null;
+  onAfterImport: () => Promise<void>;
+}) {
+  const meta = CARD_META[type];
+  const Icon = meta.icon;
+  const cardRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (highlight && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlight]);
+
+  const handleSelect = (selected: File[]) => {
+    // Cresol aceita .xlsx OU .pdf; outros tipos só .xlsx
+    const acceptPdf = type === 'cresol';
+    const xlsx = selected.filter(f => {
+      const lower = f.name.toLowerCase();
+      return lower.endsWith('.xlsx') || (acceptPdf && lower.endsWith('.pdf'));
+    });
+    const invalid = selected.length - xlsx.length;
+    if (invalid > 0) {
+      toast.error(`${invalid} arquivo(s) ignorado(s) — aceitos: ${acceptPdf ? '.xlsx ou .pdf' : '.xlsx'}`);
+    }
+    if (xlsx.length === 0) return;
+    if (meta.multi) {
+      setFiles(prev => [...prev, ...xlsx]);
+    } else {
+      setFiles([xlsx[0]]);
+    }
+  };
+
+  const removeStaged = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const runImport = async () => {
+    if (files.length === 0) return;
+    setUploading(true);
+    let success = 0;
+    const errors: string[] = [];
+    let lastDescription = '';
+    try {
+      for (const f of files) {
+        try {
+          const res = await onImport(f);
+          success++;
+          lastDescription = res.description;
+        } catch (e: any) {
+          errors.push(`${f.name}: ${e?.message ?? 'erro inesperado'}`);
+        }
+      }
+      if (success > 0) {
+        toast.success(`✓ ${success} arquivo(s) importado(s)`, {
+          description: errors.length > 0
+            ? `${errors.length} falharam — verifique o console`
+            : (files.length === 1 ? lastDescription : undefined),
+        });
+      }
+      if (errors.length > 0) {
+        console.error('[AuditImport] Erros:', errors);
+        if (success === 0) {
+          toast.error('Falha na importação', { description: errors[0] });
+        }
+      }
+      setFiles([]);
+      if (inputRef.current) inputRef.current.value = '';
+      await onAfterImport();
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onClickImport = () => {
+    if (files.length === 0) {
+      toast.error('Selecione ao menos um arquivo .xlsx');
+      return;
+    }
+    runImport();
+  };
+
+  const buttonLabel = (() => {
+    if (uploading) return 'Processando...';
+    const n = files.length;
+    const base = type === 'cresol' ? 'Cresol' : 'Maquinona';
+    if (existingImports.length > 0) {
+      return n > 1 ? `Adicionar ${n} extratos ${base}` : `Adicionar extrato ${base}`;
+    }
+    return n > 1 ? `Importar ${n} extratos ${base}` : `Importar ${base}`;
+  })();
+
+  return (
+    <>
+      <Card ref={cardRef} className={highlight ? 'border-primary border-2 shadow-md' : ''}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Icon className="h-5 w-5 text-primary" />
+            {meta.title}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Existing imports list */}
+          {existingImports.length === 0 ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Status:</span>
+              <Badge variant="secondary" className="bg-muted text-muted-foreground">não importado</Badge>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <p className="text-xs uppercase text-muted-foreground tracking-wide">
+                {meta.multi ? 'Arquivos importados neste período:' : 'Arquivo importado:'}
+              </p>
+              {existingImports.map((imp) => (
+                <div key={imp.id} className="flex items-center justify-between rounded-md border bg-card/50 px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600 dark:text-green-400 flex-shrink-0" />
+                    <span className="font-medium truncate">{imp.file_name}</span>
+                    <span className="text-muted-foreground text-xs flex-shrink-0">
+                      — {imp.imported_rows} {type === 'maquinona' ? 'transações' : 'depósitos'} · {fmtDateTime(imp.created_at)}
+                    </span>
+                  </div>
+                  {meta.multi && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive h-7 px-2"
+                      onClick={() => setConfirmRemove(imp.id)}
+                      disabled={removingId === imp.id}
+                    >
+                      {removingId === imp.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Drop zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const dropped = Array.from(e.dataTransfer.files ?? []);
+              handleSelect(dropped);
+            }}
+            onClick={() => inputRef.current?.click()}
+            className={`rounded-lg border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
+              dragOver ? 'border-primary bg-primary/5' : 'border-muted-foreground/30 hover:border-primary/50'
+            }`}
+          >
+            <UploadCloud className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+            {files.length > 0 ? (
+              <div className="text-sm space-y-1">
+                {files.map((f, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 rounded bg-muted/40 px-2 py-1">
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="font-medium text-foreground truncate">{f.name}</p>
+                      <p className="text-xs text-muted-foreground">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); removeStaged(idx); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                {meta.multi && (
+                  <p className="text-xs text-muted-foreground pt-1">Clique para adicionar mais arquivos</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-foreground">
+                {meta.multi
+                  ? (existingImports.length > 0
+                      ? 'Arraste outros extratos .xlsx ou clique para selecionar (vários arquivos aceitos)'
+                      : 'Arraste ou clique para selecionar arquivos .xlsx (vários aceitos)')
+                  : 'Arraste ou clique para selecionar o arquivo .xlsx'}
+              </p>
+            )}
+            <input
+              ref={inputRef}
+              type="file"
+              accept={type === 'cresol' ? '.xlsx,.pdf,application/pdf' : '.xlsx'}
+              multiple={meta.multi}
+              className="hidden"
+              onChange={(e) => handleSelect(Array.from(e.target.files ?? []))}
+            />
+          </div>
+
+          <Button
+            onClick={onClickImport}
+            disabled={files.length === 0 || disabled || uploading}
+            className="w-full sm:w-auto gap-2"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            {buttonLabel}
+          </Button>
+
+          <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+            {meta.tip}
+          </div>
+        </CardContent>
+      </Card>
+
+
+      {/* Remove file confirmation */}
+      <AlertDialog open={!!confirmRemove} onOpenChange={(o) => !o && setConfirmRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover este extrato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os depósitos vinculados a este arquivo serão apagados. Esta ação não pode ser desfeita. Recomenda-se reexecutar a Conciliação após remover.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmRemove) onRemove(confirmRemove);
+                setConfirmRemove(null);
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
