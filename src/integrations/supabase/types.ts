@@ -968,6 +968,10 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          maquinona_crm_cashback_total: number | null
+          maquinona_crm_cupom_total: number | null
+          maquinona_incentivo_total: number | null
+          maquinona_promo_total: number | null
           month: number
           status: string
           updated_at: string
@@ -979,6 +983,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          maquinona_crm_cashback_total?: number | null
+          maquinona_crm_cupom_total?: number | null
+          maquinona_incentivo_total?: number | null
+          maquinona_promo_total?: number | null
           month: number
           status?: string
           updated_at?: string
@@ -990,6 +998,10 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          maquinona_crm_cashback_total?: number | null
+          maquinona_crm_cupom_total?: number | null
+          maquinona_incentivo_total?: number | null
+          maquinona_promo_total?: number | null
           month?: number
           status?: string
           updated_at?: string

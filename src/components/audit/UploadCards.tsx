@@ -70,15 +70,23 @@ export function UploadMaquinonaCard({ period, ensurePeriod, onAfter }: UploadCar
         try {
           const buf = await file.arrayBuffer();
           const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-          const sheetName = wb.SheetNames.find(
-            n => n.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase() === 'transacoes',
-          );
+          const norm = (s: string) =>
+            s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+          const sheetName = wb.SheetNames.find(n => norm(n) === 'transacoes');
           if (!sheetName) throw new Error('Aba "Transações" não encontrada.');
           const rows = XLSX.utils.sheet_to_json<any>(wb.Sheets[sheetName], { defval: null, raw: false });
 
+          // Aba "Resumo das transações" (Saipos abr/26+): header em row index 3.
+          // sheet_to_json com header:1 + range:3 retorna arrays — primeiro = header.
+          const summarySheetName = wb.SheetNames.find(n => norm(n) === 'resumo das transacoes');
+          const summary_rows = summarySheetName
+            ? XLSX.utils.sheet_to_json<any>(wb.Sheets[summarySheetName], { header: 1, range: 3, defval: null, raw: false })
+            : [];
+
           const { data, error } = await supabase.functions.invoke('import-maquinona', {
-            body: { audit_period_id: p.id, file_name: file.name, rows },
+            body: { audit_period_id: p.id, file_name: file.name, rows, summary_rows },
           });
+
           if (error) throw new Error(error.message);
           if ((data as any)?.error) throw new Error((data as any).error);
           if (data && (data as any).success === false) throw new Error((data as any).error || 'Falha na importação');

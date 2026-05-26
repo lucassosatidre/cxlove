@@ -464,28 +464,60 @@ export default function AuditDashboard() {
                 <SummaryCard title="Custo total" value={formatCurrency(custoTotal)} />
               </div>
 
-              {/* Informativos compactos */}
-              {(promocaoIfood > 0 || custoOculto > 0.5) && (
-                <Card>
-                  <CardContent className="py-3">
-                    <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Informativo</div>
-                    <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
-                      {promocaoIfood > 0 && (
-                        <div>
-                          <span className="text-muted-foreground">Cashback:</span>{' '}
-                          <span className="font-medium">{formatCurrency(promocaoIfood)}</span>
-                        </div>
-                      )}
-                      {custoOculto > 0.5 && (
-                        <div>
-                          <span className="text-muted-foreground">Custo não declarado:</span>{' '}
-                          <span className="font-medium text-amber-700 dark:text-amber-500">{formatCurrency(custoOculto)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {/* Informativos compactos — totais da aba "Resumo das transações"
+                  (preferidos sobre a soma row-a-row, que perdeu colunas em abr/26). */}
+              {(() => {
+                const p = period as any;
+                const promoSummary = Number(p?.maquinona_promo_total ?? 0);
+                const crmCash = Number(p?.maquinona_crm_cashback_total ?? 0);
+                const crmCup = Number(p?.maquinona_crm_cupom_total ?? 0);
+                const incentivoSum = Number(p?.maquinona_incentivo_total ?? 0);
+                // Fallback: usa soma das transações quando o resumo não foi importado.
+                const cashbackShow = promoSummary > 0 ? promoSummary : promocaoIfood;
+                const incentivoShow = incentivoSum > 0 ? incentivoSum : incentivoIfood;
+                const hasAny = cashbackShow > 0 || crmCash > 0 || crmCup > 0 || incentivoShow > 0 || custoOculto > 0.5;
+                if (!hasAny) return null;
+                return (
+                  <Card>
+                    <CardContent className="py-3">
+                      <div className="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wide">Informativo</div>
+                      <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+                        {cashbackShow > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Cashback (Valor da promoção):</span>{' '}
+                            <span className="font-medium">{formatCurrency(cashbackShow)}</span>
+                          </div>
+                        )}
+                        {crmCash > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Cashback CRM (Serviço de CRM):</span>{' '}
+                            <span className="font-medium">{formatCurrency(crmCash)}</span>
+                          </div>
+                        )}
+                        {crmCup > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Cupom resgatado CRM:</span>{' '}
+                            <span className="font-medium">{formatCurrency(crmCup)}</span>
+                          </div>
+                        )}
+                        {incentivoShow > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">Incentivo iFood (recebido):</span>{' '}
+                            <span className="font-medium text-emerald-700 dark:text-emerald-500">{formatCurrency(incentivoShow)}</span>
+                          </div>
+                        )}
+                        {custoOculto > 0.5 && (
+                          <div>
+                            <span className="text-muted-foreground">Custo não declarado:</span>{' '}
+                            <span className="font-medium text-amber-700 dark:text-amber-500">{formatCurrency(custoOculto)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+
 
               <div>
                 <Button
