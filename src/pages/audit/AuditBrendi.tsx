@@ -395,7 +395,7 @@ function ResumoTab({
         <KpiCard
           title="Total Líquido (recebido BB)"
           value={fmt(totals.rec)}
-          hint={`${daily.length} dias úteis com depósito`}
+          hint={`${daily.filter(d => d.pedidos_count > 0).length} dias com vendas online`}
         />
         <KpiCard
           title="Custo Total"
@@ -668,7 +668,7 @@ function DiarioTab({
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Auditoria PIX BB (Brendi)</CardTitle>
         <p className="text-xs text-muted-foreground">
-          1 row por dia útil de crédito esperado. Vendas de fim de semana e feriado consolidam no próximo dia útil.
+          1 row por dia de venda (competência). O BB credita no próximo dia útil.
           Status "Manual" = diff &gt; 5% — preencha override pra justificar.
         </p>
       </CardHeader>
@@ -676,8 +676,8 @@ function DiarioTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>BB creditou em</TableHead>
-              <TableHead>Dias de venda</TableHead>
+              <TableHead>Vendido em</TableHead>
+              <TableHead>Creditado BB</TableHead>
               <TableHead className="text-right">Pedidos</TableHead>
               <TableHead className="text-right">Bruto</TableHead>
               <TableHead className="text-right">Taxa Brendi</TableHead>
@@ -698,10 +698,10 @@ function DiarioTab({
                   <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => toggleExpand(d)}>
                     <TableCell className="font-medium">
                       <span className="mr-1 text-muted-foreground">{isExpanded ? '▼' : '▶'}</span>
-                      {fmtDate(d.bb_credit_date)}
+                      {fmtDate(d.sale_date)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {(d.sale_dates ?? []).map(s => fmtDate(s)).join(', ')}
+                      {fmtDate(d.bb_credit_date)}
                     </TableCell>
                     <TableCell className="text-right">{d.pedidos_count}</TableCell>
                     <TableCell className="text-right">{fmt(d.expected_amount)}</TableCell>
