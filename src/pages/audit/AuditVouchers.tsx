@@ -150,18 +150,31 @@ function hasAntecipacao(lot: Lot): boolean {
   return Object.keys(lot.descontos).some(k => /antecip|adiantament/i.test(k));
 }
 
+// Valor líquido EFETIVO: quando o usuário preencheu `valor_creditado_bb`
+// (crédito real no BB diverge do `valor_liquido` declarado — taxa extra na
+// cessão, tarifa surpresa, antecipação), usa esse override. Senão cai no
+// `valor_liquido` do PDF. Sem isso, taxa efetiva fica subestimada porque
+// o sistema assume que o declarado bateu certinho com o que caiu no banco.
+function effectiveLiquido(lot: Lot): number {
+  return lot.valor_creditado_bb != null ? Number(lot.valor_creditado_bb) : Number(lot.valor_liquido);
+}
+function hasLiquidoOverride(lot: Lot): boolean {
+  return lot.valor_creditado_bb != null;
+}
+
 
 // Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
 // Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
 // `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
 // Ticket importados antes do commit 738af54 gravavam total_descontos ==
 // valor_liquido por causa de regex frágil contra reorder do pdfjs).
+// Usa `effectiveLiquido` pra refletir override manual quando preenchido.
 function computedLot(lot: Lot, items: LotItem[]) {
   const sumItems = items.reduce((s, i) => s + Number(i.valor || 0), 0);
   const subtotal = Number(lot.subtotal_vendas) > 0
     ? Number(lot.subtotal_vendas)
     : Math.round(sumItems * 100) / 100;
-  const liquido = Number(lot.valor_liquido);
+  const liquido = effectiveLiquido(lot);
   const totalDesc = (subtotal > 0 && liquido > 0 && subtotal >= liquido)
     ? Math.round((subtotal - liquido) * 100) / 100
     : Number(lot.total_descontos);
@@ -476,7 +489,7 @@ export default function AuditVouchers() {
       // Lote com líquido > 0 espera match contra depósito BB. Líquido === 0
       // (caso Taxa Manutenção pura — total descontos = subtotal) não tem
       // crédito esperado e não entra no denominador de "Pareados".
-      if (Number(l.valor_liquido ?? 0) > 0) expectMatch++;
+      if (effectiveLiquido(l) > 0) expectMatch++;
 
       const items = allItemsByLot[l.id] ?? [];
       const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
@@ -1250,7 +1263,23 @@ export default function AuditVouchers() {
                               ? (ovr
                                   ? fmt(Number(comp?.valor ?? 0) - Number(ovr.taxa_competencia))
                                   : <span className="italic text-muted-foreground text-xs">manual</span>)
-                              : fmt(liquido)}
+                              : (
+                                <span className="inline-flex items-center gap-1">
+                                  {fmt(liquido)}
+                                  {hasLiquidoOverride(l) && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono">✎</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Valor recebido manualmente em {fmtDate(l.data_transacao_bb)} ({l.banco_credito ?? 'BB'})
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </span>
+                              )}
                           </TableCell>
                           <TableCell>
                             {l.bb_deposit_id ? (() => {
@@ -1264,7 +1293,9 @@ export default function AuditVouchers() {
                                   {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
                                 </Badge>
                               );
-                            })() : (
+                            })() : l.status === 'matched' && l.manual ? (
+                              <Badge variant="outline" className="bg-muted/40 text-muted-foreground">Manual ✓</Badge>
+                            ) : (
                               <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>
                             )}
                           </TableCell>
@@ -1754,16 +1785,21 @@ function LotDetail({
             )}
           </div>
 
-          {/* Antecipação Banco Topázio (Ticket): Edenred cede crédito antes do
-              prazo via Banco Topázio (082). Dados reais da cessão (data BB,
-              valor creditado, banco) só aparecem no portal Edenred — entrada manual. */}
-          {hasAntecipacao(lot) && (
+          {/* Crédito real BB: editor sempre disponível pra qualquer lote, com
+              ênfase visual diferente quando há antecipação detectada. Permite
+              registrar valor recebido REAL no banco quando diverge do declarado
+              (taxa surpresa, cessão Topázio, tarifa extra). Sem isso, taxa
+              efetiva nos KPIs fica subestimada. */}
+          {(hasAntecipacao(lot) || !lot.bb_deposit_id || hasLiquidoOverride(lot)) && (
             <div>
-              <div className="text-xs uppercase text-muted-foreground mb-1">Antecipação Banco Topázio</div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">
+                {hasAntecipacao(lot) ? 'Crédito real BB (antecipação detectada)' : 'Crédito real BB'}
+              </div>
               <AntecipacaoEditor lot={lot} onSave={onSaveAntecipacao} />
               <p className="text-[11px] text-muted-foreground mt-1">
-                Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred
-                pra obter Data da Transação, Valor creditado e Banco de Crédito reais.
+                {hasAntecipacao(lot)
+                  ? 'Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred pra obter Data da Transação, Valor creditado e Banco de Crédito reais.'
+                  : 'Preencha se o valor recebido no BB diverge do líquido declarado (taxa surpresa, cessão antecipada, etc) — a taxa efetiva é recalculada com base no valor real.'}
               </p>
             </div>
           )}
@@ -1992,7 +2028,7 @@ function OverviewGrid({
         // Sempre deriva via identidade liquido = subtotal - descontos (mesma
         // razão do computedLot — DB pode ter total_descontos errado herdado
         // de import-ticket-pdf antes do commit 738af54).
-        const lotLiquido = Number(l.valor_liquido);
+        const lotLiquido = effectiveLiquido(l);
         const lotDesc = (lotSubtotal > 0 && lotLiquido > 0 && lotSubtotal >= lotLiquido)
           ? lotSubtotal - lotLiquido
           : Number(l.total_descontos);
@@ -2001,7 +2037,7 @@ function OverviewGrid({
           // vinculadas mas com data_corte no mês).
           subtotal += lotSubtotal;
           descontos += lotDesc;
-          liquido += Number(l.valor_liquido);
+          liquido += lotLiquido;
         } else if (!isParcial) {
           // 100% no mês: vendido = items reais (bate com POS), custo e
           // líquido proporcionalizam quando há gap (ver comentário em
@@ -2009,7 +2045,7 @@ function OverviewGrid({
           subtotal += compValor;
           const proporcao = lotSubtotal > 0 ? compValor / lotSubtotal : 1;
           descontos += lotDesc * proporcao;
-          liquido += Number(l.valor_liquido) * proporcao;
+          liquido += lotLiquido * proporcao;
         } else {
           subtotal += compValor;
           const ovr = overrideByLot.get(l.id);
@@ -2201,18 +2237,27 @@ function AntecipacaoEditor({
     }
   };
 
+  const isAntecipado = hasAntecipacao(lot);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           size="sm"
-          variant={filled ? 'outline' : 'default'}
-          className={filled ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400' : 'gap-1.5'}
+          variant={filled ? 'outline' : isAntecipado ? 'default' : 'outline'}
+          className={
+            filled
+              ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400'
+              : isAntecipado
+                ? 'gap-1.5'
+                : 'gap-1.5 text-muted-foreground'
+          }
         >
-          <Zap className="h-3.5 w-3.5" />
+          <Zap className={`h-3.5 w-3.5 ${!filled && isAntecipado ? 'text-amber-300' : ''}`} />
           {filled
-            ? `Antecipação ✓ ${fmtDate(lot.data_transacao_bb)} · ${fmt(Number(lot.valor_creditado_bb))}`
-            : 'Antecipação BB — preencher'}
+            ? `Valor recebido ${fmt(Number(lot.valor_creditado_bb))} em ${fmtDate(lot.data_transacao_bb)} ✓`
+            : isAntecipado
+              ? 'Antecipação BB — preencher'
+              : 'Crédito real BB'}
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 space-y-3">
