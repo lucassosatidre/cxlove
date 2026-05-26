@@ -1785,16 +1785,21 @@ function LotDetail({
             )}
           </div>
 
-          {/* Antecipação Banco Topázio (Ticket): Edenred cede crédito antes do
-              prazo via Banco Topázio (082). Dados reais da cessão (data BB,
-              valor creditado, banco) só aparecem no portal Edenred — entrada manual. */}
-          {hasAntecipacao(lot) && (
+          {/* Crédito real BB: editor sempre disponível pra qualquer lote, com
+              ênfase visual diferente quando há antecipação detectada. Permite
+              registrar valor recebido REAL no banco quando diverge do declarado
+              (taxa surpresa, cessão Topázio, tarifa extra). Sem isso, taxa
+              efetiva nos KPIs fica subestimada. */}
+          {(hasAntecipacao(lot) || !lot.bb_deposit_id || hasLiquidoOverride(lot)) && (
             <div>
-              <div className="text-xs uppercase text-muted-foreground mb-1">Antecipação Banco Topázio</div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">
+                {hasAntecipacao(lot) ? 'Crédito real BB (antecipação detectada)' : 'Crédito real BB'}
+              </div>
               <AntecipacaoEditor lot={lot} onSave={onSaveAntecipacao} />
               <p className="text-[11px] text-muted-foreground mt-1">
-                Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred
-                pra obter Data da Transação, Valor creditado e Banco de Crédito reais.
+                {hasAntecipacao(lot)
+                  ? 'Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred pra obter Data da Transação, Valor creditado e Banco de Crédito reais.'
+                  : 'Preencha se o valor recebido no BB diverge do líquido declarado (taxa surpresa, cessão antecipada, etc) — a taxa efetiva é recalculada com base no valor real.'}
               </p>
             </div>
           )}
