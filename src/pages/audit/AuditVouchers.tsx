@@ -2005,7 +2005,7 @@ function OverviewGrid({
         // Sempre deriva via identidade liquido = subtotal - descontos (mesma
         // razão do computedLot — DB pode ter total_descontos errado herdado
         // de import-ticket-pdf antes do commit 738af54).
-        const lotLiquido = Number(l.valor_liquido);
+        const lotLiquido = effectiveLiquido(l);
         const lotDesc = (lotSubtotal > 0 && lotLiquido > 0 && lotSubtotal >= lotLiquido)
           ? lotSubtotal - lotLiquido
           : Number(l.total_descontos);
@@ -2014,7 +2014,7 @@ function OverviewGrid({
           // vinculadas mas com data_corte no mês).
           subtotal += lotSubtotal;
           descontos += lotDesc;
-          liquido += Number(l.valor_liquido);
+          liquido += lotLiquido;
         } else if (!isParcial) {
           // 100% no mês: vendido = items reais (bate com POS), custo e
           // líquido proporcionalizam quando há gap (ver comentário em
@@ -2022,7 +2022,7 @@ function OverviewGrid({
           subtotal += compValor;
           const proporcao = lotSubtotal > 0 ? compValor / lotSubtotal : 1;
           descontos += lotDesc * proporcao;
-          liquido += Number(l.valor_liquido) * proporcao;
+          liquido += lotLiquido * proporcao;
         } else {
           subtotal += compValor;
           const ovr = overrideByLot.get(l.id);
