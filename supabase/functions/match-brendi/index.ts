@@ -335,13 +335,25 @@ Deno.serve(async (req) => {
     }
 
     // Pega depósitos BB Brendi.
+    // Cross-period: o usuário pode ter importado o extrato BB de abril dentro
+    // do period março. Filtrar por audit_period_id perde esses deps. Janela:
+    // mês de competência ± buffer (D-5 / D+7) cobre D+1 útil cross-month.
+    const daysAdd = (iso: string, n: number): string => {
+      const dt = new Date(iso + 'T00:00:00Z');
+      dt.setUTCDate(dt.getUTCDate() + n);
+      return dt.toISOString().slice(0, 10);
+    };
+    const bbWindowStart = daysAdd(periodMonthStart, -5);
+    const bbWindowEnd = daysAdd(periodNextMonthStart, 7);
     const { data: bbDeps } = await supabase
       .from('audit_bank_deposits')
       .select('id, deposit_date, detail, amount')
-      .eq('audit_period_id', audit_period_id)
+      .gte('deposit_date', bbWindowStart)
+      .lt('deposit_date', bbWindowEnd)
       .eq('bank', 'bb')
       .eq('category', 'brendi')
       .order('deposit_date', { ascending: true });
+    console.log(`[match-brendi] BB deps cross-period window ${bbWindowStart}..${bbWindowEnd}: ${bbDeps?.length ?? 0}`);
 
     // Re-indexa BB por SALE_DATE de origem (= prefix DD/MM - 1 calendar day).
     // Cada PIX Brendi tem detail tipo "31/01 06:01 ..." — esse "31/01" é o dia
