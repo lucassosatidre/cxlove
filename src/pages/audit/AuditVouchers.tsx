@@ -52,7 +52,11 @@ type Lot = {
   bb_deposit_id_2: string | null;
   status: string;
   manual: boolean;
+  data_transacao_bb: string | null;
+  valor_creditado_bb: number | null;
+  banco_credito: string | null;
 };
+
 
 type LotItem = {
   id: string;
