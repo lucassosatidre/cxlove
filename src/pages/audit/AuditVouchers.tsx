@@ -14,8 +14,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, Loader2,
+  ArrowLeft, ChevronDown, ChevronRight, Loader2, Zap,
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+
 import {
   UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
   UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
