@@ -22,7 +22,7 @@ type Props = {
   preserveParams?: boolean;
 };
 
-export default function AuditNavTabs({ preserveParams = true }: Props) {
+export default function AuditNavTabsV2({ preserveParams = true }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const search = preserveParams ? location.search : '';
