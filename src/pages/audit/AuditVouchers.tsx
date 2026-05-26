@@ -1285,6 +1285,8 @@ export default function AuditVouchers() {
                                 onSetMatchSecondary={(depId) => setLotMatchSecondary(l.id, depId)}
                                 onSaveOverride={(taxa, note) => saveOverride(l.id, taxa, note)}
                                 onDeleteOverride={() => deleteOverride(l.id)}
+                                onSaveAntecipacao={(payload) => saveAntecipacao(l.id, payload)}
+
                                 month={month}
                                 year={year}
                               />
