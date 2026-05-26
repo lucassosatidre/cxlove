@@ -62,13 +62,22 @@ Deno.serve(async (req) => {
     //   está lá, só precisa achar o lote correspondente em valor)
     // - Permite competência por sale_date (não expected_deposit_date)
     // - Detecta divergências por dia × tipo (cobrável)
+    const periodInfo = await supabase
+      .from('audit_periods').select('year,month').eq('id', audit_period_id).maybeSingle();
+    const yr = periodInfo.data?.year as number;
+    const mo = periodInfo.data?.month as number;
+    const _monthStart = `${yr}-${String(mo).padStart(2, '0')}-01`;
+    const _nextMonthStart = mo === 12 ? `${yr + 1}-01-01` : `${yr}-${String(mo + 1).padStart(2, '0')}-01`;
     const txs = await fetchAllPaginated<any>(
       supabase
         .from('audit_card_transactions')
         .select('sale_date,payment_method,gross_amount,net_amount')
         .eq('audit_period_id', audit_period_id)
-        .eq('deposit_group', 'ifood'),
+        .eq('deposit_group', 'ifood')
+        .gte('sale_date', _monthStart)
+        .lt('sale_date', _nextMonthStart),
     );
+
 
     const deps = await fetchAllPaginated<any>(
       supabase
