@@ -155,12 +155,13 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_name, rows } = body || {};
+    const { audit_period_id, file_name, rows, summary_rows } = body || {};
     if (!audit_period_id || !file_name || !Array.isArray(rows)) {
       return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, rows)' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
 
     const { data: period, error: periodErr } = await supabase
       .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
