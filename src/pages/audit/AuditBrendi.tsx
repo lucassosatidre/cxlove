@@ -22,8 +22,9 @@ import AuditNavTabs from '@/components/audit/AuditNavTabs';
 
 type DailyRow = {
   id: string;
-  bb_credit_date: string;        // chave: data REAL do BB credit
-  sale_dates: string[];          // sale_dates agrupadas nesse credit
+  sale_date: string;             // chave: data da venda (competência)
+  bb_credit_date: string | null; // metadado: data REAL do crédito BB (ou prevista)
+  sale_dates: string[];          // retrocompat
   expected_credit_date: string | null;
   pedidos_count: number;
   expected_amount: number;       // bruto
@@ -32,11 +33,12 @@ type DailyRow = {
   received_amount: number;
   diff: number;                  // received - expected_liquido
   diff_pct: number;
-  cumulative_diff: number;       // soma diffs até esse dia (deveria ficar ≤ 5%)
+  cumulative_diff: number;
   cumulative_diff_pct: number;
   status: string;
   note: string | null;
 };
+
 
 type CrosscheckResult = {
   ok: number;
@@ -96,6 +98,8 @@ export default function AuditBrendi() {
   const [brendiCashbackTotal, setBrendiCashbackTotal] = useState(0);
   const [brendiCashbackOrdersCount, setBrendiCashbackOrdersCount] = useState(0);
   const [saiposOrdersCount, setSaiposOrdersCount] = useState(0);
+  const [totalBrutoMes, setTotalBrutoMes] = useState(0);
+  const [pedidosMes, setPedidosMes] = useState(0);
 
   // URL sync
   useEffect(() => {
@@ -108,19 +112,16 @@ export default function AuditBrendi() {
   }, [month, year, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = async (periodId: string) => {
-    // Cashback KPI deve refletir só o mês de competência. Brendi importa 3
-    // meses (ant+comp+post) no mesmo audit_period_id pra cobrir D+1 entre
-    // meses, então filtra sale_date dentro do range do mês.
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
     const nextMonthStart = month === 12
       ? `${year + 1}-01-01`
       : `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }] = await Promise.all([
+    const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }, { data: ordersMes }] = await Promise.all([
       supabase
         .from('audit_brendi_daily')
-        .select('id, bb_credit_date, sale_dates, expected_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, cumulative_diff, cumulative_diff_pct, status, note')
+        .select('id, sale_date, bb_credit_date, sale_dates, expected_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, cumulative_diff, cumulative_diff_pct, status, note')
         .eq('audit_period_id', periodId)
-        .order('bb_credit_date'),
+        .order('sale_date'),
       supabase
         .from('audit_imports')
         .select('file_type, status, created_at, imported_rows')
@@ -142,6 +143,15 @@ export default function AuditBrendi() {
         .gte('sale_date', monthStart)
         .lt('sale_date', nextMonthStart)
         .gt('cashback_usado', 0),
+      // Total Bruto direto dos orders (fonte da verdade — competência por sale_date)
+      supabase
+        .from('audit_brendi_orders')
+        .select('total, forma_pagamento')
+        .eq('audit_period_id', periodId)
+        .ilike('status_remote', 'entregue')
+        .in('forma_pagamento', ['Pix Online', 'Crédito Online'])
+        .gte('sale_date', monthStart)
+        .lt('sale_date', nextMonthStart),
     ]);
     setDaily((dailyRows ?? []) as DailyRow[]);
     setImports((imps ?? []) as any);
@@ -149,7 +159,11 @@ export default function AuditBrendi() {
     setSaiposOrdersCount(saiposCount ?? 0);
     setBrendiCashbackTotal((cashbackData ?? []).reduce((s, r) => s + Number(r.cashback_usado || 0), 0));
     setBrendiCashbackOrdersCount((cashbackData ?? []).length);
+    const orders = (ordersMes ?? []) as Array<{ total: number }>;
+    setTotalBrutoMes(orders.reduce((s, o) => s + Number(o.total || 0), 0));
+    setPedidosMes(orders.length);
   };
+
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -165,6 +179,7 @@ export default function AuditBrendi() {
       else {
         setDaily([]); setImports([]); setBrendiOrdersCount(0); setSaiposOrdersCount(0);
         setBrendiCashbackTotal(0); setBrendiCashbackOrdersCount(0);
+        setTotalBrutoMes(0); setPedidosMes(0);
       }
       setLoading(false);
     })();
@@ -204,14 +219,14 @@ export default function AuditBrendi() {
   };
 
   const totals = useMemo(() => {
-    const exp = daily.reduce((s, d) => s + Number(d.expected_amount || 0), 0);
+    // Total Bruto/pedidos: fonte da verdade = audit_brendi_orders por sale_date.
+    const exp = totalBrutoMes;
     const expLiq = daily.reduce((s, d) => s + Number(d.expected_liquido || 0), 0);
     const taxaDecl = daily.reduce((s, d) => s + Number(d.taxa_calculada || 0), 0);
     const rec = daily.reduce((s, d) => s + Number(d.received_amount || 0), 0);
     const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;
     const taxaDeclPct = exp > 0 ? (taxaDecl / exp) * 100 : 0;
     const custoOculto = expLiq - rec;
-    const pedidosMes = daily.reduce((s, d) => s + Number(d.pedidos_count || 0), 0);
     const matchedCount = daily.filter(d => d.status === 'matched' || d.status === 'matched_window').length;
     const pendingManualCount = daily.filter(d => d.status === 'pending_manual').length;
     const mensalidadeCount = daily.filter(d => d.status === 'mensalidade_descontada').length;
@@ -219,7 +234,8 @@ export default function AuditBrendi() {
       .filter(d => d.status === 'mensalidade_descontada')
       .reduce((s, d) => s + Math.abs(Number(d.diff || 0)), 0);
     return { exp, expLiq, taxaDecl, rec, taxa, taxaDeclPct, custoOculto, pedidosMes, matchedCount, pendingManualCount, mensalidadeCount, mensalidadeAmount };
-  }, [daily]);
+  }, [daily, totalBrutoMes, pedidosMes]);
+
 
   if (roleLoading || loading) {
     return (
@@ -379,7 +395,7 @@ function ResumoTab({
         <KpiCard
           title="Total Líquido (recebido BB)"
           value={fmt(totals.rec)}
-          hint={`${daily.length} dias úteis com depósito`}
+          hint={`${daily.filter(d => d.pedidos_count > 0).length} dias com vendas online`}
         />
         <KpiCard
           title="Custo Total"
@@ -652,7 +668,7 @@ function DiarioTab({
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Auditoria PIX BB (Brendi)</CardTitle>
         <p className="text-xs text-muted-foreground">
-          1 row por dia útil de crédito esperado. Vendas de fim de semana e feriado consolidam no próximo dia útil.
+          1 row por dia de venda (competência). O BB credita no próximo dia útil.
           Status "Manual" = diff &gt; 5% — preencha override pra justificar.
         </p>
       </CardHeader>
@@ -660,8 +676,8 @@ function DiarioTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>BB creditou em</TableHead>
-              <TableHead>Dias de venda</TableHead>
+              <TableHead>Vendido em</TableHead>
+              <TableHead>Creditado BB</TableHead>
               <TableHead className="text-right">Pedidos</TableHead>
               <TableHead className="text-right">Bruto</TableHead>
               <TableHead className="text-right">Taxa Brendi</TableHead>
@@ -682,10 +698,10 @@ function DiarioTab({
                   <TableRow className="cursor-pointer hover:bg-muted/40" onClick={() => toggleExpand(d)}>
                     <TableCell className="font-medium">
                       <span className="mr-1 text-muted-foreground">{isExpanded ? '▼' : '▶'}</span>
-                      {fmtDate(d.bb_credit_date)}
+                      {fmtDate(d.sale_date)}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {(d.sale_dates ?? []).map(s => fmtDate(s)).join(', ')}
+                      {fmtDate(d.bb_credit_date)}
                     </TableCell>
                     <TableCell className="text-right">{d.pedidos_count}</TableCell>
                     <TableCell className="text-right">{fmt(d.expected_amount)}</TableCell>

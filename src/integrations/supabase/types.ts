@@ -98,7 +98,7 @@ export type Database = {
       audit_brendi_daily: {
         Row: {
           audit_period_id: string
-          bb_credit_date: string
+          bb_credit_date: string | null
           bb_deposit_ids: string[] | null
           created_at: string
           cumulative_diff: number
@@ -112,6 +112,7 @@ export type Database = {
           note: string | null
           pedidos_count: number
           received_amount: number
+          sale_date: string
           sale_dates: string[]
           status: string
           taxa_calculada: number
@@ -119,7 +120,7 @@ export type Database = {
         }
         Insert: {
           audit_period_id: string
-          bb_credit_date: string
+          bb_credit_date?: string | null
           bb_deposit_ids?: string[] | null
           created_at?: string
           cumulative_diff?: number
@@ -133,6 +134,7 @@ export type Database = {
           note?: string | null
           pedidos_count?: number
           received_amount?: number
+          sale_date: string
           sale_dates?: string[]
           status?: string
           taxa_calculada?: number
@@ -140,7 +142,7 @@ export type Database = {
         }
         Update: {
           audit_period_id?: string
-          bb_credit_date?: string
+          bb_credit_date?: string | null
           bb_deposit_ids?: string[] | null
           created_at?: string
           cumulative_diff?: number
@@ -154,6 +156,7 @@ export type Database = {
           note?: string | null
           pedidos_count?: number
           received_amount?: number
+          sale_date?: string
           sale_dates?: string[]
           status?: string
           taxa_calculada?: number

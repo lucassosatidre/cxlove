@@ -318,12 +318,15 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     { data: brendiDaily },
     { count: brendiCountMes },
     { count: brendiCount3m },
+    { data: brendiOrdersMes },
     { data: ifoodRepasses },
     { count: ifoodOrdersCount },
   ] = await Promise.all([
     sb.from('audit_brendi_daily')
-      .select('expected_amount, expected_liquido, taxa_calculada, received_amount, diff, status')
-      .eq('audit_period_id', periodId),
+      .select('expected_amount, expected_liquido, taxa_calculada, received_amount, diff, status, sale_date')
+      .eq('audit_period_id', periodId)
+      .gte('sale_date', monthStart)
+      .lt('sale_date', nextMonth),
     sb.from('audit_brendi_orders')
       .select('id', { count: 'exact', head: true })
       .eq('audit_period_id', periodId)
@@ -332,6 +335,14 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     sb.from('audit_brendi_orders')
       .select('id', { count: 'exact', head: true })
       .eq('audit_period_id', periodId),
+    // Total Bruto = fonte da verdade: audit_brendi_orders por sale_date no mês.
+    sb.from('audit_brendi_orders')
+      .select('total, forma_pagamento')
+      .eq('audit_period_id', periodId)
+      .ilike('status_remote', 'entregue')
+      .in('forma_pagamento', ['Pix Online', 'Crédito Online'])
+      .gte('sale_date', monthStart)
+      .lt('sale_date', nextMonth),
     sb.from('audit_ifood_repasses')
       .select('*')
       .eq('audit_period_id', periodId),
@@ -342,6 +353,7 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
       .lt('sale_date', nextMonth)
       .neq('status_pedido', 'CANCELADO'),
   ]);
+
 
   // Soma valor_itens + taxa_entrega_cliente paginado pra contornar o limite
   // default 1000 rows do PostgREST. Caso real fev/26: 2.645 pedidos não cabem
@@ -367,7 +379,7 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
 
   const bd = (brendiDaily ?? []) as any[];
   const sumB = (k: string) => bd.reduce((s, r) => s + Number(r[k] ?? 0), 0);
-  const brendiVendido = sumB('expected_amount');
+  const brendiVendido = ((brendiOrdersMes ?? []) as Array<{ total: number }>).reduce((s, o) => s + Number(o.total || 0), 0);
   const brendiTaxaDeclarada = sumB('taxa_calculada');
   const brendiEsperado = sumB('expected_liquido');
   const brendiRecebido = sumB('received_amount');
