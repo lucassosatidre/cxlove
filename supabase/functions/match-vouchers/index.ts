@@ -160,16 +160,26 @@ Deno.serve(async (req) => {
     // com data_credito 05/04 (dom) recebe no dep 06/04 (seg); lote com
     // 11/04 (sáb) recebe no dep 13/04 (seg). Sem essa normalização o lote
     // fica fora da janela ±2 úteis de qualquer dep.
+    // Antecipação Banco Topázio (Ticket): quando o lote tem
+    // data_transacao_bb + valor_creditado_bb preenchidos manualmente, usa
+    // ESSES valores em vez de data_credito/valor_liquido (o crédito real
+    // chegou antes via cessão Topázio, com valor diferente da projeção PDF).
     const pendingLots: PendingLot[] = lots
       .filter(l => !l.bb_deposit_id)
-      .map(l => ({
-        id: l.id,
-        numero_reembolso: l.numero_reembolso,
-        valor_liquido: Number(l.valor_liquido),
-        data_credito: l.data_credito && !isBusinessDay(l.data_credito)
-          ? nextBusinessDay(l.data_credito)
-          : l.data_credito,
-      }));
+      .map(l => {
+        const hasOverride = l.data_transacao_bb && l.valor_creditado_bb != null;
+        const effectiveDate = hasOverride ? l.data_transacao_bb : l.data_credito;
+        const effectiveAmount = hasOverride ? Number(l.valor_creditado_bb) : Number(l.valor_liquido);
+        return {
+          id: l.id,
+          numero_reembolso: l.numero_reembolso,
+          valor_liquido: effectiveAmount,
+          data_credito: effectiveDate && !isBusinessDay(effectiveDate)
+            ? nextBusinessDay(effectiveDate)
+            : effectiveDate,
+        };
+      });
+
 
     let matchedSingle = 0;
     let matchedPair = 0;        // grupos de N lotes → 1 dep (N=2..MAX)
