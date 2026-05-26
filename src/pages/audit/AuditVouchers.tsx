@@ -1754,6 +1754,22 @@ function LotDetail({
             )}
           </div>
 
+          {/* Antecipação Banco Topázio (Ticket): Edenred cede crédito antes do
+              prazo via Banco Topázio (082). Dados reais da cessão (data BB,
+              valor creditado, banco) só aparecem no portal Edenred — entrada manual. */}
+          {hasAntecipacao(lot) && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">Antecipação Banco Topázio</div>
+              <AntecipacaoEditor lot={lot} onSave={onSaveAntecipacao} />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred
+                pra obter Data da Transação, Valor creditado e Banco de Crédito reais.
+              </p>
+            </div>
+          )}
+
+
+
           {/* Override de taxa quando lote parcial */}
           {isParcial && (
             <div>
