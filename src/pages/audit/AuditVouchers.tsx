@@ -1263,7 +1263,23 @@ export default function AuditVouchers() {
                               ? (ovr
                                   ? fmt(Number(comp?.valor ?? 0) - Number(ovr.taxa_competencia))
                                   : <span className="italic text-muted-foreground text-xs">manual</span>)
-                              : fmt(liquido)}
+                              : (
+                                <span className="inline-flex items-center gap-1">
+                                  {fmt(liquido)}
+                                  {hasLiquidoOverride(l) && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <span className="text-emerald-600 dark:text-emerald-400 text-[10px] font-mono">✎</span>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Valor recebido manualmente em {fmtDate(l.data_transacao_bb)} ({l.banco_credito ?? 'BB'})
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                </span>
+                              )}
                           </TableCell>
                           <TableCell>
                             {l.bb_deposit_id ? (() => {
