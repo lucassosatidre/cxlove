@@ -1566,7 +1566,7 @@ function Stat({ label, value, className, hint }: { label: string; value: string;
 function LotDetail({
   lot, items, competenciaIni, competenciaFim,
   deposits, depositNumberById, lotsByDeposit, override,
-  onSetMatch, onSetMatchSecondary, onSaveOverride, onDeleteOverride,
+  onSetMatch, onSetMatchSecondary, onSaveOverride, onDeleteOverride, onSaveAntecipacao,
   month, year,
 }: {
   lot: Lot;
@@ -1581,9 +1581,11 @@ function LotDetail({
   onSetMatchSecondary: (depositId: string | null) => Promise<void>;
   onSaveOverride: (taxa: number, note: string | null) => Promise<void>;
   onDeleteOverride: () => Promise<void>;
+  onSaveAntecipacao: (payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null }) => Promise<void>;
   month: number;
   year: number;
 }) {
+
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao)),
     [items],
