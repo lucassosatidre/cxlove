@@ -120,7 +120,7 @@ async function parseXlsxFile(file: File, type: FileType): Promise<{ rows: any[];
   return { rows };
 }
 
-export default function AuditImport() {
+export default function AuditImportV2() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tipoParam = searchParams.get('tipo') as FileType | null;

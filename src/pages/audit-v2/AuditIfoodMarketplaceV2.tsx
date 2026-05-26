@@ -20,7 +20,7 @@ import {
   dispatchMatchIfoodMarketplace,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
-import AuditNavTabs from '@/components/audit/AuditNavTabs';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
 
 type Repasse = {
   id: string;
@@ -99,7 +99,7 @@ const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   sem_repasse: { label: 'Sem repasse', className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
 };
 
-export default function AuditIfoodMarketplace() {
+export default function AuditIfoodMarketplaceV2() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, loading: roleLoading } = useUserRole();
@@ -298,7 +298,7 @@ export default function AuditIfoodMarketplace() {
   return (
     <AppLayout title="iFood Marketplace" subtitle="Auditoria das vendas online iFood (Estrela + TEMX)">
       <div className="space-y-4">
-        <AuditNavTabs />
+        <AuditNavTabsV2 />
 
         {/* Seletor mês + loja + match */}
         <Card>
@@ -357,7 +357,7 @@ export default function AuditIfoodMarketplace() {
             <CardContent className="py-3 text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <span>
-                Importe Extrato Detalhado + Relatório de Pedidos + Conta iFood Pago em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> antes do match.
+                Importe Extrato Detalhado + Relatório de Pedidos + Conta iFood Pago em <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a> antes do match.
               </span>
             </CardContent>
           </Card>

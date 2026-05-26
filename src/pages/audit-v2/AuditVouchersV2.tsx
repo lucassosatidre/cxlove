@@ -26,7 +26,7 @@ import {
   UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
   dispatchAutoMatchVouchers,
 } from '@/components/audit/UploadCards';
-import AuditNavTabs from '@/components/audit/AuditNavTabs';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
 
 type AuditPeriod = { id: string; month: number; year: number; status: string };
 
@@ -181,7 +181,7 @@ function computedLot(lot: Lot, items: LotItem[]) {
   return { subtotal, totalDesc, liquido };
 }
 
-export default function AuditVouchers() {
+export default function AuditVouchersV2() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, loading: roleLoading } = useUserRole();
@@ -878,7 +878,7 @@ export default function AuditVouchers() {
   return (
     <AppLayout title="Vouchers" subtitle="Auditoria de Taxas">
       <div className="space-y-4">
-        <AuditNavTabs />
+        <AuditNavTabsV2 />
 
         {/* Seletor de período */}
         <Card>

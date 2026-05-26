@@ -70,7 +70,7 @@ type MatchRow = {
   lots: LotMatch[]; // breakdown PIX + CARD com cresol pareado
 };
 
-export default function AuditIfood() {
+export default function AuditIfoodV2() {
   const navigate = useNavigate();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const { user } = useAuth();

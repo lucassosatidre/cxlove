@@ -13,7 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-import AuditNavTabs from '@/components/audit/AuditNavTabs';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
 import {
   UploadMaquinonaCard, UploadCresolCard,
   UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
@@ -78,7 +78,7 @@ const GROUP_DESCRIPTIONS: Record<DocSpec['group'], string> = {
   ifood: 'Vendas online iFood (Estrela + TEMX) com repasses semanais na conta iFood Pago.',
 };
 
-export default function AuditImportacoes() {
+export default function AuditImportacoesV2() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, loading: roleLoading } = useUserRole();
@@ -418,7 +418,7 @@ export default function AuditImportacoes() {
   return (
     <AppLayout title="Importações" subtitle="Documentos necessários para a auditoria">
       <div className="space-y-4">
-        <AuditNavTabs />
+        <AuditNavTabsV2 />
 
         {/* Seletor de período + botão Executar Auditoria */}
         <Card>

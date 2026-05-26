@@ -18,7 +18,7 @@ import {
   UploadBrendiCard, UploadSaiposCard, dispatchMatchBrendi,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
-import AuditNavTabs from '@/components/audit/AuditNavTabs';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
 
 type DailyRow = {
   id: string;
@@ -77,7 +77,7 @@ const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', curren
 const fmtPct = (v: number) => `${(v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 
-export default function AuditBrendi() {
+export default function AuditBrendiV2() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, loading: roleLoading } = useUserRole();
@@ -263,7 +263,7 @@ export default function AuditBrendi() {
   return (
     <AppLayout title="Brendi" subtitle="Custo Brendi (vendas online)">
       <div className="space-y-4">
-        <AuditNavTabs />
+        <AuditNavTabsV2 />
 
         {/* Seletor mês */}
         <Card>
@@ -311,7 +311,7 @@ export default function AuditBrendi() {
             <CardContent className="py-3 text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <span>
-                Importe <strong>Brendi</strong> e <strong>Saipos</strong> em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> antes de executar o match.
+                Importe <strong>Brendi</strong> e <strong>Saipos</strong> em <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a> antes de executar o match.
               </span>
             </CardContent>
           </Card>

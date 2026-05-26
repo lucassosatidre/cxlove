@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import { Loader2, FileText, Download, Lock, LockOpen, ChevronDown, ChevronRight } from 'lucide-react';
-import AuditNavTabs from '@/components/audit/AuditNavTabs';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
 import { buildContabilData, generateContabilReport } from '@/lib/contabil-data-builder';
 import { ContabilReportView } from '@/components/audit/ContabilReportView';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
@@ -24,7 +24,7 @@ const MONTHS = [
 
 type AuditPeriod = { id: string; month: number; year: number; status: string };
 
-export default function AuditRelatorios() {
+export default function AuditRelatoriosV2() {
   const { user } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -191,7 +191,7 @@ export default function AuditRelatorios() {
   return (
     <AppLayout title="Relatórios" subtitle="Geração de relatórios contábeis do período">
       <div className="space-y-4">
-        <AuditNavTabs />
+        <AuditNavTabsV2 />
 
         {/* Seletor de período */}
         <Card>
@@ -381,14 +381,14 @@ export default function AuditRelatorios() {
         {!canGenerate && period && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="py-3 text-sm">
-              ⚠ Período <strong>aberto</strong>. Execute a auditoria em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> antes de gerar o relatório contábil.
+              ⚠ Período <strong>aberto</strong>. Execute a auditoria em <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a> antes de gerar o relatório contábil.
             </CardContent>
           </Card>
         )}
         {!period && (
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="py-3 text-sm">
-              ⚠ Período {MONTHS[month - 1]}/{year} não foi criado. Vá em <a href="/admin/auditoria/importacoes" className="underline font-semibold">Importações</a> e importe os arquivos do mês.
+              ⚠ Período {MONTHS[month - 1]}/{year} não foi criado. Vá em <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a> e importe os arquivos do mês.
             </CardContent>
           </Card>
         )}

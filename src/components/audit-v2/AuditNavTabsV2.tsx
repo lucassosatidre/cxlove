@@ -9,12 +9,12 @@ type Tab = {
 };
 
 const TABS: Tab[] = [
-  { id: 'importacoes', label: 'Importações', path: '/admin/auditoria/importacoes' },
-  { id: 'maquinona', label: 'Maquinona', path: '/admin/auditoria/maquinona', matchPaths: ['/admin/auditoria/maquinona'] },
-  { id: 'vouchers', label: 'Vouchers', path: '/admin/auditoria/vouchers' },
-  { id: 'brendi', label: 'Brendi', path: '/admin/auditoria/brendi' },
-  { id: 'ifood', label: 'iFood Marketplace', path: '/admin/auditoria/ifood-marketplace' },
-  { id: 'relatorios', label: 'Relatórios', path: '/admin/auditoria/relatorios' },
+  { id: 'importacoes', label: 'Importações', path: '/admin/auditoria-v2/importacoes' },
+  { id: 'maquinona', label: 'Maquinona', path: '/admin/auditoria-v2/maquinona', matchPaths: ['/admin/auditoria-v2/maquinona'] },
+  { id: 'vouchers', label: 'Vouchers', path: '/admin/auditoria-v2/vouchers' },
+  { id: 'brendi', label: 'Brendi', path: '/admin/auditoria-v2/brendi' },
+  { id: 'ifood', label: 'iFood Marketplace', path: '/admin/auditoria-v2/ifood-marketplace' },
+  { id: 'relatorios', label: 'Relatórios', path: '/admin/auditoria-v2/relatorios' },
 ];
 
 type Props = {

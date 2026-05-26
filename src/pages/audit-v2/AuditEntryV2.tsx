@@ -1,9 +1,9 @@
 // Página de entrada de Auditoria. Decide pra onde redirecionar baseado no
 // status do período do mês atual (ou mês na URL):
-//   - conciliado/fechado → /admin/auditoria/relatorios
-//   - aberto/sem período → /admin/auditoria/importacoes
+//   - conciliado/fechado → /admin/auditoria-v2/relatorios
+//   - aberto/sem período → /admin/auditoria-v2/importacoes
 //
-// A aba Maquinona (que era a entrada antiga) agora vive em /admin/auditoria/maquinona.
+// A aba Maquinona (que era a entrada antiga) agora vive em /admin/auditoria-v2/maquinona.
 
 import { useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 
-export default function AuditEntry() {
+export default function AuditEntryV2() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { isAdmin, loading: roleLoading } = useUserRole();
@@ -37,9 +37,9 @@ export default function AuditEntry() {
       const status = (data as any)?.status as string | undefined;
       const params = `?month=${month}&year=${year}`;
       if (status === 'conciliado' || status === 'fechado') {
-        navigate(`/admin/auditoria/relatorios${params}`, { replace: true });
+        navigate(`/admin/auditoria-v2/relatorios${params}`, { replace: true });
       } else {
-        navigate(`/admin/auditoria/importacoes${params}`, { replace: true });
+        navigate(`/admin/auditoria-v2/importacoes${params}`, { replace: true });
       }
     })();
     return () => { active = false; };

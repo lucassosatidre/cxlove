@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
 import { Plus, ArrowRight, Loader2, Lock, LockOpen, History } from 'lucide-react';
-import AuditNavTabs from '@/components/audit/AuditNavTabs';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
 import { periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
 import { ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 import { fetchAllPaginated } from '@/lib/supabase-pagination';
@@ -94,7 +94,7 @@ const formatCurrency = (v: number) =>
 const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
-export default function AuditDashboard() {
+export default function AuditDashboardV2() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
@@ -391,7 +391,7 @@ export default function AuditDashboard() {
   return (
     <AppLayout title="Auditoria de Taxas" subtitle="Conciliação Maquinona × Cresol (iFood físico)">
       <div className="space-y-4">
-        <AuditNavTabs />
+        <AuditNavTabsV2 />
 
         {/* Closed banner */}
         {isClosed && period && (
@@ -525,7 +525,7 @@ export default function AuditDashboard() {
                   size="sm"
                   className="gap-1 text-primary"
                   disabled={!canExport}
-                  onClick={() => navigate(`/admin/auditoria/ifood?period=${period?.id}`)}
+                  onClick={() => navigate(`/admin/auditoria-v2/ifood?period=${period?.id}`)}
                 >
                   Ver detalhes <ArrowRight className="h-3.5 w-3.5" />
                 </Button>

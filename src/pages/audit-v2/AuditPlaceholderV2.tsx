@@ -7,7 +7,7 @@ import { ArrowLeft } from 'lucide-react';
 
 interface Props { title: string; }
 
-export default function AuditPlaceholder({ title }: Props) {
+export default function AuditPlaceholderV2({ title }: Props) {
   const navigate = useNavigate();
   return (
     <AppLayout title={title}>
