@@ -1185,10 +1185,29 @@ export default function AuditVouchers() {
                           <TableCell>
                             {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{l.numero_reembolso}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span>{l.numero_reembolso}</span>
+                              {hasAntecipacao(l) && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Zap className={`h-3.5 w-3.5 ${l.data_transacao_bb && l.valor_creditado_bb != null ? 'text-emerald-500' : 'text-amber-500'}`} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {l.data_transacao_bb && l.valor_creditado_bb != null
+                                        ? `Antecipado via ${l.banco_credito ?? 'Banco Topázio'} em ${fmtDate(l.data_transacao_bb)} — ${fmt(Number(l.valor_creditado_bb))}`
+                                        : 'Antecipação detectada — preencha Data/Valor reais no detalhe do lote'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="font-mono">{l.produto ?? '—'}</Badge>
                           </TableCell>
+
                           <TableCell>{fmtDate(l.data_corte)}</TableCell>
                           <TableCell>{fmtDate(l.data_credito)}</TableCell>
                           <TableCell className="text-xs">
