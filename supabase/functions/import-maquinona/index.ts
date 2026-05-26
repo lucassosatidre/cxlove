@@ -324,6 +324,61 @@ Deno.serve(async (req) => {
       await supabase.from('audit_periods').update({ status: 'importado' }).eq('id', audit_period_id);
     }
 
+    // ── Aba "Resumo das transações" — Saipos mudou layout em abr/26 ─────
+    // A "Valor da promoção" sumiu da aba Transações e agora vive aqui,
+    // junto com 2 colunas novas (CRM Cashback, CRM Cupom resgatado).
+    // Recebemos summary_rows como array-de-arrays (header em rows[0] após
+    // o frontend ter cortado as 3 linhas de meta com `range: 3`).
+    let summaryPromo = 0, summaryCrmCashback = 0, summaryCrmCupom = 0, summaryIncentivo = 0;
+    let summaryRowsCounted = 0;
+    const summaryDiag: any = { received: Array.isArray(summary_rows) ? summary_rows.length : null };
+    if (Array.isArray(summary_rows) && summary_rows.length > 1) {
+      const header = (summary_rows[0] as any[]).map((h) => normalizeKey(String(h ?? '')));
+      const findCol = (...names: string[]) => {
+        const wanted = names.map(normalizeKey);
+        return header.findIndex((h) => wanted.includes(h));
+      };
+      const colPromo = findCol('valor da promocao', 'valor da promoção');
+      const colCrmCash = findCol('servico de crm | cashback', 'serviço de crm | cashback');
+      const colCrmCup = findCol('servico de crm | cupom resgatado', 'serviço de crm | cupom resgatado');
+      const colIncentivo = findCol('incentivo ifood');
+      summaryDiag.header = header;
+      summaryDiag.cols = { colPromo, colCrmCash, colCrmCup, colIncentivo };
+
+      for (let i = 1; i < summary_rows.length; i++) {
+        const row = summary_rows[i] as any[];
+        if (!Array.isArray(row) || row.length === 0) continue;
+        // Pula linhas TOTAL e vazias.
+        const firstCell = String(row[0] ?? '').trim().toLowerCase();
+        if (!firstCell || firstCell.startsWith('total')) continue;
+        summaryRowsCounted++;
+        if (colPromo >= 0) summaryPromo += parseNumber(row[colPromo]);
+        if (colCrmCash >= 0) summaryCrmCashback += parseNumber(row[colCrmCash]);
+        if (colCrmCup >= 0) summaryCrmCupom += parseNumber(row[colCrmCup]);
+        if (colIncentivo >= 0) summaryIncentivo += parseNumber(row[colIncentivo]);
+      }
+
+      const round2 = (n: number) => Math.round(n * 100) / 100;
+      const { error: updErr } = await supabase
+        .from('audit_periods')
+        .update({
+          maquinona_promo_total: round2(summaryPromo),
+          maquinona_crm_cashback_total: round2(summaryCrmCashback),
+          maquinona_crm_cupom_total: round2(summaryCrmCupom),
+          maquinona_incentivo_total: round2(summaryIncentivo),
+        })
+        .eq('id', audit_period_id);
+      if (updErr) console.error('[import-maquinona] update period totals err', updErr.message);
+    }
+    summaryDiag.totals = {
+      promo: summaryPromo,
+      crm_cashback: summaryCrmCashback,
+      crm_cupom: summaryCrmCupom,
+      incentivo: summaryIncentivo,
+      counted: summaryRowsCounted,
+    };
+
+
     return new Response(JSON.stringify({
       success: true,
       total_rows: totalRows,
