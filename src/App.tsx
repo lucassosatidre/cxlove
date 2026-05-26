@@ -137,6 +137,15 @@ const App = () => (
             <Route path="/admin/auditoria/ifood-marketplace" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfoodMarketplace /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/importacoes" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImportacoes /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria/relatorios" element={<ProtectedRoute><SectorGuard sector="tele"><AuditRelatorios /></SectorGuard></ProtectedRoute>} />
+            {/* Auditoria v2 — paralela em testes */}
+            <Route path="/admin/auditoria-v2" element={<ProtectedRoute><SectorGuard sector="tele"><AuditEntryV2 /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria-v2/importacoes" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImportacoesV2 /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria-v2/maquinona" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboardV2 /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria-v2/conciliacao" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
+            <Route path="/admin/auditoria-v2/vouchers" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVouchersV2 /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria-v2/brendi" element={<ProtectedRoute><SectorGuard sector="tele"><AuditBrendiV2 /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria-v2/ifood-marketplace" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfoodMarketplaceV2 /></SectorGuard></ProtectedRoute>} />
+            <Route path="/admin/auditoria-v2/relatorios" element={<ProtectedRoute><SectorGuard sector="tele"><AuditRelatoriosV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/clau/memoria" element={<ProtectedRoute><SectorGuard sector="tele"><ClauMemory /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/sofia" element={<ProtectedRoute><SectorGuard sector="tele"><Sofia /></SectorGuard></ProtectedRoute>} />
             {/* Redirect old test routes */}
