@@ -22,8 +22,9 @@ import AuditNavTabs from '@/components/audit/AuditNavTabs';
 
 type DailyRow = {
   id: string;
-  bb_credit_date: string;        // chave: data REAL do BB credit
-  sale_dates: string[];          // sale_dates agrupadas nesse credit
+  sale_date: string;             // chave: data da venda (competência)
+  bb_credit_date: string | null; // metadado: data REAL do crédito BB (ou prevista)
+  sale_dates: string[];          // retrocompat
   expected_credit_date: string | null;
   pedidos_count: number;
   expected_amount: number;       // bruto
@@ -32,11 +33,12 @@ type DailyRow = {
   received_amount: number;
   diff: number;                  // received - expected_liquido
   diff_pct: number;
-  cumulative_diff: number;       // soma diffs até esse dia (deveria ficar ≤ 5%)
+  cumulative_diff: number;
   cumulative_diff_pct: number;
   status: string;
   note: string | null;
 };
+
 
 type CrosscheckResult = {
   ok: number;
