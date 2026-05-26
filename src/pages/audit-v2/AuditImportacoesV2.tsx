@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
-import { Loader2, CheckCircle2, Circle, Play, FileText, Trash2 } from 'lucide-react';
+import {
+  Loader2, CheckCircle2, Circle, Play, FileText, Trash2, AlertTriangle,
+  ChevronDown, ChevronRight, Info, CopyCheck,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -32,36 +35,53 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const fmtInt = (v: number) => v.toLocaleString('pt-BR');
+const fmtInt = (v: number) => Number(v || 0).toLocaleString('pt-BR');
+const fmtMoney = (v: number) =>
+  Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtDate = (iso?: string | null) => {
+  if (!iso) return '—';
+  const [y, m, d] = String(iso).slice(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+};
 
-type ImportRow = { id: string; file_type: string; status: string; imported_rows: number; created_at: string; file_name: string };
+type ImportRow = {
+  id: string;
+  file_type: string;
+  status: string;
+  imported_rows: number;
+  created_at: string;
+  file_name: string;
+};
 
-type MonthSlot = 'anterior' | 'comp' | 'posterior';
+type IntakeRow = {
+  grupo: string;
+  doc: string;
+  doc_id: string;
+  ym: string;          // 'YYYY-MM'
+  linhas: number;
+  data_min: string | null;
+  data_max: string | null;
+  valor: number;
+};
+
+type SlotKind = 'comp' | 'post';
 
 type DocSpec = {
-  id: string;
-  /** Indicador na UI (ex: "Maquinona", "Cresol") */
+  docId: string;                 // bate com RPC doc_id
   label: string;
-  /** Descrição curta do que é o arquivo */
-  description: string;
-  /** Formato aceito (.xlsx, .pdf, .csv) */
   format: string;
-  /** Slots de mês esperados. Cada slot vira uma linha de checkbox/upload. */
-  monthSlots: MonthSlot[];
-  /** Pra docs que precisam de N arquivos no MESMO mês (ex: iFood × 2 lojas) */
-  filesPerSlot?: number;
-  /** file_types correspondentes em audit_imports pra contar progresso */
-  fileTypes: string[];
-  /** Categoria pra agrupamento visual */
+  slots: SlotKind[];
+  filesPerSlot: number;
+  fileTypes: string[];           // audit_imports.file_type
   group: 'maquinona' | 'vouchers' | 'brendi' | 'ifood';
-  /** Componente de upload */
   Component: React.ComponentType<{
     period: AuditPeriodLite | null;
     ensurePeriod: () => Promise<AuditPeriodLite | null>;
     onAfter: () => Promise<void> | void;
   }>;
-  /** Hook pós-upload (ex: dispatch match) */
   postUpload?: (periodId: string) => Promise<void>;
+  /** Texto curto pra explicar o motivo do mês 'post' */
+  postReason?: string;
 };
 
 const GROUP_LABELS: Record<DocSpec['group'], string> = {
@@ -71,15 +91,27 @@ const GROUP_LABELS: Record<DocSpec['group'], string> = {
   ifood: 'iFood Marketplace',
 };
 
-const GROUP_DESCRIPTIONS: Record<DocSpec['group'], string> = {
-  maquinona: 'Vendas físicas Crédito/Débito/Pix processadas pela Maquinona iFood (depósito Cresol).',
-  vouchers: 'Lotes de vouchers Alelo/Ticket/VR/Pluxee + extrato BB com depósitos correspondentes.',
-  brendi: 'Pedidos online Brendi com PIX direto BB + relatório Saipos como fonte da verdade.',
-  ifood: 'Vendas online iFood (Estrela + TEMX) com repasses semanais na conta iFood Pago.',
+// ───────── helpers de mês ─────────
+const ymOf = (year: number, month: number): string =>
+  `${year}-${String(month).padStart(2, '0')}`;
+
+const addMonth = (year: number, month: number, delta: number): { year: number; month: number } => {
+  const idx = (year * 12 + (month - 1)) + delta;
+  return { year: Math.floor(idx / 12), month: (idx % 12) + 1 };
+};
+
+const slotYm = (slot: SlotKind, compYear: number, compMonth: number): string => {
+  if (slot === 'comp') return ymOf(compYear, compMonth);
+  const { year, month } = addMonth(compYear, compMonth, 1);
+  return ymOf(year, month);
+};
+
+const ymLabel = (ym: string): string => {
+  const [y, m] = ym.split('-').map(Number);
+  return `${MONTHS[(m - 1 + 12) % 12]}/${y}`;
 };
 
 export default function AuditImportacoesV2() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAdmin, loading: roleLoading } = useUserRole();
   const now = new Date();
@@ -88,10 +120,12 @@ export default function AuditImportacoesV2() {
   const [year, setYear] = useState<number>(Number(searchParams.get('year')) || now.getFullYear());
   const [period, setPeriod] = useState<AuditPeriodLite | null>(null);
   const [imports, setImports] = useState<ImportRow[]>([]);
+  const [intake, setIntake] = useState<IntakeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningAudit, setRunningAudit] = useState(false);
   const [toDelete, setToDelete] = useState<ImportRow | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   // URL sync
   useEffect(() => {
@@ -102,12 +136,30 @@ export default function AuditImportacoesV2() {
   }, [month, year]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = async (periodId: string) => {
-    const { data } = await supabase
-      .from('audit_imports')
-      .select('id, file_type, status, imported_rows, created_at, file_name')
-      .eq('audit_period_id', periodId)
-      .order('created_at', { ascending: false });
-    setImports((data ?? []) as any);
+    const [impsRes, intakeRes] = await Promise.all([
+      supabase
+        .from('audit_imports')
+        .select('id, file_type, status, imported_rows, created_at, file_name')
+        .eq('audit_period_id', periodId)
+        .order('created_at', { ascending: false }),
+      supabase.rpc('audit_intake_by_month' as any, { p_period: periodId }),
+    ]);
+    setImports((impsRes.data ?? []) as any);
+    if (intakeRes.error) {
+      console.warn('[intake_by_month] erro:', intakeRes.error);
+      setIntake([]);
+    } else {
+      setIntake(((intakeRes.data ?? []) as any[]).map(r => ({
+        grupo: String(r.grupo ?? ''),
+        doc: String(r.doc ?? ''),
+        doc_id: String(r.doc_id ?? ''),
+        ym: String(r.ym ?? ''),
+        linhas: Number(r.linhas ?? 0),
+        data_min: r.data_min ?? null,
+        data_max: r.data_max ?? null,
+        valor: Number(r.valor ?? 0),
+      })));
+    }
   };
 
   useEffect(() => {
@@ -121,7 +173,7 @@ export default function AuditImportacoesV2() {
       if (!active) return;
       setPeriod(p);
       if (p) await refresh(p.id);
-      else setImports([]);
+      else { setImports([]); setIntake([]); }
       setLoading(false);
     })();
     return () => { active = false; };
@@ -143,32 +195,22 @@ export default function AuditImportacoesV2() {
 
   const deleteImpactText = (fileType: string): string => {
     switch (fileType) {
-      case 'maquinona':
-        return 'As transações da Maquinona usam transaction_id como chave (UPSERT). Re-upload sobrescreve as mesmas linhas — esta ação só apaga o registro de importação.';
-      case 'vr_vendas':
-        return 'Itens vinculados a lotes VR não são apagados aqui (vínculo via lot_id). Esta ação apaga apenas o registro de importação; re-upload reprocessa.';
+      case 'maquinona': return 'As transações da Maquinona usam transaction_id como chave (UPSERT). Re-upload sobrescreve as mesmas linhas.';
+      case 'vr_vendas': return 'Itens vinculados a lotes VR não são apagados aqui (vínculo via lot_id). Re-upload reprocessa.';
       case 'cresol':
-      case 'bb':
-        return 'Todos os depósitos bancários vinculados a este arquivo serão apagados.';
+      case 'bb': return 'Todos os depósitos bancários vinculados a este arquivo serão apagados.';
       case 'ticket':
       case 'alelo':
       case 'pluxee':
       case 'pluxee_vendas':
       case 'pluxee_pagamentos':
-      case 'vr':
-        return 'Todos os lotes de voucher e seus itens vinculados a este arquivo serão apagados.';
-      case 'brendi':
-        return 'Todos os pedidos Brendi vinculados a este arquivo serão apagados.';
-      case 'saipos':
-        return 'Todas as vendas Saipos vinculadas a este arquivo serão apagadas.';
-      case 'ifood_orders':
-        return 'Todos os pedidos iFood vinculados a este arquivo serão apagados.';
-      case 'ifood_conta_csv':
-        return 'Todos os movimentos da conta iFood Pago vinculados a este arquivo serão apagados.';
-      case 'ifood_extrato_detalhado':
-        return 'Todos os lançamentos detalhados E os repasses agregados desta loja (no período) serão apagados.';
-      default:
-        return 'Apenas o registro de importação será apagado.';
+      case 'vr': return 'Todos os lotes de voucher e seus itens vinculados a este arquivo serão apagados.';
+      case 'brendi': return 'Todos os pedidos Brendi vinculados a este arquivo serão apagados.';
+      case 'saipos': return 'Todas as vendas Saipos vinculadas a este arquivo serão apagadas.';
+      case 'ifood_orders': return 'Todos os pedidos iFood vinculados a este arquivo serão apagados.';
+      case 'ifood_conta_csv': return 'Todos os movimentos da conta iFood Pago vinculados a este arquivo serão apagados.';
+      case 'ifood_extrato_detalhado': return 'Todos os lançamentos detalhados E os repasses agregados desta loja (no período) serão apagados.';
+      default: return 'Apenas o registro de importação será apagado.';
     }
   };
 
@@ -191,209 +233,124 @@ export default function AuditImportacoesV2() {
     }
   };
 
-  // Executa os 4 matches em sequência: Maquinona×Cresol, Vouchers, Brendi, iFood Marketplace.
-  // Cada um roda só com os dados que tem disponíveis. Logs vão como toasts.
   const runFullAudit = async () => {
     const p = await ensurePeriod();
     if (!p) return;
     setRunningAudit(true);
     const results: string[] = [];
     try {
-      // 1) Maquinona × Cresol (run-audit-match)
       try {
-        const { data, error } = await supabase.functions.invoke('run-audit-match', {
-          body: { audit_period_id: p.id },
-        });
+        const { data, error } = await supabase.functions.invoke('run-audit-match', { body: { audit_period_id: p.id } });
         if (error) throw new Error(error.message);
-        if (data?.success) {
-          results.push(`Maquinona × Cresol: ${data.daily_matches_count ?? 0} dias casados`);
-        } else {
-          results.push(`Maquinona × Cresol: ${data?.error || 'falha'}`);
-        }
-      } catch (e: any) {
-        results.push(`Maquinona × Cresol: erro — ${e?.message ?? 'desconhecido'}`);
-      }
+        results.push(data?.success
+          ? `Maquinona × Cresol: ${data.daily_matches_count ?? 0} dias casados`
+          : `Maquinona × Cresol: ${data?.error || 'falha'}`);
+      } catch (e: any) { results.push(`Maquinona × Cresol: erro — ${e?.message ?? 'desconhecido'}`); }
 
-      // 2) Vouchers (4 operadoras)
       try {
         await dispatchAutoMatchVouchers(p.id, ['ticket', 'alelo', 'vr', 'pluxee']);
-        results.push('Vouchers (Ticket/Alelo/VR/Pluxee): match disparado');
-      } catch (e: any) {
-        results.push(`Vouchers: erro — ${e?.message ?? 'desconhecido'}`);
-      }
+        results.push('Vouchers: match disparado');
+      } catch (e: any) { results.push(`Vouchers: erro — ${e?.message ?? 'desconhecido'}`); }
 
-      // 3) Brendi
       try {
         const res = await dispatchMatchBrendi(p.id);
-        if (res) {
-          const cc = res.crosscheck;
-          const d = res.daily;
-          results.push(`Brendi: ${d.rows} dias · ${cc.ok} ok · taxa ${d.taxa_efetiva_pct}%`);
-        } else {
-          results.push('Brendi: erro (ver toasts)');
-        }
-      } catch (e: any) {
-        results.push(`Brendi: erro — ${e?.message ?? 'desconhecido'}`);
-      }
+        if (res) results.push(`Brendi: ${res.daily.rows} dias · ${res.crosscheck.ok} ok`);
+        else results.push('Brendi: erro (ver toasts)');
+      } catch (e: any) { results.push(`Brendi: erro — ${e?.message ?? 'desconhecido'}`); }
 
-      // 4) iFood Marketplace
       try {
         const res = await dispatchMatchIfoodMarketplace(p.id);
-        if (res) {
-          const r = res.repasses;
-          results.push(`iFood Marketplace: ${r.total} repasses · recebido R$ ${r.total_conta_recebido}`);
-        } else {
-          results.push('iFood Marketplace: erro (ver toasts)');
-        }
-      } catch (e: any) {
-        results.push(`iFood Marketplace: erro — ${e?.message ?? 'desconhecido'}`);
-      }
+        if (res) results.push(`iFood Mkt: ${res.repasses.total} repasses`);
+        else results.push('iFood Marketplace: erro (ver toasts)');
+      } catch (e: any) { results.push(`iFood Marketplace: erro — ${e?.message ?? 'desconhecido'}`); }
 
       await refresh(p.id);
-      toast.success('✓ Auditoria concluída', {
-        description: results.join(' · '),
-        duration: 8000,
-      });
+      toast.success('✓ Auditoria concluída', { description: results.join(' · '), duration: 8000 });
     } finally {
       setRunningAudit(false);
     }
   };
 
-  // Especificação dos documentos. Ordem reflete a ordem visual.
-  // monthSlots: meses requeridos relativos ao mês de competência.
-  // 'anterior' = mês ANT, 'comp' = COMP, 'posterior' = mês POST.
   const DOCS: DocSpec[] = useMemo(() => [
-    // ─── Maquinona — 3 meses (cross-month coverage) ────────────────────────
+    // Maquinona
     {
-      id: 'maquinona', label: 'Maquinona iFood',
-      description: 'XLSX exportado da Maquinona (aba "Transações") — vendas crédito/débito/Pix/voucher.',
-      format: '.xlsx',
-      monthSlots: ['anterior', 'comp', 'posterior'],
-      fileTypes: ['maquinona'],
+      docId: 'maquinona', label: 'Maquinona iFood', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['maquinona'],
       group: 'maquinona', Component: UploadMaquinonaCard,
     },
     {
-      id: 'cresol', label: 'Extrato Cresol',
-      description: 'XLSX do banco Cresol — depósitos da Maquinona iFood.',
-      format: '.xlsx',
-      monthSlots: ['anterior', 'comp', 'posterior'],
-      fileTypes: ['cresol'],
+      docId: 'cresol', label: 'Extrato Cresol', format: '.xlsx',
+      slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['cresol'],
       group: 'maquinona', Component: UploadCresolCard,
+      postReason: 'crédito D+1 das vendas do fim do mês',
     },
-    // ─── Vouchers ──────────────────────────────────────────────────────────
+    // Vouchers
     {
-      id: 'bb', label: 'Extrato Banco do Brasil',
-      description: 'XLSX do BB com depósitos voucher (alelo/ticket/pluxee/vr/brendi).',
-      format: '.xlsx',
-      monthSlots: ['comp', 'posterior'],
-      fileTypes: ['bb'],
+      docId: 'bb', label: 'Extrato Banco do Brasil', format: '.xlsx',
+      slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['bb'],
       group: 'vouchers', Component: UploadBBCard,
+      postReason: 'crédito D+1 dos depósitos voucher',
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket', 'alelo', 'pluxee', 'vr']); },
     },
     {
-      id: 'ticket', label: 'Reembolsos Ticket',
-      description: 'PDF "Extrato de Reembolsos Detalhado" do portal Ticket Edenred.',
-      format: '.pdf',
-      monthSlots: ['comp'],
-      fileTypes: ['ticket'],
+      docId: 'ticket', label: 'Reembolsos Ticket', format: '.pdf',
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['ticket'],
       group: 'vouchers', Component: UploadTicketCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket']); },
     },
     {
-      id: 'alelo', label: 'Extrato Alelo',
-      description: 'XLSX exportado do portal Alelo (aba "Extrato").',
-      format: '.xlsx',
-      monthSlots: ['comp'],
-      fileTypes: ['alelo'],
+      docId: 'alelo', label: 'Extrato Alelo', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['alelo'],
       group: 'vouchers', Component: UploadAleloCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['alelo']); },
     },
     {
-      id: 'vr', label: 'Vale Refeição (VR)',
-      description: 'XLS do portal VR — Guias de Reembolso + Relatório de Transação.',
-      format: '.xls',
-      monthSlots: ['comp'],
-      fileTypes: ['vr', 'vr_vendas'],
+      docId: 'vr', label: 'Vale Refeição (VR)', format: '.xls',
+      slots: ['comp'], filesPerSlot: 2, fileTypes: ['vr', 'vr_vendas'],
       group: 'vouchers', Component: UploadVRCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['vr']); },
     },
     {
-      id: 'pluxee_vendas', label: 'Pluxee — Extrato de Vendas',
-      description: 'XLSX "extrato_vendas" da Pluxee. 1 arquivo do mês de competência — define todas as vendas e quando devem pagar (data de pagamento pode cair no mês seguinte).',
-      format: '.xlsx',
-      monthSlots: ['comp'],
-      fileTypes: ['pluxee_vendas'],
+      docId: 'pluxee_vendas', label: 'Pluxee — Extrato de Vendas', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['pluxee_vendas'],
       group: 'vouchers', Component: UploadPluxeeVendasCard,
     },
     {
-      id: 'pluxee_pagamentos', label: 'Pluxee — Extrato de Pagamentos',
-      description: 'XLSX "extrato_pagamentos" da Pluxee — confirma pagamentos efetivos (PAGO/ERRO) e descontos. 1 arquivo do mês comp + 1 do mês posterior (cobre vendas que pagam só no mês seguinte).',
-      format: '.xlsx',
-      monthSlots: ['comp', 'posterior'],
-      fileTypes: ['pluxee_pagamentos'],
+      docId: 'pluxee_pagamentos', label: 'Pluxee — Extrato de Pagamentos', format: '.xlsx',
+      slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['pluxee_pagamentos'],
       group: 'vouchers', Component: UploadPluxeePagamentosCard,
+      postReason: 'pagamento pode cair no mês seguinte',
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
     },
-    // Card "Pluxee — CSV legado (recuperação)" oculto em mai/26. Componente
-    // UploadPluxeeCard segue exportado em UploadCards.tsx pra reativar se
-    // surgir necessidade de recuperar audit period antigo.
-    // ─── Brendi ─────────────────────────────────────────────────────────────
+    // Brendi
     {
-      id: 'brendi', label: 'Pedidos Brendi',
-      description: 'XLSX "Pedidos" do portal Brendi (aba "Resultado da consulta").',
-      format: '.xlsx',
-      monthSlots: ['anterior', 'comp', 'posterior'],
-      fileTypes: ['brendi'],
+      docId: 'brendi', label: 'Pedidos Brendi', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['brendi'],
       group: 'brendi', Component: UploadBrendiCard,
     },
     {
-      id: 'saipos', label: 'Vendas Saipos',
-      description: 'XLSX "Vendas por período" do PDV Saipos (compartilhado com iFood Marketplace).',
-      format: '.xlsx',
-      monthSlots: ['anterior', 'comp', 'posterior'],
-      fileTypes: ['saipos'],
+      docId: 'saipos', label: 'Vendas Saipos', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['saipos'],
       group: 'brendi', Component: UploadSaiposCard,
     },
-    // ─── iFood Marketplace ─────────────────────────────────────────────────
-    // Extrato/Pedidos: 2 arquivos no MESMO mês (1 por loja: Estrela + TEMX)
+    // iFood
     {
-      id: 'ifood_extrato', label: 'Extrato Detalhado iFood',
-      description: 'XLSX do Portal Parceiro → Financeiro → Extrato Detalhado. 1 arquivo por loja (Estrela + TEMX).',
-      format: '.xlsx',
-      monthSlots: ['comp'], filesPerSlot: 2,
-      fileTypes: ['ifood_extrato_detalhado'],
+      docId: 'ifood_extrato_detalhado', label: 'Extrato Detalhado iFood', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 2, fileTypes: ['ifood_extrato_detalhado'],
       group: 'ifood', Component: UploadIfoodExtratoDetalhadoCard,
     },
     {
-      id: 'ifood_orders', label: 'Relatório de Pedidos iFood',
-      description: 'XLSX do Portal Parceiro → Pedidos → Relatório de Pedidos. 1 por loja (Estrela + TEMX).',
-      format: '.xlsx',
-      monthSlots: ['comp'], filesPerSlot: 2,
-      fileTypes: ['ifood_orders'],
+      docId: 'ifood_orders', label: 'Relatório de Pedidos iFood', format: '.xlsx',
+      slots: ['comp'], filesPerSlot: 2, fileTypes: ['ifood_orders'],
       group: 'ifood', Component: UploadIfoodOrdersCard,
     },
     {
-      id: 'ifood_conta', label: 'Conta iFood Pago (CSV)',
-      description: 'Extrato CSV da conta iFood Pago — 2 meses (alguns ciclos antecipam no mês posterior).',
-      format: '.csv',
-      monthSlots: ['comp', 'posterior'],
-      fileTypes: ['ifood_conta_csv'],
+      docId: 'ifood_conta_csv', label: 'Conta iFood Pago (CSV)', format: '.csv',
+      slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['ifood_conta_csv'],
       group: 'ifood', Component: UploadIfoodContaCsvCard,
+      postReason: 'antecipação pode cair no mês seguinte',
     },
   ], []);
-
-  const targetCount = (doc: DocSpec) => doc.monthSlots.length * (doc.filesPerSlot ?? 1);
-
-  const docProgress = (doc: DocSpec) => {
-    const completed = imports.filter(i => doc.fileTypes.includes(i.file_type) && i.status === 'completed').length;
-    return { completed, isDone: completed >= targetCount(doc) };
-  };
-
-  const groupProgress = (group: DocSpec['group']) => {
-    const docsInGroup = DOCS.filter(d => d.group === group);
-    const done = docsInGroup.filter(d => docProgress(d).isDone).length;
-    return { done, total: docsInGroup.length };
-  };
 
   if (roleLoading || loading) {
     return (
@@ -415,12 +372,51 @@ export default function AuditImportacoesV2() {
 
   const groups: DocSpec['group'][] = ['maquinona', 'vouchers', 'brendi', 'ifood'];
 
+  // Index pra lookup rápido: doc_id → ym → IntakeRow
+  const intakeByDocYm = new Map<string, Map<string, IntakeRow>>();
+  for (const row of intake) {
+    if (!intakeByDocYm.has(row.doc_id)) intakeByDocYm.set(row.doc_id, new Map());
+    intakeByDocYm.get(row.doc_id)!.set(row.ym, row);
+  }
+
+  // Imports por file_type (todos os file_types do doc)
+  const importsForDoc = (doc: DocSpec) =>
+    imports.filter(i => doc.fileTypes.includes(i.file_type) && i.status === 'completed');
+
+  // Detecta duplicatas (mesmo file_type + mesmo imported_rows, ≥2 ocorrências)
+  const dupKeys = (doc: DocSpec): Map<string, ImportRow[]> => {
+    const m = new Map<string, ImportRow[]>();
+    for (const imp of importsForDoc(doc)) {
+      const k = `${imp.file_type}|${imp.imported_rows}`;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(imp);
+    }
+    for (const [k, list] of m) if (list.length < 2) m.delete(k);
+    return m;
+  };
+
   return (
     <AppLayout title="Importações" subtitle="Documentos necessários para a auditoria">
       <div className="space-y-4">
         <AuditNavTabsV2 />
 
-        {/* Seletor de período + botão Executar Auditoria */}
+        {/* Legenda */}
+        <Card>
+          <CardContent className="py-3">
+            <div className="flex items-start gap-2 text-xs">
+              <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+              <div className="space-y-1 text-muted-foreground">
+                <div className="font-medium text-foreground">Como ler esta tela</div>
+                <div>• Cada documento mostra os <span className="text-foreground">meses que ele precisa</span> ter.</div>
+                <div>• <CheckCircle2 className="inline h-3 w-3 text-green-600 dark:text-green-400" /> <span className="text-foreground">verde</span> = arquivo lido cobrindo o mês certo · <Circle className="inline h-3 w-3" /> <span className="text-foreground">cinza</span> = falta importar · <AlertTriangle className="inline h-3 w-3 text-amber-600 dark:text-amber-400" /> <span className="text-foreground">âmbar</span> = entrou dado de um mês que não devia estar aqui.</div>
+                <div>• <span className="text-foreground">"Banco credita D+1"</span>: Cresol e BB do mês seguinte são necessários porque vendas do fim do mês caem na conta só no mês seguinte.</div>
+                <div>• Clique <span className="text-foreground">[ver]</span> pra conferir datas e valores que o sistema leu de cada arquivo.</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Seletor de período + Executar */}
         <Card>
           <CardContent className="py-4 flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
@@ -442,108 +438,160 @@ export default function AuditImportacoesV2() {
               </Select>
             </div>
             {period && (
-              <Badge variant="secondary">
-                {MONTHS[month - 1]} {year} · {period.status}
-              </Badge>
+              <Badge variant="secondary">{MONTHS[month - 1]} {year} · {period.status}</Badge>
             )}
             <div className="ml-auto">
-              <Button
-                onClick={runFullAudit}
-                disabled={!period || runningAudit}
-                size="lg"
-                className="gap-2"
-              >
-                {runningAudit
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Play className="h-4 w-4" />}
+              <Button onClick={runFullAudit} disabled={!period || runningAudit} size="lg" className="gap-2">
+                {runningAudit ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                 {runningAudit ? 'Executando auditoria...' : 'Executar Auditoria'}
               </Button>
             </div>
           </CardContent>
         </Card>
 
-        {/* Grupos com checklist + uploads */}
+        {/* Grupos */}
         {groups.map(group => {
           const docsInGroup = DOCS.filter(d => d.group === group);
-          const prog = groupProgress(group);
           return (
             <Card key={group}>
               <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div>
-                    <CardTitle className="text-base">{GROUP_LABELS[group]}</CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">{GROUP_DESCRIPTIONS[group]}</p>
-                  </div>
-                  <Badge variant={prog.done === prog.total ? 'default' : 'secondary'} className="shrink-0">
-                    {prog.done} / {prog.total} documentos
-                  </Badge>
-                </div>
+                <CardTitle className="text-base">{GROUP_LABELS[group]}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {docsInGroup.map(doc => {
-                  const docImports = imports.filter(
-                    i => doc.fileTypes.includes(i.file_type) && i.status === 'completed',
-                  );
-                  const target = targetCount(doc);
-                  const isDone = docImports.length >= target;
+                  const docImports = importsForDoc(doc);
+                  const docIntake = intakeByDocYm.get(doc.docId) ?? new Map<string, IntakeRow>();
+                  const expectedYms = new Set(doc.slots.map(s => slotYm(s, year, month)));
+                  const unexpectedYms = [...docIntake.keys()].filter(ym => !expectedYms.has(ym)).sort();
+                  const dups = dupKeys(doc);
                   const Component = doc.Component;
 
                   return (
-                    <div key={doc.id} className="rounded-md border bg-card/50 p-3 space-y-3">
-                      {/* Header do documento */}
-                      <div className="flex items-start gap-2">
-                        {isDone
-                          ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
-                          : <Circle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline gap-2 flex-wrap">
-                            <span className={isDone ? 'line-through text-muted-foreground font-medium' : 'font-medium'}>
-                              {doc.label}
-                            </span>
-                            <span className="text-xs text-muted-foreground">{doc.format}</span>
-                            <Badge variant={isDone ? 'default' : 'outline'} className="text-[10px]">
-                              {docImports.length}/{target} arquivos
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {doc.description}
-                            {' · '}
-                            <span className="italic">
-                              {monthSlotsLabel(doc.monthSlots, doc.filesPerSlot, month)}
-                            </span>
-                          </p>
-                        </div>
+                    <div key={doc.docId} className="rounded-md border bg-card/50 p-3 space-y-3">
+                      {/* Header */}
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <FileText className="h-4 w-4 text-muted-foreground self-center" />
+                        <span className="font-medium">{doc.label}</span>
+                        <span className="text-xs text-muted-foreground">({doc.format})</span>
+                        {dups.size > 0 && (
+                          <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] gap-1">
+                            <CopyCheck className="h-3 w-3" />
+                            {[...dups.values()].reduce((a, l) => a + l.length, 0)} arquivos duplicados — pode apagar os repetidos
+                          </Badge>
+                        )}
                       </div>
 
-                      {/* Lista de arquivos já importados */}
-                      {docImports.length > 0 && (
-                        <div className="text-xs space-y-1 pl-6">
-                          {docImports.slice(0, 10).map((imp, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-muted-foreground">
-                              <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" />
-                              <span className="font-mono text-foreground truncate" title={imp.file_name}>
-                                {imp.file_name}
-                              </span>
-                              <span className="shrink-0">·</span>
-                              <span className="shrink-0">{fmtInt(Number(imp.imported_rows ?? 0))} linhas</span>
-                              <span className="shrink-0">·</span>
-                              <span className="shrink-0">{new Date(imp.created_at).toLocaleDateString('pt-BR')}</span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                                onClick={() => setToDelete(imp)}
-                                title="Apagar este arquivo"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
+                      {/* Slots esperados */}
+                      <div className="space-y-1.5 pl-1">
+                        {doc.slots.map(slot => {
+                          const ym = slotYm(slot, year, month);
+                          const intakeRow = docIntake.get(ym);
+                          const filesNeeded = doc.filesPerSlot;
+                          // Contagem de imports completados desse file_type (proxy pra slots multi-arquivo)
+                          const importsCount = docImports.length;
+                          const slotFilled = filesNeeded > 1
+                            ? !!intakeRow && importsCount >= filesNeeded
+                            : !!intakeRow;
+                          const expandKey = `${doc.docId}|${ym}`;
+                          const isExpanded = expanded[expandKey];
+
+                          return (
+                            <div key={ym} className="rounded border border-border/50 bg-background/40">
+                              <div className="flex items-start gap-2 px-2 py-1.5 text-xs flex-wrap">
+                                {slotFilled
+                                  ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+                                  : <Circle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />}
+                                <span className="font-medium text-foreground min-w-[110px]">{ymLabel(ym)}</span>
+                                {intakeRow ? (
+                                  <>
+                                    <span className="text-muted-foreground">
+                                      lido: <span className="text-foreground">{fmtDate(intakeRow.data_min)}</span> a <span className="text-foreground">{fmtDate(intakeRow.data_max)}</span>
+                                      {' · '}
+                                      <span className="text-foreground">{fmtInt(intakeRow.linhas)}</span> linhas
+                                      {' · '}
+                                      <span className="text-foreground">{fmtMoney(intakeRow.valor)}</span>
+                                    </span>
+                                    {filesNeeded > 1 && (
+                                      <Badge variant={importsCount >= filesNeeded ? 'default' : 'outline'} className="text-[10px]">
+                                        {Math.min(importsCount, filesNeeded)} de {filesNeeded} arquivos
+                                      </Badge>
+                                    )}
+                                    <Button
+                                      variant="ghost" size="sm"
+                                      className="h-6 px-2 text-xs ml-auto"
+                                      onClick={() => setExpanded(s => ({ ...s, [expandKey]: !s[expandKey] }))}
+                                    >
+                                      {isExpanded ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                                      ver
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <span className="text-muted-foreground italic">Falta importar</span>
+                                )}
+                                {slot === 'post' && doc.postReason && (
+                                  <span className="text-[10px] italic text-muted-foreground basis-full pl-6">
+                                    ({doc.postReason})
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Detalhe expandido: lista de imports daquele file_type */}
+                              {isExpanded && intakeRow && (
+                                <div className="border-t border-border/50 px-2 py-2 space-y-1 text-xs bg-muted/30">
+                                  <div className="text-muted-foreground">
+                                    Período: <span className="text-foreground">{fmtDate(intakeRow.data_min)} → {fmtDate(intakeRow.data_max)}</span>
+                                    {' · '}
+                                    <span className="text-foreground">{fmtInt(intakeRow.linhas)}</span> linhas
+                                    {' · '}
+                                    Total: <span className="text-foreground">{fmtMoney(intakeRow.valor)}</span>
+                                  </div>
+                                  <div className="pt-1 text-[11px] uppercase text-muted-foreground">Arquivos importados ({doc.fileTypes.join(', ')})</div>
+                                  {docImports.length === 0 ? (
+                                    <div className="text-muted-foreground italic">Nenhum registro em audit_imports.</div>
+                                  ) : docImports.map(imp => (
+                                    <div key={imp.id} className="flex items-center gap-2 text-muted-foreground">
+                                      <FileText className="h-3 w-3 text-green-600 dark:text-green-400 shrink-0" />
+                                      <span className="font-mono text-foreground truncate" title={imp.file_name}>{imp.file_name}</span>
+                                      <span>·</span>
+                                      <span>{fmtInt(imp.imported_rows)} linhas</span>
+                                      <span>·</span>
+                                      <span>{new Date(imp.created_at).toLocaleDateString('pt-BR')}</span>
+                                      <Button
+                                        variant="ghost" size="icon"
+                                        className="h-6 w-6 ml-auto text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                        onClick={() => setToDelete(imp)}
+                                        title="Apagar este arquivo"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                      )}
+                          );
+                        })}
+
+                        {/* Linhas inesperadas (spillover) */}
+                        {unexpectedYms.map(ym => {
+                          const r = docIntake.get(ym)!;
+                          return (
+                            <div key={`u-${ym}`} className="rounded border border-amber-500/40 bg-amber-500/5 px-2 py-1.5 text-xs flex items-start gap-2 flex-wrap">
+                              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                              <span className="font-medium text-amber-700 dark:text-amber-300 min-w-[110px]">{ymLabel(ym)}</span>
+                              <span className="text-muted-foreground">
+                                <span className="text-foreground">{fmtInt(r.linhas)}</span> linhas · <span className="text-foreground">{fmtMoney(r.valor)}</span>
+                              </span>
+                              <span className="basis-full pl-6 text-amber-700/80 dark:text-amber-300/80 italic">
+                                esse documento NÃO deveria ter dados de {ymLabel(ym).split('/')[0].toLowerCase()}. Provável venda de outro mês que entrou aqui — confira na aba do canal.
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
 
                       {/* Card de upload */}
-                      <div className="pl-6">
+                      <div className="pl-1">
                         <Component
                           period={period}
                           ensurePeriod={ensurePeriod}
@@ -571,13 +619,9 @@ export default function AuditImportacoesV2() {
             <AlertDialogTitle>Apagar este arquivo importado?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
-                <div className="font-mono text-xs bg-muted p-2 rounded break-all">
-                  {toDelete?.file_name}
-                </div>
+                <div className="font-mono text-xs bg-muted p-2 rounded break-all">{toDelete?.file_name}</div>
                 <p>{toDelete ? deleteImpactText(toDelete.file_type) : ''}</p>
-                <p className="text-xs italic">
-                  Após apagar, faça o upload da versão atualizada e reexecute a auditoria.
-                </p>
+                <p className="text-xs italic">Após apagar, faça o upload da versão atualizada e reexecute a auditoria.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -596,19 +640,4 @@ export default function AuditImportacoesV2() {
       </AlertDialog>
     </AppLayout>
   );
-}
-
-// Helper: gera label "Janeiro + Fevereiro + Março" baseado no mês comp e slots
-function monthSlotsLabel(slots: MonthSlot[], filesPerSlot: number | undefined, compMonth: number): string {
-  const monthName = (m: number) => MONTHS[((m - 1) % 12 + 12) % 12];
-  const labels = slots.map(s => {
-    if (s === 'anterior') return monthName(compMonth - 1);
-    if (s === 'comp') return monthName(compMonth);
-    return monthName(compMonth + 1);
-  });
-  const joined = labels.join(' + ');
-  if (filesPerSlot && filesPerSlot > 1) {
-    return `${joined} · ${filesPerSlot} arquivos por mês (1 por loja)`;
-  }
-  return joined;
 }
