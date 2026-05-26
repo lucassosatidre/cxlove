@@ -109,11 +109,12 @@ Deno.serve(async (req) => {
     // (period = mês da venda) do depósito BB (period = onde foi importado).
     const { data: lots } = await supabase
       .from('audit_voucher_lots')
-      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual, audit_period_id')
+      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual, audit_period_id, data_transacao_bb, valor_creditado_bb, banco_credito')
       .eq('operadora', operadora)
       .gte('data_credito', windowMin)
       .lte('data_credito', windowMax)
       .order('data_credito', { ascending: true });
+
 
     if (!lots || lots.length === 0) {
       return new Response(JSON.stringify({ success: true, message: 'Nenhum lote a processar', matched: 0 }), {
