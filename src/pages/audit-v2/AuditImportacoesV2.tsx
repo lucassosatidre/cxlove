@@ -13,7 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
 import {
   UploadMaquinonaCard, UploadCresolCard,
   UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,

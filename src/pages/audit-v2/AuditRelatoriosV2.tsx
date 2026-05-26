@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import { Loader2, FileText, Download, Lock, LockOpen, ChevronDown, ChevronRight } from 'lucide-react';
-import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
 import { buildContabilData, generateContabilReport } from '@/lib/contabil-data-builder';
 import { ContabilReportView } from '@/components/audit/ContabilReportView';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';

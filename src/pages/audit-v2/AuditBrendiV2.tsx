@@ -18,7 +18,7 @@ import {
   UploadBrendiCard, UploadSaiposCard, dispatchMatchBrendi,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
-import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
 
 type DailyRow = {
   id: string;

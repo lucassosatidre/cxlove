@@ -26,7 +26,7 @@ import {
   UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
   dispatchAutoMatchVouchers,
 } from '@/components/audit/UploadCards';
-import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
 
 type AuditPeriod = { id: string; month: number; year: number; status: string };
 

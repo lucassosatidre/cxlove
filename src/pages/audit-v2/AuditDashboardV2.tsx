@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from '@/hooks/use-toast';
 import { Plus, ArrowRight, Loader2, Lock, LockOpen, History } from 'lucide-react';
-import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2V2';
+import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
 import { periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
 import { ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 import { fetchAllPaginated } from '@/lib/supabase-pagination';
