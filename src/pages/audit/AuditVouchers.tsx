@@ -1277,7 +1277,9 @@ export default function AuditVouchers() {
                                   {l.manual && <span className="ml-1 text-[10px]">(M)</span>}
                                 </Badge>
                               );
-                            })() : (
+                            })() : l.status === 'matched' && l.manual ? (
+                              <Badge variant="outline" className="bg-muted/40 text-muted-foreground">Manual ✓</Badge>
+                            ) : (
                               <Badge variant="outline" className="text-muted-foreground">Pendente</Badge>
                             )}
                           </TableCell>
