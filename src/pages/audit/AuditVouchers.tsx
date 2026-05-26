@@ -2150,3 +2150,115 @@ function OverviewGrid({
     </div>
   );
 }
+
+function AntecipacaoEditor({
+  lot,
+  onSave,
+}: {
+  lot: Lot;
+  onSave: (payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null }) => Promise<void>;
+}) {
+  const filled = !!(lot.data_transacao_bb && lot.valor_creditado_bb != null);
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState<string>(lot.data_transacao_bb ?? '');
+  const [valor, setValor] = useState<string>(lot.valor_creditado_bb != null ? String(lot.valor_creditado_bb) : '');
+  const [banco, setBanco] = useState<string>(lot.banco_credito ?? '1 - BANCO DO BRASIL');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDate(lot.data_transacao_bb ?? '');
+    setValor(lot.valor_creditado_bb != null ? String(lot.valor_creditado_bb) : '');
+    setBanco(lot.banco_credito ?? '1 - BANCO DO BRASIL');
+  }, [lot.data_transacao_bb, lot.valor_creditado_bb, lot.banco_credito]);
+
+  const handleSave = async () => {
+    const v = valor.replace(',', '.').trim();
+    const num = v ? Number(v) : null;
+    if (v && (!isFinite(num as number) || (num as number) < 0)) {
+      toast.error('Valor inválido');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        data_transacao_bb: date || null,
+        valor_creditado_bb: num,
+        banco_credito: banco.trim() || null,
+      });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    try {
+      await onSave({ data_transacao_bb: null, valor_creditado_bb: null, banco_credito: null });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant={filled ? 'outline' : 'default'}
+          className={filled ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400' : 'gap-1.5'}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          {filled
+            ? `Antecipação ✓ ${fmtDate(lot.data_transacao_bb)} · ${fmt(Number(lot.valor_creditado_bb))}`
+            : 'Antecipação BB — preencher'}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="antec-date" className="text-xs">Data da Transação (BB)</Label>
+          <Input id="antec-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="antec-valor" className="text-xs">Valor creditado (R$)</Label>
+          <Input
+            id="antec-valor"
+            type="text"
+            inputMode="decimal"
+            placeholder="Ex: 118.41"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="antec-banco" className="text-xs">Banco de Crédito</Label>
+          <Input
+            id="antec-banco"
+            list="antec-banco-options"
+            value={banco}
+            onChange={(e) => setBanco(e.target.value)}
+          />
+          <datalist id="antec-banco-options">
+            <option value="1 - BANCO DO BRASIL" />
+            <option value="082 - BANCO TOPAZIO" />
+          </datalist>
+        </div>
+        <div className="flex justify-between gap-2">
+          {filled && (
+            <Button variant="ghost" size="sm" onClick={handleClear} disabled={saving} className="text-rose-600">
+              Limpar
+            </Button>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
