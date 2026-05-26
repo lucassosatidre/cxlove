@@ -36,7 +36,13 @@ export default function AuditNavTabsV2({ preserveParams = true }: Props) {
 
   return (
     <div className="border-b border-border mb-4">
-      <nav className="flex gap-1 -mb-px overflow-x-auto" aria-label="Navegação de auditoria">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+          🧪 v2 (rascunho)
+        </span>
+        <span className="text-[11px] text-muted-foreground">Versão paralela em testes — a v1 segue intacta.</span>
+      </div>
+      <nav className="flex gap-1 -mb-px overflow-x-auto" aria-label="Navegação de auditoria v2">
         {TABS.map(tab => {
           const active = isActive(tab);
           return (
