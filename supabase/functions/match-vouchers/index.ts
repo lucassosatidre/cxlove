@@ -383,7 +383,7 @@ Deno.serve(async (req) => {
       }
     }
 
-
+    for (const u of updates) {
       await supabase
         .from('audit_voucher_lots')
         .update({
@@ -402,10 +402,13 @@ Deno.serve(async (req) => {
       matched_pair: matchedPair,
       matched_pair_lots: matchedPairLots,
       matched_split: matchedSplit,
-      matched: matchedSingle + matchedPairLots + matchedSplit,
+      matched_pool_lots: matchedPoolLots,
+      matched_pool_deps: matchedPoolDeps,
+      matched: matchedSingle + matchedPairLots + matchedSplit + matchedPoolLots,
       ambiguous: ambiguous.slice(0, 20),
-      message: `${matchedSingle} 1-pra-1 + ${matchedPair} grupos N-pra-1 (${matchedPairLots} lotes) + ${matchedSplit} 1 lote→2 deps${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
+      message: `${matchedSingle} 1-pra-1 + ${matchedPair} grupos N-pra-1 (${matchedPairLots} lotes) + ${matchedSplit} 1 lote→2 deps${matchedPoolLots > 0 ? ` + ${matchedPoolLots} lotes pool Topázio (${matchedPoolDeps} deps)` : ''}${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
   } catch (e: any) {
     console.error('match-vouchers error', e);
     return new Response(JSON.stringify({ error: e?.message ?? 'Erro inesperado' }), {
