@@ -319,7 +319,71 @@ Deno.serve(async (req) => {
       }
     }
 
-    for (const u of updates) {
+    // Pass D: Pool Banco Topázio (antecipação Edenred/Ticket). Lotes com
+    // data_transacao_bb + valor_creditado_bb preenchidos manualmente são
+    // creditados via "Cessão Créd Liquid Princ" pelo Banco Topázio (082) no
+    // mesmo dia, agregados em 1-2 depósitos. Não respeita 1-pra-1 nem categoria
+    // ticket — esses depósitos podem estar sob outra categoria no BB. Logo:
+    // busca por dia + descrição cessão/topázio direto, independente de pool A/B/C.
+    let matchedPoolLots = 0;
+    let matchedPoolDeps = 0;
+    if (operadora === 'ticket') {
+      const takenIds = new Set(updates.map(u => u.id));
+      const overrideLots = lots
+        .filter(l => !l.bb_deposit_id && !takenIds.has(l.id))
+        .filter(l => l.data_transacao_bb && l.valor_creditado_bb != null);
+
+      // Agrupa por data_transacao_bb
+      const byDate = new Map<string, typeof overrideLots>();
+      for (const l of overrideLots) {
+        const d = l.data_transacao_bb as string;
+        if (!byDate.has(d)) byDate.set(d, []);
+        byDate.get(d)!.push(l);
+      }
+
+      for (const [date, dayLots] of byDate.entries()) {
+        // Busca depósitos BB no dia, ainda não casados, com descrição cessão/topázio.
+        const { data: poolDeps } = await supabase
+          .from('audit_bank_deposits')
+          .select('id, deposit_date, amount, description, detail')
+          .eq('audit_period_id', audit_period_id)
+          .eq('bank', 'bb')
+          .eq('deposit_date', date)
+          .eq('matched', false);
+        const candidates = (poolDeps ?? []).filter((d: any) => {
+          const desc = String(d.description ?? '').toLowerCase();
+          const det = String(d.detail ?? '').toLowerCase();
+          return desc.includes('cess') || desc.includes('topazio') || desc.includes('topázio')
+            || det.includes('cess') || det.includes('topazio') || det.includes('topázio');
+        });
+        if (candidates.length === 0) continue;
+        const sumLots = dayLots.reduce((s, l) => s + Number(l.valor_creditado_bb), 0);
+        const sumDeps = candidates.reduce((s: number, d: any) => s + Number(d.amount), 0);
+        const POOL_TOLERANCE = 5;
+        // Aceita se soma dos lotes <= soma dos deps + tolerância (deps podem
+        // conter outras operadoras antecipadas invisíveis no PDF Ticket).
+        if (sumLots > sumDeps + POOL_TOLERANCE) continue;
+        const anchorDep = candidates[0];
+        for (const l of dayLots) {
+          updates.push({
+            id: l.id,
+            bb_deposit_id: anchorDep.id,
+            diff: 0,
+          });
+          matchedPoolLots++;
+        }
+        // Marca todos os deps do pool como matched
+        for (const d of candidates) {
+          await supabase
+            .from('audit_bank_deposits')
+            .update({ matched: true, match_reason: 'pool_topazio' })
+            .eq('id', d.id);
+          matchedPoolDeps++;
+        }
+      }
+    }
+
+
       await supabase
         .from('audit_voucher_lots')
         .update({
