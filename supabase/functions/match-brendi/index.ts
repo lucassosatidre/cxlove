@@ -377,30 +377,20 @@ Deno.serve(async (req) => {
       bbBySaleDate.set(sd, arr);
     }
 
-    // Pra cada sale_date, descobre seu bb_credit_date REAL (do extrato BB):
-    // - se tem PIX com prefix (sale_date+1): bb_credit_date = deposit_date do PIX
-    // - senão (sem_deposito): fallback nextBusinessDay(sale_date)
-    function resolveCreditDate(sd: string): string {
-      const pix = bbBySaleDate.get(sd);
-      if (pix && pix.length > 0) {
-        // Se múltiplos PIX (estorno fragmentou), pega data mais cedo.
-        return pix.reduce((min, p) => p.deposit_date < min ? p.deposit_date : min, pix[0].deposit_date);
-      }
-      return nextBusinessDay(sd);
-    }
-
-    // Agrupa sale_dates por bb_credit_date REAL. Cada PIX Brendi tem prefix
-    // que aponta pra UMA sale_date (= prefix - 1 calendar). Mapeamos sales
-    // → bb_credit_date via essa relação. Janela de crédito BB casa com janela
-    // de crédito BB → match limpo, fecha em soma e em UI por dia útil.
-    const dailyByCreditDate = new Map<string, {
-      sale_dates: Set<string>;
+    // ─────────────────────────────────────────────────────────────────────
+    // NOVA AGREGAÇÃO: dailyBySaleDate. Competência = sale_date (data da venda)
+    // - bb_credit_date vira METADADO (primeiro deposit_date dos PIX vinculados,
+    //   ou nextBusinessDay(sale_date) se ainda não creditou).
+    // - Total bruto do mês = Σ(expected_bruto) de sale_dates dentro do mês.
+    // ─────────────────────────────────────────────────────────────────────
+    const dailyBySaleDate = new Map<string, {
       pedidos_count: number;
       expected_bruto: number;
       expected_liquido: number;
       taxa_calculada: number;
       received: number;
       pix_ids: Set<string>;
+      bb_credit_dates: Set<string>;
     }>();
 
     const allSaleDates = new Set<string>([
@@ -411,17 +401,15 @@ Deno.serve(async (req) => {
     for (const sd of allSaleDates) {
       const sales = brendiBySaleDate.get(sd) ?? { count: 0, total: 0, taxa: 0 };
       const pix = bbBySaleDate.get(sd) ?? [];
-      const cd = resolveCreditDate(sd);
-      const cur = dailyByCreditDate.get(cd) ?? {
-        sale_dates: new Set<string>(),
+      const cur = dailyBySaleDate.get(sd) ?? {
         pedidos_count: 0,
         expected_bruto: 0,
         expected_liquido: 0,
         taxa_calculada: 0,
         received: 0,
         pix_ids: new Set<string>(),
+        bb_credit_dates: new Set<string>(),
       };
-      cur.sale_dates.add(sd);
       cur.pedidos_count += sales.count;
       cur.expected_bruto += sales.total;
       cur.taxa_calculada += sales.taxa;
@@ -430,38 +418,39 @@ Deno.serve(async (req) => {
         if (!cur.pix_ids.has(p.id)) {
           cur.received += p.amount;
           cur.pix_ids.add(p.id);
+          cur.bb_credit_dates.add(p.deposit_date);
         }
       }
-      dailyByCreditDate.set(cd, cur);
+      dailyBySaleDate.set(sd, cur);
     }
 
-    // PIX órfãos (prefix não parseável) — adiciona ao daily do deposit_date
-    // como received extra, sem expected.
+    // PIX órfãos (prefix não parseável) — agrega como sale_date = deposit_date - 1.
     for (const op of orphanPix) {
-      const cd = op.deposit_date;
-      const cur = dailyByCreditDate.get(cd) ?? {
-        sale_dates: new Set<string>(),
+      const sd = batchDateToSaleDate(op.deposit_date);
+      const cur = dailyBySaleDate.get(sd) ?? {
         pedidos_count: 0, expected_bruto: 0, expected_liquido: 0,
-        taxa_calculada: 0, received: 0, pix_ids: new Set<string>(),
+        taxa_calculada: 0, received: 0,
+        pix_ids: new Set<string>(), bb_credit_dates: new Set<string>(),
       };
       if (!cur.pix_ids.has(op.id)) {
         cur.received += op.amount;
         cur.pix_ids.add(op.id);
+        cur.bb_credit_dates.add(op.deposit_date);
       }
-      dailyByCreditDate.set(cd, cur);
+      dailyBySaleDate.set(sd, cur);
     }
 
-    // Filtra pra mês de competência usando bb_credit_date.
+    // Filtra pra mês de competência usando SALE_DATE (não bb_credit_date).
     const periodYM = `${period.year}-${String(period.month).padStart(2, '0')}`;
     const adjacent = { count: 0, expected: 0, received: 0 };
     const dailyRows: any[] = [];
 
-    for (const [cd, agg] of dailyByCreditDate.entries()) {
+    for (const [sd, agg] of dailyBySaleDate.entries()) {
       const received = agg.received;
       const expectedLiquido = agg.expected_liquido;
 
-      if (!cd.startsWith(periodYM)) {
-        adjacent.count += agg.sale_dates.size;
+      if (!sd.startsWith(periodYM)) {
+        adjacent.count += 1;
         adjacent.expected += expectedLiquido;
         adjacent.received += received;
         continue;
@@ -476,18 +465,22 @@ Deno.serve(async (req) => {
       } else if (agg.pedidos_count === 0) {
         status = 'pending_manual'; // PIX órfão sem vendas
       } else if (diffPct <= DIFF_PCT_THRESHOLD || Math.abs(diff) <= DIFF_ABS_THRESHOLD) {
-        // matched: pct OU absoluto baixo. Em dias de baixo volume (R$300),
-        // 5% = R$15 que é apertado demais — R$150 absoluto absorve flutuação.
         status = 'matched';
       } else {
         status = 'pending_manual';
       }
 
+      // bb_credit_date = data mais cedo entre os PIX vinculados (metadado).
+      // Fallback se sem PIX: nextBusinessDay(sale_date).
+      const creditDates = Array.from(agg.bb_credit_dates).sort();
+      const bbCreditDate = creditDates.length > 0 ? creditDates[0] : nextBusinessDay(sd);
+
       dailyRows.push({
         audit_period_id,
-        bb_credit_date: cd,
-        sale_dates: Array.from(agg.sale_dates).sort(),
-        expected_credit_date: cd, // mantém retrocompat (informativo)
+        sale_date: sd,
+        bb_credit_date: bbCreditDate,
+        sale_dates: [sd], // retrocompat: array com a própria sale_date
+        expected_credit_date: bbCreditDate,
         pedidos_count: agg.pedidos_count,
         expected_amount: Math.round(agg.expected_bruto * 100) / 100,
         expected_liquido: Math.round(expectedLiquido * 100) / 100,
@@ -500,12 +493,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Pass 3: detecta UMA mensalidade no mês inteiro. Pra cada daily com diff
-    // negativo, calcula o "excedente" além da taxa-base esperada (2% do
-    // expected). Se o maior excedente do mês cair em [200, 400], esse daily
-    // ganha status 'mensalidade_descontada' e os outros mantêm o status do
-    // pass 2 (matched/pending_manual). Como diff é contra expected_LIQUIDO,
-    // usamos abs(diff) direto (sem subtrair baseline — taxa já descontada).
+    // Pass 3: mensalidade — mesma lógica, aplicada sobre dailyRows.
     let mensalidadeIdx = -1;
     let mensalidadeAmount = 0;
     for (let i = 0; i < dailyRows.length; i++) {
@@ -525,13 +513,8 @@ Deno.serve(async (req) => {
       dailyRows[mensalidadeIdx].status = 'mensalidade_descontada';
     }
 
-    // Pass 4: cumulative window matching. Brendi tem cutoff de batch ~horário
-    // não-meia-noite, causando flutuação dia-a-dia (+R$580 num dia, -R$237
-    // no seguinte) que se compensa em 1-2 dias. A SOMA cumulativa fecha. Se
-    // até o dia X o |cumulative_diff| / cumulative_expected ≤ 5%, marca rows
-    // pending_manual como matched_window — está dentro do esperado em janela.
-    // Pula linhas com mensalidade_descontada (já tratadas).
-    dailyRows.sort((a, b) => a.bb_credit_date.localeCompare(b.bb_credit_date));
+    // Pass 4: cumulative window matching (ordena por sale_date).
+    dailyRows.sort((a, b) => a.sale_date.localeCompare(b.sale_date));
     let cumDiff = 0;
     let cumExpected = 0;
     for (const d of dailyRows) {
@@ -548,11 +531,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Upsert dailyRows
+    // Upsert por (audit_period_id, sale_date)
     if (dailyRows.length > 0) {
       const { error: upErr } = await supabase
         .from('audit_brendi_daily')
-        .upsert(dailyRows, { onConflict: 'audit_period_id,bb_credit_date' });
+        .upsert(dailyRows, { onConflict: 'audit_period_id,sale_date' });
       if (upErr) {
         console.error('upsert audit_brendi_daily error', upErr);
         return new Response(JSON.stringify({ error: `Erro ao gravar daily: ${upErr.message}` }), {
@@ -560,6 +543,7 @@ Deno.serve(async (req) => {
         });
       }
     }
+
 
     // KPIs consolidados
     const totalExpectedBruto = dailyRows.reduce((s, d) => s + d.expected_amount, 0);
