@@ -1205,11 +1205,13 @@ export type Database = {
       audit_voucher_lots: {
         Row: {
           audit_period_id: string
+          banco_credito: string | null
           bb_deposit_id: string | null
           bb_deposit_id_2: string | null
           created_at: string
           data_corte: string | null
           data_credito: string
+          data_transacao_bb: string | null
           descontos: Json | null
           diff: number | null
           id: string
@@ -1222,15 +1224,18 @@ export type Database = {
           status: string
           subtotal_vendas: number
           total_descontos: number
+          valor_creditado_bb: number | null
           valor_liquido: number
         }
         Insert: {
           audit_period_id: string
+          banco_credito?: string | null
           bb_deposit_id?: string | null
           bb_deposit_id_2?: string | null
           created_at?: string
           data_corte?: string | null
           data_credito: string
+          data_transacao_bb?: string | null
           descontos?: Json | null
           diff?: number | null
           id?: string
@@ -1243,15 +1248,18 @@ export type Database = {
           status?: string
           subtotal_vendas?: number
           total_descontos?: number
+          valor_creditado_bb?: number | null
           valor_liquido: number
         }
         Update: {
           audit_period_id?: string
+          banco_credito?: string | null
           bb_deposit_id?: string | null
           bb_deposit_id_2?: string | null
           created_at?: string
           data_corte?: string | null
           data_credito?: string
+          data_transacao_bb?: string | null
           descontos?: Json | null
           diff?: number | null
           id?: string
@@ -1264,6 +1272,7 @@ export type Database = {
           status?: string
           subtotal_vendas?: number
           total_descontos?: number
+          valor_creditado_bb?: number | null
           valor_liquido?: number
         }
         Relationships: [

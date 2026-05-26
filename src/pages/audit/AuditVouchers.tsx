@@ -14,8 +14,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, ChevronDown, ChevronRight, Loader2,
+  ArrowLeft, ChevronDown, ChevronRight, Loader2, Zap,
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+
 import {
   UploadBBCard, UploadTicketCard, UploadAleloCard, UploadVRCard,
   UploadPluxeeVendasCard, UploadPluxeePagamentosCard,
@@ -52,7 +57,11 @@ type Lot = {
   bb_deposit_id_2: string | null;
   status: string;
   manual: boolean;
+  data_transacao_bb: string | null;
+  valor_creditado_bb: number | null;
+  banco_credito: string | null;
 };
+
 
 type LotItem = {
   id: string;
@@ -133,6 +142,15 @@ const fmtPct = (v: number) => `${v.toLocaleString('pt-BR', { minimumFractionDigi
 const fmtDate = (iso: string | null) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
 const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 
+// Detecta lote com antecipação Banco Topázio — Edenred cede o crédito antes
+// do prazo (data_credito do PDF) e a chave `tarifa_adiantamento` aparece no
+// descontos JSONB. Crédito real chega via "Cessão Créd Liquid Princ" no BB.
+function hasAntecipacao(lot: Lot): boolean {
+  if (!lot.descontos) return false;
+  return Object.keys(lot.descontos).some(k => /antecip|adiantament/i.test(k));
+}
+
+
 // Identidade do extrato (todas operadoras): liquido = subtotal - descontos.
 // Sempre derivamos `totalDesc` quando subtotal e líquido são válidos —
 // `lot.total_descontos` no DB pode estar errado (caso real mai/26: lotes
@@ -194,7 +212,7 @@ export default function AuditVouchers() {
     const [lotsRes, importsRes, depRes, maqRes, ovrRes] = await Promise.all([
       supabase
         .from('audit_voucher_lots')
-        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, bb_deposit_id_2, status, manual')
+        .select('id, operadora, numero_reembolso, numero_contrato, produto, data_corte, data_credito, subtotal_vendas, total_descontos, valor_liquido, descontos, bb_deposit_id, bb_deposit_id_2, status, manual, data_transacao_bb, valor_creditado_bb, banco_credito')
         .eq('audit_period_id', periodId)
         .order('data_credito', { ascending: true }),
       supabase
@@ -778,6 +796,24 @@ export default function AuditVouchers() {
       : 'Match atualizado · descontos recalculados');
     if (period) await refresh(period.id);
   };
+
+  // Salva entrada manual de antecipação Banco Topázio (Ticket).
+  const saveAntecipacao = async (
+    lotId: string,
+    payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null },
+  ) => {
+    const { error } = await supabase
+      .from('audit_voucher_lots')
+      .update(payload)
+      .eq('id', lotId);
+    if (error) { toast.error('Erro ao salvar antecipação', { description: error.message }); return; }
+    toast.success('Antecipação salva · re-rodando match…');
+    if (period) {
+      await dispatchAutoMatchVouchers(period.id, ['ticket']);
+      await refresh(period.id);
+    }
+  };
+
   const saveOverride = async (lotId: string, taxaCompetencia: number, note: string | null) => {
     const existing = overrides.find(o => o.lot_id === lotId && o.year === year && o.month === month);
     if (existing) {
@@ -1167,10 +1203,29 @@ export default function AuditVouchers() {
                           <TableCell>
                             {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{l.numero_reembolso}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span>{l.numero_reembolso}</span>
+                              {hasAntecipacao(l) && (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Zap className={`h-3.5 w-3.5 ${l.data_transacao_bb && l.valor_creditado_bb != null ? 'text-emerald-500' : 'text-amber-500'}`} />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      {l.data_transacao_bb && l.valor_creditado_bb != null
+                                        ? `Antecipado via ${l.banco_credito ?? 'Banco Topázio'} em ${fmtDate(l.data_transacao_bb)} — ${fmt(Number(l.valor_creditado_bb))}`
+                                        : 'Antecipação detectada — preencha Data/Valor reais no detalhe do lote'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Badge variant="outline" className="font-mono">{l.produto ?? '—'}</Badge>
                           </TableCell>
+
                           <TableCell>{fmtDate(l.data_corte)}</TableCell>
                           <TableCell>{fmtDate(l.data_credito)}</TableCell>
                           <TableCell className="text-xs">
@@ -1230,6 +1285,8 @@ export default function AuditVouchers() {
                                 onSetMatchSecondary={(depId) => setLotMatchSecondary(l.id, depId)}
                                 onSaveOverride={(taxa, note) => saveOverride(l.id, taxa, note)}
                                 onDeleteOverride={() => deleteOverride(l.id)}
+                                onSaveAntecipacao={(payload) => saveAntecipacao(l.id, payload)}
+
                                 month={month}
                                 year={year}
                               />
@@ -1509,7 +1566,7 @@ function Stat({ label, value, className, hint }: { label: string; value: string;
 function LotDetail({
   lot, items, competenciaIni, competenciaFim,
   deposits, depositNumberById, lotsByDeposit, override,
-  onSetMatch, onSetMatchSecondary, onSaveOverride, onDeleteOverride,
+  onSetMatch, onSetMatchSecondary, onSaveOverride, onDeleteOverride, onSaveAntecipacao,
   month, year,
 }: {
   lot: Lot;
@@ -1524,9 +1581,11 @@ function LotDetail({
   onSetMatchSecondary: (depositId: string | null) => Promise<void>;
   onSaveOverride: (taxa: number, note: string | null) => Promise<void>;
   onDeleteOverride: () => Promise<void>;
+  onSaveAntecipacao: (payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null }) => Promise<void>;
   month: number;
   year: number;
 }) {
+
   const sortedItems = useMemo(
     () => [...items].sort((a, b) => a.data_transacao.localeCompare(b.data_transacao)),
     [items],
@@ -1694,6 +1753,22 @@ function LotDetail({
               </div>
             )}
           </div>
+
+          {/* Antecipação Banco Topázio (Ticket): Edenred cede crédito antes do
+              prazo via Banco Topázio (082). Dados reais da cessão (data BB,
+              valor creditado, banco) só aparecem no portal Edenred — entrada manual. */}
+          {hasAntecipacao(lot) && (
+            <div>
+              <div className="text-xs uppercase text-muted-foreground mb-1">Antecipação Banco Topázio</div>
+              <AntecipacaoEditor lot={lot} onSave={onSaveAntecipacao} />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Lote antecipado (tarifa de adiantamento detectada). Consulte o portal Edenred
+                pra obter Data da Transação, Valor creditado e Banco de Crédito reais.
+              </p>
+            </div>
+          )}
+
+
 
           {/* Override de taxa quando lote parcial */}
           {isParcial && (
@@ -2075,3 +2150,115 @@ function OverviewGrid({
     </div>
   );
 }
+
+function AntecipacaoEditor({
+  lot,
+  onSave,
+}: {
+  lot: Lot;
+  onSave: (payload: { data_transacao_bb: string | null; valor_creditado_bb: number | null; banco_credito: string | null }) => Promise<void>;
+}) {
+  const filled = !!(lot.data_transacao_bb && lot.valor_creditado_bb != null);
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState<string>(lot.data_transacao_bb ?? '');
+  const [valor, setValor] = useState<string>(lot.valor_creditado_bb != null ? String(lot.valor_creditado_bb) : '');
+  const [banco, setBanco] = useState<string>(lot.banco_credito ?? '1 - BANCO DO BRASIL');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setDate(lot.data_transacao_bb ?? '');
+    setValor(lot.valor_creditado_bb != null ? String(lot.valor_creditado_bb) : '');
+    setBanco(lot.banco_credito ?? '1 - BANCO DO BRASIL');
+  }, [lot.data_transacao_bb, lot.valor_creditado_bb, lot.banco_credito]);
+
+  const handleSave = async () => {
+    const v = valor.replace(',', '.').trim();
+    const num = v ? Number(v) : null;
+    if (v && (!isFinite(num as number) || (num as number) < 0)) {
+      toast.error('Valor inválido');
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        data_transacao_bb: date || null,
+        valor_creditado_bb: num,
+        banco_credito: banco.trim() || null,
+      });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    try {
+      await onSave({ data_transacao_bb: null, valor_creditado_bb: null, banco_credito: null });
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant={filled ? 'outline' : 'default'}
+          className={filled ? 'gap-1.5 text-emerald-700 border-emerald-500/40 dark:text-emerald-400' : 'gap-1.5'}
+        >
+          <Zap className="h-3.5 w-3.5" />
+          {filled
+            ? `Antecipação ✓ ${fmtDate(lot.data_transacao_bb)} · ${fmt(Number(lot.valor_creditado_bb))}`
+            : 'Antecipação BB — preencher'}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="antec-date" className="text-xs">Data da Transação (BB)</Label>
+          <Input id="antec-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="antec-valor" className="text-xs">Valor creditado (R$)</Label>
+          <Input
+            id="antec-valor"
+            type="text"
+            inputMode="decimal"
+            placeholder="Ex: 118.41"
+            value={valor}
+            onChange={(e) => setValor(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="antec-banco" className="text-xs">Banco de Crédito</Label>
+          <Input
+            id="antec-banco"
+            list="antec-banco-options"
+            value={banco}
+            onChange={(e) => setBanco(e.target.value)}
+          />
+          <datalist id="antec-banco-options">
+            <option value="1 - BANCO DO BRASIL" />
+            <option value="082 - BANCO TOPAZIO" />
+          </datalist>
+        </div>
+        <div className="flex justify-between gap-2">
+          {filled && (
+            <Button variant="ghost" size="sm" onClick={handleClear} disabled={saving} className="text-rose-600">
+              Limpar
+            </Button>
+          )}
+          <div className="flex gap-2 ml-auto">
+            <Button variant="outline" size="sm" onClick={() => setOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Salvar'}
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+

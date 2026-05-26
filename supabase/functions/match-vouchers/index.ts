@@ -109,11 +109,12 @@ Deno.serve(async (req) => {
     // (period = mês da venda) do depósito BB (period = onde foi importado).
     const { data: lots } = await supabase
       .from('audit_voucher_lots')
-      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual, audit_period_id')
+      .select('id, numero_reembolso, valor_liquido, data_credito, bb_deposit_id, bb_deposit_id_2, manual, audit_period_id, data_transacao_bb, valor_creditado_bb, banco_credito')
       .eq('operadora', operadora)
       .gte('data_credito', windowMin)
       .lte('data_credito', windowMax)
       .order('data_credito', { ascending: true });
+
 
     if (!lots || lots.length === 0) {
       return new Response(JSON.stringify({ success: true, message: 'Nenhum lote a processar', matched: 0 }), {
@@ -159,16 +160,26 @@ Deno.serve(async (req) => {
     // com data_credito 05/04 (dom) recebe no dep 06/04 (seg); lote com
     // 11/04 (sáb) recebe no dep 13/04 (seg). Sem essa normalização o lote
     // fica fora da janela ±2 úteis de qualquer dep.
+    // Antecipação Banco Topázio (Ticket): quando o lote tem
+    // data_transacao_bb + valor_creditado_bb preenchidos manualmente, usa
+    // ESSES valores em vez de data_credito/valor_liquido (o crédito real
+    // chegou antes via cessão Topázio, com valor diferente da projeção PDF).
     const pendingLots: PendingLot[] = lots
       .filter(l => !l.bb_deposit_id)
-      .map(l => ({
-        id: l.id,
-        numero_reembolso: l.numero_reembolso,
-        valor_liquido: Number(l.valor_liquido),
-        data_credito: l.data_credito && !isBusinessDay(l.data_credito)
-          ? nextBusinessDay(l.data_credito)
-          : l.data_credito,
-      }));
+      .map(l => {
+        const hasOverride = l.data_transacao_bb && l.valor_creditado_bb != null;
+        const effectiveDate = hasOverride ? l.data_transacao_bb : l.data_credito;
+        const effectiveAmount = hasOverride ? Number(l.valor_creditado_bb) : Number(l.valor_liquido);
+        return {
+          id: l.id,
+          numero_reembolso: l.numero_reembolso,
+          valor_liquido: effectiveAmount,
+          data_credito: effectiveDate && !isBusinessDay(effectiveDate)
+            ? nextBusinessDay(effectiveDate)
+            : effectiveDate,
+        };
+      });
+
 
     let matchedSingle = 0;
     let matchedPair = 0;        // grupos de N lotes → 1 dep (N=2..MAX)
@@ -308,6 +319,71 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Pass D: Pool Banco Topázio (antecipação Edenred/Ticket). Lotes com
+    // data_transacao_bb + valor_creditado_bb preenchidos manualmente são
+    // creditados via "Cessão Créd Liquid Princ" pelo Banco Topázio (082) no
+    // mesmo dia, agregados em 1-2 depósitos. Não respeita 1-pra-1 nem categoria
+    // ticket — esses depósitos podem estar sob outra categoria no BB. Logo:
+    // busca por dia + descrição cessão/topázio direto, independente de pool A/B/C.
+    let matchedPoolLots = 0;
+    let matchedPoolDeps = 0;
+    if (operadora === 'ticket') {
+      const takenIds = new Set(updates.map(u => u.id));
+      const overrideLots = lots
+        .filter(l => !l.bb_deposit_id && !takenIds.has(l.id))
+        .filter(l => l.data_transacao_bb && l.valor_creditado_bb != null);
+
+      // Agrupa por data_transacao_bb
+      const byDate = new Map<string, typeof overrideLots>();
+      for (const l of overrideLots) {
+        const d = l.data_transacao_bb as string;
+        if (!byDate.has(d)) byDate.set(d, []);
+        byDate.get(d)!.push(l);
+      }
+
+      for (const [date, dayLots] of byDate.entries()) {
+        // Busca depósitos BB no dia com descrição cessão/topázio (independente
+        // de matched — pool é idempotente, reanexa todos os deps do dia).
+        const { data: poolDeps } = await supabase
+          .from('audit_bank_deposits')
+          .select('id, deposit_date, amount, description, detail')
+          .eq('audit_period_id', audit_period_id)
+          .eq('bank', 'bb')
+          .eq('deposit_date', date);
+
+        const candidates = (poolDeps ?? []).filter((d: any) => {
+          const desc = String(d.description ?? '').toLowerCase();
+          const det = String(d.detail ?? '').toLowerCase();
+          return desc.includes('cess') || desc.includes('topazio') || desc.includes('topázio')
+            || det.includes('cess') || det.includes('topazio') || det.includes('topázio');
+        });
+        if (candidates.length === 0) continue;
+        const sumLots = dayLots.reduce((s, l) => s + Number(l.valor_creditado_bb), 0);
+        const sumDeps = candidates.reduce((s: number, d: any) => s + Number(d.amount), 0);
+        const POOL_TOLERANCE = 5;
+        // Aceita se soma dos lotes <= soma dos deps + tolerância (deps podem
+        // conter outras operadoras antecipadas invisíveis no PDF Ticket).
+        if (sumLots > sumDeps + POOL_TOLERANCE) continue;
+        const anchorDep = candidates[0];
+        for (const l of dayLots) {
+          updates.push({
+            id: l.id,
+            bb_deposit_id: anchorDep.id,
+            diff: 0,
+          });
+          matchedPoolLots++;
+        }
+        // Marca todos os deps do pool como matched
+        for (const d of candidates) {
+          await supabase
+            .from('audit_bank_deposits')
+            .update({ matched: true, match_reason: 'pool_topazio' })
+            .eq('id', d.id);
+          matchedPoolDeps++;
+        }
+      }
+    }
+
     for (const u of updates) {
       await supabase
         .from('audit_voucher_lots')
@@ -327,10 +403,13 @@ Deno.serve(async (req) => {
       matched_pair: matchedPair,
       matched_pair_lots: matchedPairLots,
       matched_split: matchedSplit,
-      matched: matchedSingle + matchedPairLots + matchedSplit,
+      matched_pool_lots: matchedPoolLots,
+      matched_pool_deps: matchedPoolDeps,
+      matched: matchedSingle + matchedPairLots + matchedSplit + matchedPoolLots,
       ambiguous: ambiguous.slice(0, 20),
-      message: `${matchedSingle} 1-pra-1 + ${matchedPair} grupos N-pra-1 (${matchedPairLots} lotes) + ${matchedSplit} 1 lote→2 deps${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
+      message: `${matchedSingle} 1-pra-1 + ${matchedPair} grupos N-pra-1 (${matchedPairLots} lotes) + ${matchedSplit} 1 lote→2 deps${matchedPoolLots > 0 ? ` + ${matchedPoolLots} lotes pool Topázio (${matchedPoolDeps} deps)` : ''}${ambiguous.length > 0 ? ` (${ambiguous.length} ambíguos)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
   } catch (e: any) {
     console.error('match-vouchers error', e);
     return new Response(JSON.stringify({ error: e?.message ?? 'Erro inesperado' }), {
