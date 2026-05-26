@@ -98,6 +98,8 @@ export default function AuditBrendi() {
   const [brendiCashbackTotal, setBrendiCashbackTotal] = useState(0);
   const [brendiCashbackOrdersCount, setBrendiCashbackOrdersCount] = useState(0);
   const [saiposOrdersCount, setSaiposOrdersCount] = useState(0);
+  const [totalBrutoMes, setTotalBrutoMes] = useState(0);
+  const [pedidosMes, setPedidosMes] = useState(0);
 
   // URL sync
   useEffect(() => {
@@ -110,19 +112,16 @@ export default function AuditBrendi() {
   }, [month, year, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = async (periodId: string) => {
-    // Cashback KPI deve refletir só o mês de competência. Brendi importa 3
-    // meses (ant+comp+post) no mesmo audit_period_id pra cobrir D+1 entre
-    // meses, então filtra sale_date dentro do range do mês.
     const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
     const nextMonthStart = month === 12
       ? `${year + 1}-01-01`
       : `${year}-${String(month + 1).padStart(2, '0')}-01`;
-    const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }] = await Promise.all([
+    const [{ data: dailyRows }, { data: imps }, { count: brendiCount }, { count: saiposCount }, { data: cashbackData }, { data: ordersMes }] = await Promise.all([
       supabase
         .from('audit_brendi_daily')
-        .select('id, bb_credit_date, sale_dates, expected_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, cumulative_diff, cumulative_diff_pct, status, note')
+        .select('id, sale_date, bb_credit_date, sale_dates, expected_credit_date, pedidos_count, expected_amount, expected_liquido, taxa_calculada, received_amount, diff, diff_pct, cumulative_diff, cumulative_diff_pct, status, note')
         .eq('audit_period_id', periodId)
-        .order('bb_credit_date'),
+        .order('sale_date'),
       supabase
         .from('audit_imports')
         .select('file_type, status, created_at, imported_rows')
@@ -144,6 +143,15 @@ export default function AuditBrendi() {
         .gte('sale_date', monthStart)
         .lt('sale_date', nextMonthStart)
         .gt('cashback_usado', 0),
+      // Total Bruto direto dos orders (fonte da verdade — competência por sale_date)
+      supabase
+        .from('audit_brendi_orders')
+        .select('total, forma_pagamento')
+        .eq('audit_period_id', periodId)
+        .ilike('status_remote', 'entregue')
+        .in('forma_pagamento', ['Pix Online', 'Crédito Online'])
+        .gte('sale_date', monthStart)
+        .lt('sale_date', nextMonthStart),
     ]);
     setDaily((dailyRows ?? []) as DailyRow[]);
     setImports((imps ?? []) as any);
@@ -151,7 +159,11 @@ export default function AuditBrendi() {
     setSaiposOrdersCount(saiposCount ?? 0);
     setBrendiCashbackTotal((cashbackData ?? []).reduce((s, r) => s + Number(r.cashback_usado || 0), 0));
     setBrendiCashbackOrdersCount((cashbackData ?? []).length);
+    const orders = (ordersMes ?? []) as Array<{ total: number }>;
+    setTotalBrutoMes(orders.reduce((s, o) => s + Number(o.total || 0), 0));
+    setPedidosMes(orders.length);
   };
+
 
   useEffect(() => {
     if (!isAdmin) return;
