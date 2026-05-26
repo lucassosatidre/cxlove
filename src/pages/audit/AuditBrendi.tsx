@@ -179,6 +179,7 @@ export default function AuditBrendi() {
       else {
         setDaily([]); setImports([]); setBrendiOrdersCount(0); setSaiposOrdersCount(0);
         setBrendiCashbackTotal(0); setBrendiCashbackOrdersCount(0);
+        setTotalBrutoMes(0); setPedidosMes(0);
       }
       setLoading(false);
     })();
@@ -218,14 +219,14 @@ export default function AuditBrendi() {
   };
 
   const totals = useMemo(() => {
-    const exp = daily.reduce((s, d) => s + Number(d.expected_amount || 0), 0);
+    // Total Bruto/pedidos: fonte da verdade = audit_brendi_orders por sale_date.
+    const exp = totalBrutoMes;
     const expLiq = daily.reduce((s, d) => s + Number(d.expected_liquido || 0), 0);
     const taxaDecl = daily.reduce((s, d) => s + Number(d.taxa_calculada || 0), 0);
     const rec = daily.reduce((s, d) => s + Number(d.received_amount || 0), 0);
     const taxa = exp > 0 ? ((exp - rec) / exp) * 100 : 0;
     const taxaDeclPct = exp > 0 ? (taxaDecl / exp) * 100 : 0;
     const custoOculto = expLiq - rec;
-    const pedidosMes = daily.reduce((s, d) => s + Number(d.pedidos_count || 0), 0);
     const matchedCount = daily.filter(d => d.status === 'matched' || d.status === 'matched_window').length;
     const pendingManualCount = daily.filter(d => d.status === 'pending_manual').length;
     const mensalidadeCount = daily.filter(d => d.status === 'mensalidade_descontada').length;
@@ -233,7 +234,8 @@ export default function AuditBrendi() {
       .filter(d => d.status === 'mensalidade_descontada')
       .reduce((s, d) => s + Math.abs(Number(d.diff || 0)), 0);
     return { exp, expLiq, taxaDecl, rec, taxa, taxaDeclPct, custoOculto, pedidosMes, matchedCount, pendingManualCount, mensalidadeCount, mensalidadeAmount };
-  }, [daily]);
+  }, [daily, totalBrutoMes, pedidosMes]);
+
 
   if (roleLoading || loading) {
     return (
