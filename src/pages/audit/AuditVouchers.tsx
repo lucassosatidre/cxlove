@@ -489,7 +489,7 @@ export default function AuditVouchers() {
       // Lote com líquido > 0 espera match contra depósito BB. Líquido === 0
       // (caso Taxa Manutenção pura — total descontos = subtotal) não tem
       // crédito esperado e não entra no denominador de "Pareados".
-      if (Number(l.valor_liquido ?? 0) > 0) expectMatch++;
+      if (effectiveLiquido(l) > 0) expectMatch++;
 
       const items = allItemsByLot[l.id] ?? [];
       const { subtotal: lotSubtotal, totalDesc, liquido: lotLiquido } = computedLot(l, items);
