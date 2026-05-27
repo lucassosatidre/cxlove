@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "151"
+VERSION = "152"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
@@ -1075,12 +1075,12 @@ def gerar_etiqueta_producao(payload, larg=None, alt=None):
                     draw.text((x, y0 + i * (line_h + 2)), l, fill="white", font=f_tmp)
                 break
 
-    # ---- FAB / VAL (fonte NORMAL preta) — hora anexada ao FAB quando disponível
+    # ---- FAB / VAL (fonte BOLD preta — nitidez na térmica) — hora anexada ao FAB quando disponível
     label_fab = f"FAB: {fab} {hora}".rstrip() if hora else f"FAB: {fab}"
     label_val = f"VAL: {val}"
     metade = largura_util // 2
-    f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, bold=False, tam_max=40, tam_min=14)
-    f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, bold=False, tam_max=40, tam_min=14)
+    f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, bold=True, tam_max=40, tam_min=14)
+    f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, bold=True, tam_max=40, tam_min=14)
     f_dat = f_b if f_b.size < f_a.size else f_a
     bb_fab = draw.textbbox((0, 0), label_fab, font=f_dat)
     bb_val = draw.textbbox((0, 0), label_val, font=f_dat)
@@ -1094,12 +1094,15 @@ def gerar_etiqueta_producao(payload, larg=None, alt=None):
         label_resp = f"PORÇÃO: {porcao}   RESPONSÁVEL: {resp}"
     else:
         label_resp = f"RESPONSÁVEL: {resp}"
-    f_resp = _prod_fit(draw, label_resp, largura_util - 4, h_resp - 4, bold=False, tam_max=32, tam_min=10)
+    f_resp = _prod_fit(draw, label_resp, largura_util - 4, h_resp - 4, bold=True, tam_max=32, tam_min=10)
     bb_r = draw.textbbox((0, 0), label_resp, font=f_resp)
     rw, rh = bb_r[2] - bb_r[0], bb_r[3] - bb_r[1]
     rx = margem_e + (largura_util - rw) // 2
     ry = y_resp + (h_resp - rh) // 2 - 2
     draw.text((rx, ry), label_resp, fill="black", font=f_resp)
+
+    # Térmica: remove o cinza do anti-aliasing -> preto puro ou branco puro (nitidez)
+    img = img.convert("L").point(lambda p: 0 if p < 190 else 255).convert("RGB")
     return img
 
 def processar_lovelabel(filepath, filename):
