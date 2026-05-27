@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "150"
+VERSION = "151"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
@@ -866,11 +866,12 @@ def processar_pedido(filepath, filename):
         except: pass
         return
 
+    impressora_cx = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
     num_etiquetas = max(total_caixas, 1)
     for i in range(1, num_etiquetas + 1):
         img = gerar_etiqueta(numero_pedido, i, num_etiquetas, all_display, total_entrega,
                              pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido)
-        log(f"  Etiqueta {i}/{num_etiquetas}..."); imprimir_etiqueta(img)
+        log(f"  Etiqueta {i}/{num_etiquetas}..."); imprimir_etiqueta(img, printer_name=impressora_cx)
         if i < num_etiquetas: time.sleep(0.5)
     try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log(f"  Movido")
     except: pass
@@ -889,48 +890,20 @@ def processar_arquivo(filepath):
 _LOVELABEL_SEEN = {}
 _LOVELABEL_DEDUP_S = 5
 
-# --- Impressora 50x25 do CO LOVE: achada pelo IP (config por PC) ---
+# --- Impressoras achadas pelo IP FIXO na rede (o nome no Windows varia por PC) ---
+# Caixas (comandas) 80x30mm  e  Producao do CO LOVE 50x25mm sao 2 impressoras de rede.
+IP_IMPRESSORA_CAIXAS   = "192.168.1.14"   # comandas das caixas (80x30)
+IP_IMPRESSORA_PRODUCAO = "192.168.1.24"   # etiquetas de validade CO LOVE (50x25)
+
 CO_LOVE_LARGURA_MM = 50
 CO_LOVE_ALTURA_MM = 25
 CO_LOVE_LARGURA_PX = int(CO_LOVE_LARGURA_MM * DPI / 25.4)   # ~399 px @ 203 DPI
 CO_LOVE_ALTURA_PX = int(CO_LOVE_ALTURA_MM * DPI / 25.4)     # ~199 px @ 203 DPI
 
-# Arquivo com 1 linha: o IP da impressora de etiquetas 50x25 DESTE computador.
-CO_LOVE_IP_FILE = os.path.join(PASTA_DOWNLOADS, "colove_impressora_ip.txt")
-_co_love_cache = {"ip": None, "name": None}
-
-_TEMPLATE_IP = (
-    "# IP da impressora de etiquetas 50x25mm do CO LOVE neste computador.\n"
-    "# Escreva o IP na linha de baixo (ex: 192.168.1.50) e salve.\n"
-    "# As comandas das caixas continuam saindo na impressora padrao - nao mexa nelas.\n"
-    "# Pra achar o IP: Painel de Controle > Dispositivos e Impressoras > botao direito\n"
-    "#   na impressora 50x25 > Propriedades da impressora > aba Portas (mostra o IP).\n"
-    "\n"
-)
-
-def _garantir_template_ip():
-    try:
-        if not os.path.exists(CO_LOVE_IP_FILE):
-            with open(CO_LOVE_IP_FILE, "w", encoding="utf-8") as f:
-                f.write(_TEMPLATE_IP)
-            log(f"  CO LOVE: criado modelo {CO_LOVE_IP_FILE} (coloque o IP da impressora 50x25)")
-    except Exception:
-        pass
-
-def _ler_ip_colove():
-    try:
-        with open(CO_LOVE_IP_FILE, "r", encoding="utf-8") as f:
-            for linha in f:
-                s = linha.strip()
-                if s and not s.startswith("#"):
-                    m = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', s)
-                    if m: return m.group(1)
-    except Exception:
-        pass
-    return None
+_cache_impressora_ip = {}
 
 def _ip_da_porta(port_name):
-    """Tenta descobrir o IP de uma porta de impressora (pelo nome ou pelo registro)."""
+    """Descobre o IP de uma porta de impressora (pelo nome da porta ou pelo registro)."""
     m = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', port_name or "")
     if m: return m.group(1)
     try:
@@ -958,26 +931,24 @@ def _achar_impressora_por_ip(ip):
         flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
         impressoras = win32print.EnumPrinters(flags, None, 2)
     except Exception as e:
-        log(f"  CO LOVE: erro lendo impressoras: {e}")
+        log(f"  erro lendo impressoras: {e}")
         return None
     for p in impressoras:
         if _ip_da_porta(p.get("pPortName", "")) == ip:
             return p.get("pPrinterName", "")
     return None
 
-def _impressora_colove():
-    """Nome (Windows) da impressora 50x25 deste PC, achada pelo IP. Cacheado."""
-    ip = _ler_ip_colove()
-    if not ip:
-        return None
-    if _co_love_cache["ip"] == ip and _co_love_cache["name"]:
-        return _co_love_cache["name"]
+def _impressora_para(ip, fallback=None, etiqueta=""):
+    """Nome (Windows) da impressora que esta no IP dado. Cacheia so o sucesso."""
+    nome = _cache_impressora_ip.get(ip)
+    if nome: return nome
     nome = _achar_impressora_por_ip(ip)
-    _co_love_cache["ip"] = ip
-    _co_love_cache["name"] = nome
-    if nome: log(f"  CO LOVE: impressora '{nome}' (IP {ip})")
-    else: log(f"  CO LOVE: nenhuma impressora com IP {ip} encontrada")
-    return nome
+    if nome:
+        _cache_impressora_ip[ip] = nome
+        log(f"  {etiqueta}: impressora '{nome}' (IP {ip})")
+        return nome
+    log(f"  {etiqueta}: nenhuma impressora no IP {ip} -> usando '{fallback}'")
+    return fallback
 
 def _prod_fonte_bold(tamanho):
     for p in ("arialbd.ttf", "C:\\Windows\\Fonts\\arialbd.ttf",
@@ -1153,10 +1124,7 @@ def processar_lovelabel(filepath, filename):
     qtd = max(1, min(50, int(payload.get("quantity", 1))))
     nome = payload.get("product_name", "?")
     log(f"  CO LOVE: {qtd}x '{nome}' (batch {str(batch_id)[:8]}{'/REIMP' if is_reprint else ''})")
-    impressora = _impressora_colove()
-    if not impressora:
-        impressora = NOME_IMPRESSORA
-        log("  CO LOVE: SEM impressora 50x25 configurada (veja colove_impressora_ip.txt) -> usando impressora padrao")
+    impressora = _impressora_para(IP_IMPRESSORA_PRODUCAO, fallback=NOME_IMPRESSORA, etiqueta="PRODUCAO")
     img = gerar_etiqueta_producao(payload)
     for i in range(qtd):
         try: imprimir_etiqueta(img, printer_name=impressora, larg=CO_LOVE_LARGURA_PX, alt=CO_LOVE_ALTURA_PX)
@@ -1188,13 +1156,12 @@ def main():
     print(f"  Usuario:     {os.path.expanduser('~')}")
     print(f"  Monitorando: {PASTA_DOWNLOADS}")
     print(f"  Impressora:  {NOME_IMPRESSORA}")
-    print(f"  Etiqueta:    {LARGURA_MM}x{ALTURA_MM}mm (comandas das caixas)")
-    print(f"  CO LOVE:     {CO_LOVE_LARGURA_MM}x{CO_LOVE_ALTURA_MM}mm (impressora pelo IP em {os.path.basename(CO_LOVE_IP_FILE)})\n")
+    print(f"  Caixas:      {LARGURA_MM}x{ALTURA_MM}mm  (IP {IP_IMPRESSORA_CAIXAS})")
+    print(f"  CO LOVE:     {CO_LOVE_LARGURA_MM}x{CO_LOVE_ALTURA_MM}mm  (IP {IP_IMPRESSORA_PRODUCAO})\n")
     print("  Verificando atualizacoes..."); check_update(); print()
     if not os.path.exists(PASTA_DOWNLOADS):
         print(f"  ERRO: Pasta nao encontrada: {PASTA_DOWNLOADS}"); input("  Enter para sair..."); return
     os.makedirs(PASTA_SAIPOS, exist_ok=True)
-    _garantir_template_ip()
     print("  Aguardando pedidos do Saipos...\n  (Ctrl+C para parar)\n")
     log(f"Script v{VERSION} iniciado - {LARGURA_MM}x{ALTURA_MM}mm")
     handler = SaiposHandler(); observer = Observer()
