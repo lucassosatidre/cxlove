@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "152"
+VERSION = "153"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
@@ -1020,17 +1020,17 @@ def _prod_wrap(draw, texto, font, max_w):
 
 def gerar_etiqueta_producao(payload, larg=None, alt=None):
     """
-    Layout CO LOVE v150 — etiqueta 50x25mm (impressora separada, achada por IP):
-    - FAIXA PRETA NO TOPO com nome do insumo em BRANCO BOLD (gramatura
-      detectada vai pro rodapé como 'PORÇÃO: NNG').
-    - FAB / VAL no meio (texto preto, fonte normal).
-    - Porção + Responsável embaixo (texto preto, fonte normal, sem fundo).
+    Layout CO LOVE v153 — etiqueta 50x25mm, FUNDO PRETO + texto BRANCO bold:
+    - Nome do insumo grande no topo (10% MENOR que a versão anterior).
+    - FAB / VAL lado a lado e PORÇÃO/RESPONSÁVEL embaixo, 20% MAIORES.
+    Tudo em preto puro/branco puro (sem cinza) pra nitidez na térmica.
     """
     larg = larg if larg else CO_LOVE_LARGURA_PX
     alt = alt if alt else CO_LOVE_ALTURA_PX
-    img = Image.new("RGB", (larg, alt), "white")
+    img = Image.new("RGB", (larg, alt), "black")   # FUNDO PRETO
     draw = ImageDraw.Draw(img)
-    margem_e, margem_d, margem_b = 16, 28, 6
+    margem_e, margem_d = 14, 14
+    largura_util = larg - margem_e - margem_d
 
     nome_raw = (payload.get("product_name") or "?").upper()
     nome, porcao = _extrair_porcao(nome_raw)
@@ -1038,70 +1038,96 @@ def gerar_etiqueta_producao(payload, larg=None, alt=None):
     val = _prod_data_br(payload.get("expiry_date") or "")
     hora = _prod_hora_br(payload.get("printed_at") or "")
     resp = (payload.get("responsible_name") or "?").strip().upper()
-
-    largura_util = larg - margem_e - margem_d
-    altura_util = alt - margem_b
-
-    h_nome = int(altura_util * 0.50)   # faixa preta no topo
-    h_datas = int(altura_util * 0.25)
-    h_resp = altura_util - h_nome - h_datas
-
-    y_nome = 0
-    y_datas = h_nome
-    y_resp = y_datas + h_datas
-
-    # ---- Faixa preta no TOPO com nome em branco (BOLD)
-    draw.rectangle([0, 0, larg, h_nome], fill="black")
-    f_nome = _prod_fit(draw, nome, largura_util, h_nome - 10, bold=True, tam_max=72, tam_min=20)
-    bb = draw.textbbox((0, 0), nome, font=f_nome)
-    if (bb[2] - bb[0]) <= largura_util:
-        lh = bb[3] - bb[1]
-        x = margem_e + (largura_util - (bb[2] - bb[0])) // 2
-        y = y_nome + (h_nome - lh) // 2 - 4
-        draw.text((x, y), nome, fill="white", font=f_nome)
-    else:
-        for s in range(50, 14, -2):
-            f_tmp = _prod_fonte_bold(s)
-            linhas = _prod_wrap(draw, nome, f_tmp, largura_util)
-            if len(linhas) > 2: continue
-            line_h = draw.textbbox((0, 0), "Ag", font=f_tmp)[3]
-            total_h = line_h * len(linhas) + 2 * (len(linhas) - 1)
-            if total_h <= h_nome - 10:
-                y0 = y_nome + (h_nome - total_h) // 2 - 2
-                for i, l in enumerate(linhas):
-                    bbl = draw.textbbox((0, 0), l, font=f_tmp)
-                    lw = bbl[2] - bbl[0]
-                    x = margem_e + (largura_util - lw) // 2
-                    draw.text((x, y0 + i * (line_h + 2)), l, fill="white", font=f_tmp)
-                break
-
-    # ---- FAB / VAL (fonte BOLD preta — nitidez na térmica) — hora anexada ao FAB quando disponível
     label_fab = f"FAB: {fab} {hora}".rstrip() if hora else f"FAB: {fab}"
     label_val = f"VAL: {val}"
-    metade = largura_util // 2
-    f_a = _prod_fit(draw, label_val, metade - 8, h_datas - 4, bold=True, tam_max=40, tam_min=14)
-    f_b = _prod_fit(draw, label_fab, metade - 8, h_datas - 4, bold=True, tam_max=40, tam_min=14)
-    f_dat = f_b if f_b.size < f_a.size else f_a
-    bb_fab = draw.textbbox((0, 0), label_fab, font=f_dat)
-    bb_val = draw.textbbox((0, 0), label_val, font=f_dat)
-    h_label = max(bb_fab[3] - bb_fab[1], bb_val[3] - bb_val[1])
-    y_label = y_datas + (h_datas - h_label) // 2 - 2
-    draw.text((margem_e, y_label), label_fab, fill="black", font=f_dat)
-    draw.text((larg - margem_d - (bb_val[2] - bb_val[0]), y_label), label_val, fill="black", font=f_dat)
+    label_resp_1l = f"PORÇÃO: {porcao}   RESPONSÁVEL: {resp}" if porcao else f"RESPONSÁVEL: {resp}"
 
-    # ---- Porção + Responsável (fonte NORMAL preta, sem fundo)
-    if porcao:
-        label_resp = f"PORÇÃO: {porcao}   RESPONSÁVEL: {resp}"
+    def w(t, f): bb = draw.textbbox((0, 0), t, font=f); return bb[2] - bb[0]
+    def h(t, f): bb = draw.textbbox((0, 0), t, font=f); return bb[3] - bb[1]
+    def maior_bold_ate(texto, max_w, alvo):
+        for s in range(alvo, 7, -1):
+            f = _prod_fonte_bold(s)
+            if w(texto, f) <= max_w: return f
+        return _prod_fonte_bold(8)
+
+    # --- Tamanhos de referência (geometria da versão branca) p/ aplicar -10% / +20%
+    ref_alt = alt - 6
+    ref_nome = _prod_fit(draw, nome, largura_util, int(ref_alt * 0.50) - 10, bold=True, tam_max=72, tam_min=20).size
+    ref_dat = min(
+        _prod_fit(draw, label_fab, (largura_util // 2) - 8, int(ref_alt * 0.25) - 4, bold=True, tam_max=40, tam_min=14).size,
+        _prod_fit(draw, label_val, (largura_util // 2) - 8, int(ref_alt * 0.25) - 4, bold=True, tam_max=40, tam_min=14).size,
+    )
+    ref_resp = _prod_fit(draw, label_resp_1l, largura_util - 4, int(ref_alt * 0.25) - 4, bold=True, tam_max=32, tam_min=10).size
+    alvo_nome = max(int(round(ref_nome * 0.90)), 14)   # -10%
+    alvo_dat = max(int(round(ref_dat * 1.20)), 12)     # +20%
+    alvo_resp = max(int(round(ref_resp * 1.20)), 12)   # +20%
+
+    # --- NOME: 1 linha no tamanho alvo se couber; senão reduz pouco; senão 2 linhas
+    f_nome = _prod_fonte_bold(alvo_nome)
+    if w(nome, f_nome) <= largura_util:
+        bloco_nome = [(nome, f_nome)]
     else:
-        label_resp = f"RESPONSÁVEL: {resp}"
-    f_resp = _prod_fit(draw, label_resp, largura_util - 4, h_resp - 4, bold=True, tam_max=32, tam_min=10)
-    bb_r = draw.textbbox((0, 0), label_resp, font=f_resp)
-    rw, rh = bb_r[2] - bb_r[0], bb_r[3] - bb_r[1]
-    rx = margem_e + (largura_util - rw) // 2
-    ry = y_resp + (h_resp - rh) // 2 - 2
-    draw.text((rx, ry), label_resp, fill="black", font=f_resp)
+        f1 = maior_bold_ate(nome, largura_util, alvo_nome)
+        if f1.size >= int(alvo_nome * 0.8):
+            bloco_nome = [(nome, f1)]
+        else:
+            bloco_nome = []
+            for s in range(alvo_nome, 11, -1):
+                ft = _prod_fonte_bold(s)
+                linhas = _prod_wrap(draw, nome, ft, largura_util)
+                if len(linhas) <= 2 and all(w(l, ft) <= largura_util for l in linhas):
+                    bloco_nome = [(l, ft) for l in linhas]; break
+            if not bloco_nome:
+                bloco_nome = [(nome, maior_bold_ate(nome, largura_util, alvo_nome))]
 
-    # Térmica: remove o cinza do anti-aliasing -> preto puro ou branco puro (nitidez)
+    # --- FAB / VAL: lado a lado na linha cheia, maior fonte <= alvo que caiba
+    gap_dat = 12
+    f_dat = maior_bold_ate(label_fab, largura_util, alvo_dat)  # garante pelo menos o FAB
+    for s in range(alvo_dat, 8, -1):
+        f = _prod_fonte_bold(s)
+        if w(label_fab, f) + gap_dat + w(label_val, f) <= largura_util:
+            f_dat = f; break
+
+    # --- PORÇÃO/RESPONSÁVEL: 1 linha no alvo se couber, senão 2 linhas
+    f_resp = _prod_fonte_bold(alvo_resp)
+    if w(label_resp_1l, f_resp) <= largura_util:
+        bloco_resp = [(label_resp_1l, f_resp)]
+    elif porcao:
+        p1, p2 = f"PORÇÃO: {porcao}", f"RESPONSÁVEL: {resp}"
+        fr = maior_bold_ate(p2, largura_util, alvo_resp)
+        for s in range(alvo_resp, 8, -1):
+            ft = _prod_fonte_bold(s)
+            if w(p1, ft) <= largura_util and w(p2, ft) <= largura_util:
+                fr = ft; break
+        bloco_resp = [(p1, fr), (p2, fr)]
+    else:
+        bloco_resp = [(label_resp_1l, maior_bold_ate(label_resp_1l, largura_util, alvo_resp))]
+
+    # --- Empilha os 3 blocos centralizados na vertical
+    def alt_bloco(bloco, esp):
+        lh = max(h("Ag", f) for _, f in bloco)
+        return lh * len(bloco) + esp * (len(bloco) - 1)
+    esp_linha, esp_resp, espaco = 2, 3, 11
+    a_nome = alt_bloco(bloco_nome, esp_linha)
+    a_dat = max(h(label_fab, f_dat), h(label_val, f_dat))
+    a_resp = alt_bloco(bloco_resp, esp_resp)
+    total = a_nome + espaco + a_dat + espaco + a_resp
+    y = max(4, (alt - total) // 2)
+
+    def desenha_centrado(bloco, y0, esp):
+        lh = max(h("Ag", f) for _, f in bloco)
+        for i, (linha, f) in enumerate(bloco):
+            x = margem_e + (largura_util - w(linha, f)) // 2
+            draw.text((x, y0 + i * (lh + esp)), linha, fill="white", font=f)
+
+    desenha_centrado(bloco_nome, y, esp_linha)
+    y += a_nome + espaco
+    draw.text((margem_e, y), label_fab, fill="white", font=f_dat)
+    draw.text((larg - margem_d - w(label_val, f_dat), y), label_val, fill="white", font=f_dat)
+    y += a_dat + espaco
+    desenha_centrado(bloco_resp, y, esp_resp)
+
+    # Térmica: preto puro / branco puro (sem cinza do anti-aliasing)
     img = img.convert("L").point(lambda p: 0 if p < 190 else 255).convert("RGB")
     return img
 
