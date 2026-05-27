@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "149"
+VERSION = "150"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
@@ -718,18 +718,21 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
 
 
 
-def imprimir_etiqueta(img):
+def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
+    printer_name = printer_name or NOME_IMPRESSORA
+    larg = larg if larg else LARGURA_PX
+    alt = alt if alt else ALTURA_PX
     tmp = tempfile.NamedTemporaryFile(suffix=".bmp", delete=False); tmp_path = tmp.name; tmp.close()
     try:
         img.save(tmp_path, "BMP")
         try:
             import win32print, win32ui; from PIL import ImageWin
-            hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(NOME_IMPRESSORA)
+            hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
             hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
-            ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, LARGURA_PX, ALTURA_PX))
-            hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC(); log("  Impresso OK")
+            ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
+            hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC(); log(f"  Impresso OK ({printer_name})")
         except ImportError:
-            subprocess.run(f'mspaint /pt "{tmp_path}" "{NOME_IMPRESSORA}"', shell=True, capture_output=True, timeout=10)
+            subprocess.run(f'mspaint /pt "{tmp_path}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
             log("  Impresso OK (mspaint)")
     except Exception as e: log(f"  ERRO: {e}")
     finally:
@@ -886,6 +889,96 @@ def processar_arquivo(filepath):
 _LOVELABEL_SEEN = {}
 _LOVELABEL_DEDUP_S = 5
 
+# --- Impressora 50x25 do CO LOVE: achada pelo IP (config por PC) ---
+CO_LOVE_LARGURA_MM = 50
+CO_LOVE_ALTURA_MM = 25
+CO_LOVE_LARGURA_PX = int(CO_LOVE_LARGURA_MM * DPI / 25.4)   # ~399 px @ 203 DPI
+CO_LOVE_ALTURA_PX = int(CO_LOVE_ALTURA_MM * DPI / 25.4)     # ~199 px @ 203 DPI
+
+# Arquivo com 1 linha: o IP da impressora de etiquetas 50x25 DESTE computador.
+CO_LOVE_IP_FILE = os.path.join(PASTA_DOWNLOADS, "colove_impressora_ip.txt")
+_co_love_cache = {"ip": None, "name": None}
+
+_TEMPLATE_IP = (
+    "# IP da impressora de etiquetas 50x25mm do CO LOVE neste computador.\n"
+    "# Escreva o IP na linha de baixo (ex: 192.168.1.50) e salve.\n"
+    "# As comandas das caixas continuam saindo na impressora padrao - nao mexa nelas.\n"
+    "# Pra achar o IP: Painel de Controle > Dispositivos e Impressoras > botao direito\n"
+    "#   na impressora 50x25 > Propriedades da impressora > aba Portas (mostra o IP).\n"
+    "\n"
+)
+
+def _garantir_template_ip():
+    try:
+        if not os.path.exists(CO_LOVE_IP_FILE):
+            with open(CO_LOVE_IP_FILE, "w", encoding="utf-8") as f:
+                f.write(_TEMPLATE_IP)
+            log(f"  CO LOVE: criado modelo {CO_LOVE_IP_FILE} (coloque o IP da impressora 50x25)")
+    except Exception:
+        pass
+
+def _ler_ip_colove():
+    try:
+        with open(CO_LOVE_IP_FILE, "r", encoding="utf-8") as f:
+            for linha in f:
+                s = linha.strip()
+                if s and not s.startswith("#"):
+                    m = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', s)
+                    if m: return m.group(1)
+    except Exception:
+        pass
+    return None
+
+def _ip_da_porta(port_name):
+    """Tenta descobrir o IP de uma porta de impressora (pelo nome ou pelo registro)."""
+    m = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', port_name or "")
+    if m: return m.group(1)
+    try:
+        import winreg
+        base = r"SYSTEM\CurrentControlSet\Control\Print\Monitors\Standard TCP/IP Port\Ports"
+        chave = base + "\\" + (port_name or "")
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, chave) as k:
+            for nome_valor in ("IPAddress", "HostName"):
+                try:
+                    v, _ = winreg.QueryValueEx(k, nome_valor)
+                    mm = re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', str(v))
+                    if mm: return mm.group(1)
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    return None
+
+def _achar_impressora_por_ip(ip):
+    try:
+        import win32print
+    except Exception:
+        return None
+    try:
+        flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+        impressoras = win32print.EnumPrinters(flags, None, 2)
+    except Exception as e:
+        log(f"  CO LOVE: erro lendo impressoras: {e}")
+        return None
+    for p in impressoras:
+        if _ip_da_porta(p.get("pPortName", "")) == ip:
+            return p.get("pPrinterName", "")
+    return None
+
+def _impressora_colove():
+    """Nome (Windows) da impressora 50x25 deste PC, achada pelo IP. Cacheado."""
+    ip = _ler_ip_colove()
+    if not ip:
+        return None
+    if _co_love_cache["ip"] == ip and _co_love_cache["name"]:
+        return _co_love_cache["name"]
+    nome = _achar_impressora_por_ip(ip)
+    _co_love_cache["ip"] = ip
+    _co_love_cache["name"] = nome
+    if nome: log(f"  CO LOVE: impressora '{nome}' (IP {ip})")
+    else: log(f"  CO LOVE: nenhuma impressora com IP {ip} encontrada")
+    return nome
+
 def _prod_fonte_bold(tamanho):
     for p in ("arialbd.ttf", "C:\\Windows\\Fonts\\arialbd.ttf",
               "/Library/Fonts/Arial Bold.ttf",
@@ -954,15 +1047,17 @@ def _prod_wrap(draw, texto, font, max_w):
     if atual: linhas.append(atual)
     return linhas
 
-def gerar_etiqueta_producao(payload):
+def gerar_etiqueta_producao(payload, larg=None, alt=None):
     """
-    Layout CO LOVE v148:
+    Layout CO LOVE v150 — etiqueta 50x25mm (impressora separada, achada por IP):
     - FAIXA PRETA NO TOPO com nome do insumo em BRANCO BOLD (gramatura
       detectada vai pro rodapé como 'PORÇÃO: NNG').
     - FAB / VAL no meio (texto preto, fonte normal).
     - Porção + Responsável embaixo (texto preto, fonte normal, sem fundo).
     """
-    img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
+    larg = larg if larg else CO_LOVE_LARGURA_PX
+    alt = alt if alt else CO_LOVE_ALTURA_PX
+    img = Image.new("RGB", (larg, alt), "white")
     draw = ImageDraw.Draw(img)
     margem_e, margem_d, margem_b = 16, 28, 6
 
@@ -973,8 +1068,8 @@ def gerar_etiqueta_producao(payload):
     hora = _prod_hora_br(payload.get("printed_at") or "")
     resp = (payload.get("responsible_name") or "?").strip().upper()
 
-    largura_util = LARGURA_PX - margem_e - margem_d
-    altura_util = ALTURA_PX - margem_b
+    largura_util = larg - margem_e - margem_d
+    altura_util = alt - margem_b
 
     h_nome = int(altura_util * 0.50)   # faixa preta no topo
     h_datas = int(altura_util * 0.25)
@@ -985,7 +1080,7 @@ def gerar_etiqueta_producao(payload):
     y_resp = y_datas + h_datas
 
     # ---- Faixa preta no TOPO com nome em branco (BOLD)
-    draw.rectangle([0, 0, LARGURA_PX, h_nome], fill="black")
+    draw.rectangle([0, 0, larg, h_nome], fill="black")
     f_nome = _prod_fit(draw, nome, largura_util, h_nome - 10, bold=True, tam_max=72, tam_min=20)
     bb = draw.textbbox((0, 0), nome, font=f_nome)
     if (bb[2] - bb[0]) <= largura_util:
@@ -1021,7 +1116,7 @@ def gerar_etiqueta_producao(payload):
     h_label = max(bb_fab[3] - bb_fab[1], bb_val[3] - bb_val[1])
     y_label = y_datas + (h_datas - h_label) // 2 - 2
     draw.text((margem_e, y_label), label_fab, fill="black", font=f_dat)
-    draw.text((LARGURA_PX - margem_d - (bb_val[2] - bb_val[0]), y_label), label_val, fill="black", font=f_dat)
+    draw.text((larg - margem_d - (bb_val[2] - bb_val[0]), y_label), label_val, fill="black", font=f_dat)
 
     # ---- Porção + Responsável (fonte NORMAL preta, sem fundo)
     if porcao:
@@ -1058,9 +1153,13 @@ def processar_lovelabel(filepath, filename):
     qtd = max(1, min(50, int(payload.get("quantity", 1))))
     nome = payload.get("product_name", "?")
     log(f"  CO LOVE: {qtd}x '{nome}' (batch {str(batch_id)[:8]}{'/REIMP' if is_reprint else ''})")
+    impressora = _impressora_colove()
+    if not impressora:
+        impressora = NOME_IMPRESSORA
+        log("  CO LOVE: SEM impressora 50x25 configurada (veja colove_impressora_ip.txt) -> usando impressora padrao")
     img = gerar_etiqueta_producao(payload)
     for i in range(qtd):
-        try: imprimir_etiqueta(img)
+        try: imprimir_etiqueta(img, printer_name=impressora, larg=CO_LOVE_LARGURA_PX, alt=CO_LOVE_ALTURA_PX)
         except Exception as e: log(f"  ERRO imp {i+1}/{qtd}: {e}"); break
         time.sleep(0.2)
     try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log(f"  Movido")
@@ -1089,11 +1188,13 @@ def main():
     print(f"  Usuario:     {os.path.expanduser('~')}")
     print(f"  Monitorando: {PASTA_DOWNLOADS}")
     print(f"  Impressora:  {NOME_IMPRESSORA}")
-    print(f"  Etiqueta:    {LARGURA_MM}x{ALTURA_MM}mm\n")
+    print(f"  Etiqueta:    {LARGURA_MM}x{ALTURA_MM}mm (comandas das caixas)")
+    print(f"  CO LOVE:     {CO_LOVE_LARGURA_MM}x{CO_LOVE_ALTURA_MM}mm (impressora pelo IP em {os.path.basename(CO_LOVE_IP_FILE)})\n")
     print("  Verificando atualizacoes..."); check_update(); print()
     if not os.path.exists(PASTA_DOWNLOADS):
         print(f"  ERRO: Pasta nao encontrada: {PASTA_DOWNLOADS}"); input("  Enter para sair..."); return
     os.makedirs(PASTA_SAIPOS, exist_ok=True)
+    _garantir_template_ip()
     print("  Aguardando pedidos do Saipos...\n  (Ctrl+C para parar)\n")
     log(f"Script v{VERSION} iniciado - {LARGURA_MM}x{ALTURA_MM}mm")
     handler = SaiposHandler(); observer = Observer()
