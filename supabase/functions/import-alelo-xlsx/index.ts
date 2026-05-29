@@ -214,20 +214,23 @@ Deno.serve(async (req) => {
     const salesKept = periodFilter.kept;
 
     type Lot = {
-      data_pag: string;
+      data_pag: string | null;
       items: RawSale[];
       bruto: number; liquido: number; produtos: Set<string>;
+      pendente?: boolean; data_venda_ref?: string;
     };
     const lotMap = new Map<string, Lot>();
     for (const s of salesKept) {
-      const lot = lotMap.get(s.data_pag) ?? { data_pag: s.data_pag, items: [], bruto: 0, liquido: 0, produtos: new Set<string>() };
+      const isPend = !s.data_pag;
+      const key = isPend ? `PEND|${s.data_venda}` : (s.data_pag as string);
+      const lot = lotMap.get(key) ?? { data_pag: s.data_pag, items: [], bruto: 0, liquido: 0, produtos: new Set<string>(), pendente: isPend, data_venda_ref: s.data_venda };
       lot.items.push(s);
       lot.bruto += s.bruto;
       lot.liquido += s.liquido;
       lot.produtos.add(s.tipo);
-      lotMap.set(s.data_pag, lot);
+      lotMap.set(key, lot);
     }
-    const lots = Array.from(lotMap.values()).sort((a, b) => a.data_pag.localeCompare(b.data_pag));
+    const lots = Array.from(lotMap.values()).sort((a, b) => (a.data_pag ?? a.data_venda_ref ?? '').localeCompare(b.data_pag ?? b.data_venda_ref ?? ''));
 
     const totalItems = salesKept.length;
     const { data: importRec, error: importErr } = await supabase
