@@ -4,7 +4,8 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "159"
+VERSION = "160"
+# v160 (29/05/26): + Comanda Virtual embutida (empurra pedido pro CO LOVE, sem senha, interruptor central).
 # v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
 #   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
 #   FUNDO BRANCO + TEXTO PRETO (traco preto fino imprime nitido). Margem direita maior +
