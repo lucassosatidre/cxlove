@@ -1504,38 +1504,28 @@ def sofia_poll_loop():
 
 # ============================================================
 # COMANDA VIRTUAL - envia o pedido pra fila do CO LOVE (alem de imprimir)
-# So atua se existir ~/Downloads/comanda_config.json com {"enabled": true, ...}.
+# Vai EMBUTIDO, SEM SENHA: todo PC com este programa ja manda (atualiza pelo GitHub).
+# Quem decide se CRIA comanda e o interruptor central no servidor (capture_enabled).
 # Best-effort: a impressao SEMPRE acontece antes e NUNCA e afetada por isto.
+# Opt-out local opcional: ~/Downloads/comanda_config.json com {"enabled": false} silencia ESTE PC.
 # ============================================================
-COMANDA_CONFIG  = os.path.join(PASTA_DOWNLOADS, "comanda_config.json")
-COMANDA_OUTBOX  = os.path.join(PASTA_SAIPOS, "comanda_outbox")
-COMANDA_SENT    = os.path.join(PASTA_SAIPOS, "comanda_sent")
-COMANDA_FAILED  = os.path.join(PASTA_SAIPOS, "comanda_failed")
+COMANDA_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-comanda"
+COMANDA_TYPES    = ["ENTREGA", "RETIRADA", "SALAO"]
+COMANDA_CONFIG   = os.path.join(PASTA_DOWNLOADS, "comanda_config.json")  # opt-out local opcional
+COMANDA_OUTBOX   = os.path.join(PASTA_SAIPOS, "comanda_outbox")
+COMANDA_SENT     = os.path.join(PASTA_SAIPOS, "comanda_sent")
+COMANDA_FAILED   = os.path.join(PASTA_SAIPOS, "comanda_failed")
 COMANDA_RETRY_INTERVAL = 15        # segundos entre tentativas de reenvio da outbox
 
-def _comanda_config():
-    """Le {enabled, endpoint, token, anon?, comanda_types?} de ~/Downloads/comanda_config.json.
-    Sem arquivo OU enabled!=true OU faltando endpoint/token -> DESLIGADO (so imprime)."""
+def _comanda_local_off():
+    """Opt-out: se existir comanda_config.json com enabled=false, ESTE PC nao envia."""
     if not os.path.exists(COMANDA_CONFIG):
-        return None
+        return False
     try:
         with open(COMANDA_CONFIG, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-        if not cfg.get("enabled"):
-            return None
-        endpoint = (cfg.get("endpoint") or "").strip()
-        token = (cfg.get("token") or "").strip()
-        if not endpoint or not token:
-            return None
-        return {
-            "endpoint": endpoint,
-            "token": token,
-            "anon": (cfg.get("anon") or "").strip(),
-            "comanda_types": cfg.get("comanda_types") or ["ENTREGA", "RETIRADA", "SALAO"],
-        }
-    except Exception as e:
-        log(f"  COMANDA config invalida: {e}")
-        return None
+            return json.load(f).get("enabled") is False
+    except Exception:
+        return False
 
 def _comanda_order_type(balcao, codigo_canal):
     # v1: ENTREGA (delivery) x RETIRADA (balcao/retirada). Salao sera refinado depois.
@@ -1545,13 +1535,11 @@ def _comanda_outbox_path(id_sale):
     ids = re.sub(r'[^A-Za-z0-9_-]', '_', str(id_sale or "sem"))
     return os.path.join(COMANDA_OUTBOX, f"{ids}.json")
 
-def _comanda_post(cfg, payload):
-    """POST pro endpoint. Retorna (codigo_http, corpo). Erro de rede -> levanta (caller trata)."""
-    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + cfg["token"]}
-    if cfg.get("anon"):
-        headers["apikey"] = cfg["anon"]
+def _comanda_post(payload):
+    """POST pro endpoint (sem senha; controle e o interruptor central). Retorna (codigo_http, corpo)."""
+    headers = {"Content-Type": "application/json"}
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(cfg["endpoint"], data=data, headers=headers, method="POST")
+    req = urllib.request.Request(COMANDA_ENDPOINT, data=data, headers=headers, method="POST")
     try:
         resp = urllib.request.urlopen(req, timeout=8, context=_sofia_ctx())
         return resp.getcode(), resp.read().decode("utf-8", "replace")
@@ -1561,9 +1549,9 @@ def _comanda_post(cfg, payload):
         except: pass
         return e.code, body
 
-def _comanda_try_send_file(cfg, fn):
-    """Envia UM arquivo da outbox. 2xx -> sent/. 400/422 -> failed/. Resto -> deixa (retry)."""
-    if not cfg or not os.path.exists(fn):
+def _comanda_try_send_file(fn):
+    """Envia UM arquivo da outbox. 2xx (inclui 'pausado') -> sent/. 400/422 -> failed/. Resto -> deixa (retry)."""
+    if not os.path.exists(fn):
         return
     try:
         with open(fn, "r", encoding="utf-8") as f:
@@ -1571,7 +1559,7 @@ def _comanda_try_send_file(cfg, fn):
     except Exception:
         return
     try:
-        code, body = _comanda_post(cfg, payload)
+        code, body = _comanda_post(payload)
     except Exception as e:
         log(f"  COMANDA envio falhou (vai tentar de novo): {e}")
         return
@@ -1581,7 +1569,7 @@ def _comanda_try_send_file(cfg, fn):
         except:
             try: os.remove(fn)
             except: pass
-        log(f"  COMANDA enviada ({code})")
+        log(f"  COMANDA ok ({code})")
     elif code in (400, 422):
         os.makedirs(COMANDA_FAILED, exist_ok=True)
         try: os.replace(fn, os.path.join(COMANDA_FAILED, os.path.basename(fn)))
@@ -1592,15 +1580,15 @@ def _comanda_try_send_file(cfg, fn):
 
 def empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
                      pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale):
-    """Best-effort: poe o pedido na fila do CO LOVE. NUNCA levanta erro (a etiqueta ja saiu)."""
+    """Best-effort: poe o pedido na fila do CO LOVE. NUNCA levanta erro (a etiqueta ja saiu).
+    Sempre tenta enviar (se nao houver opt-out local); o servidor decide se vira comanda."""
     try:
         if total_caixas <= 0 or not id_sale:
             return
-        cfg = _comanda_config()
-        if not cfg:
-            return  # desligado: nem grava outbox
+        if _comanda_local_off():
+            return
         otype = _comanda_order_type(balcao, codigo_canal)
-        if otype not in cfg["comanda_types"]:
+        if otype not in COMANDA_TYPES:
             return
         payload = {
             "version": 1, "id_sale": str(id_sale), "numero_pedido": numero_pedido,
@@ -1615,19 +1603,18 @@ def empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
         os.replace(tmp, fn)
-        threading.Thread(target=_comanda_try_send_file, args=(cfg, fn), daemon=True).start()
+        threading.Thread(target=_comanda_try_send_file, args=(fn,), daemon=True).start()
     except Exception as e:
         log(f"  COMANDA push falhou (ok, etiqueta ja saiu): {e}")
 
 def comanda_retry_loop():
-    """Reenvia o que ficou na outbox (ex: internet caiu na hora). So age se ligado."""
+    """Reenvia o que ficou na outbox (ex: internet caiu na hora)."""
     while True:
         try:
-            cfg = _comanda_config()
-            if cfg and os.path.isdir(COMANDA_OUTBOX):
+            if os.path.isdir(COMANDA_OUTBOX):
                 for name in sorted(os.listdir(COMANDA_OUTBOX)):
                     if name.endswith(".json"):
-                        _comanda_try_send_file(cfg, os.path.join(COMANDA_OUTBOX, name))
+                        _comanda_try_send_file(os.path.join(COMANDA_OUTBOX, name))
         except Exception as e:
             log(f"  COMANDA retry erro: {e}")
         time.sleep(COMANDA_RETRY_INTERVAL)
