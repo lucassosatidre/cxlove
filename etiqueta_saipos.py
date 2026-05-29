@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "155"
+VERSION = "156"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request, threading, ssl
@@ -1113,6 +1113,9 @@ class SaiposHandler(FileSystemEventHandler):
         elif fn.endswith(".lovelabel"):
             try: processar_lovelabel(filepath, os.path.basename(filepath))
             except Exception as e: log(f"ERRO lovelabel: {fn}: {e}")
+        elif fn.endswith(".sofiapedido"):
+            try: processar_sofia_arquivo(filepath, os.path.basename(filepath))
+            except Exception as e: log(f"ERRO sofiapedido: {fn}: {e}")
 
 # ============================================================
 # SOFIA - Pedidos por telefone (comanda + etiquetas via fila online)
@@ -1317,6 +1320,33 @@ def processar_sofia_pedido(pedido, impressora):
             if i < n_et: time.sleep(0.4)
         except Exception as e:
             log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
+
+def processar_sofia_arquivo(filepath, filename):
+    """Pedido da Sofia baixado pelo Caixa Love (.sofiapedido) -> imprime comanda + etiquetas.
+    Mesmo mecanismo das etiquetas do CO LOVE: o arquivo cai em Downloads e o watcher imprime.
+    Sem segredo, sem polling — basta o Caixa Love aberto no PC da cozinha."""
+    if filename in processados_arquivos and (time.time() - processados_arquivos[filename]) < 30:
+        return
+    processados_arquivos[filename] = time.time()
+    try:
+        time.sleep(0.4)
+        with open(filepath, "r", encoding="utf-8") as f:
+            pedido = json.load(f)
+    except Exception as e:
+        log(f"  ERRO lendo .sofiapedido: {e}"); return
+    numero = pedido.get("numero", "?")
+    log(f"  SOFIA arquivo: pedido #{numero}")
+    impressora = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
+    try:
+        processar_sofia_pedido(pedido, impressora)
+        log(f"  SOFIA #{numero}: comanda + etiquetas OK")
+    except Exception as e:
+        log(f"  ERRO imprimindo SOFIA #{numero}: {e}")
+    try:
+        os.makedirs(PASTA_SAIPOS, exist_ok=True)
+        shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename))
+    except Exception:
+        pass
 
 def sofia_poll_loop():
     log("SOFIA poller iniciado (aguardando sofia_caixa.json em Downloads)")

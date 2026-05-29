@@ -119,7 +119,45 @@ export default function SofiaCaixa() {
     const { error } = await supabase.from('sofia_orders').update(patch as never).eq('id', o.id);
     setBusy(null);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success(status === 'pendente_impressao' ? `Pedido #${o.numero} enviado pra cozinha` : 'Atualizado'); load(); }
+    else {
+      const msg = status === 'pendente_impressao' ? `Pedido #${o.numero} na fila da cozinha`
+        : status === 'impresso' ? `Pedido #${o.numero} enviado pra impressora da cozinha`
+        : status === 'cancelado' ? `Pedido #${o.numero} cancelado` : 'Atualizado';
+      toast.success(msg); load();
+    }
+  }
+
+  // Baixa o pedido como arquivo .sofiapedido na pasta Downloads. O programa da cozinha
+  // (etiqueta_saipos.py) que já roda no PC pega esse arquivo e imprime comanda + etiquetas
+  // — mesmo mecanismo das etiquetas do CO LOVE. Sem segredo, sem configuração.
+  function baixarPedidoArquivo(o: Order) {
+    const pedido = {
+      numero: o.numero, tipo: o.tipo,
+      nome_cliente: o.nome_cliente, telefone: o.telefone,
+      endereco: o.endereco, bairro: o.bairro, complemento: o.complemento, referencia: o.referencia,
+      forma_pagamento: o.forma_pagamento, troco_para: o.troco_para,
+      taxa_entrega: o.taxa_entrega, subtotal: o.subtotal, total: o.total,
+      observacoes: o.observacoes,
+      hora: new Date(o.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      itens: o.itens,
+    };
+    const blob = new Blob([JSON.stringify(pedido)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sofia_pedido_${o.numero}_${o.id.slice(0, 8)}.sofiapedido`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+
+  async function imprimirNaCozinha(o: Order) {
+    baixarPedidoArquivo(o);
+    await setStatus(o, 'impresso', { impresso_em: new Date().toISOString() });
+  }
+
+  function reimprimir(o: Order) {
+    baixarPedidoArquivo(o);
+    toast.success(`Pedido #${o.numero} reenviado pra impressora`);
   }
 
   const pendentes = orders.filter((o) => o.status === 'pendente_conferencia');
@@ -152,7 +190,7 @@ export default function SofiaCaixa() {
           <Secao titulo="Aguardando conferência" cor="amber" itens={pendentes} vazio="Nada pra conferir agora.">
             {(o) => (
               <OrderCard key={o.id} o={o} busy={busy === o.id}
-                onImprimir={() => setStatus(o, 'pendente_impressao')}
+                onImprimir={() => imprimirNaCozinha(o)}
                 onEditar={() => setEditing(o)}
                 onCancelar={() => setStatus(o, 'cancelado')} />
             )}
@@ -170,7 +208,7 @@ export default function SofiaCaixa() {
             <Secao titulo="Impressos" cor="green" itens={impressos} vazio="">
               {(o) => (
                 <OrderCard key={o.id} o={o} busy={busy === o.id} impresso
-                  onReimprimir={() => setStatus(o, 'pendente_impressao', { impresso_em: null })}
+                  onReimprimir={() => reimprimir(o)}
                   onEditar={() => setEditing(o)} />
               )}
             </Secao>
