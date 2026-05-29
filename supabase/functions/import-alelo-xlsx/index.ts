@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
       const dataPag = toIsoDate(r[COL.dataPag]);
       const bruto = toNumber(r[COL.bruto]);
       const liquido = toNumber(r[COL.liquido]);
-      if (!dataVenda || !dataPag || bruto == null || liquido == null) {
+      if (!dataVenda || bruto == null || liquido == null) {
         skippedInvalid++;
         continue;
       }
