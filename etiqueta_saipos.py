@@ -4,7 +4,11 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "158"
+VERSION = "159"
+# v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
+#   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
+#   FUNDO BRANCO + TEXTO PRETO (traco preto fino imprime nitido). Margem direita maior +
+#   texto centralizado na area util pra nao cortar a lateral direita. Mesmo layout (5 linhas).
 # v157 (29/05/26): etiqueta CO LOVE deixava de caber em 1 etiqueta (espalhava em 2).
 #   Agora o tamanho do papel e' FORCADO pra 50x25mm via DEVMODE/ResetDC e a imagem e'
 #   desenhada na area real de impressao (HORZRES/VERTRES) da impressora de producao.
@@ -1029,7 +1033,7 @@ def _prod_wrap(draw, texto, font, max_w):
 
 def gerar_etiqueta_producao(payload, larg=None, alt=None):
     """
-    Layout CO LOVE v154 — etiqueta 50x25mm, FUNDO PRETO + texto BRANCO bold.
+    Layout CO LOVE v159 — etiqueta 50x25mm, FUNDO BRANCO + texto PRETO bold (nitido na termica).
     UMA informação por linha, TODAS no MESMO tamanho de fonte, distribuídas
     igualmente na altura (cada linha ocupa uma fatia igual da etiqueta):
         NOME / FAB: dd/mm/aaaa / VAL: dd/mm/aaaa / POR: NNG / RES: NOME
@@ -1037,9 +1041,10 @@ def gerar_etiqueta_producao(payload, larg=None, alt=None):
     """
     larg = larg if larg else CO_LOVE_LARGURA_PX
     alt = alt if alt else CO_LOVE_ALTURA_PX
-    img = Image.new("RGB", (larg, alt), "black")   # FUNDO PRETO
+    img = Image.new("RGB", (larg, alt), "white")   # FUNDO BRANCO (traco preto fino = nitido na termica)
     draw = ImageDraw.Draw(img)
-    margem_e, margem_d, margem_t, margem_b = 12, 12, 5, 5
+    # margem direita maior pra a lateral direita nao ser cortada na impressao
+    margem_e, margem_d, margem_t, margem_b = 16, 34, 6, 6
     largura_util = larg - margem_e - margem_d
     altura_util = alt - margem_t - margem_b
 
@@ -1066,10 +1071,12 @@ def gerar_etiqueta_producao(payload, larg=None, alt=None):
             tam = s; break
     f = _prod_fonte_bold(tam)
 
-    # Desenha cada linha centralizada no meio da sua fatia
+    # Desenha cada linha centralizada na fatia, no centro da AREA UTIL (nao da imagem),
+    # pra o texto ficar levemente a esquerda e nao encostar na borda direita cortada.
+    cx = margem_e + largura_util // 2
     for i, l in enumerate(linhas):
         cy = margem_t + int(i * slot + slot / 2)
-        draw.text((larg // 2, cy), l, fill="white", font=f, anchor="mm")
+        draw.text((cx, cy), l, fill="black", font=f, anchor="mm")
 
     # Térmica: preto puro / branco puro (sem cinza do anti-aliasing)
     img = img.convert("L").point(lambda p: 0 if p < 190 else 255).convert("RGB")
