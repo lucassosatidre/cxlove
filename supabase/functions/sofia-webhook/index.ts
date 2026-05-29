@@ -96,6 +96,33 @@ Deno.serve(async (req) => {
 
     if (error) return jsonResponse({ error: error.message }, 500);
 
+    // Plano B de captura: se a chamada terminou e parece ter pedido, dispara o
+    // extrator de IA pra montar o pedido estruturado (caso a tool finalizar_pedido
+    // não tenha sido chamada). Não bloqueia a resposta do webhook.
+    const orderFlag = extractedData["status"];
+    const pareceTerPedido = orderFlag !== false && orderFlag !== "false";
+    if (status === "completed" && pareceTerPedido) {
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const secret = Deno.env.get("SOFIA_WEBHOOK_SECRET") ?? "";
+      const extractUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/sofia-extract-order`;
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+      };
+      if (secret) headers["x-sofia-secret"] = secret;
+      const task = fetch(extractUrl, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ sofia_call_id: sofiaCallId }),
+      })
+        .then(async (r) => { if (!r.ok) console.error("sofia-extract-order falhou:", r.status, await r.text()); })
+        .catch((e) => console.error("sofia-extract-order erro:", e));
+      // @ts-ignore EdgeRuntime existe no runtime do Supabase
+      if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(task);
+      else await task;
+    }
+
     return jsonResponse({ ok: true, sofia_call_id: sofiaCallId });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

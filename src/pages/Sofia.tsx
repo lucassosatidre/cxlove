@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import SofiaPainel from '@/components/sofia/SofiaPainel';
+import SofiaCaixa from '@/components/sofia/SofiaCaixa';
 import SofiaPedidos from '@/components/sofia/SofiaPedidos';
 import SofiaCampanhas from '@/components/sofia/SofiaCampanhas';
 import SofiaAssistentes from '@/components/sofia/SofiaAssistentes';
@@ -22,12 +23,14 @@ export default function Sofia() {
       <Tabs defaultValue="painel" className="w-full">
         <TabsList>
           <TabsTrigger value="painel">Painel</TabsTrigger>
+          <TabsTrigger value="caixa">Caixa</TabsTrigger>
           <TabsTrigger value="pedidos">Pedidos por Telefone</TabsTrigger>
           <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
           <TabsTrigger value="conhecimento">Conhecimento</TabsTrigger>
           <TabsTrigger value="assistentes">Assistentes</TabsTrigger>
         </TabsList>
         <TabsContent value="painel" className="mt-4"><SofiaPainel /></TabsContent>
+        <TabsContent value="caixa" className="mt-4"><SofiaCaixa /></TabsContent>
         <TabsContent value="pedidos" className="mt-4"><SofiaPedidos /></TabsContent>
         <TabsContent value="campanhas" className="mt-4"><SofiaCampanhas /></TabsContent>
         <TabsContent value="conhecimento" className="mt-4"><SofiaConhecimento /></TabsContent>

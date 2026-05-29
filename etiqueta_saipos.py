@@ -4,10 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "154"
+VERSION = "155"
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
-import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request
+import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request, threading, ssl
 from datetime import datetime, timezone, timedelta
 try:
     from zoneinfo import ZoneInfo
@@ -37,6 +37,7 @@ ALTURA_PX = int(ALTURA_MM * DPI / 25.4)
 LOG_FILE = os.path.join(PASTA_DOWNLOADS, "etiqueta_saipos_log.txt")
 DEBUG_FILE = os.path.join(PASTA_DOWNLOADS, "etiqueta_debug.txt")
 processados_arquivos = {}; processados_id_sale = {}; cache_pagamento = {}
+_print_lock = threading.Lock()   # serializa impressao entre o watcher Saipos e o poller Sofia
 
 def log(msg):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S"); linha = f"[{ts}] {msg}"; print(linha)
@@ -725,15 +726,16 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
     tmp = tempfile.NamedTemporaryFile(suffix=".bmp", delete=False); tmp_path = tmp.name; tmp.close()
     try:
         img.save(tmp_path, "BMP")
-        try:
-            import win32print, win32ui; from PIL import ImageWin
-            hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
-            hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
-            ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
-            hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC(); log(f"  Impresso OK ({printer_name})")
-        except ImportError:
-            subprocess.run(f'mspaint /pt "{tmp_path}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
-            log("  Impresso OK (mspaint)")
+        with _print_lock:   # uma impressao por vez (watcher Saipos + poller Sofia compartilham a impressora)
+            try:
+                import win32print, win32ui; from PIL import ImageWin
+                hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
+                hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
+                ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
+                hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC(); log(f"  Impresso OK ({printer_name})")
+            except ImportError:
+                subprocess.run(f'mspaint /pt "{tmp_path}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
+                log("  Impresso OK (mspaint)")
     except Exception as e: log(f"  ERRO: {e}")
     finally:
         try: time.sleep(2); os.unlink(tmp_path)
@@ -1112,6 +1114,255 @@ class SaiposHandler(FileSystemEventHandler):
             try: processar_lovelabel(filepath, os.path.basename(filepath))
             except Exception as e: log(f"ERRO lovelabel: {fn}: {e}")
 
+# ============================================================
+# SOFIA - Pedidos por telefone (comanda + etiquetas via fila online)
+# ============================================================
+SOFIA_SUPABASE_URL = "https://hvpmkkxvvjnefayrlcjy.supabase.co"
+SOFIA_POLL_INTERVAL = 5            # segundos entre consultas
+SOFIA_UPDATE_EVERY = 1800          # checa atualizacao do helper a cada 30min no caixa
+SOFIA_CONFIG = os.path.join(PASTA_DOWNLOADS, "sofia_caixa.json")
+_sofia_impressos = {}              # id -> timestamp (dedup local)
+
+def _sofia_config():
+    """Le {url?, secret?} de ~/Downloads/sofia_caixa.json. Sem arquivo -> poller idle."""
+    if not os.path.exists(SOFIA_CONFIG):
+        return None
+    try:
+        with open(SOFIA_CONFIG, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        url = (cfg.get("url") or SOFIA_SUPABASE_URL).rstrip("/")
+        return {"url": url, "secret": cfg.get("secret") or ""}
+    except Exception as e:
+        log(f"  SOFIA config invalida: {e}")
+        return None
+
+def _sofia_ctx():
+    ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+def _sofia_http(url, method="GET", body=None, secret=""):
+    headers = {"Content-Type": "application/json"}
+    if secret: headers["x-sofia-secret"] = secret
+    data = json.dumps(body).encode("utf-8") if body is not None else None
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    resp = urllib.request.urlopen(req, timeout=15, context=_sofia_ctx())
+    return json.loads(resp.read().decode("utf-8"))
+
+def sofia_pag_cat(forma, troco_para, total):
+    """Mapeia forma_pagamento da Sofia pro vocabulario do rodape (PAGO/MAQUINONA/DINHEIRO...)."""
+    f = (forma or "").lower()
+    if f == "pago": return "PAGO", {}
+    if f in ("maquininha","maquinona","cartao","credito","debito","pix"): return "MAQUINONA", {"valor": total}
+    if f == "dinheiro":
+        try:
+            if troco_para and float(troco_para) > float(total):
+                return "DINHEIRO_TROCO", {"valor_pedido": total, "valor_receber": float(troco_para), "valor_troco": float(troco_para)-float(total)}
+        except: pass
+        return "DINHEIRO", {"valor": total}
+    return "", {}
+
+def sofia_display(itens):
+    """Converte itens estruturados (DB) -> display_items do gerar_etiqueta (mesmo render Saipos)."""
+    display = []
+    for it in (itens or []):
+        tipo = (it.get("tipo") or "").lower()
+        try: qtd = max(1, int(it.get("qtd") or 1))
+        except: qtd = 1
+        nome = limpar_nome(it.get("nome") or "Item")
+        if tipo == "pizza":
+            cat = "caixa_doce" if (it.get("categoria") == "doce") else "caixa_salgada"
+            sabores = []
+            for s in (it.get("sabores") or []):
+                snome = (s.get("nome") or "").strip()
+                if not snome: continue
+                fr = (s.get("fracao") or "").strip().replace(" ", "")
+                if fr and fr != "1/1" and "inteir" not in fr.lower():
+                    sabores.append(f"{fr} {snome}")
+                else:
+                    sabores.append(snome)
+            display.append({"tipo": cat, "nome": nome, "qty": qtd, "sabores": sabores})
+            if it.get("borda"):
+                display.append({"tipo": "borda", "nome": str(it["borda"]), "qty": 1, "sabores": []})
+        elif tipo == "bebida":
+            display.append({"tipo": "bebida", "nome": nome, "qty": qtd, "sabores": []})
+        else:
+            display.append({"tipo": "outro", "nome": nome, "qty": qtd, "sabores": []})
+    return display
+
+def gerar_comanda(pedido):
+    """Comanda de despacho 80x30mm: Nº/SOFIA/hora, cliente, endereco, pagamento, total."""
+    img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
+    draw = ImageDraw.Draw(img)
+    me = 14; md = 14
+    def cf(t):
+        try: return ImageFont.truetype("arialbd.ttf", t)
+        except:
+            try: return ImageFont.truetype("C:\\Windows\\Fonts\\arialbd.ttf", t)
+            except: return ImageFont.load_default()
+    def tw(txt, f):
+        try: bb = draw.textbbox((0,0), txt, font=f); return bb[2]-bb[0]
+        except: return len(txt)*8
+    maxw = LARGURA_PX - me - md
+
+    try: num = f"{int(pedido.get('numero') or 0):04d}"
+    except: num = str(pedido.get("numero") or "")
+    hora = pedido.get("hora") or ""
+    tipo = (pedido.get("tipo") or "entrega").lower()
+    header = f"#{num} SOFIA" + (f" {hora}" if hora else "")
+
+    def fit1(txt, teto, piso):
+        for sz in range(teto, piso-1, -1):
+            if tw(txt, cf(sz)) <= maxw: return sz
+        return piso
+    fsh = fit1(header, 34, 12); fh = cf(fsh)
+    try: bbh = draw.textbbox((0,0),"Ag",font=fh); hh = (bbh[3]-bbh[1])+10
+    except: hh = fsh+10
+
+    total = float(pedido.get("total") or 0)
+    troco = pedido.get("troco_para")
+    forma = (pedido.get("forma_pagamento") or "")
+    cliente = (pedido.get("nome_cliente") or "Sem nome").strip()
+    fone = (pedido.get("telefone") or "").strip()
+    linhas = []
+    linhas.append(("RETIRADA NO BALCAO" if tipo == "retirada" else "ENTREGA", True))
+    linhas.append((cliente + (f"  {fone}" if fone else ""), True))
+    if tipo == "entrega":
+        end = ", ".join([x for x in [pedido.get("endereco"), pedido.get("complemento")] if x])
+        if end: linhas.append((end, False))
+        b = pedido.get("bairro") or ""; ref = pedido.get("referencia") or ""
+        if b or ref: linhas.append(((b + (f" - ref: {ref}" if ref else "")).strip(), False))
+    fl = forma.lower()
+    if fl == "pago": pag_txt = "PAGO (online)"
+    elif fl == "pix": pag_txt = "PIX"
+    elif fl in ("maquininha","maquinona","cartao","credito","debito"): pag_txt = "MAQUININHA na entrega"
+    elif fl == "dinheiro":
+        if troco and float(troco) > total:
+            pag_txt = f"DINHEIRO - troco p/ R${formatar_valor(float(troco))} (devolver R${formatar_valor(float(troco)-total)})"
+        else: pag_txt = "DINHEIRO"
+    else: pag_txt = "CONFIRMAR PAGAMENTO"
+    linhas.append((pag_txt, False))
+    obs = (pedido.get("observacoes") or "").strip()
+    if obs: linhas.append((f"OBS: {obs}", False))
+
+    n_itens = 0
+    for it in (pedido.get("itens") or []):
+        try: n_itens += max(1, int(it.get("qty") or it.get("qtd") or 1))
+        except: n_itens += 1
+    rodape = f"TOTAL R${formatar_valor(total)}  -  {n_itens} item(s)"
+    fsr = fit1(rodape, fsh, 12); fr = cf(fsr)
+    try: bbr = draw.textbbox((0,0),"Ag",font=fr); hr = (bbr[3]-bbr[1])+10
+    except: hr = fsr+10
+
+    y0 = hh + 4
+    alt_corpo = ALTURA_PX - hr - y0 - 4
+    chosen = None
+    for sz in range(22, 9, -1):
+        f = cf(sz)
+        try: bb = draw.textbbox((0,0),"Ag",font=f); lh = (bb[3]-bb[1])+5
+        except: lh = sz+5
+        wrapped = []
+        for txt, bold in linhas:
+            for wl in word_wrap(txt, draw, f, maxw): wrapped.append((wl, bold))
+        if len(wrapped)*lh <= alt_corpo:
+            chosen = (sz, lh, wrapped); break
+    if not chosen:
+        sz = 10; f = cf(sz)
+        try: bb = draw.textbbox((0,0),"Ag",font=f); lh = (bb[3]-bb[1])+4
+        except: lh = sz+4
+        wrapped = []
+        for txt, bold in linhas:
+            for wl in word_wrap(txt, draw, f, maxw): wrapped.append((wl, bold))
+        chosen = (sz, lh, wrapped[: max(1, alt_corpo // max(1, lh))])
+    sz, lh, wrapped = chosen
+
+    draw.rectangle([(0,0),(LARGURA_PX,hh)], fill="black")
+    try: bb = draw.textbbox((0,0),header,font=fh); yh = (hh-(bb[3]-bb[1]))//2 - 2
+    except: yh = 2
+    draw.text((me, yh), header, fill="white", font=fh)
+    y = y0
+    for wl, bold in wrapped:
+        draw.text((me, y), wl, fill="black", font=cf(sz)); y += lh
+    draw.rectangle([(0, ALTURA_PX-hr),(LARGURA_PX, ALTURA_PX)], fill="black")
+    try: bb = draw.textbbox((0,0),rodape,font=fr); yr = (ALTURA_PX-hr)+(hr-(bb[3]-bb[1]))//2 - 2
+    except: yr = ALTURA_PX-hr+2
+    draw.text((me, yr), rodape, fill="white", font=fr)
+    return img
+
+def processar_sofia_pedido(pedido, impressora):
+    numero = str(pedido.get("numero") or "")
+    display = sofia_display(pedido.get("itens"))
+    total_caixas = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada","caixa_doce"))
+    total_bebidas = sum(d["qty"] for d in display if d["tipo"] == "bebida")
+    total_outros = sum(d["qty"] for d in display if d["tipo"] == "outro")
+    total_entrega = total_caixas + total_bebidas + total_outros
+    total_valor = float(pedido.get("total") or 0)
+    pag_cat, pag_dados = sofia_pag_cat(pedido.get("forma_pagamento"), pedido.get("troco_para"), total_valor)
+    balcao = (pedido.get("tipo") == "retirada")
+    nome_cli = (pedido.get("nome_cliente") or "").strip().split(" ")[0].upper() if pedido.get("nome_cliente") else ""
+    hora = pedido.get("hora") or ""
+
+    try:
+        log(f"  SOFIA #{numero}: comanda...")
+        imprimir_etiqueta(gerar_comanda(pedido), printer_name=impressora)
+    except Exception as e:
+        log(f"  ERRO comanda #{numero}: {e}")
+
+    n_et = max(total_caixas, 1)
+    for i in range(1, n_et + 1):
+        try:
+            img = gerar_etiqueta(numero, i, n_et, display, total_entrega,
+                                 pag_cat, pag_dados, balcao, "SOFIA", "SOFIA", nome_cli, hora)
+            imprimir_etiqueta(img, printer_name=impressora)
+            log(f"  SOFIA #{numero}: etiqueta {i}/{n_et}")
+            if i < n_et: time.sleep(0.4)
+        except Exception as e:
+            log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
+
+def sofia_poll_loop():
+    log("SOFIA poller iniciado (aguardando sofia_caixa.json em Downloads)")
+    last_update = time.time()
+    while True:
+        try:
+            cfg = _sofia_config()
+            if not cfg:
+                time.sleep(SOFIA_POLL_INTERVAL); continue
+            base = f"{cfg['url']}/functions/v1/sofia-print-queue"
+            sep = "&" if "?" in base else "?"
+            url = base + (f"{sep}secret={urllib.parse.quote(cfg['secret'])}" if cfg.get("secret") else "")
+            data = _sofia_http(url, method="GET", secret=cfg.get("secret",""))
+            pedidos = (data or {}).get("pedidos", [])
+            if pedidos:
+                impressora = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
+                todos_ids = []
+                for p in pedidos:
+                    pid = p.get("id")
+                    if not pid: continue
+                    todos_ids.append(pid)
+                    last = _sofia_impressos.get(pid)
+                    if last and (time.time() - last) < 60:
+                        continue  # impresso há pouco neste ciclo — evita duplicar antes do mark
+                    processar_sofia_pedido(p, impressora)
+                if todos_ids:
+                    # Marca como impresso no servidor; só grava o dedup local se o mark deu certo.
+                    # Se o mark falhar (rede), NÃO trava: o próximo ciclo reimprime e remarca.
+                    marcou = False
+                    try:
+                        resp = _sofia_http(base, method="POST", body={"action": "mark", "ids": todos_ids}, secret=cfg.get("secret", ""))
+                        marcou = bool((resp or {}).get("ok"))
+                    except Exception as e:
+                        log(f"  SOFIA mark falhou (vai reimprimir no proximo ciclo): {e}")
+                    if marcou:
+                        agora = time.time()
+                        for pid in todos_ids: _sofia_impressos[pid] = agora
+                        log(f"  SOFIA: {len(todos_ids)} pedido(s) impresso(s) e confirmado(s)")
+            if time.time() - last_update > SOFIA_UPDATE_EVERY:
+                last_update = time.time()
+                try: check_update()
+                except: pass
+        except Exception as e:
+            log(f"  SOFIA poll erro: {e}")
+        time.sleep(SOFIA_POLL_INTERVAL)
+
 def main():
     print("=" * 60)
     print(f"  ETIQUETA SAIPOS -> ELGIN L42PRO FULL  (v{VERSION})")
@@ -1130,6 +1381,8 @@ def main():
     log(f"Script v{VERSION} iniciado - {LARGURA_MM}x{ALTURA_MM}mm")
     handler = SaiposHandler(); observer = Observer()
     observer.schedule(handler, PASTA_DOWNLOADS, recursive=False); observer.start()
+    # SOFIA: poller de pedidos por telefone (so atua se existir sofia_caixa.json em Downloads)
+    threading.Thread(target=sofia_poll_loop, daemon=True).start()
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt: log("Script encerrado"); observer.stop()

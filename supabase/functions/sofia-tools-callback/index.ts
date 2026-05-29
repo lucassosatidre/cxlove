@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { corsHeaders, jsonResponse } from "../_shared/sofia.ts";
+import { criarSofiaOrder } from "../_shared/sofia_order.ts";
 
 /**
  * Webhook das custom mid-call tools da Sofia (Lucinéia v9).
@@ -468,15 +469,21 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { data: row, error } = await supabase
-      .from("sofia_menu")
-      .select("data")
-      .eq("slug", "estrela_da_ilha_v1")
-      .single();
-    if (error || !row) {
-      return jsonResponse({ ok: false, error: "Menu não encontrado." }, 500);
+
+    // finalizar_pedido não usa cardápio — evita query e não falha se a tabela mudar
+    const FINALIZAR = ["finalizar_pedido", "registrar_pedido", "fechar_pedido"];
+    let menu: MenuData = {} as MenuData;
+    if (!FINALIZAR.includes(toolName)) {
+      const { data: row, error } = await supabase
+        .from("sofia_menu")
+        .select("data")
+        .eq("slug", "estrela_da_ilha_v1")
+        .single();
+      if (error || !row) {
+        return jsonResponse({ ok: false, error: "Menu não encontrado." }, 500);
+      }
+      menu = row.data as MenuData;
     }
-    const menu = row.data as MenuData;
 
     let result: unknown;
     switch (toolName) {
@@ -506,6 +513,27 @@ Deno.serve(async (req) => {
       case "consultar_taxa_entrega":
         result = consultarTaxaEntrega(menu, args);
         break;
+      case "finalizar_pedido":
+      case "registrar_pedido":
+      case "fechar_pedido": {
+        // Captura determinística: a Sofia manda o carrinho pronto no fim da ligação.
+        const { order, error: ordErr } = await criarSofiaOrder(supabase, args, {
+          sofiaCallId: args.sofia_call_id ?? args.call_id ?? null,
+          origem: "sofia",
+        });
+        if (ordErr || !order) {
+          result = { error: `Não consegui registrar o pedido: ${ordErr ?? "desconhecido"}` };
+        } else {
+          result = {
+            sucesso: true,
+            numero_pedido: order.numero,
+            status: order.status === "pendente_impressao" ? "enviado_para_cozinha" : "aguardando_conferencia",
+            total: order.total,
+            mensagem: `Pedido número ${order.numero} registrado com sucesso.`,
+          };
+        }
+        break;
+      }
       default:
         return jsonResponse({ ok: false, error: `tool desconhecida: ${toolName}` }, 400);
     }
