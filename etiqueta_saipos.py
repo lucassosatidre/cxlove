@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "164"
+VERSION = "165"
+# v165 (29/05/26): + envia a "foto" crua de cada pedido pro CO LOVE (texto do Saipos + itens
+#   parseados) pra IA diaria melhorar escrita/exibicao. Best-effort, NUNCA afeta impressao,
+#   gated no servidor por debug_capture_enabled. Mesmo opt-out local da comanda.
 # v160 (29/05/26): + Comanda Virtual embutida (empurra pedido pro CO LOVE, sem senha, interruptor central).
 # v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
 #   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
@@ -887,6 +890,9 @@ def processar_pedido(filepath, filename):
         except: pass
         empurrar_comanda(mesa, display, tcx, tent, "", False, "", "", garcom, hora, id_sale,
                          force_order_type="SALAO", label_printed=False)
+        empurrar_debug(id_sale, mesa, "SALAO", "", "", rows_all, display,
+                       {"caixas": tcx, "entrega": tent},
+                       {"mesa": mesa, "garcom": garcom, "hora": hora})
         return
 
     el_cozinha = []; el_caixa = []
@@ -991,6 +997,11 @@ def processar_pedido(filepath, filename):
     # CO LOVE: alem de imprimir, manda o pedido pra fila dos pizzaiolos (best-effort, so se ligado)
     empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
                      pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale)
+    # CO LOVE: manda a "foto" crua do pedido pra IA diaria (best-effort, so se ligado no servidor)
+    empurrar_debug(id_sale, numero_pedido, _comanda_order_type(balcao, codigo_canal),
+                   canal, codigo_canal, rows_all, all_display,
+                   {"caixas": total_caixas, "bebidas": total_bebidas, "outros": total_outros, "entrega": total_entrega},
+                   {"cliente_nome": nome_cliente, "pag_cat": pag_cat, "hora": hora_pedido, "balcao": balcao})
 
 def processar_arquivo(filepath):
     filename = os.path.basename(filepath)
@@ -1901,6 +1912,96 @@ def comanda_retry_loop():
             log(f"  COMANDA retry erro: {e}")
         time.sleep(COMANDA_RETRY_INTERVAL)
 
+# ============================================================
+# DEBUG -> CO LOVE: manda a "foto" crua de cada pedido (texto do Saipos + o que o script
+# entendeu) pra IA diaria do CO LOVE melhorar escrita/exibicao. Best-effort, NUNCA afeta a
+# impressao. Gated no servidor por debug_capture_enabled. Mesmo opt-out local da comanda.
+# ============================================================
+DEBUG_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-debug"
+DEBUG_OUTBOX   = os.path.join(PASTA_SAIPOS, "debug_outbox")
+DEBUG_SENT     = os.path.join(PASTA_SAIPOS, "debug_sent")
+DEBUG_FAILED   = os.path.join(PASTA_SAIPOS, "debug_failed")
+
+def _debug_raw_text(rows):
+    out = []
+    for row in (rows or []):
+        limpo = re.sub(r'<[^>]+>', '', row).strip()
+        if limpo: out.append(limpo)
+    return "\n".join(out)
+
+def _debug_post(payload):
+    headers = {"Content-Type": "application/json"}
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(DEBUG_ENDPOINT, data=data, headers=headers, method="POST")
+    try:
+        resp = urllib.request.urlopen(req, timeout=8, context=_sofia_ctx())
+        return resp.getcode(), resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        body = ""
+        try: body = e.read().decode("utf-8", "replace")
+        except: pass
+        return e.code, body
+
+def _debug_try_send_file(fn):
+    if not os.path.exists(fn): return
+    try:
+        with open(fn, "r", encoding="utf-8") as f: payload = json.load(f)
+    except Exception: return
+    try:
+        code, body = _debug_post(payload)
+    except Exception as e:
+        log(f"  DEBUG envio falhou (vai tentar de novo): {e}"); return
+    if 200 <= code < 300:
+        os.makedirs(DEBUG_SENT, exist_ok=True)
+        try: os.replace(fn, os.path.join(DEBUG_SENT, os.path.basename(fn)))
+        except:
+            try: os.remove(fn)
+            except: pass
+    elif code in (400, 422):
+        os.makedirs(DEBUG_FAILED, exist_ok=True)
+        try: os.replace(fn, os.path.join(DEBUG_FAILED, os.path.basename(fn)))
+        except: pass
+        log(f"  DEBUG rejeitado ({code}): {body[:120]}")
+    else:
+        log(f"  DEBUG HTTP {code}: vai tentar de novo")
+
+def empurrar_debug(id_sale, numero_pedido, order_type, canal, codigo_canal, rows_all, all_display, totals, meta):
+    """Best-effort: manda a foto crua do pedido pro CO LOVE (pra IA diaria). NUNCA levanta erro."""
+    try:
+        if not id_sale: return
+        if _comanda_local_off(): return
+        m = dict(meta or {})
+        try:
+            import socket; m["hostname"] = socket.gethostname()
+        except Exception: pass
+        payload = {
+            "version": 1, "id_sale": str(id_sale), "numero_pedido": numero_pedido,
+            "order_type": order_type, "canal": canal, "codigo_canal": codigo_canal,
+            "raw_text": _debug_raw_text(rows_all), "parsed_items": all_display or [],
+            "totals": totals or {}, "meta": m, "script_version": VERSION,
+        }
+        ids = re.sub(r'[^A-Za-z0-9_-]', '_', str(id_sale or "sem"))
+        fn = os.path.join(DEBUG_OUTBOX, f"{ids}.json")
+        os.makedirs(DEBUG_OUTBOX, exist_ok=True)
+        tmp = fn + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f: json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, fn)
+        threading.Thread(target=_debug_try_send_file, args=(fn,), daemon=True).start()
+    except Exception as e:
+        log(f"  DEBUG push falhou (ok): {e}")
+
+def debug_retry_loop():
+    """Reenvia os logs de debug que ficaram na outbox (ex: internet caiu)."""
+    while True:
+        try:
+            if os.path.isdir(DEBUG_OUTBOX):
+                for name in sorted(os.listdir(DEBUG_OUTBOX)):
+                    if name.endswith(".json"):
+                        _debug_try_send_file(os.path.join(DEBUG_OUTBOX, name))
+        except Exception as e:
+            log(f"  DEBUG retry erro: {e}")
+        time.sleep(COMANDA_RETRY_INTERVAL)
+
 def main():
     print("=" * 60)
     print(f"  ETIQUETA SAIPOS -> ELGIN L42PRO FULL  (v{VERSION})")
@@ -1923,6 +2024,8 @@ def main():
     threading.Thread(target=sofia_poll_loop, daemon=True).start()
     # CO LOVE: reenvio da fila de comandas (so age se existir comanda_config.json ligado)
     threading.Thread(target=comanda_retry_loop, daemon=True).start()
+    # CO LOVE: reenvio dos logs de debug pra IA (so cria dado se ligado no servidor)
+    threading.Thread(target=debug_retry_loop, daemon=True).start()
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt: log("Script encerrado"); observer.stop()
