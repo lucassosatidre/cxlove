@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "165"
+VERSION = "166"
+# v166 (29/05/26): + aplica o "dicionario" de regras da IA na escrita dos itens (encoding/
+#   sabor_alias/borda_cleanup/abbrev). So vem regra se debug_apply_rules=true no servidor;
+#   senao a edge devolve vazio e o comportamento e IDENTICO ao de hoje. abbrev so na etiqueta.
 # v165 (29/05/26): + envia a "foto" crua de cada pedido pro CO LOVE (texto do Saipos + itens
 #   parseados) pra IA diaria melhorar escrita/exibicao. Best-effort, NUNCA afeta impressao,
 #   gated no servidor por debug_capture_enabled. Mesmo opt-out local da comanda.
@@ -888,7 +891,7 @@ def processar_pedido(filepath, filename):
         if id_sale: processados_id_sale[id_sale] = time.time()
         try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log("  Movido (salao)")
         except: pass
-        empurrar_comanda(mesa, display, tcx, tent, "", False, "", "", garcom, hora, id_sale,
+        empurrar_comanda(mesa, aplicar_regras_display(display, "comanda"), tcx, tent, "", False, "", "", garcom, hora, id_sale,
                          force_order_type="SALAO", label_printed=False)
         empurrar_debug(id_sale, mesa, "SALAO", "", "", rows_all, display,
                        {"caixas": tcx, "entrega": tent},
@@ -985,9 +988,10 @@ def processar_pedido(filepath, filename):
         return
 
     impressora_cx = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
+    display_etiqueta = aplicar_regras_display(all_display, "etiqueta")  # no-op se o dicionario estiver desligado
     num_etiquetas = max(total_caixas, 1)
     for i in range(1, num_etiquetas + 1):
-        img = gerar_etiqueta(numero_pedido, i, num_etiquetas, all_display, total_entrega,
+        img = gerar_etiqueta(numero_pedido, i, num_etiquetas, display_etiqueta, total_entrega,
                              pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido)
         log(f"  Etiqueta {i}/{num_etiquetas}..."); imprimir_etiqueta(img, printer_name=impressora_cx)
         if i < num_etiquetas: time.sleep(0.5)
@@ -995,7 +999,7 @@ def processar_pedido(filepath, filename):
     except: pass
     log(f"  OK #{numero_pedido} - {num_etiquetas} etiqueta(s)!")
     # CO LOVE: alem de imprimir, manda o pedido pra fila dos pizzaiolos (best-effort, so se ligado)
-    empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
+    empurrar_comanda(numero_pedido, aplicar_regras_display(all_display, "comanda"), total_caixas, total_entrega,
                      pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale)
     # CO LOVE: manda a "foto" crua do pedido pra IA diaria (best-effort, so se ligado no servidor)
     empurrar_debug(id_sale, numero_pedido, _comanda_order_type(balcao, codigo_canal),
@@ -2002,6 +2006,72 @@ def debug_retry_loop():
             log(f"  DEBUG retry erro: {e}")
         time.sleep(COMANDA_RETRY_INTERVAL)
 
+# ============================================================
+# REGRAS (dicionario da IA) -> aplica na escrita dos itens. So vem regra do servidor se
+# debug_apply_rules=true (senao a edge devolve vazio = comportamento de hoje, byte a byte).
+# ============================================================
+RULES_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/get-etiqueta-rules"
+RULES_REFRESH_INTERVAL = 600  # 10 min
+_REGRAS = {"rules": []}
+_REGRAS_LOCK = threading.Lock()
+_TIPOS_TEXTO = ("encoding", "sabor_alias", "borda_cleanup", "abbrev")
+
+def _carregar_regras():
+    """Best-effort: busca o dicionario ativo. Se falhar, mantem o cache atual."""
+    try:
+        req = urllib.request.Request(RULES_ENDPOINT, headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req, timeout=8, context=_sofia_ctx())
+        data = json.loads(resp.read().decode("utf-8", "replace"))
+        rules = data.get("rules") if isinstance(data, dict) else None
+        if isinstance(rules, list):
+            with _REGRAS_LOCK: _REGRAS["rules"] = rules
+            if rules: log(f"  REGRAS: {len(rules)} ativa(s)")
+    except Exception as e:
+        log(f"  REGRAS fetch (ok, usa cache): {e}")
+
+def regras_refresh_loop():
+    while True:
+        _carregar_regras()
+        time.sleep(RULES_REFRESH_INTERVAL)
+
+def _aplica_uma_regra(texto, regra):
+    try:
+        mp = regra.get("match_pattern") or ""
+        if not mp: return texto
+        rep = regra.get("replacement"); rep = "" if rep is None else str(rep)
+        if regra.get("is_regex"): return re.sub(mp, rep, texto)
+        return texto.replace(mp, rep)
+    except Exception:
+        return texto
+
+def aplicar_regras_texto(texto, alvo):
+    """Aplica regras de TEXTO (encoding/sabor_alias/borda_cleanup/abbrev) que valem pro alvo."""
+    if not texto: return texto
+    with _REGRAS_LOCK: regras = list(_REGRAS["rules"])
+    if not regras: return texto
+    s = texto
+    for tipo in _TIPOS_TEXTO:               # ordem importa: conserta -> padroniza -> encurta
+        if tipo == "abbrev" and alvo != "etiqueta": continue  # abreviar so na etiqueta (comanda tem espaco)
+        for r in regras:
+            if r.get("rule_type") != tipo: continue
+            tg = r.get("target") or "ambos"
+            if tg != "ambos" and tg != alvo: continue
+            s = _aplica_uma_regra(s, r)
+    return s
+
+def aplicar_regras_display(display, alvo):
+    """Copia do display com nome/sabores normalizados. SEM regras = MESMO objeto (no-op total)."""
+    with _REGRAS_LOCK: tem = bool(_REGRAS["rules"])
+    if not tem: return display
+    out = []
+    for it in (display or []):
+        novo = dict(it)
+        if novo.get("nome"): novo["nome"] = aplicar_regras_texto(str(novo["nome"]), alvo)
+        if isinstance(novo.get("sabores"), list):
+            novo["sabores"] = [aplicar_regras_texto(str(x), alvo) for x in novo["sabores"]]
+        out.append(novo)
+    return out
+
 def main():
     print("=" * 60)
     print(f"  ETIQUETA SAIPOS -> ELGIN L42PRO FULL  (v{VERSION})")
@@ -2026,6 +2096,9 @@ def main():
     threading.Thread(target=comanda_retry_loop, daemon=True).start()
     # CO LOVE: reenvio dos logs de debug pra IA (so cria dado se ligado no servidor)
     threading.Thread(target=debug_retry_loop, daemon=True).start()
+    # CO LOVE: dicionario de regras da IA (so vem regra se debug_apply_rules=true; senao no-op)
+    _carregar_regras()
+    threading.Thread(target=regras_refresh_loop, daemon=True).start()
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt: log("Script encerrado"); observer.stop()
