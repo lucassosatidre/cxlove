@@ -4,14 +4,14 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "157"
+VERSION = "158"
 # v157 (29/05/26): etiqueta CO LOVE deixava de caber em 1 etiqueta (espalhava em 2).
 #   Agora o tamanho do papel e' FORCADO pra 50x25mm via DEVMODE/ResetDC e a imagem e'
 #   desenhada na area real de impressao (HORZRES/VERTRES) da impressora de producao.
 #   Se o driver ignorar o tamanho, avisa no log pra calibrar a impressora. Fallback seguro.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
-import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request, threading, ssl
+import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request, urllib.error, threading, ssl
 from datetime import datetime, timezone, timedelta
 try:
     from zoneinfo import ZoneInfo
@@ -882,6 +882,9 @@ def processar_pedido(filepath, filename):
     try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log(f"  Movido")
     except: pass
     log(f"  OK #{numero_pedido} - {num_etiquetas} etiqueta(s)!")
+    # CO LOVE: alem de imprimir, manda o pedido pra fila dos pizzaiolos (best-effort, so se ligado)
+    empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
+                     pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale)
 
 def processar_arquivo(filepath):
     filename = os.path.basename(filepath)
@@ -1492,6 +1495,136 @@ def sofia_poll_loop():
             log(f"  SOFIA poll erro: {e}")
         time.sleep(SOFIA_POLL_INTERVAL)
 
+# ============================================================
+# COMANDA VIRTUAL - envia o pedido pra fila do CO LOVE (alem de imprimir)
+# So atua se existir ~/Downloads/comanda_config.json com {"enabled": true, ...}.
+# Best-effort: a impressao SEMPRE acontece antes e NUNCA e afetada por isto.
+# ============================================================
+COMANDA_CONFIG  = os.path.join(PASTA_DOWNLOADS, "comanda_config.json")
+COMANDA_OUTBOX  = os.path.join(PASTA_SAIPOS, "comanda_outbox")
+COMANDA_SENT    = os.path.join(PASTA_SAIPOS, "comanda_sent")
+COMANDA_FAILED  = os.path.join(PASTA_SAIPOS, "comanda_failed")
+COMANDA_RETRY_INTERVAL = 15        # segundos entre tentativas de reenvio da outbox
+
+def _comanda_config():
+    """Le {enabled, endpoint, token, anon?, comanda_types?} de ~/Downloads/comanda_config.json.
+    Sem arquivo OU enabled!=true OU faltando endpoint/token -> DESLIGADO (so imprime)."""
+    if not os.path.exists(COMANDA_CONFIG):
+        return None
+    try:
+        with open(COMANDA_CONFIG, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        if not cfg.get("enabled"):
+            return None
+        endpoint = (cfg.get("endpoint") or "").strip()
+        token = (cfg.get("token") or "").strip()
+        if not endpoint or not token:
+            return None
+        return {
+            "endpoint": endpoint,
+            "token": token,
+            "anon": (cfg.get("anon") or "").strip(),
+            "comanda_types": cfg.get("comanda_types") or ["ENTREGA", "RETIRADA", "SALAO"],
+        }
+    except Exception as e:
+        log(f"  COMANDA config invalida: {e}")
+        return None
+
+def _comanda_order_type(balcao, codigo_canal):
+    # v1: ENTREGA (delivery) x RETIRADA (balcao/retirada). Salao sera refinado depois.
+    return "RETIRADA" if balcao else "ENTREGA"
+
+def _comanda_outbox_path(id_sale):
+    ids = re.sub(r'[^A-Za-z0-9_-]', '_', str(id_sale or "sem"))
+    return os.path.join(COMANDA_OUTBOX, f"{ids}.json")
+
+def _comanda_post(cfg, payload):
+    """POST pro endpoint. Retorna (codigo_http, corpo). Erro de rede -> levanta (caller trata)."""
+    headers = {"Content-Type": "application/json", "Authorization": "Bearer " + cfg["token"]}
+    if cfg.get("anon"):
+        headers["apikey"] = cfg["anon"]
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(cfg["endpoint"], data=data, headers=headers, method="POST")
+    try:
+        resp = urllib.request.urlopen(req, timeout=8, context=_sofia_ctx())
+        return resp.getcode(), resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        body = ""
+        try: body = e.read().decode("utf-8", "replace")
+        except: pass
+        return e.code, body
+
+def _comanda_try_send_file(cfg, fn):
+    """Envia UM arquivo da outbox. 2xx -> sent/. 400/422 -> failed/. Resto -> deixa (retry)."""
+    if not cfg or not os.path.exists(fn):
+        return
+    try:
+        with open(fn, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception:
+        return
+    try:
+        code, body = _comanda_post(cfg, payload)
+    except Exception as e:
+        log(f"  COMANDA envio falhou (vai tentar de novo): {e}")
+        return
+    if 200 <= code < 300:
+        os.makedirs(COMANDA_SENT, exist_ok=True)
+        try: os.replace(fn, os.path.join(COMANDA_SENT, os.path.basename(fn)))
+        except:
+            try: os.remove(fn)
+            except: pass
+        log(f"  COMANDA enviada ({code})")
+    elif code in (400, 422):
+        os.makedirs(COMANDA_FAILED, exist_ok=True)
+        try: os.replace(fn, os.path.join(COMANDA_FAILED, os.path.basename(fn)))
+        except: pass
+        log(f"  COMANDA rejeitada ({code}): {body[:120]}")
+    else:
+        log(f"  COMANDA HTTP {code}: vai tentar de novo")
+
+def empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
+                     pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale):
+    """Best-effort: poe o pedido na fila do CO LOVE. NUNCA levanta erro (a etiqueta ja saiu)."""
+    try:
+        if total_caixas <= 0 or not id_sale:
+            return
+        cfg = _comanda_config()
+        if not cfg:
+            return  # desligado: nem grava outbox
+        otype = _comanda_order_type(balcao, codigo_canal)
+        if otype not in cfg["comanda_types"]:
+            return
+        payload = {
+            "version": 1, "id_sale": str(id_sale), "numero_pedido": numero_pedido,
+            "order_type": otype, "canal": canal, "codigo_canal": codigo_canal,
+            "cliente_nome": nome_cliente, "pagamento_cat": pag_cat, "hora_pedido": hora_pedido,
+            "items": all_display, "total_caixas": total_caixas, "total_entrega": total_entrega,
+            "label_printed": True,
+        }
+        fn = _comanda_outbox_path(id_sale)
+        os.makedirs(COMANDA_OUTBOX, exist_ok=True)
+        tmp = fn + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, fn)
+        threading.Thread(target=_comanda_try_send_file, args=(cfg, fn), daemon=True).start()
+    except Exception as e:
+        log(f"  COMANDA push falhou (ok, etiqueta ja saiu): {e}")
+
+def comanda_retry_loop():
+    """Reenvia o que ficou na outbox (ex: internet caiu na hora). So age se ligado."""
+    while True:
+        try:
+            cfg = _comanda_config()
+            if cfg and os.path.isdir(COMANDA_OUTBOX):
+                for name in sorted(os.listdir(COMANDA_OUTBOX)):
+                    if name.endswith(".json"):
+                        _comanda_try_send_file(cfg, os.path.join(COMANDA_OUTBOX, name))
+        except Exception as e:
+            log(f"  COMANDA retry erro: {e}")
+        time.sleep(COMANDA_RETRY_INTERVAL)
+
 def main():
     print("=" * 60)
     print(f"  ETIQUETA SAIPOS -> ELGIN L42PRO FULL  (v{VERSION})")
@@ -1512,6 +1645,8 @@ def main():
     observer.schedule(handler, PASTA_DOWNLOADS, recursive=False); observer.start()
     # SOFIA: poller de pedidos por telefone (so atua se existir sofia_caixa.json em Downloads)
     threading.Thread(target=sofia_poll_loop, daemon=True).start()
+    # CO LOVE: reenvio da fila de comandas (so age se existir comanda_config.json ligado)
+    threading.Thread(target=comanda_retry_loop, daemon=True).start()
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt: log("Script encerrado"); observer.stop()
