@@ -287,11 +287,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Pass 2: pra órfãos (vendas de mês anterior), agrupa por data_pagamento
-    // e cria lotes PLUXEE-PAG-YYYYMMDD-N
-    if (orphans.length > 0) {
+    // Pass 2: órfãos = pagamentos sem venda correspondente neste período.
+    // REGRA DE COMPETÊNCIA: o lote vive no mês DAS VENDAS (data_transacao),
+    // nunca na data do pagamento. Órfão cuja venda é de OUTRO mês pertence ao
+    // fechamento daquele mês (lá ele entra pelo arquivo de vendas) — criá-lo
+    // aqui causaria dupla contagem e inflaria o bruto do mês. Só viram lote PAG
+    // os órfãos cuja venda (data_transacao) cai no mês alvo.
+    const orphansThisPeriod = orphans.filter(p => {
+      const parts = String(p.data_transacao ?? '').split('-');
+      return Number(parts[0]) === period.year && Number(parts[1]) === period.month;
+    });
+    const skippedPriorPeriodSales = orphans.length - orphansThisPeriod.length;
+    if (orphansThisPeriod.length > 0) {
       const byPag = new Map<string, Pag[]>();
-      for (const p of orphans) {
+      for (const p of orphansThisPeriod) {
         const arr = byPag.get(p.data_pagamento) ?? [];
         arr.push(p);
         byPag.set(p.data_pagamento, arr);
