@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
     const pareceTerPedido = orderFlag !== false && orderFlag !== "false";
     if (status === "completed" && pareceTerPedido) {
       const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const secret = Deno.env.get("SOFIA_WEBHOOK_SECRET") ?? "";
+      const secret = Deno.env.get("SOFIA_PRINT_SECRET") ?? "";
       const extractUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/sofia-extract-order`;
       const headers: Record<string, string> = {
         "Content-Type": "application/json",

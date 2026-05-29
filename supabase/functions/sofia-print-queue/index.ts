@@ -43,10 +43,11 @@ function horaBR(iso: string | null): string {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Auth por secret compartilhado — OBRIGATÓRIO (a fila expõe PII do cliente).
-  const expected = Deno.env.get("SOFIA_WEBHOOK_SECRET");
+  // Auth por secret dedicado — OBRIGATÓRIO (a fila expõe PII do cliente).
+  // Secret próprio (NÃO o do webhook) pra não interferir na Sofia que já roda ao vivo.
+  const expected = Deno.env.get("SOFIA_PRINT_SECRET");
   if (!expected) {
-    return json({ error: "Servidor sem SOFIA_WEBHOOK_SECRET configurado." }, 503);
+    return json({ error: "Servidor sem SOFIA_PRINT_SECRET configurado." }, 503);
   }
   {
     const url = new URL(req.url);

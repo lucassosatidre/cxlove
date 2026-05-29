@@ -94,8 +94,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
-  // verify_jwt=false: protege com o mesmo secret do webhook (se configurado)
-  const expectedSecret = Deno.env.get("SOFIA_WEBHOOK_SECRET");
+  // verify_jwt=false: protege com o secret dedicado da Sofia-caixa (se configurado)
+  const expectedSecret = Deno.env.get("SOFIA_PRINT_SECRET");
   if (expectedSecret) {
     const provided = new URL(req.url).searchParams.get("secret") ?? req.headers.get("x-sofia-secret");
     if (provided !== expectedSecret) return jsonResponse({ error: "unauthorized" }, 401);
