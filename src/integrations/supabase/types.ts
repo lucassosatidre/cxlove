@@ -3003,6 +3003,123 @@ export type Database = {
         }
         Relationships: []
       }
+      sofia_order_counter: {
+        Row: {
+          dia: string
+          ultimo: number
+        }
+        Insert: {
+          dia?: string
+          ultimo?: number
+        }
+        Update: {
+          dia?: string
+          ultimo?: number
+        }
+        Relationships: []
+      }
+      sofia_orders: {
+        Row: {
+          bairro: string | null
+          complemento: string | null
+          conferido_por: string | null
+          created_at: string
+          dia: string
+          endereco: string | null
+          forma_pagamento: string | null
+          id: string
+          impresso_em: string | null
+          itens: Json
+          nome_cliente: string | null
+          numero: number
+          observacoes: string | null
+          origem: string
+          raw: Json | null
+          referencia: string | null
+          sofia_call_id: string | null
+          status: string
+          subtotal: number
+          taxa_entrega: number
+          telefone: string | null
+          tipo: string
+          total: number
+          troco_para: number | null
+          updated_at: string
+        }
+        Insert: {
+          bairro?: string | null
+          complemento?: string | null
+          conferido_por?: string | null
+          created_at?: string
+          dia?: string
+          endereco?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          impresso_em?: string | null
+          itens?: Json
+          nome_cliente?: string | null
+          numero: number
+          observacoes?: string | null
+          origem?: string
+          raw?: Json | null
+          referencia?: string | null
+          sofia_call_id?: string | null
+          status?: string
+          subtotal?: number
+          taxa_entrega?: number
+          telefone?: string | null
+          tipo?: string
+          total?: number
+          troco_para?: number | null
+          updated_at?: string
+        }
+        Update: {
+          bairro?: string | null
+          complemento?: string | null
+          conferido_por?: string | null
+          created_at?: string
+          dia?: string
+          endereco?: string | null
+          forma_pagamento?: string | null
+          id?: string
+          impresso_em?: string | null
+          itens?: Json
+          nome_cliente?: string | null
+          numero?: number
+          observacoes?: string | null
+          origem?: string
+          raw?: Json | null
+          referencia?: string | null
+          sofia_call_id?: string | null
+          status?: string
+          subtotal?: number
+          taxa_entrega?: number
+          telefone?: string | null
+          tipo?: string
+          total?: number
+          troco_para?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      sofia_settings: {
+        Row: {
+          data: Json
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          data?: Json
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          data?: Json
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           details: Json | null
@@ -3357,6 +3474,7 @@ export type Database = {
         }
         Returns: Json
       }
+      sofia_next_numero: { Args: never; Returns: number }
     }
     Enums: {
       app_role:
