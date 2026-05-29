@@ -84,7 +84,7 @@ export default function SofiaCaixa() {
       .order('created_at', { ascending: false })
       .limit(200);
     if (error) toast.error('Erro ao carregar pedidos: ' + error.message);
-    else setOrders((data ?? []) as Order[]);
+    else setOrders((data ?? []) as unknown as Order[]);
     setLoading(false);
   }, []);
 
