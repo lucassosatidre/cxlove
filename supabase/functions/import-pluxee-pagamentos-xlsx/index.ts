@@ -287,11 +287,20 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Pass 2: pra órfãos (vendas de mês anterior), agrupa por data_pagamento
-    // e cria lotes PLUXEE-PAG-YYYYMMDD-N
-    if (orphans.length > 0) {
+    // Pass 2: órfãos = pagamentos sem venda correspondente neste período.
+    // REGRA DE COMPETÊNCIA: o lote vive no mês DAS VENDAS (data_transacao),
+    // nunca na data do pagamento. Órfão cuja venda é de OUTRO mês pertence ao
+    // fechamento daquele mês (lá ele entra pelo arquivo de vendas) — criá-lo
+    // aqui causaria dupla contagem e inflaria o bruto do mês. Só viram lote PAG
+    // os órfãos cuja venda (data_transacao) cai no mês alvo.
+    const orphansThisPeriod = orphans.filter(p => {
+      const parts = String(p.data_transacao ?? '').split('-');
+      return Number(parts[0]) === period.year && Number(parts[1]) === period.month;
+    });
+    const skippedPriorPeriodSales = orphans.length - orphansThisPeriod.length;
+    if (orphansThisPeriod.length > 0) {
       const byPag = new Map<string, Pag[]>();
-      for (const p of orphans) {
+      for (const p of orphansThisPeriod) {
         const arr = byPag.get(p.data_pagamento) ?? [];
         arr.push(p);
         byPag.set(p.data_pagamento, arr);
@@ -428,11 +437,12 @@ Deno.serve(async (req) => {
       skipped_outside_period_by_month: periodFilter.skippedByMonth,
       updated_items: updatedItems,
       orphan_pagamentos: orphans.length,
+      skipped_prior_period_sales: skippedPriorPeriodSales,
       created_orphan_lots: createdLots,
       created_orphan_items: createdItems,
       lots_adjusted: lotsAdjusted,
       taxa_rate_pct: Math.round(taxaRateApplied * 10000) / 100,
-      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}`,
+      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}${skippedPriorPeriodSales > 0 ? ` · ${skippedPriorPeriodSales} pagamentos de venda de outro mês ignorados (competência)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-pagamentos-xlsx error', e);
