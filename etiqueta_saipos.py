@@ -4,7 +4,11 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "156"
+VERSION = "157"
+# v157 (29/05/26): etiqueta CO LOVE deixava de caber em 1 etiqueta (espalhava em 2).
+#   Agora o tamanho do papel e' FORCADO pra 50x25mm via DEVMODE/ResetDC e a imagem e'
+#   desenhada na area real de impressao (HORZRES/VERTRES) da impressora de producao.
+#   Se o driver ignorar o tamanho, avisa no log pra calibrar a impressora. Fallback seguro.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request, threading, ssl
@@ -1068,6 +1072,103 @@ def gerar_etiqueta_producao(payload, larg=None, alt=None):
     img = img.convert("L").point(lambda p: 0 if p < 190 else 255).convert("RGB")
     return img
 
+def _devmode_papel(printer_name, larg_mm, alt_mm):
+    """DEVMODE da impressora com o tamanho de papel FORCADO em larg_mm x alt_mm.
+    Devolve None se nao der (ex.: sem pywin32). Tamanhos em decimos de milimetro."""
+    try:
+        import win32print, win32con
+        h = win32print.OpenPrinter(printer_name)
+        try:
+            dm = win32print.GetPrinter(h, 2).get("pDevMode")
+            if dm is None:
+                return None
+            dm.PaperSize = 256                       # DMPAPER_USER (tamanho personalizado)
+            dm.PaperWidth = int(round(larg_mm * 10)) # decimos de mm
+            dm.PaperLength = int(round(alt_mm * 10))
+            dm.Orientation = 1                       # DMORIENT_PORTRAIT
+            dm.Fields = (dm.Fields | win32con.DM_PAPERSIZE | win32con.DM_PAPERWIDTH
+                         | win32con.DM_PAPERLENGTH | win32con.DM_ORIENTATION)
+            return dm
+        finally:
+            win32print.ClosePrinter(h)
+    except Exception as e:
+        log(f"  devmode papel falhou: {e}")
+        return None
+
+def imprimir_etiqueta_producao(img, printer_name, copias=1):
+    """Imprime a etiqueta de validade do CO LOVE FORCANDO o papel pra 50x25mm e
+    preenchendo a area real de impressao (HORZRES/VERTRES). Resolve o caso de a
+    etiqueta 'espalhar em 2' quando o driver tem um tamanho de papel antigo/errado.
+    Se pywin32 faltar, cai no metodo antigo (_imprimir_dib)."""
+    with _print_lock:
+        try:
+            import win32ui, win32gui, win32con
+            from PIL import ImageWin
+        except ImportError:
+            log("  pywin32 ausente; usando metodo antigo (sem forcar 50x25)")
+            for _ in range(copias):
+                _imprimir_dib(img, printer_name, CO_LOVE_LARGURA_PX, CO_LOVE_ALTURA_PX)
+                time.sleep(0.2)
+            return
+        try:
+            hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
+        except Exception as e:
+            log(f"  ERRO criar DC producao: {e}"); return
+        try:
+            dm = _devmode_papel(printer_name, CO_LOVE_LARGURA_MM, CO_LOVE_ALTURA_MM)
+            if dm is not None:
+                try: win32gui.ResetDC(hdc.GetSafeHdc(), dm)
+                except Exception as e: log(f"  ResetDC ignorado: {e}")
+            try:
+                aw = hdc.GetDeviceCaps(win32con.HORZRES); ah = hdc.GetDeviceCaps(win32con.VERTRES)
+            except Exception:
+                aw, ah = 0, 0
+            # A etiqueta e' SEMPRE deitada (50mm larg x 25mm alt = 399x199px). Nao giramos:
+            # o sintoma e' "espalha em 2", nao texto torto. Se a area reportada estiver zerada
+            # ou "em pe"/muito fora do esperado, o driver IGNOROU o tamanho forcado -> avisa
+            # bem alto no log (precisa calibrar a impressora) e desenha no tamanho correto.
+            esperado_w, esperado_h = CO_LOVE_LARGURA_PX, CO_LOVE_ALTURA_PX
+            area_ok = (aw > 0 and ah > 0 and aw >= ah
+                       and abs(aw - esperado_w) <= esperado_w * 0.30
+                       and abs(ah - esperado_h) <= esperado_h * 0.30)
+            if not area_ok:
+                log(f"  AVISO: driver NAO aplicou 50x25 (area {aw}x{ah}px, esperado ~{esperado_w}x{esperado_h}). "
+                    f"Calibrar a impressora de PRODUCAO (192.168.1.24): tamanho 50x25mm + calibrar gap/midia.")
+                aw, ah = esperado_w, esperado_h
+            dib = ImageWin.Dib(img)
+            for _ in range(copias):
+                hdc.StartDoc("Etiqueta CO Love"); hdc.StartPage()
+                dib.draw(hdc.GetHandleOutput(), (0, 0, aw, ah))
+                hdc.EndPage(); hdc.EndDoc()
+                time.sleep(0.2)
+            log(f"  Impresso OK producao x{copias} ({printer_name}) area {aw}x{ah}px")
+        except Exception as e:
+            log(f"  ERRO impressao producao: {e}")
+        finally:
+            try: hdc.DeleteDC()
+            except: pass
+
+def _imprimir_dib(img, printer_name, larg, alt):
+    """Print cru de uma imagem num DC de impressora (sem _print_lock; ja deve estar travado)."""
+    try:
+        import win32ui; from PIL import ImageWin
+        hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
+        hdc.StartDoc("Etiqueta CO Love"); hdc.StartPage()
+        ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
+        hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
+        log(f"  Impresso OK ({printer_name})")
+    except ImportError:
+        tmp = tempfile.NamedTemporaryFile(suffix=".bmp", delete=False); tp = tmp.name; tmp.close()
+        try:
+            img.save(tp, "BMP")
+            subprocess.run(f'mspaint /pt "{tp}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
+            log("  Impresso OK (mspaint)")
+        finally:
+            try: time.sleep(2); os.unlink(tp)
+            except: pass
+    except Exception as e:
+        log(f"  ERRO: {e}")
+
 def processar_lovelabel(filepath, filename):
     try:
         time.sleep(0.6)
@@ -1092,10 +1193,8 @@ def processar_lovelabel(filepath, filename):
     log(f"  CO LOVE: {qtd}x '{nome}' (batch {str(batch_id)[:8]}{'/REIMP' if is_reprint else ''})")
     impressora = _impressora_para(IP_IMPRESSORA_PRODUCAO, fallback=NOME_IMPRESSORA, etiqueta="PRODUCAO")
     img = gerar_etiqueta_producao(payload)
-    for i in range(qtd):
-        try: imprimir_etiqueta(img, printer_name=impressora, larg=CO_LOVE_LARGURA_PX, alt=CO_LOVE_ALTURA_PX)
-        except Exception as e: log(f"  ERRO imp {i+1}/{qtd}: {e}"); break
-        time.sleep(0.2)
+    try: imprimir_etiqueta_producao(img, impressora, copias=qtd)
+    except Exception as e: log(f"  ERRO imp producao: {e}")
     try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log(f"  Movido")
     except Exception as e: log(f"  ERRO mover: {e}")
 
