@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "161"
+VERSION = "162"
 # v160 (29/05/26): + Comanda Virtual embutida (empurra pedido pro CO LOVE, sem senha, interruptor central).
 # v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
 #   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
@@ -738,13 +738,32 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
         with _print_lock:   # uma impressao por vez (watcher Saipos + poller Sofia compartilham a impressora)
             try:
                 import win32print, win32ui; from PIL import ImageWin
-                hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
-                hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
-                ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
-                hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC(); log(f"  Impresso OK ({printer_name})")
             except ImportError:
                 subprocess.run(f'mspaint /pt "{tmp_path}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
                 log("  Impresso OK (mspaint)")
+            else:
+                # Tenta de novo se a impressora 'tropecar' (comum no 1o job apos abrir/instalar).
+                ultimo_erro = None
+                for tentativa in range(4):
+                    hdc = None
+                    try:
+                        hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
+                        hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
+                        ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
+                        hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
+                        log(f"  Impresso OK ({printer_name})")
+                        ultimo_erro = None
+                        break
+                    except Exception as e:
+                        ultimo_erro = e
+                        if hdc:
+                            try: hdc.DeleteDC()
+                            except Exception: pass
+                        if tentativa < 3:
+                            log(f"  impressora ocupada, tentando de novo ({tentativa+1}/4)...")
+                            time.sleep(1.2)
+                if ultimo_erro is not None:
+                    log(f"  ERRO: {ultimo_erro}")
     except Exception as e: log(f"  ERRO: {e}")
     finally:
         try: time.sleep(2); os.unlink(tmp_path)
