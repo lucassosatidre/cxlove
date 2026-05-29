@@ -249,7 +249,9 @@ Deno.serve(async (req) => {
     let insertedItems = 0;
 
     for (const lot of lots) {
-      const numReembolso = `ALELO-${lot.data_pag.replaceAll('-', '')}`;
+      const numReembolso = lot.pendente
+        ? `ALELO-${(lot.data_venda_ref ?? '').replaceAll('-', '')}-PEND`
+        : `ALELO-${(lot.data_pag as string).replaceAll('-', '')}`;
       const subtotal = Math.round(lot.bruto * 100) / 100;
       const liq = Math.round(lot.liquido * 100) / 100;
       const totalDesc = Math.round((subtotal - liq) * 100) / 100;
@@ -266,7 +268,9 @@ Deno.serve(async (req) => {
       const lotPayload = {
         audit_period_id, operadora: 'alelo',
         numero_reembolso: numReembolso, numero_contrato: null,
-        produto, data_corte: null, data_credito: lot.data_pag,
+        produto, data_corte: null,
+        data_credito: lot.pendente ? null : lot.data_pag,
+        status: lot.pendente ? 'pending' : 'matched',
         subtotal_vendas: subtotal, total_descontos: totalDesc, valor_liquido: liq,
         descontos: { taxa_alelo: totalDesc },
         import_id: importRec.id,
