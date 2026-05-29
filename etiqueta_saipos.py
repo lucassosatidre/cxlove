@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "166"
+VERSION = "167"
+# v167 (29/05/26): regras do dicionario sao LITERAIS (str.replace), nunca regex. Mata risco de
+#   ReDoS travar a impressao (re.sub sem timeout) e de backreference falhar em silencio. is_regex ignorado.
 # v166 (29/05/26): + aplica o "dicionario" de regras da IA na escrita dos itens (encoding/
 #   sabor_alias/borda_cleanup/abbrev). So vem regra se debug_apply_rules=true no servidor;
 #   senao a edge devolve vazio e o comportamento e IDENTICO ao de hoje. abbrev so na etiqueta.
@@ -894,7 +896,10 @@ def processar_pedido(filepath, filename):
         empurrar_comanda(mesa, aplicar_regras_display(display, "comanda"), tcx, tent, "", False, "", "", garcom, hora, id_sale,
                          force_order_type="SALAO", label_printed=False)
         empurrar_debug(id_sale, mesa, "SALAO", "", "", rows_all, display,
-                       {"caixas": tcx, "entrega": tent},
+                       {"caixas": tcx,
+                        "bebidas": sum(d["qty"] for d in display if d["tipo"] == "bebida"),
+                        "outros": sum(d["qty"] for d in display if d["tipo"] == "outro"),
+                        "entrega": tent},
                        {"mesa": mesa, "garcom": garcom, "hora": hora})
         return
 
@@ -2035,11 +2040,12 @@ def regras_refresh_loop():
         time.sleep(RULES_REFRESH_INTERVAL)
 
 def _aplica_uma_regra(texto, regra):
+    # LITERAL por seguranca: str.replace e O(n), sem risco de ReDoS (re.sub nao tem timeout) nem
+    # de backreference no replacement. is_regex e ignorado de proposito (regex desabilitado no servidor).
     try:
         mp = regra.get("match_pattern") or ""
         if not mp: return texto
         rep = regra.get("replacement"); rep = "" if rep is None else str(rep)
-        if regra.get("is_regex"): return re.sub(mp, rep, texto)
         return texto.replace(mp, rep)
     except Exception:
         return texto
