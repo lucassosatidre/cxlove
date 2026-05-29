@@ -437,11 +437,12 @@ Deno.serve(async (req) => {
       skipped_outside_period_by_month: periodFilter.skippedByMonth,
       updated_items: updatedItems,
       orphan_pagamentos: orphans.length,
+      skipped_prior_period_sales: skippedPriorPeriodSales,
       created_orphan_lots: createdLots,
       created_orphan_items: createdItems,
       lots_adjusted: lotsAdjusted,
       taxa_rate_pct: Math.round(taxaRateApplied * 10000) / 100,
-      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}`,
+      message: `${updatedItems} status atualizados · ${createdItems} órfãos criados em ${createdLots} lotes · ${lotsAdjusted} lots ajustados (taxa ${(taxaRateApplied*100).toFixed(2)}%)${periodFilter.skipped > 0 ? ` (${periodFilter.skipped} fora do mês)` : ''}${skippedPriorPeriodSales > 0 ? ` · ${skippedPriorPeriodSales} pagamentos de venda de outro mês ignorados (competência)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-pluxee-pagamentos-xlsx error', e);
