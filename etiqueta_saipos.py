@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "163"
+VERSION = "164"
 # v160 (29/05/26): + Comanda Virtual embutida (empurra pedido pro CO LOVE, sem senha, interruptor central).
 # v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
 #   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
@@ -472,6 +472,70 @@ def eh_retirada(print_rows):
         if "retirada" in texto or "balc" in texto: return True
     return False
 
+# ---- SALAO (mesa): formato de impressao DIFERENTE do delivery ----
+def _salao_txt(row):
+    return corrigir_encoding(limpar_tags(row))
+
+def eh_salao(print_rows):
+    """Salao tem cabecalho 'MESA MESA' e/ou linha 'Garcom:'. Delivery/retirada nao tem."""
+    for r in print_rows:
+        t = _salao_txt(r)
+        if t.upper().startswith("MESA MESA"): return True
+        if re.match(r'(?i)^gar.?om:', t): return True
+    return False
+
+def extrair_mesa(print_rows):
+    for r in print_rows:
+        m = re.match(r'(?i)^mesa:\s*(.+)$', _salao_txt(r))
+        if m and m.group(1).strip(): return m.group(1).strip()
+    return ""
+
+def extrair_garcom(print_rows):
+    for r in print_rows:
+        m = re.match(r'(?i)^gar.?om:\s*(.+)$', _salao_txt(r))
+        if m and m.group(1).strip(): return m.group(1).strip()
+    return ""
+
+def _salao_eh_bebida(nome):
+    n = nome.lower()
+    return any(b in n for b in ["chopp","refri","coca","guaran","cerveja","heineken","suco","agua",
+                                "fanta","sprite","bebida","lata","long neck","drink","brahma","skol",
+                                "budweiser","stella","corona","tonica","energetico","red bull","monster"])
+
+def extrair_itens_salao(print_rows):
+    """Le os itens no formato salao: 'N  Pizza X' seguido de '-Nx Sabor'. Bebida = linha sem sabores."""
+    display = []; cur = None; in_items = False
+    for r in print_rows:
+        t = _salao_txt(r); low = t.lower()
+        if "qt.descri" in low: in_items = True; continue
+        if not in_items: continue
+        if "quantidade de itens" in low: break
+        if not t: continue
+        mf = re.match(r'^-\s*(\d+)\s*x\s+(.+)$', t)     # "-1x Pepperoni" = sabor da pizza atual
+        mi = re.match(r'^(\d+)\s+(.+)$', t)             # "1  Pizza Gigante" = item
+        if mf and cur is not None and cur["tipo"] in ("caixa_salgada", "caixa_doce"):
+            cur["_fl"].extend([mf.group(2).strip()] * int(mf.group(1)))
+        elif mi:
+            qt = int(mi.group(1)); nome = mi.group(2).strip()
+            if "pizza" in nome.lower():
+                cur = {"tipo": "caixa_salgada", "nome": nome, "qty": qt, "_fl": []}
+            else:
+                cur = {"tipo": "bebida" if _salao_eh_bebida(nome) else "outro", "nome": nome, "qty": qt, "_fl": []}
+            display.append(cur)
+    out = []
+    for d in display:
+        fl = d.pop("_fl", []); sab = []
+        if fl:
+            total = len(fl); ordem = []
+            for n in fl:
+                if n not in ordem: ordem.append(n)
+            for n in ordem:
+                c = fl.count(n)
+                sab.append(f"{c}/{total} {n}" if total > 1 else n)
+        d["sabores"] = sab
+        out.append(d)
+    return out
+
 def agrupar_display(display):
     resultado = []; i = 0
     while i < len(display):
@@ -806,6 +870,24 @@ def processar_pedido(filepath, filename):
             return
         else:
             log(f"  Reimpressao: {id_sale} ({elapsed:.0f}s atras)")
+
+    # ---- SALAO: o Saipos imprime a comanda fisica; aqui NAO imprime etiqueta, so manda
+    #      pra fila virtual marcado como SALAO (com a Mesa). Formato de itens e diferente. ----
+    rows_all = []
+    for el in data: rows_all.extend(el.get("printRows", []))
+    if eh_salao(rows_all):
+        for el in data: debug_save(filename, el.get("printRows", []))
+        mesa = extrair_mesa(rows_all); garcom = extrair_garcom(rows_all)
+        hora = extrair_hora_pedido(rows_all); display = extrair_itens_salao(rows_all)
+        tcx = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada", "caixa_doce"))
+        tent = sum(d["qty"] for d in display)
+        log(f"  SALAO Mesa {str(mesa)[:24]}: {tcx}cx {tent}itens (sem etiqueta)")
+        if id_sale: processados_id_sale[id_sale] = time.time()
+        try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log("  Movido (salao)")
+        except: pass
+        empurrar_comanda(mesa, display, tcx, tent, "", False, "", "", garcom, hora, id_sale,
+                         force_order_type="SALAO", label_printed=False)
+        return
 
     el_cozinha = []; el_caixa = []
     for el in data:
@@ -1777,15 +1859,17 @@ def _comanda_try_send_file(fn):
         log(f"  COMANDA HTTP {code}: vai tentar de novo")
 
 def empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
-                     pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale):
+                     pag_cat, balcao, canal, codigo_canal, nome_cliente, hora_pedido, id_sale,
+                     force_order_type=None, label_printed=True):
     """Best-effort: poe o pedido na fila do CO LOVE. NUNCA levanta erro (a etiqueta ja saiu).
-    Sempre tenta enviar (se nao houver opt-out local); o servidor decide se vira comanda."""
+    Sempre tenta enviar (se nao houver opt-out local); o servidor decide se vira comanda.
+    force_order_type: usado pelo salao (SALAO). label_printed: False no salao (Saipos imprime a fisica)."""
     try:
         if total_caixas <= 0 or not id_sale:
             return
         if _comanda_local_off():
             return
-        otype = _comanda_order_type(balcao, codigo_canal)
+        otype = force_order_type or _comanda_order_type(balcao, codigo_canal)
         if otype not in COMANDA_TYPES:
             return
         payload = {
@@ -1793,7 +1877,7 @@ def empurrar_comanda(numero_pedido, all_display, total_caixas, total_entrega,
             "order_type": otype, "canal": canal, "codigo_canal": codigo_canal,
             "cliente_nome": nome_cliente, "pagamento_cat": pag_cat, "hora_pedido": hora_pedido,
             "items": all_display, "total_caixas": total_caixas, "total_entrega": total_entrega,
-            "label_printed": True,
+            "label_printed": label_printed,
         }
         fn = _comanda_outbox_path(id_sale)
         os.makedirs(COMANDA_OUTBOX, exist_ok=True)
