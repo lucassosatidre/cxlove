@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "160"
+VERSION = "161"
 # v160 (29/05/26): + Comanda Virtual embutida (empurra pedido pro CO LOVE, sem senha, interruptor central).
 # v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
 #   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
@@ -1434,16 +1434,39 @@ def processar_sofia_pedido(pedido, impressora):
 def processar_sofia_arquivo(filepath, filename):
     """Pedido da Sofia baixado pelo Caixa Love (.sofiapedido) -> imprime comanda + etiquetas.
     Mesmo mecanismo das etiquetas do CO LOVE: o arquivo cai em Downloads e o watcher imprime.
-    Sem segredo, sem polling — basta o Caixa Love aberto no PC da cozinha."""
-    if filename in processados_arquivos and (time.time() - processados_arquivos[filename]) < 30:
-        return
-    processados_arquivos[filename] = time.time()
+    Sem segredo, sem polling — basta o Caixa Love aberto no PC da cozinha.
+
+    Robustez: 'reivindica' o arquivo via rename atomico ANTES de ler. Assim, se houver
+    mais de uma copia do programa rodando (ou eventos duplicados do watcher), so UMA
+    processa — as outras saem em silencio. Tambem tolera o arquivo ainda estar sendo
+    escrito pelo navegador (tenta de novo)."""
+    claim = filepath + ".printing"
+    claimed = False
+    for tentativa in range(8):  # ate ~2.4s aguardando o arquivo materializar/liberar
+        if not os.path.exists(filepath):
+            if tentativa == 0:
+                time.sleep(0.3); continue   # navegador ainda pode estar criando
+            return                          # sumiu / outra copia ja pegou -> silencioso
+        try:
+            os.replace(filepath, claim)     # reivindicacao atomica
+            claimed = True
+            break
+        except FileNotFoundError:
+            return                          # outra copia reivindicou primeiro -> silencioso
+        except (PermissionError, OSError):
+            time.sleep(0.3)                 # ainda sendo escrito/bloqueado -> tenta de novo
+    if not claimed:
+        log("  SOFIA: arquivo ocupado, nao consegui ler"); return
+
     try:
-        time.sleep(0.4)
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(claim, "r", encoding="utf-8") as f:
             pedido = json.load(f)
     except Exception as e:
-        log(f"  ERRO lendo .sofiapedido: {e}"); return
+        log(f"  ERRO lendo .sofiapedido: {e}")
+        try: os.remove(claim)
+        except Exception: pass
+        return
+
     numero = pedido.get("numero", "?")
     log(f"  SOFIA arquivo: pedido #{numero}")
     impressora = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
@@ -1454,9 +1477,10 @@ def processar_sofia_arquivo(filepath, filename):
         log(f"  ERRO imprimindo SOFIA #{numero}: {e}")
     try:
         os.makedirs(PASTA_SAIPOS, exist_ok=True)
-        shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename))
+        shutil.move(claim, os.path.join(PASTA_SAIPOS, filename))
     except Exception:
-        pass
+        try: os.remove(claim)
+        except Exception: pass
 
 def sofia_poll_loop():
     log("SOFIA poller iniciado (aguardando sofia_caixa.json em Downloads)")
