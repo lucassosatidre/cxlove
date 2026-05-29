@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
     const wasConciliado = period.status === 'conciliado';
 
     type RawSale = {
-      data_venda: string; data_pag: string; tipo: string;
+      data_venda: string; data_pag: string | null; tipo: string;
       autorizacao: string | null; cartao: string | null;
       bruto: number; liquido: number; cnpj: string | null;
     };
