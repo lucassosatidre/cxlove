@@ -116,7 +116,7 @@ export default function SofiaCaixa() {
     const { data: { user } } = await supabase.auth.getUser();
     const patch: Record<string, unknown> = { status, ...extra };
     if (status === 'pendente_impressao') patch.conferido_por = user?.id ?? null;
-    const { error } = await supabase.from('sofia_orders').update(patch).eq('id', o.id);
+    const { error } = await supabase.from('sofia_orders').update(patch as never).eq('id', o.id);
     setBusy(null);
     if (error) toast.error('Erro: ' + error.message);
     else { toast.success(status === 'pendente_impressao' ? `Pedido #${o.numero} enviado pra cozinha` : 'Atualizado'); load(); }
