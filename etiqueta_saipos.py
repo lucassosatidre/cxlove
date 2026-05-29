@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "162"
+VERSION = "163"
 # v160 (29/05/26): + Comanda Virtual embutida (empurra pedido pro CO LOVE, sem senha, interruptor central).
 # v159 (29/05/26): legibilidade da etiqueta CO LOVE. Texto branco em fundo PRETO saia
 #   apagado/ilegivel na termica (traco branco fino "enche" no campo preto). Invertido pra
@@ -925,8 +925,9 @@ _LOVELABEL_DEDUP_S = 5
 
 # --- Impressoras achadas pelo IP FIXO na rede (o nome no Windows varia por PC) ---
 # Caixas (comandas) 80x30mm  e  Producao do CO LOVE 50x25mm sao 2 impressoras de rede.
-IP_IMPRESSORA_CAIXAS   = "192.168.1.14"   # comandas das caixas (80x30)
+IP_IMPRESSORA_CAIXAS   = "192.168.1.14"   # etiquetas das caixas de pizza (80x30)
 IP_IMPRESSORA_PRODUCAO = "192.168.1.24"   # etiquetas de validade CO LOVE (50x25)
+IP_IMPRESSORA_COMANDA  = "192.168.1.222"  # comanda em cupom estilo Saipos (Elgin i8, 80mm)
 
 CO_LOVE_LARGURA_MM = 50
 CO_LOVE_ALTURA_MM = 25
@@ -1420,6 +1421,152 @@ def gerar_comanda(pedido):
     draw.text((me, yr), rodape, fill="white", font=fr)
     return img
 
+COMANDA_CUPOM_W = 576   # 80mm util (~72mm) @ 203 DPI -> Elgin i8
+
+_MESES_PT = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"]
+
+def gerar_comanda_cupom(pedido):
+    """Comanda em CUPOM (80mm, Elgin i8) no formato do Saipos: ENTREGA/RETIRADA, data,
+    Nº do pedido, cliente, endereco (entrega), lista de itens com sabores, qtd de itens,
+    pagamento/troco e rodape. Imagem de largura fixa e altura variavel."""
+    W = COMANDA_CUPOM_W
+    ML, MR = 14, 14
+    USE = W - ML - MR
+    img = Image.new("RGB", (W, 2600), "white")
+    draw = ImageDraw.Draw(img)
+    fb = _prod_fonte_bold
+    fn = _prod_fonte_normal
+
+    def alt(f):
+        try: bb = draw.textbbox((0,0), "Ag", font=f); return (bb[3]-bb[1])
+        except: return 20
+    def larg(s, f):
+        try: bb = draw.textbbox((0,0), s, font=f); return (bb[2]-bb[0])
+        except: return len(s)*10
+
+    y = 12
+    def center(s, f, fill="black", gap=6):
+        nonlocal y
+        x = (W - larg(s, f)) // 2
+        draw.text((x, y), s, font=f, fill=fill)
+        y += alt(f) + gap
+    def left(s, f, x=ML, gap=5):
+        nonlocal y
+        for ln in word_wrap(s, draw, f, W - x - MR):
+            draw.text((x, y), ln, font=f, fill="black")
+            y += alt(f) + gap
+    def lr(le, ri, f, gap=6):
+        nonlocal y
+        draw.text((ML, y), le, font=f, fill="black")
+        draw.text((W - MR - larg(ri, f), y), ri, font=f, fill="black")
+        y += alt(f) + gap
+    def dash(gap=10):
+        nonlocal y
+        y += 2
+        x = ML
+        while x < W - MR:
+            draw.line([(x, y), (min(x+8, W-MR), y)], fill="black", width=2)
+            x += 14
+        y += gap
+    def bar(s, f, gap=8):
+        nonlocal y
+        h = alt(f) + 14
+        draw.rectangle([(0, y), (W, y + h)], fill="black")
+        x = (W - larg(s, f)) // 2
+        draw.text((x, y + 7), s, font=f, fill="white")
+        y += h + gap
+
+    tipo = (pedido.get("tipo") or "entrega").lower()
+    try: num = f"{int(pedido.get('numero') or 0):04d}"
+    except: num = str(pedido.get("numero") or "")
+    hora = (pedido.get("hora") or "").strip()
+    try:
+        ag = datetime.now(_BR_TZ); data_str = f"{ag.day:02d}/{_MESES_PT[ag.month-1]}"
+    except: data_str = ""
+    if hora: data_str = f"{data_str} - {hora}" if data_str else hora
+
+    # Cabecalho
+    center("ENTREGA" if tipo == "entrega" else "RETIRADA NO BALCAO", fb(40), gap=8)
+    dash()
+    if data_str: center(data_str, fn(28)); dash()
+    bar(f"PEDIDO Nº {num}  -  SOFIA", fb(32))
+    dash()
+
+    # Cliente
+    cli = (pedido.get("nome_cliente") or "Sem nome").strip()
+    center(cli, fb(36), gap=4)
+    fone = (pedido.get("telefone") or "").strip()
+    if fone: center(fone, fn(26))
+    dash()
+
+    # Endereco (so entrega)
+    if tipo == "entrega":
+        end = (pedido.get("endereco") or "").strip()
+        compl = (pedido.get("complemento") or "").strip()
+        bairro = (pedido.get("bairro") or "").strip()
+        ref = (pedido.get("referencia") or "").strip()
+        if end: left(end + (f" - {compl}" if compl else ""), fb(28))
+        if bairro: left(f"Bairro: {bairro}", fn(26))
+        if ref: left(f"Ref: {ref}", fn(26))
+        if end or bairro or ref: dash()
+
+    # Itens
+    left("Qt.Descrição", fn(24), gap=8)
+    itens = pedido.get("itens") or []
+    n_itens = 0
+    for it in itens:
+        try: q = max(1, int(it.get("qtd") or 1))
+        except: q = 1
+        n_itens += q
+        nome = (it.get("nome") or "Item").strip()
+        left(f"{q}  {nome}", fb(30), gap=3)
+        if (it.get("tipo") or "") == "pizza":
+            for s in (it.get("sabores") or []):
+                sn = (s.get("nome") or "").strip()
+                if not sn: continue
+                fr = (s.get("fracao") or "").strip().replace(" ", "")
+                pref = f"-{fr} " if (fr and fr != "1/1" and "inteir" not in fr.lower()) else "-"
+                left(f"{pref}{sn}", fn(28), x=ML+24, gap=3)
+            if it.get("borda"):
+                left(f"Borda: {it['borda']}", fn(28), x=ML+24, gap=3)
+        obs_i = (it.get("obs") or "").strip()
+        if obs_i: left(f"* {obs_i}", fn(26), x=ML+24, gap=3)
+        y += 6
+    dash()
+    lr("Quantidade de itens:", str(n_itens), fb(28))
+    dash()
+
+    # Pagamento (Sofia: entrega propria precisa pro entregador)
+    forma = (pedido.get("forma_pagamento") or "").lower()
+    total = float(pedido.get("total") or 0)
+    troco = pedido.get("troco_para")
+    if forma == "pago": pag = "PAGO (online)"
+    elif forma == "pix": pag = "PIX"
+    elif forma in ("maquininha","maquinona","cartao","credito","debito"): pag = "MAQUININHA na entrega"
+    elif forma == "dinheiro":
+        if troco and float(troco) > total:
+            pag = f"DINHEIRO - Troco para R${formatar_valor(float(troco))}"
+        else: pag = "DINHEIRO"
+    else: pag = "CONFIRMAR PAGAMENTO"
+    bar(f"TOTAL  R${formatar_valor(total)}", fb(34))
+    center(pag, fn(28), gap=4)
+    if forma == "dinheiro" and troco and float(troco) > total:
+        center(f"(devolver R${formatar_valor(float(troco)-total)})", fn(24))
+    obs = (pedido.get("observacoes") or "").strip()
+    if obs:
+        dash(); left(f"OBS: {obs}", fb(26))
+    dash()
+
+    # Rodape (estilo Saipos)
+    center("Canal: Telefone (Sofia)", fn(24), gap=4)
+    if data_str: center(f"Data/hora: {data_str}", fn(24))
+    bar(f"Nº Pedido: {num}", fb(28))
+    center("Pizzaria Estrela da Ilha", fn(22), gap=2)
+
+    # Recorta na altura usada + folga pro corte
+    final = img.crop((0, 0, W, min(y + 48, 2600)))
+    return final
+
 def processar_sofia_pedido(pedido, impressora):
     numero = str(pedido.get("numero") or "")
     display = sofia_display(pedido.get("itens"))
@@ -1433,12 +1580,7 @@ def processar_sofia_pedido(pedido, impressora):
     nome_cli = (pedido.get("nome_cliente") or "").strip().split(" ")[0].upper() if pedido.get("nome_cliente") else ""
     hora = pedido.get("hora") or ""
 
-    try:
-        log(f"  SOFIA #{numero}: comanda...")
-        imprimir_etiqueta(gerar_comanda(pedido), printer_name=impressora)
-    except Exception as e:
-        log(f"  ERRO comanda #{numero}: {e}")
-
+    # 1) ETIQUETAS das caixas de pizza -> impressora de etiqueta (.14)
     n_et = max(total_caixas, 1)
     for i in range(1, n_et + 1):
         try:
@@ -1449,6 +1591,18 @@ def processar_sofia_pedido(pedido, impressora):
             if i < n_et: time.sleep(0.4)
         except Exception as e:
             log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
+
+    # 2) COMANDA em cupom estilo Saipos -> impressora de comanda (.222, Elgin i8)
+    imp_comanda = _impressora_para(IP_IMPRESSORA_COMANDA, fallback=None, etiqueta="COMANDA")
+    if imp_comanda:
+        try:
+            cmd = gerar_comanda_cupom(pedido)
+            imprimir_etiqueta(cmd, printer_name=imp_comanda, larg=cmd.width, alt=cmd.height)
+            log(f"  SOFIA #{numero}: comanda (cupom) OK")
+        except Exception as e:
+            log(f"  ERRO comanda #{numero}: {e}")
+    else:
+        log(f"  SOFIA #{numero}: impressora de comanda (192.168.1.222) nao encontrada - comanda nao impressa")
 
 def processar_sofia_arquivo(filepath, filename):
     """Pedido da Sofia baixado pelo Caixa Love (.sofiapedido) -> imprime comanda + etiquetas.
