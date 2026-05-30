@@ -75,13 +75,16 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     const button = (
       <button
         onClick={() => handleNav(item.path)}
-        className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
           active
-            ? 'bg-primary text-primary-foreground'
-            : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
         }`}
       >
-        <item.icon className="h-4 w-4 shrink-0" />
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-r bg-gold-500" aria-hidden="true" />
+        )}
+        <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-gold-500' : ''}`} />
         {!collapsed && item.label}
       </button>
     );
