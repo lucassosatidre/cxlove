@@ -4,7 +4,11 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "167"
+VERSION = "168"
+# v168 (30/05/26): CONSERTO salao nao imprimia. As filas do CO LOVE (comanda_outbox/debug_outbox/etc)
+#   ficavam DENTRO de Downloads/saipos, que e a ENTRADA do Saipos Printer -> poluia a pasta dele e ele
+#   engasgava (entrega tinha a etiqueta nossa de fallback, salao nao tinha nada -> salao sem papel).
+#   Agora as filas vivem em ~/colove_fila (fora da pasta do Saipos Printer) + limpa as subpastas antigas no boot.
 # v167 (29/05/26): regras do dicionario sao LITERAIS (str.replace), nunca regex. Mata risco de
 #   ReDoS travar a impressao (re.sub sem timeout) e de backreference falhar em silencio. is_regex ignorado.
 # v166 (29/05/26): + aplica o "dicionario" de regras da IA na escrita dos itens (encoding/
@@ -46,7 +50,9 @@ except ImportError:
     from PIL import Image, ImageDraw, ImageFont
 
 PASTA_DOWNLOADS = os.path.join(os.path.expanduser("~"), "Downloads")
-PASTA_SAIPOS = os.path.join(PASTA_DOWNLOADS, "saipos")
+PASTA_SAIPOS = os.path.join(PASTA_DOWNLOADS, "saipos")  # ENTRADA do Saipos Printer: aqui SO vao arquivos de impressao
+# NOSSOS arquivos de dados (filas pro CO LOVE) ficam FORA da pasta do Saipos Printer, pra nao poluir a entrada dele:
+PASTA_FILA = os.path.join(os.path.expanduser("~"), "colove_fila")
 NOME_IMPRESSORA = "ELGIN L42PRO FULL"
 LARGURA_MM = 80; ALTURA_MM = 30; DPI = 203
 LARGURA_PX = int(LARGURA_MM * DPI / 25.4)
@@ -1812,9 +1818,9 @@ def sofia_poll_loop():
 COMANDA_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-comanda"
 COMANDA_TYPES    = ["ENTREGA", "RETIRADA", "SALAO"]
 COMANDA_CONFIG   = os.path.join(PASTA_DOWNLOADS, "comanda_config.json")  # opt-out local opcional
-COMANDA_OUTBOX   = os.path.join(PASTA_SAIPOS, "comanda_outbox")
-COMANDA_SENT     = os.path.join(PASTA_SAIPOS, "comanda_sent")
-COMANDA_FAILED   = os.path.join(PASTA_SAIPOS, "comanda_failed")
+COMANDA_OUTBOX   = os.path.join(PASTA_FILA, "comanda_outbox")
+COMANDA_SENT     = os.path.join(PASTA_FILA, "comanda_sent")
+COMANDA_FAILED   = os.path.join(PASTA_FILA, "comanda_failed")
 COMANDA_RETRY_INTERVAL = 15        # segundos entre tentativas de reenvio da outbox
 
 def _comanda_local_off():
@@ -1927,9 +1933,9 @@ def comanda_retry_loop():
 # impressao. Gated no servidor por debug_capture_enabled. Mesmo opt-out local da comanda.
 # ============================================================
 DEBUG_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-debug"
-DEBUG_OUTBOX   = os.path.join(PASTA_SAIPOS, "debug_outbox")
-DEBUG_SENT     = os.path.join(PASTA_SAIPOS, "debug_sent")
-DEBUG_FAILED   = os.path.join(PASTA_SAIPOS, "debug_failed")
+DEBUG_OUTBOX   = os.path.join(PASTA_FILA, "debug_outbox")
+DEBUG_SENT     = os.path.join(PASTA_FILA, "debug_sent")
+DEBUG_FAILED   = os.path.join(PASTA_FILA, "debug_failed")
 
 def _debug_raw_text(rows):
     out = []
@@ -2010,6 +2016,32 @@ def debug_retry_loop():
         except Exception as e:
             log(f"  DEBUG retry erro: {e}")
         time.sleep(COMANDA_RETRY_INTERVAL)
+
+def _migrar_filas_antigas():
+    """Tira nossas filas de DADOS de dentro de Downloads/saipos (a entrada do Saipos Printer).
+    Move o que sobrou pra ~/colove_fila e apaga as subpastas antigas, pra nao poluir o Saipos Printer."""
+    pares = [("comanda_outbox", COMANDA_OUTBOX), ("comanda_sent", COMANDA_SENT), ("comanda_failed", COMANDA_FAILED),
+             ("debug_outbox", DEBUG_OUTBOX), ("debug_sent", DEBUG_SENT), ("debug_failed", DEBUG_FAILED)]
+    movidos = 0
+    for nome_antigo, novo in pares:
+        antigo = os.path.join(PASTA_SAIPOS, nome_antigo)
+        if not os.path.isdir(antigo):
+            continue
+        try:
+            os.makedirs(novo, exist_ok=True)
+            for nome in os.listdir(antigo):
+                src = os.path.join(antigo, nome)
+                try:
+                    if os.path.isfile(src):
+                        os.replace(src, os.path.join(novo, nome)); movidos += 1
+                except Exception:
+                    pass
+            try: os.rmdir(antigo)
+            except Exception: pass
+        except Exception:
+            pass
+    if movidos:
+        log(f"  LIMPEZA: {movidos} arquivo(s) de fila tirado(s) da pasta do Saipos Printer")
 
 # ============================================================
 # REGRAS (dicionario da IA) -> aplica na escrita dos itens. So vem regra do servidor se
@@ -2092,6 +2124,8 @@ def main():
     if not os.path.exists(PASTA_DOWNLOADS):
         print(f"  ERRO: Pasta nao encontrada: {PASTA_DOWNLOADS}"); input("  Enter para sair..."); return
     os.makedirs(PASTA_SAIPOS, exist_ok=True)
+    os.makedirs(PASTA_FILA, exist_ok=True)
+    _migrar_filas_antigas()  # tira nossas filas de dentro da pasta do Saipos Printer (conserto salao)
     print("  Aguardando pedidos do Saipos...\n  (Ctrl+C para parar)\n")
     log(f"Script v{VERSION} iniciado - {LARGURA_MM}x{ALTURA_MM}mm")
     handler = SaiposHandler(); observer = Observer()
