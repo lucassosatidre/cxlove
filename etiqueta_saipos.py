@@ -4,7 +4,11 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "168"
+VERSION = "169"
+# v169 (30/05/26): CONSERTO leitor do salao. Sub-linha "-1 Borda ..." (sem x) era descartada e
+#   bebida de combo ("-1x Caneca Individual de Coca Cola") virava SABOR da pizza. Agora cada
+#   sub-linha e classificada: borda -> item borda; bebida (lista do cardapio) -> item bebida;
+#   senao -> sabor. Aceita "-N" sem x. _salao_eh_bebida expandida c/ cardapio real (sem acento).
 # v168 (30/05/26): CONSERTO salao nao imprimia. As filas do CO LOVE (comanda_outbox/debug_outbox/etc)
 #   ficavam DENTRO de Downloads/saipos, que e a ENTRADA do Saipos Printer -> poluia a pasta dele e ele
 #   engasgava (entrega tinha a etiqueta nossa de fallback, salao nao tinha nada -> salao sem papel).
@@ -200,12 +204,9 @@ def eh_caixa_pizza(nome):
     """Qualquer pizza que vira caixa (conta como etiqueta)"""
     return eh_pizza_salgada(nome) or eh_pizza_broto(nome)
 def eh_bebida(nome):
-    n = nome.lower().strip()
-    palavras = ["coca", "pepsi", "guarana", "pureza", "refrigerante",
-                "suco", "agua", "cerveja", "heineken", "skol", "vinho", "espumante"]
-    for p in palavras:
-        if p in n: return True
-    return False
+    # Delega pro detector compartilhado (lista completa dos cardapios). Definido mais abaixo;
+    # resolvido em tempo de chamada. Cobre refri/cerveja/vinho/caipirinha/drink/caneca de combo etc.
+    return _salao_eh_bebida(nome)
 def contar_pizzas_no_nome(nome):
     m = re.match(r'^(\d+)\s*x\s+', nome, re.IGNORECASE)
     return int(m.group(1)) if m else 1
@@ -510,42 +511,81 @@ def extrair_garcom(print_rows):
         if m and m.group(1).strip(): return m.group(1).strip()
     return ""
 
+def _sem_acento(s):
+    for a, b in (("á","a"),("â","a"),("ã","a"),("à","a"),("é","e"),("ê","e"),("í","i"),
+                 ("ó","o"),("ô","o"),("õ","o"),("ú","u"),("ç","c")):
+        s = s.replace(a, b)
+    return s
+
 def _salao_eh_bebida(nome):
-    n = nome.lower()
-    return any(b in n for b in ["chopp","refri","coca","guaran","cerveja","heineken","suco","agua",
-                                "fanta","sprite","bebida","lata","long neck","drink","brahma","skol",
-                                "budweiser","stella","corona","tonica","energetico","red bull","monster"])
+    # Detector de bebida COMPARTILHADO (salao + delivery/retirada/ficha — eh_bebida delega aqui).
+    # Sem acento pra casar sempre. Palavras derivadas dos cardapios reais (Codigos de integracao.xlsx).
+    # NAO inclui nome de fruta (morango/abacaxi/limao/uva) — colidem com sabores de pizza doce.
+    n = _sem_acento(nome.lower())
+    return any(b in n for b in [
+        "caneca",                                                  # combo refil: "Caneca Individual de ..."
+        "refri","coca cola","pepsi","guaran","fanta","sprite","del valle","kombucha","bally","pureza",
+        "antarctica","tonica","agua","lata","refrigerante",        # refrigerantes / refis
+        "chopp","cerveja","heineken","brahma","skol","budweiser","stella","corona","eisenbahn",
+        "therez","original 600","long neck",                       # cervejas / chopp
+        "vinho","taca","tinto","casillero","chandon","trivento","santa cristina","lunae",
+        "espumante","prosecco","rolha",                            # vinhos / espumantes
+        "caip","cuba libre","gin ","margarita","martini","drink",  # caipirinhas / drinks
+        "bebida","suco","energetico","red bull","monster",
+    ])
 
 def extrair_itens_salao(print_rows):
-    """Le os itens no formato salao: 'N  Pizza X' seguido de '-Nx Sabor'. Bebida = linha sem sabores."""
-    display = []; cur = None; in_items = False
+    """Le os itens do salao. Item de topo: '1  Pizza X' (ou '1  Heineken'). Sub-linha: '-1x Sabor',
+    '-1 Borda de ...' (sem x) ou '-1x Caneca ...' (bebida de combo). Cada sub-linha vira BORDA (eh_borda),
+    BEBIDA (_salao_eh_bebida, ex combo McDonald's) ou SABOR da pizza atual — nunca mistura."""
+    display = []; cur_pizza = None; in_items = False
     for r in print_rows:
         t = _salao_txt(r); low = t.lower()
         if "qt.descri" in low: in_items = True; continue
         if not in_items: continue
         if "quantidade de itens" in low: break
         if not t: continue
-        mf = re.match(r'^-\s*(\d+)\s*x\s+(.+)$', t)     # "-1x Pepperoni" = sabor da pizza atual
-        mi = re.match(r'^(\d+)\s+(.+)$', t)             # "1  Pizza Gigante" = item
-        if mf and cur is not None and cur["tipo"] in ("caixa_salgada", "caixa_doce"):
-            cur["_fl"].extend([mf.group(2).strip()] * int(mf.group(1)))
-        elif mi:
-            qt = int(mi.group(1)); nome = mi.group(2).strip()
-            if "pizza" in nome.lower():
-                cur = {"tipo": "caixa_salgada", "nome": nome, "qty": qt, "_fl": []}
+        if t.startswith("-"):                                       # SUB-LINHA (numero opcional, x opcional)
+            m = re.match(r'^-\s*(?:(\d+)\s*x?\s+)?(.+)$', t)
+            if not m: continue
+            qt = int(m.group(1)) if m.group(1) else 1
+            nome = m.group(2).strip()
+            if not nome: continue
+            if eh_borda(nome):
+                display.append({"tipo": "borda", "nome": nome, "qty": qt, "_fl": []})
+            elif _salao_eh_bebida(nome):
+                display.append({"tipo": "bebida", "nome": nome, "qty": qt, "_fl": []})
+            elif cur_pizza is not None:
+                cur_pizza["_fl"].extend([nome] * qt)                # sabor da pizza atual
             else:
-                cur = {"tipo": "bebida" if _salao_eh_bebida(nome) else "outro", "nome": nome, "qty": qt, "_fl": []}
-            display.append(cur)
+                display.append({"tipo": "outro", "nome": nome, "qty": qt, "_fl": []})
+            continue
+        mi = re.match(r'^(\d+)\s+(.+)$', t)                         # ITEM DE TOPO
+        if mi:
+            qt = int(mi.group(1)); nome = mi.group(2).strip()
+            if "pizza" in nome.lower() and not _salao_eh_bebida(nome):
+                cur_pizza = {"tipo": "caixa_salgada", "nome": nome, "qty": qt, "_fl": []}
+                display.append(cur_pizza)
+            elif eh_borda(nome):
+                display.append({"tipo": "borda", "nome": nome, "qty": qt, "_fl": []})
+            elif _salao_eh_bebida(nome):
+                display.append({"tipo": "bebida", "nome": nome, "qty": qt, "_fl": []}); cur_pizza = None
+            else:
+                cur_pizza = {"tipo": "outro", "nome": nome, "qty": qt, "_fl": []}
+                display.append(cur_pizza)
     out = []
     for d in display:
         fl = d.pop("_fl", []); sab = []
         if fl:
-            total = len(fl); ordem = []
+            ordem = []
             for n in fl:
                 if n not in ordem: ordem.append(n)
-            for n in ordem:
-                c = fl.count(n)
-                sab.append(f"{c}/{total} {n}" if total > 1 else n)
+            if len(ordem) == 1:
+                sab = [ordem[0]]                                    # pizza inteira de 1 sabor
+            else:
+                total = len(fl)
+                for n in ordem:
+                    sab.append(f"{fl.count(n)}/{total} {n}")
         d["sabores"] = sab
         out.append(d)
     return out
@@ -892,7 +932,7 @@ def processar_pedido(filepath, filename):
     if eh_salao(rows_all):
         for el in data: debug_save(filename, el.get("printRows", []))
         mesa = extrair_mesa(rows_all); garcom = extrair_garcom(rows_all)
-        hora = extrair_hora_pedido(rows_all); display = extrair_itens_salao(rows_all)
+        hora = extrair_hora_pedido(rows_all); display = agrupar_display(extrair_itens_salao(rows_all))
         tcx = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada", "caixa_doce"))
         tent = sum(d["qty"] for d in display)
         log(f"  SALAO Mesa {str(mesa)[:24]}: {tcx}cx {tent}itens (sem etiqueta)")
