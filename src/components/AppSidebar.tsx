@@ -227,6 +227,11 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
               {collapsed && <TooltipContent side="right" className="text-xs">Expandir</TooltipContent>}
             </Tooltip>
           )}
+          {!collapsed && (
+            <p className="font-title italic text-[10px] text-sidebar-foreground/50 text-center pt-2">
+              by Propósito Soluções
+            </p>
+          )}
         </div>
       </aside>
     </TooltipProvider>
