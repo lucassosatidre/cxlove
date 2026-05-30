@@ -76,7 +76,7 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
               <button onClick={() => setSidebarOpen(true)} className="text-sidebar-foreground">
                 <Menu className="h-5 w-5" />
               </button>
-              <span className="text-sm font-bold text-sidebar-accent-foreground">Conferência</span>
+              <span className="font-brand text-base tracking-[0.18em] text-sidebar-accent-foreground">VIGIA</span>
             </div>
             <div className="flex items-center gap-1">
               <ThemeToggle />
@@ -107,8 +107,8 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
           <header className="px-4 sm:px-8 pt-6 sm:pt-8 pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-foreground">{title}</h1>
-                {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+                <h1 className="font-brand text-2xl sm:text-3xl text-foreground tracking-wide">{title}</h1>
+                {subtitle && <p className="font-title italic text-sm text-muted-foreground mt-1">{subtitle}</p>}
               </div>
               {headerActions && <div className="flex items-center gap-3">{headerActions}</div>}
             </div>

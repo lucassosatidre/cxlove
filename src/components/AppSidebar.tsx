@@ -8,7 +8,7 @@ import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, Ch
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import caixaLoveLogo from '@/assets/caixa-love-logo.png';
+import vigiaLogo from '@/assets/vigia-logo.png';
 
 interface AppSidebarProps {
   open?: boolean;
@@ -75,13 +75,16 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     const button = (
       <button
         onClick={() => handleNav(item.path)}
-        className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
           active
-            ? 'bg-primary text-primary-foreground'
-            : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+            : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
         }`}
       >
-        <item.icon className="h-4 w-4 shrink-0" />
+        {active && (
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-[3px] rounded-r bg-gold-500" aria-hidden="true" />
+        )}
+        <item.icon className={`h-4 w-4 shrink-0 ${active ? 'text-gold-500' : ''}`} />
         {!collapsed && item.label}
       </button>
     );
@@ -115,24 +118,26 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
         {/* Logo + branding */}
         {!collapsed ? (
-          <div className="flex flex-col items-center px-4 pt-5 pb-2">
-            <img
-              src={caixaLoveLogo}
-              alt="Caixa Love"
-              className="w-[160px] object-contain"
-              style={{ mixBlendMode: 'lighten' }}
-            />
-            <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight mt-2">CAIXA LOVE</p>
-            <p className="text-[10px] text-sidebar-foreground/60">Logística & Fechamento de Caixa</p>
+          <div className="flex flex-col items-center px-4 pt-5 pb-3">
+            <div className="bg-marfim rounded-2xl p-2 shadow-card">
+              <img
+                src={vigiaLogo}
+                alt="VIGIA"
+                className="w-[120px] h-[120px] object-contain"
+              />
+            </div>
+            <p className="font-brand text-lg font-bold text-sidebar-accent-foreground leading-tight mt-3 tracking-[0.18em]">VIGIA</p>
+            <p className="font-title italic text-[12px] text-gold-300/90 mt-0.5">Operação &amp; Controle</p>
           </div>
         ) : (
           <div className="flex items-center justify-center px-2 pt-5 pb-2">
-            <img
-              src={caixaLoveLogo}
-              alt="Caixa Love"
-              className="h-8 w-8 object-contain"
-              style={{ mixBlendMode: 'lighten' }}
-            />
+            <div className="bg-marfim rounded-lg p-1 shadow-card">
+              <img
+                src={vigiaLogo}
+                alt="VIGIA"
+                className="h-8 w-8 object-contain"
+              />
+            </div>
           </div>
         )}
 
@@ -221,6 +226,11 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
               </TooltipTrigger>
               {collapsed && <TooltipContent side="right" className="text-xs">Expandir</TooltipContent>}
             </Tooltip>
+          )}
+          {!collapsed && (
+            <p className="font-title italic text-[10px] text-sidebar-foreground/50 text-center pt-2">
+              by Propósito Soluções
+            </p>
           )}
         </div>
       </aside>

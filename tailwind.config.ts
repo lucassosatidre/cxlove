@@ -16,8 +16,24 @@ export default {
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+        brand: ['Cinzel', 'ui-serif', 'Georgia', 'serif'],
+        title: ['Cormorant Garamond', 'ui-serif', 'Georgia', 'serif'],
+        ui: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       colors: {
+        navy: {
+          950: 'hsl(var(--navy-950))',
+          900: 'hsl(var(--navy-900))',
+          800: 'hsl(var(--navy-800))',
+        },
+        gold: {
+          700: 'hsl(var(--gold-700))',
+          500: 'hsl(var(--gold-500))',
+          300: 'hsl(var(--gold-300))',
+        },
+        champagne: 'hsl(var(--champagne))',
+        marfim: 'hsl(var(--marfim))',
+        perola: 'hsl(var(--perola))',
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
