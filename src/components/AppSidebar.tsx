@@ -8,7 +8,7 @@ import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, Ch
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import caixaLoveLogo from '@/assets/caixa-love-logo.png';
+import vigiaLogo from '@/assets/vigia-logo.png';
 
 interface AppSidebarProps {
   open?: boolean;
