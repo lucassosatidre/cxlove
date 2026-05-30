@@ -532,7 +532,7 @@ export default function EntregadorPortal() {
     <div className="min-h-screen bg-muted">
       {/* Header */}
       <header className="sticky top-0 z-20 h-14 bg-sidebar flex items-center justify-between px-4">
-        <span className="text-sidebar-accent-foreground font-bold text-base tracking-tight">CAIXA LOVE</span>
+        <span className="font-brand text-sidebar-accent-foreground text-base tracking-[0.18em]">VIGIA</span>
         <div className="flex items-center gap-3">
           {driver && <span className="text-sidebar-foreground/70 text-sm hidden sm:block">{driver.nome}</span>}
           <NotificationBell />
