@@ -76,7 +76,7 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
               <button onClick={() => setSidebarOpen(true)} className="text-sidebar-foreground">
                 <Menu className="h-5 w-5" />
               </button>
-              <span className="text-sm font-bold text-sidebar-accent-foreground">Conferência</span>
+              <span className="font-brand text-base tracking-[0.18em] text-sidebar-accent-foreground">VIGIA</span>
             </div>
             <div className="flex items-center gap-1">
               <ThemeToggle />
