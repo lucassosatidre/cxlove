@@ -115,24 +115,26 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
         {/* Logo + branding */}
         {!collapsed ? (
-          <div className="flex flex-col items-center px-4 pt-5 pb-2">
-            <img
-              src={caixaLoveLogo}
-              alt="Caixa Love"
-              className="w-[160px] object-contain"
-              style={{ mixBlendMode: 'lighten' }}
-            />
-            <p className="text-sm font-bold text-sidebar-accent-foreground leading-tight mt-2">CAIXA LOVE</p>
-            <p className="text-[10px] text-sidebar-foreground/60">Logística & Fechamento de Caixa</p>
+          <div className="flex flex-col items-center px-4 pt-5 pb-3">
+            <div className="bg-marfim rounded-2xl p-2 shadow-card">
+              <img
+                src={vigiaLogo}
+                alt="VIGIA"
+                className="w-[120px] h-[120px] object-contain"
+              />
+            </div>
+            <p className="font-brand text-lg font-bold text-sidebar-accent-foreground leading-tight mt-3 tracking-[0.18em]">VIGIA</p>
+            <p className="font-title italic text-[12px] text-gold-300/90 mt-0.5">Operação &amp; Controle</p>
           </div>
         ) : (
           <div className="flex items-center justify-center px-2 pt-5 pb-2">
-            <img
-              src={caixaLoveLogo}
-              alt="Caixa Love"
-              className="h-8 w-8 object-contain"
-              style={{ mixBlendMode: 'lighten' }}
-            />
+            <div className="bg-marfim rounded-lg p-1 shadow-card">
+              <img
+                src={vigiaLogo}
+                alt="VIGIA"
+                className="h-8 w-8 object-contain"
+              />
+            </div>
           </div>
         )}
 
