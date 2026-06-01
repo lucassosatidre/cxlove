@@ -4,7 +4,18 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "174"
+VERSION = "175"
+# v175 (01/06/26): consertos achados na auditoria em massa (344 pedidos reais reproduzidos):
+#   (1) CASHBACK/obs: bloco ** ... ** com `**` sozinho numa linha (ou valor depois) NAO fechava ->
+#       engolia os sabores -> PIZZA VAZIA (#150). Reescrito: fecha no 1o `**` depois da abertura;
+#       linha que comeca com "-" (sabor) fecha a obs antes; flush no "Quantidade de itens"; tira
+#       ruido de CASHBACK da observacao.
+#   (2) ADICIONAL: "-1x Adicional de X" virava fatia (fracao impossivel "5/3", #219). Agora
+#       eh_adicional() -> item a parte, nao conta como fatia (espelha o salao).
+#   (3) NOME CORTADO: quebra de linha colava com espaco e minusculo ("SEM QU"+"EIJO"->"SEM QU eijo").
+#       Agora cola sem espaco no corte de palavra, preserva o caso e re-abrevia -> "SEM QUEIJO".
+#   (4) "Sem Borda Recheada" nao e sabor -> pulado (nao infla fracao do combo nem polui).
+#   Verificado: py_compile + reproducao dos pedidos reais (#150/#219/SEM QUEIJO) + 4 controles.
 # v174 (01/06/26): (1) ACENTO na fonte: corrigir_encoding agora devolve com acento (Muçarela,
 #   Camarão, Brócolis, Sensação, Prestígio, Guaraná, Açaí, Maracujá...) em vez de ASCII — antes
 #   dependia do dicionario da IA re-acentuar, mas o fetch do dicionario falha em PC antigo e a
@@ -255,6 +266,9 @@ def eh_sabor_doce(nome):
     """Sabor de broto DOCE mesmo SEM o prefixo 'Pizza Broto de' (ex.: '-1x Sensacao Mesclado')."""
     n = corrigir_encoding(nome or "").lower()
     return any(d in n for d in _BROTO_DOCES)
+def eh_adicional(nome):
+    """'Adicional de X' = topping, NAO e sabor/fatia (senao infla a fracao, ex 5/3). Igual o salao."""
+    return bool(re.search(r'\badicional\b', nome or "", re.IGNORECASE))
 def _anexar_sabor(display, sabor, qty):
     """Anexa o sabor (sub-linha '-Nx Sabor' estilo Temx) na pizza SALGADA mais recente.
     Denominador = slots do tamanho (gigante 3 etc.); consolidar_sabores junta iguais. True se anexou."""
@@ -319,27 +333,46 @@ def consolidar_sabores(sabores_raw):
         resultado.append(f"{total_num}/{den} {nome}")
     return resultado
 
+def _flush_obs(display, obs_acc):
+    """Fecha o bloco de observacao do cliente -> item 'Obs:'. Tira ruido de CASHBACK/desconto
+    (nao e observacao do cliente, e promo do canal)."""
+    txt = " ".join(obs_acc).strip()
+    txt = re.sub(r'cashback.*', '', txt, flags=re.IGNORECASE).strip()
+    txt = txt.strip(" .,-*")
+    if txt:
+        display.append({"tipo": "outro", "nome": f"Obs: {txt}", "qty": 1, "sabores_raw": []})
+
 def extrair_itens_printrows(print_rows):
     display = []; total_caixas = 0; total_bebidas = 0; total_outros = 0
     em_zona = False; ultimo_tipo = None; em_obs = False; obs_acc = []
     for row in print_rows:
         texto = limpar_tags(row)
         if "Qt.Descri" in texto: em_zona = True; continue
-        if "Quantidade de itens" in texto: em_zona = False; continue
+        if "Quantidade de itens" in texto:
+            if em_obs: _flush_obs(display, obs_acc); obs_acc = []; em_obs = False  # nunca engolir itens
+            em_zona = False; continue
         if not em_zona: continue
         if not texto or texto == " ": continue
         texto_limpo = texto.strip()
 
-        # Observacao do cliente: bloco entre ** ... ** (pode quebrar em varias linhas).
-        # Vira item "Obs:" (balao de obs na comanda) e NAO deixa colar no nome da pizza (bug).
-        if em_obs or texto_limpo.startswith("**"):
-            parte = texto_limpo.replace("*", "").strip()
-            if parte: obs_acc.append(parte)
-            fechou = texto_limpo.rstrip().endswith("**") and texto_limpo.count("*") >= (4 if texto_limpo.startswith("**") else 2)
-            em_obs = not fechou
-            if fechou:
-                txt = " ".join(obs_acc).strip(); obs_acc = []
-                if txt: display.append({"tipo": "outro", "nome": f"Obs: {txt}", "qty": 1, "sabores_raw": []})
+        # Observacao do cliente: bloco entre ** ... ** (pode quebrar em varias linhas e vir com
+        # CASHBACK misturado). Vira item "Obs:" e NUNCA pode engolir os sabores (bug pizza vazia, #150).
+        # SEGURANCA: se, estando em_obs, aparece uma linha que comeca com "-" (= sabor/borda/bebida),
+        # o bloco ja acabou (texto de obs nao comeca com "-") -> fecha a obs e REPROCESSA esta linha.
+        if em_obs and texto_limpo.startswith("-"):
+            _flush_obs(display, obs_acc); obs_acc = []; em_obs = False
+            # cai pro fluxo normal abaixo (sem continue)
+        elif em_obs or texto_limpo.startswith("**"):
+            # so tira o ** da FRENTE quando e a ABERTURA; dentro do bloco, um ** (ate sozinho) FECHA.
+            resto = texto_limpo[2:] if (texto_limpo.startswith("**") and not em_obs) else texto_limpo
+            if "**" in resto:                       # fecha no PRIMEIRO ** depois da abertura
+                antes = resto.split("**", 1)[0].strip()
+                if antes: obs_acc.append(antes)
+                _flush_obs(display, obs_acc); obs_acc = []; em_obs = False
+            else:
+                p = resto.strip()
+                if p: obs_acc.append(p)
+                em_obs = True
             ultimo_tipo = "obs"
             continue
 
@@ -368,6 +401,7 @@ def extrair_itens_printrows(print_rows):
             ultimo_tipo = "item"
             if eh_borda(nome_raw):
                 display.append({"tipo": "borda", "nome": nome_raw, "qty": qty, "sabores_raw": []})
+            elif "sem borda" in nome_raw.lower(): continue   # "Sem Borda Recheada" nao e sabor
             elif eh_sabor_temx(nome_raw): continue
             elif eh_sabor_numerado(nome_raw): continue
             elif eh_pizza_salgada(nome_raw):
@@ -378,6 +412,8 @@ def extrair_itens_printrows(print_rows):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_bebidas += qty
             elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
                 display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_caixas += qty
+            elif eh_adicional(nome_raw):                       # "Adicional de X" -> item a parte, NAO fatia
+                display.append({"tipo": "outro", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_outros += qty
             elif _anexar_sabor(display, nome_raw, qty):        # "-Nx Sabor" (Temx) -> sabor da pizza salgada
                 pass
             elif nome_raw:
@@ -385,7 +421,7 @@ def extrair_itens_printrows(print_rows):
             continue
         if eh_fracao(texto_limpo):
             num, den, sabor = extrair_sabor_fracao(texto_limpo)
-            if sabor and num and den:
+            if sabor and num and den and "sem borda" not in sabor.lower():  # "Sem Borda Recheada" nao e sabor
                 for d in reversed(display):
                     if d["tipo"] in ("caixa_salgada", "caixa_doce"):
                         d["sabores_raw"].append((num, den, sabor)); break
@@ -396,6 +432,7 @@ def extrair_itens_printrows(print_rows):
             ultimo_tipo = "item"
             if eh_borda(nome_raw):
                 display.append({"tipo": "borda", "nome": nome_raw, "qty": 1, "sabores_raw": []})
+            elif "sem borda" in nome_raw.lower(): continue   # "Sem Borda Recheada" nao e sabor
             elif eh_sabor_temx(nome_raw): continue
             elif eh_sabor_numerado(nome_raw): continue
             elif eh_pizza_salgada(nome_raw):
@@ -406,6 +443,8 @@ def extrair_itens_printrows(print_rows):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_bebidas += 1
             elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
                 display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_caixas += 1
+            elif eh_adicional(nome_raw):                       # "Adicional de X" -> item a parte, NAO fatia
+                display.append({"tipo": "outro", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_outros += 1
             elif _anexar_sabor(display, nome_raw, 1):          # "-Sabor" solto -> sabor da pizza salgada
                 pass
             elif nome_raw and len(nome_raw) > 2:
@@ -417,7 +456,12 @@ def extrair_itens_printrows(print_rows):
                 for d in reversed(display):
                     if d["tipo"] in ("caixa_salgada", "caixa_doce") and d["sabores_raw"]:
                         n, de, sab = d["sabores_raw"][-1]
-                        d["sabores_raw"][-1] = (n, de, (sab + " " + texto_enc.lower()).strip()); break
+                        # v175: palavra cortada na quebra de linha (ex "SEM QU"+"EIJO") -> cola SEM
+                        # espaco e SEM minusculizar; so poe espaco se nao for corte de palavra. Depois
+                        # re-abrevia o sabor montado (pra "(SEM X)" remontado virar "s/ x" etc.).
+                        corte = bool(re.search(r'[0-9A-Za-zÀ-ÿ]$', sab) and re.match(r'^[A-Za-zÀ-ÿ]', texto_enc))
+                        novo = (sab + texto_enc) if corte else (sab + " " + texto_enc)
+                        d["sabores_raw"][-1] = (n, de, abreviar_sabor(novo.strip())); break
             elif display:
                 display[-1]["nome"] = limpar_nome(display[-1]["nome"] + texto_limpo)
     for d in display: d["sabores"] = consolidar_sabores(d.get("sabores_raw", []))
