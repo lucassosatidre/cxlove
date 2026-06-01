@@ -4,7 +4,17 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "172"
+VERSION = "173"
+# v173 (01/06/26): 3 bugs de LEITURA (validados em pedidos reais do banco + 2 controles):
+#   (a) TEMX: sabores vinham em sub-linha "-1x Lombo" (sem fracao) e viravam item "outro" -> a
+#       pizza ficava SEM sabor nenhum. Agora "-Nx Sabor" depois de uma pizza salgada vira sabor
+#       dela (denominador = slots do tamanho: broto1/grande2/gigante3/familia4) via _anexar_sabor.
+#   (b) BROTO DOCE sem prefixo: "-1x Sensacao Mesclado" (broto doce escrito sem "Pizza Broto de")
+#       virava "outro"/sabor errado. Novo eh_sabor_doce -> vira caixa_doce (forneiro), nao sabor.
+#   (c) "Borda Broto de X"/"Borda Cheddar" nao era reconhecida como borda (eh_borda so pegava
+#       "borda de") -> virava pizza salgada inteira. Agora eh_borda pega nome que comeca com "borda".
+#   NAO mexe no nome cru da borda ("1 Pizza com Borda...") de proposito: o colove usa o numero pra
+#   anexar a borda na pizza certa do combo. Verificado: py_compile + 4 pedidos reais + render.
 # v172 (01/06/26): RAIZ da multiplicacao de regras da IA. abreviar_sabor MINUSCULAVA a 1a letra
 #   do sabor ("Calabresa" -> "calabresa"), o que obrigava o dicionario da IA a criar uma regra de
 #   capitalizacao por COMBINACAO de sabor (~50 regras-remendo). Agora capitaliza ("Calabresa
@@ -168,6 +178,7 @@ ORDINAL = r'\d+.?'
 def eh_borda(nome):
     n = nome.lower()
     if "borda de" in n: return True
+    if n.strip().startswith("borda"): return True   # "Borda Broto de Cheddar", "Borda Cheddar"
     if re.match(ORDINAL + r'\s+(pizza\s+)?(temx\s+)?(com\s+)?borda', n, re.IGNORECASE): return True
     if "temx borda" in n: return True
     return False
@@ -223,6 +234,26 @@ def eh_pizza_broto(nome):
     if eh_sabor_temx(nome): return False
     if eh_sabor_numerado(nome): return False
     if "broto" in n or "brotinho" in n: return eh_broto_doce(nome)
+    return False
+def slots_do_tamanho(nome):
+    """Quantos sabores cabem no tamanho (regra do dono): broto 1, grande 2, gigante 3, familia 4."""
+    n = (nome or "").lower()
+    if "familia" in n or "família" in n: return 4
+    if "gigante" in n: return 3
+    if "grande" in n: return 2
+    if "broto" in n or "brotinho" in n: return 1
+    return 2
+def eh_sabor_doce(nome):
+    """Sabor de broto DOCE mesmo SEM o prefixo 'Pizza Broto de' (ex.: '-1x Sensacao Mesclado')."""
+    n = corrigir_encoding(nome or "").lower()
+    return any(d in n for d in _BROTO_DOCES)
+def _anexar_sabor(display, sabor, qty):
+    """Anexa o sabor (sub-linha '-Nx Sabor' estilo Temx) na pizza SALGADA mais recente.
+    Denominador = slots do tamanho (gigante 3 etc.); consolidar_sabores junta iguais. True se anexou."""
+    for d in reversed(display):
+        if d["tipo"] == "caixa_salgada":
+            d["sabores_raw"].append((qty, slots_do_tamanho(d["nome"]), abreviar_sabor(sabor)))
+            return True
     return False
 def eh_caixa_pizza(nome):
     """Qualquer pizza que vira caixa (conta como etiqueta)"""
@@ -337,6 +368,10 @@ def extrair_itens_printrows(print_rows):
                 display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_caixas += qty
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_bebidas += qty
+            elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
+                display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_caixas += qty
+            elif _anexar_sabor(display, nome_raw, qty):        # "-Nx Sabor" (Temx) -> sabor da pizza salgada
+                pass
             elif nome_raw:
                 display.append({"tipo": "outro", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_outros += qty
             continue
@@ -361,6 +396,10 @@ def extrair_itens_printrows(print_rows):
                 display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_caixas += 1
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_bebidas += 1
+            elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
+                display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_caixas += 1
+            elif _anexar_sabor(display, nome_raw, 1):          # "-Sabor" solto -> sabor da pizza salgada
+                pass
             elif nome_raw and len(nome_raw) > 2:
                 display.append({"tipo": "outro", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_outros += 1
             continue
