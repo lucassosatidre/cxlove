@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "170"
+VERSION = "171"
+# v171 (01/06/26): observacao do cliente (bloco ** ... **) vira item "Obs:" (balao de obs na
+#   comanda) em vez de colar no nome da pizza ("Pizza Grandesem borda por favor" era o bug).
 # v170 (01/06/26): broto SALGADO ("Pizza Broto" sem doce no nome) vira caixa_salgada (era doce ->
 #   comanda em branco, bug #38); consolidar_sabores junta metades iguais ("2/2 calabresa" em vez de
 #   "1/2 calabresa" duplicado, bug #66). So muda o leitor de itens; render da etiqueta intacto.
@@ -272,7 +274,7 @@ def consolidar_sabores(sabores_raw):
 
 def extrair_itens_printrows(print_rows):
     display = []; total_caixas = 0; total_bebidas = 0; total_outros = 0
-    em_zona = False; ultimo_tipo = None
+    em_zona = False; ultimo_tipo = None; em_obs = False; obs_acc = []
     for row in print_rows:
         texto = limpar_tags(row)
         if "Qt.Descri" in texto: em_zona = True; continue
@@ -280,6 +282,19 @@ def extrair_itens_printrows(print_rows):
         if not em_zona: continue
         if not texto or texto == " ": continue
         texto_limpo = texto.strip()
+
+        # Observacao do cliente: bloco entre ** ... ** (pode quebrar em varias linhas).
+        # Vira item "Obs:" (balao de obs na comanda) e NAO deixa colar no nome da pizza (bug).
+        if em_obs or texto_limpo.startswith("**"):
+            parte = texto_limpo.replace("*", "").strip()
+            if parte: obs_acc.append(parte)
+            fechou = texto_limpo.rstrip().endswith("**") and texto_limpo.count("*") >= (4 if texto_limpo.startswith("**") else 2)
+            em_obs = not fechou
+            if fechou:
+                txt = " ".join(obs_acc).strip(); obs_acc = []
+                if txt: display.append({"tipo": "outro", "nome": f"Obs: {txt}", "qty": 1, "sabores_raw": []})
+            ultimo_tipo = "obs"
+            continue
 
         mp = re.match(r'^(\d+)\s{2,}(.+?)(?:\s{2,}[\d,.]+)?$', texto_limpo)
         if mp:
