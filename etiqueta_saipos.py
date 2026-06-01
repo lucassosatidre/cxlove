@@ -4,7 +4,13 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "171"
+VERSION = "172"
+# v172 (01/06/26): RAIZ da multiplicacao de regras da IA. abreviar_sabor MINUSCULAVA a 1a letra
+#   do sabor ("Calabresa" -> "calabresa"), o que obrigava o dicionario da IA a criar uma regra de
+#   capitalizacao por COMBINACAO de sabor (~50 regras-remendo). Agora capitaliza ("Calabresa
+#   c/ Catupiry" sai certo direto). Resultado final IDENTICO ao que ja saia (o dicionario corrige
+#   o mesmo depois), mas para de depender das ~50 regras. NAO toca "SEM QUEIJO" (so a 1a letra).
+#   Acento (encoding) e additive caps ("c/ CATUPIRY") seguem no dicionario (poucas, estaveis).
 # v171 (01/06/26): observacao do cliente (bloco ** ... **) vira item "Obs:" (balao de obs na
 #   comanda) em vez de colar no nome da pizza ("Pizza Grandesem borda por favor" era o bug).
 # v170 (01/06/26): broto SALGADO ("Pizza Broto" sem doce no nome) vira caixa_salgada (era doce ->
@@ -153,7 +159,9 @@ def abreviar_sabor(sabor):
         s += f" s/ {m.group(1).lower()}"
     s = re.sub(r'^[Tt]emx\s+[Pp]izza\s+de\s+', '', s)
     s = s.strip()
-    if s: s = s[0].lower() + s[1:]
+    # v172: capitaliza a 1a letra (antes minusculava, obrigando o dicionario a ter 1 regra de
+    # capitalizacao por sabor). So a 1a letra: nao mexe em "SEM QUEIJO"/"c/ CATUPIRY" (dicionario).
+    if s: s = s[0].upper() + s[1:]
     return s
 
 ORDINAL = r'\d+.?'
