@@ -139,3 +139,57 @@ describe('delivery matching — global allocation with method divergence', () =>
     });
   });
 });
+
+describe('delivery matching — pareamento por grupo (Frota Garantida ↔ máquina de frota)', () => {
+  const txFrota = {
+    id: 'tx-frota',
+    gross_amount: 90,
+    payment_method: 'Credito',
+    machine_serial: 'FROTA-SER',
+    sale_time: '20:10:00',
+  };
+  const orderFrota = {
+    id: 'order-frota',
+    order_number: '50',
+    payment_method: 'Crédito',
+    total_amount: 90,
+    delivery_person: 'Frota Garantida',
+    sale_time: '20:08',
+    is_confirmed: true,
+  };
+  const orderGabriel = {
+    id: 'order-gabriel',
+    order_number: '51',
+    payment_method: 'Crédito',
+    total_amount: 90,
+    delivery_person: 'Gabriel',
+    sale_time: '20:08',
+    is_confirmed: true,
+  };
+
+  it('transação de máquina "frota" casa com o pedido Frota Garantida, não com o nomeado', () => {
+    const serialMap = new Map<string, string>([['FROTA-SER', 'Frota 1']]);
+    const matches = matchTransactionsToOrders(
+      [txFrota],
+      [orderGabriel, orderFrota],
+      new Set(),
+      [],
+      serialMap
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].orderId).toBe('order-frota');
+  });
+
+  it('transação de máquina nomeada casa com o pedido daquele entregador, não com Frota Garantida', () => {
+    const serialMap = new Map<string, string>([['FROTA-SER', 'Gabriel']]);
+    const matches = matchTransactionsToOrders(
+      [txFrota],
+      [orderFrota, orderGabriel],
+      new Set(),
+      [],
+      serialMap
+    );
+    expect(matches).toHaveLength(1);
+    expect(matches[0].orderId).toBe('order-gabriel');
+  });
+});

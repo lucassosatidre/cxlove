@@ -10,6 +10,7 @@ import {
   normalizeDeliveryMethod,
   NormalizedDeliveryMethod,
 } from './delivery-method-utils';
+import { driverGroupKey } from './driver-name-match';
 
 interface OrderForMatching {
   id: string;
@@ -111,7 +112,11 @@ function contextScore(
   let score = 0;
   const inferred = inferDeliveryPerson(tx.machine_serial, serialMap);
   if (inferred && order.delivery_person) {
-    if (inferred.trim().toLowerCase() === order.delivery_person.trim().toLowerCase()) {
+    // Compara por GRUPO: primeiro nome normalizado, e qualquer "Frota …" (máquina)
+    // casa com pedidos rotulados "Frota Garantida".
+    const machineGroup = driverGroupKey(inferred);
+    const orderGroup = driverGroupKey(order.delivery_person);
+    if (machineGroup && orderGroup && machineGroup === orderGroup) {
       score += 3;
     } else {
       score -= 1;

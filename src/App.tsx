@@ -11,6 +11,7 @@ import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
 import Import from "./pages/Import";
 import TeleImport from "./pages/TeleImport";
+import PickNGoImport from "./pages/PickNGoImport";
 import Reconciliation from "./pages/Reconciliation";
 import ReconciliationLegacy from "./pages/ReconciliationLegacy";
 import DeliveryReconciliation from "./pages/DeliveryReconciliation";
@@ -110,6 +111,7 @@ const App = () => (
             <Route path="/tele" element={<ProtectedRoute><SectorGuard sector="tele"><Dashboard /></SectorGuard></ProtectedRoute>} />
             <Route path="/import" element={<ProtectedRoute><SectorGuard sector="tele"><Import /></SectorGuard></ProtectedRoute>} />
             <Route path="/tele/import" element={<ProtectedRoute><SectorGuard sector="tele"><TeleImport /></SectorGuard></ProtectedRoute>} />
+            <Route path="/tele/pickngo" element={<ProtectedRoute><SectorGuard sector="tele"><PickNGoImport /></SectorGuard></ProtectedRoute>} />
             <Route path="/reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="tele"><Reconciliation /></SectorGuard></ProtectedRoute>} />
             <Route path="/reconciliation-legacy/:id" element={<ProtectedRoute><SectorGuard sector="tele"><ReconciliationLegacy /></SectorGuard></ProtectedRoute>} />
             <Route path="/delivery-reconciliation/:id" element={<ProtectedRoute><SectorGuard sector="tele"><DeliveryReconciliation /></SectorGuard></ProtectedRoute>} />
