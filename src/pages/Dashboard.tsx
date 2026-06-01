@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import AppLayout from '@/components/AppLayout';
-import { FileSpreadsheet, CalendarDays, ChevronRight, Trash2, DoorOpen, ShieldAlert, CheckCircle2, Clock, User, Truck } from 'lucide-react';
+import { FileSpreadsheet, CalendarDays, ChevronRight, Trash2, DoorOpen, ShieldAlert, CheckCircle2, Clock, User } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -405,41 +405,35 @@ export default function Dashboard() {
       title="Tele"
       subtitle={`📅 ${todayLabel} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => navigate('/tele/pickngo')}>
-            <Truck className="h-4 w-4 mr-2" />
-            Importar PickNGo
-          </Button>
-          {isAdmin && (
-            <Popover open={abrirCaixaOpen} onOpenChange={setAbrirCaixaOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline">
-                  <DoorOpen className="h-4 w-4 mr-2" />
-                  Abrir Caixa
+        isAdmin ? (
+          <Popover open={abrirCaixaOpen} onOpenChange={setAbrirCaixaOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline">
+                <DoorOpen className="h-4 w-4 mr-2" />
+                Abrir Caixa
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <div className="p-3 border-b border-border">
+                <p className="text-sm font-medium text-foreground">Selecione a data</p>
+              </div>
+              <Calendar
+                mode="single"
+                selected={abrirCaixaDate}
+                onSelect={setAbrirCaixaDate}
+                today={undefined}
+                disabled={{ after: new Date() }}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+              <div className="p-3 border-t border-border">
+                <Button className="w-full" onClick={handleAbrirCaixa} disabled={!abrirCaixaDate || abrirCaixaLoading}>
+                  {abrirCaixaLoading ? 'Abrindo...' : 'Confirmar'}
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <div className="p-3 border-b border-border">
-                  <p className="text-sm font-medium text-foreground">Selecione a data</p>
-                </div>
-                <Calendar
-                  mode="single"
-                  selected={abrirCaixaDate}
-                  onSelect={setAbrirCaixaDate}
-                  today={undefined}
-                  disabled={{ after: new Date() }}
-                  initialFocus
-                  className={cn("p-3 pointer-events-auto")}
-                />
-                <div className="p-3 border-t border-border">
-                  <Button className="w-full" onClick={handleAbrirCaixa} disabled={!abrirCaixaDate || abrirCaixaLoading}>
-                    {abrirCaixaLoading ? 'Abrindo...' : 'Confirmar'}
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        ) : undefined
       }
     >
       {loading ? (

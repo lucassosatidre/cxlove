@@ -867,6 +867,10 @@ export default function Reconciliation() {
                   </span>
                 )}
               </div>
+              <Button variant="outline" size="sm" onClick={() => navigate('/tele/pickngo')}>
+                <Truck className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Importar PickNGo</span>
+              </Button>
               <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !isAdmin} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>

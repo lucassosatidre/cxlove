@@ -319,7 +319,11 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const byDriver = useMemo(() => {
     const map: Record<string, { debit: number; credit: number; voucher: number; pix: number; debitCount: number; creditCount: number; voucherCount: number; pixCount: number; count: number }> = {};
     for (const r of readings) {
-      const name = r.delivery_person || noPersonLabel;
+      // Máquinas da Frota (cadastro) são agrupadas pelo nome da máquina (ex: "Frota 1"),
+      // não como "Sem entregador" — elas pertencem à Frota Garantida.
+      const cleaned = (r.machine_serial || '').replace(/^S1F2-000/, '');
+      const reg = registry.get(cleaned);
+      const name = reg?.category === 'frota' ? reg.friendly_name : (r.delivery_person || noPersonLabel);
       if (!map[name]) map[name] = { debit: 0, credit: 0, voucher: 0, pix: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0, count: 0 };
       map[name].debit += r.debit_amount;
       map[name].credit += r.credit_amount;
@@ -332,7 +336,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       map[name].count++;
     }
     return Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
-  }, [readings]);
+  }, [readings, registry, noPersonLabel]);
 
   if (loading) return null;
 
