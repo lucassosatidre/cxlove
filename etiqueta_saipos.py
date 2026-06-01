@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "173"
+VERSION = "174"
+# v174 (01/06/26): (1) ACENTO na fonte: corrigir_encoding agora devolve com acento (Muçarela,
+#   Camarão, Brócolis, Sensação, Prestígio, Guaraná, Açaí, Maracujá...) em vez de ASCII — antes
+#   dependia do dicionario da IA re-acentuar, mas o fetch do dicionario falha em PC antigo e a
+#   comanda saia "Mucarela". Mesmo casamento testado; so a saida mudou. (2) slots_do_tamanho sem
+#   "familia" (a Estrela so tem broto/grande/gigante). Verificado: py_compile + 4 reais + render.
 # v173 (01/06/26): 3 bugs de LEITURA (validados em pedidos reais do banco + 2 controles):
 #   (a) TEMX: sabores vinham em sub-linha "-1x Lombo" (sem fracao) e viravam item "outro" -> a
 #       pizza ficava SEM sabor nenhum. Agora "-Nx Sabor" depois de uma pizza salgada vira sabor
@@ -128,21 +133,24 @@ def limpar_tags(texto):
     return re.sub(r'<[^>]+>', '', texto).strip()
 
 def corrigir_encoding(texto):
-    texto = re.sub(r'[Mm]u.?arela', 'Mucarela', texto)
+    # v174: SAIDA com acento (antes era ASCII e o dicionario da IA re-acentuava — mas o fetch do
+    # dicionario falha em PC antigo, entao a comanda saia sem acento). Mesmo "casamento" testado de
+    # antes (case-sensitive); so a saida ganhou acento. Acento estavel agora nao depende do dicionario.
+    texto = re.sub(r'[Mm]u.?arela', 'Muçarela', texto)
     texto = re.sub(r'[Cc]ala.?resa', 'Calabresa', texto)
-    texto = re.sub(r'[Ss]ensa.{0,2}o\b', 'Sensacao', texto)
-    texto = re.sub(r'[Cc]ama.{0,2}o\b', 'Camarao', texto)
-    texto = re.sub(r'[Cc]amar.o\b', 'Camarao', texto)
-    texto = re.sub(r'[Bb]r.coli', 'Brocoli', texto)
+    texto = re.sub(r'[Ss]ensa.{0,2}o\b', 'Sensação', texto)
+    texto = re.sub(r'[Cc]ama.{0,2}o\b', 'Camarão', texto)
+    texto = re.sub(r'[Cc]amar.o\b', 'Camarão', texto)
+    texto = re.sub(r'[Bb]r.coli', 'Brócoli', texto)
     texto = re.sub(r'[Cc]atup.ry', 'Catupiry', texto)
-    texto = re.sub(r'[Pp]rest.gio', 'Prestigio', texto)
-    texto = re.sub(r'[Rr]equeij.o', 'Requeijao', texto)
-    texto = re.sub(r'[Ff]eij.o', 'Feijao', texto)
-    texto = re.sub(r'[Gg]uaran.[\s]*[Zz]ero', 'Guarana Zero', texto)
-    texto = re.sub(r'[Gg]uaran.\s', 'Guarana ', texto)
-    texto = re.sub(r'[Aa].?a[ií]\b', 'Acai', texto)
-    texto = re.sub(r'[Mm]aracuj.', 'Maracuja', texto)
-    texto = re.sub(r'(\w)[^\w\s]o\b', r'\1ao', texto)
+    texto = re.sub(r'[Pp]rest.gio', 'Prestígio', texto)
+    texto = re.sub(r'[Rr]equeij.o', 'Requeijão', texto)
+    texto = re.sub(r'[Ff]eij.o', 'Feijão', texto)
+    texto = re.sub(r'[Gg]uaran.[\s]*[Zz]ero', 'Guaraná Zero', texto)
+    texto = re.sub(r'[Gg]uaran.\s', 'Guaraná ', texto)
+    texto = re.sub(r'[Aa].?a[ií]\b', 'Açaí', texto)
+    texto = re.sub(r'[Mm]aracuj.', 'Maracujá', texto)
+    texto = re.sub(r'(\w)[^\w\s]o\b', r'\1ão', texto)
     texto = texto.replace("\ufffd", "").replace("\u25a1", "")
     texto = re.sub(r'\s{2,}', ' ', texto)
     return texto
@@ -236,12 +244,12 @@ def eh_pizza_broto(nome):
     if "broto" in n or "brotinho" in n: return eh_broto_doce(nome)
     return False
 def slots_do_tamanho(nome):
-    """Quantos sabores cabem no tamanho (regra do dono): broto 1, grande 2, gigante 3, familia 4."""
+    """Quantos sabores cabem no tamanho (regra do dono): broto 1, grande 2, gigante 3.
+    A Estrela so tem esses 3 tamanhos (sem Familia)."""
     n = (nome or "").lower()
-    if "familia" in n or "família" in n: return 4
     if "gigante" in n: return 3
-    if "grande" in n: return 2
     if "broto" in n or "brotinho" in n: return 1
+    if "grande" in n: return 2
     return 2
 def eh_sabor_doce(nome):
     """Sabor de broto DOCE mesmo SEM o prefixo 'Pizza Broto de' (ex.: '-1x Sensacao Mesclado')."""
