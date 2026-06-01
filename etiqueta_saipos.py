@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "169"
+VERSION = "170"
+# v170 (01/06/26): broto SALGADO ("Pizza Broto" sem doce no nome) vira caixa_salgada (era doce ->
+#   comanda em branco, bug #38); consolidar_sabores junta metades iguais ("2/2 calabresa" em vez de
+#   "1/2 calabresa" duplicado, bug #66). So muda o leitor de itens; render da etiqueta intacto.
 # v169 (30/05/26): CONSERTO leitor do salao. Sub-linha "-1 Borda ..." (sem x) era descartada e
 #   bebida de combo ("-1x Caneca Individual de Coca Cola") virava SABOR da pizza. Agora cada
 #   sub-linha e classificada: borda -> item borda; bebida (lista do cardapio) -> item bebida;
@@ -180,25 +183,36 @@ def extrair_sabor_fracao(texto):
         sabor = abreviar_sabor(m.group(3).strip())
         return num, den, sabor
     return None, None, ""
+# Sabores DOCES que aparecem no NOME do produto broto (ex.: "Pizza Broto de Nutella").
+# Broto SALGADO vem como produto "Pizza Broto" (sem doce no nome) + sabor na sub-linha.
+_BROTO_DOCES = ("nutella", "chocolate", "sensacao", "sensação", "charge", "prestigio",
+    "prestígio", "brigadeiro", "doce", "morango", "leite cond", "ovomaltine", "oreo",
+    "banana", "romeu", "confete", "ferrero", "ninho", "kit kat", "kitkat", "beijinho",
+    "cartola", "bicho de pe", "bicho de pé", "sonho de valsa", "coco", "cocada")
+def eh_broto_doce(nome):
+    n = (nome or "").lower()
+    if "broto" not in n and "brotinho" not in n: return False
+    return any(d in n for d in _BROTO_DOCES)
 def eh_pizza_salgada(nome):
-    """Pizza salgada: gigante, grande (nao broto/doce)"""
+    """Pizza salgada: gigante, grande, OU broto SALGADO (Pizza Broto sem doce no nome)."""
     n = nome.lower().strip()
     if eh_borda(nome): return False
     if eh_sabor_temx(nome): return False
     if eh_sabor_numerado(nome): return False
-    if "broto" in n or "brotinho" in n: return False
+    # broto SALGADO tambem e pizza salgada (sabor vem na sub-linha); broto DOCE nao (vai pra direita)
+    if "broto" in n or "brotinho" in n: return not eh_broto_doce(nome)
     palavras = ["pizza gigante", "pizza grande", "gigante", "grande",
                 "temx pizza gigante", "temx pizza grande"]
     for p in palavras:
         if p in n: return True
     return False
 def eh_pizza_broto(nome):
-    """Pizza broto/doce: sempre vai pra direita"""
+    """Pizza broto DOCE (caixa_doce / coluna direita). Broto SALGADO e tratado como salgada."""
     n = nome.lower().strip()
     if eh_borda(nome): return False
     if eh_sabor_temx(nome): return False
     if eh_sabor_numerado(nome): return False
-    if "broto" in n or "brotinho" in n: return True
+    if "broto" in n or "brotinho" in n: return eh_broto_doce(nome)
     return False
 def eh_caixa_pizza(nome):
     """Qualquer pizza que vira caixa (conta como etiqueta)"""
@@ -252,10 +266,8 @@ def consolidar_sabores(sabores_raw):
     resultado = []
     for den, nome in ordem:
         total_num = grupos[(den, nome)]
-        if den == 2:
-            for _ in range(total_num): resultado.append(f"1/2 {nome}")
-        else:
-            resultado.append(f"{total_num}/{den} {nome}")
+        # junta metades iguais: 2 metades de calabresa -> "2/2 calabresa" (inteira), sem repetir "1/2"
+        resultado.append(f"{total_num}/{den} {nome}")
     return resultado
 
 def extrair_itens_printrows(print_rows):
