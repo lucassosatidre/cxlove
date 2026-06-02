@@ -13,7 +13,7 @@ const DEFAULT_MODEL = 'claude-sonnet-4-6';
 const ALLOWED_MODELS = new Set([
   'claude-haiku-4-5',
   'claude-sonnet-4-6',
-  'claude-opus-4-7',
+  'claude-opus-4-8',
 ]);
 
 // ============================================================
