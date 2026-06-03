@@ -4,7 +4,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useAvatarEmoji } from '@/hooks/useAvatarEmoji';
-import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard, Calculator, Brain, Headphones, FlaskConical } from 'lucide-react';
+import { useTheme } from '@/hooks/useTheme';
+import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard, Calculator, Brain, Headphones, FlaskConical, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -19,9 +20,10 @@ interface AppSidebarProps {
 
 export default function AppSidebar({ open = true, onClose, collapsed = false, onToggleCollapse }: AppSidebarProps) {
   const { user, signOut } = useAuth();
-  const { isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
+  const { role, isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
   const { hasPermission } = useUserPermissions();
   const { emoji, updateEmoji, EMOJI_OPTIONS } = useAvatarEmoji();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useIsMobile();
@@ -66,7 +68,19 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     onClose?.();
   };
 
-  const userName = user?.email?.split('@')[0] || 'Usuário';
+  const userName =
+    (user?.user_metadata?.full_name as string | undefined) ||
+    (user?.user_metadata?.name as string | undefined) ||
+    user?.email?.split('@')[0] ||
+    'Usuário';
+
+  const roleLabel = (() => {
+    if (role === 'admin') return 'Administrador';
+    if (role === 'caixa_tele') return 'Caixa Tele';
+    if (role === 'caixa_salao') return 'Caixa Salão';
+    if (role === 'entregador') return 'Entregador';
+    return 'Usuário';
+  })();
 
   const sidebarWidth = collapsed ? 'w-16' : 'w-56';
 
@@ -116,22 +130,20 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
           </div>
         )}
 
-        {/* Logo + branding */}
+        {/* Logo header — the image already contains the brand name + tagline */}
         {!collapsed ? (
-          <div className="flex flex-col items-center px-4 pt-5 pb-3">
+          <div className="flex flex-col items-center px-4 pt-5 pb-4 border-b border-sidebar-border">
             <div className="bg-marfim rounded-2xl p-2 shadow-card">
               <img
                 src={vigiaLogo}
                 alt="VIGIA"
-                className="w-[120px] h-[120px] object-contain"
+                className="w-[140px] h-[140px] object-contain"
               />
             </div>
-            <p className="font-brand text-lg font-bold text-sidebar-accent-foreground leading-tight mt-3 tracking-[0.18em]">VIGIA</p>
-            <p className="font-title italic text-[12px] text-gold-300/90 mt-0.5">Operação &amp; Controle</p>
           </div>
         ) : (
-          <div className="flex items-center justify-center px-2 pt-5 pb-2">
-            <div className="bg-marfim rounded-lg p-1 shadow-card">
+          <div className="flex items-center justify-center px-2 pt-5 pb-4 border-b border-sidebar-border">
+            <div className="bg-marfim rounded-xl p-1.5 shadow-card">
               <img
                 src={vigiaLogo}
                 alt="VIGIA"
@@ -141,54 +153,112 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
           </div>
         )}
 
-        {!collapsed && <div className="mx-3 mb-2 border-b border-sidebar-border" />}
-
-        {/* User block */}
-        {!collapsed ? (
-          <div className="mx-3 mb-4 px-3 py-2 bg-sidebar-accent/50 rounded-lg flex items-center gap-2.5">
-            <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
-              <PopoverTrigger asChild>
-                <button className="text-xl hover:scale-110 transition-transform cursor-pointer shrink-0" title="Trocar emoji">
-                  {emoji}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent side="right" className="w-64 p-2" align="start">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Escolha seu avatar</p>
-                <div className="grid grid-cols-6 gap-1">
-                  {EMOJI_OPTIONS.map((e, i) => (
-                    <button
-                      key={`${e}-${i}`}
-                      onClick={() => { updateEmoji(e); setEmojiPickerOpen(false); }}
-                      className={`text-xl p-1.5 rounded-md hover:bg-accent transition-colors ${emoji === e ? 'bg-accent ring-1 ring-primary' : ''}`}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-            <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
-              {userName}
-            </p>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center mb-3">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-lg cursor-default">{emoji}</span>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs">{userName}</TooltipContent>
-            </Tooltip>
-          </div>
-        )}
-
-        <nav className={`flex-1 ${collapsed ? 'px-1.5' : 'px-3'} space-y-0.5`}>
+        {/* Nav */}
+        <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5' : 'px-3'} space-y-0.5`}>
           {navItems.map((item) => (
             <NavButton key={item.path} item={item} />
           ))}
         </nav>
 
-        <div className={`${collapsed ? 'px-1.5' : 'px-3'} pb-5 space-y-1`}>
+        {/* Footer */}
+        <div className={`border-t border-sidebar-border ${collapsed ? 'px-1.5' : 'px-3'} py-3 space-y-2`}>
+          {/* User chip */}
+          {!collapsed ? (
+            <div className="px-2 py-2 bg-sidebar-accent/50 rounded-lg flex items-center gap-2.5">
+              <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                <PopoverTrigger asChild>
+                  <button className="h-8 w-8 shrink-0 rounded-full bg-sidebar-accent flex items-center justify-center text-lg hover:scale-110 transition-transform cursor-pointer" title="Trocar emoji">
+                    {emoji}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent side="right" className="w-64 p-2" align="start">
+                  <p className="text-xs font-medium text-muted-foreground mb-2">Escolha seu avatar</p>
+                  <div className="grid grid-cols-6 gap-1">
+                    {EMOJI_OPTIONS.map((e, i) => (
+                      <button
+                        key={`${e}-${i}`}
+                        onClick={() => { updateEmoji(e); setEmojiPickerOpen(false); }}
+                        className={`text-xl p-1.5 rounded-md hover:bg-accent transition-colors ${emoji === e ? 'bg-accent ring-1 ring-primary' : ''}`}
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-sidebar-accent-foreground truncate">
+                  {userName}
+                </p>
+                <p className="text-[10px] text-sidebar-foreground/60 truncate">
+                  {roleLabel}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Popover open={emojiPickerOpen} onOpenChange={setEmojiPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <button className="h-8 w-8 rounded-full bg-sidebar-accent flex items-center justify-center text-base cursor-pointer hover:scale-110 transition-transform" title="Trocar emoji">
+                        {emoji}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="right" className="w-64 p-2" align="start">
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Escolha seu avatar</p>
+                      <div className="grid grid-cols-6 gap-1">
+                        {EMOJI_OPTIONS.map((e, i) => (
+                          <button
+                            key={`${e}-${i}`}
+                            onClick={() => { updateEmoji(e); setEmojiPickerOpen(false); }}
+                            className={`text-xl p-1.5 rounded-md hover:bg-accent transition-colors ${emoji === e ? 'bg-accent ring-1 ring-primary' : ''}`}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs">{userName}</TooltipContent>
+              </Tooltip>
+            </div>
+          )}
+
+          {/* Theme + collapse toggles */}
+          <div className={`flex items-center ${collapsed ? 'flex-col gap-1' : 'justify-center gap-1'}`}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-lg text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent row-transition"
+                  aria-label={theme === 'light' ? 'Ativar tema escuro' : 'Ativar tema claro'}
+                >
+                  {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">
+                {theme === 'light' ? 'Tema escuro' : 'Tema claro'}
+              </TooltipContent>
+            </Tooltip>
+
+            {!isMobile && onToggleCollapse && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={onToggleCollapse}
+                    className="p-2 rounded-lg text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent row-transition"
+                    aria-label={collapsed ? 'Expandir' : 'Minimizar'}
+                  >
+                    {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs">{collapsed ? 'Expandir' : 'Minimizar'}</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+
           {/* Logout */}
           {collapsed ? (
             <Tooltip>
@@ -212,24 +282,11 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
             </button>
           )}
 
-          {/* Collapse toggle (desktop only) */}
-          {!isMobile && onToggleCollapse && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={onToggleCollapse}
-                  className={`w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-lg text-xs text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground row-transition`}
-                >
-                  {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-                  {!collapsed && 'Minimizar'}
-                </button>
-              </TooltipTrigger>
-              {collapsed && <TooltipContent side="right" className="text-xs">Expandir</TooltipContent>}
-            </Tooltip>
-          )}
+          {/* Signature */}
           {!collapsed && (
-            <p className="font-title italic text-[10px] text-sidebar-foreground/50 text-center pt-2">
-              by Propósito Soluções
+            <p className="font-title italic text-[10px] text-center pt-1">
+              <span className="text-sidebar-foreground/50">by </span>
+              <span className="text-gold-500">Propósito Soluções</span>
             </p>
           )}
         </div>

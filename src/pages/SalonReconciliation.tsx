@@ -883,7 +883,7 @@ export default function SalonReconciliation() {
                             <Badge
                               variant="secondary"
                               className={`text-[9px] ${
-                                matchedTxs[0]?.match_type === 'combined_mixed' ? 'bg-blue-500/10 text-blue-600'
+                                matchedTxs[0]?.match_type === 'combined_mixed' ? 'bg-info/10 text-info'
                                   : confidence === 'high' ? 'bg-success/10 text-success'
                                   : confidence === 'medium' ? 'bg-primary/10 text-primary'
                                   : 'bg-warning/10 text-warning'

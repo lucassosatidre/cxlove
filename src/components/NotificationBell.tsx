@@ -16,7 +16,7 @@ interface Notification {
   created_at: string;
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ className }: { className?: string }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
@@ -65,7 +65,7 @@ export default function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="relative text-sidebar-foreground hover:text-sidebar-accent-foreground transition-colors p-1">
+        <button className={className ?? "relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"}>
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-destructive text-white text-[9px] font-bold rounded-full h-4 min-w-[16px] flex items-center justify-center px-0.5">

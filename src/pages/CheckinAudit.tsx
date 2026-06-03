@@ -309,7 +309,7 @@ export default function CheckinAudit() {
                         {c.substituto_pos_18h && <span className="ml-1 text-[10px] text-amber-600">(sub)</span>}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={sb.variant} className={c.status === 'confirmado' ? 'bg-green-100 text-green-700' : c.status === 'fila_espera' ? 'bg-amber-100 text-amber-700' : ''}>
+                        <Badge variant={sb.variant} className={c.status === 'confirmado' ? 'bg-success/15 text-success' : c.status === 'fila_espera' ? 'bg-warning/15 text-warning' : ''}>
                           {sb.label}
                         </Badge>
                       </TableCell>

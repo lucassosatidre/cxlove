@@ -537,7 +537,7 @@ export default function DriverShifts() {
 
                 {day.shifts.map((shift, shiftIdx) => {
                   const fillPct = shift.vagas > 0 ? Math.round((shift.checkins / shift.vagas) * 100) : 0;
-                  const barColor = fillPct >= 100 ? 'bg-destructive' : fillPct > 75 ? 'bg-warning' : 'bg-green-500';
+                  const barColor = fillPct >= 100 ? 'bg-destructive' : fillPct > 75 ? 'bg-warning' : 'bg-success';
                   return (
                     <div key={shiftIdx} className="rounded-md border border-border p-2 space-y-1.5 bg-background">
                       <div className="flex items-center justify-between">

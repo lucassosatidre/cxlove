@@ -388,7 +388,7 @@ export default function Overview() {
 
   return (
     <AppLayout
-      title="Visão Geral"
+      title="Painel"
       subtitle="Acompanhamento diário — Conferência, Conciliação & Cofre"
     >
       <Tabs defaultValue="overview" className="w-full">

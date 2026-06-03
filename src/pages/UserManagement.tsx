@@ -162,8 +162,8 @@ export default function UserManagement() {
 
   const roleBadgeClass = (role: string | null) => {
     if (role === 'admin') return 'bg-primary/15 text-primary border-primary/30';
-    if (role === 'caixa_tele') return 'bg-blue-500/15 text-blue-600 border-blue-500/30';
-    if (role === 'caixa_salao') return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
+    if (role === 'caixa_tele') return 'bg-info/15 text-info border-info/30';
+    if (role === 'caixa_salao') return 'bg-warning/15 text-warning border-warning/30';
     return 'bg-muted text-muted-foreground';
   };
 
@@ -227,11 +227,11 @@ export default function UserManagement() {
                           Acesso total
                         </Badge>
                       ) : u.role === 'caixa_tele' ? (
-                        <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-xs">
+                        <Badge variant="outline" className="bg-info/10 text-info border-info/20 text-xs">
                           Tele
                         </Badge>
                       ) : u.role === 'caixa_salao' ? (
-                        <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-xs">
+                        <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-xs">
                           Salão
                         </Badge>
                       ) : u.permissions.length === 0 ? (

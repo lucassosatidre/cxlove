@@ -1883,13 +1883,13 @@ function OrderRow({ order, hasMultiple, badgeType, isExpanded, breakdownValid, i
             className={`h-5 w-5 rounded border-2 flex items-center justify-center row-transition ${
               order.is_confirmed
                 ? isAutoOnline
-                  ? 'bg-blue-500 border-blue-500'
+                  ? 'bg-info border-info'
                   : 'bg-success border-success'
                 : 'border-border'
             }`}
             onClick={onCheckboxClick}
           >
-            {order.is_confirmed && <CheckCircle2 className={`h-3.5 w-3.5 ${isAutoOnline ? 'text-white' : 'text-success-foreground'}`} />}
+            {order.is_confirmed && <CheckCircle2 className={`h-3.5 w-3.5 ${isAutoOnline ? 'text-info-foreground' : 'text-success-foreground'}`} />}
           </div>
         </td>
         <td className={`p-3 font-medium ${order.is_confirmed ? 'text-muted-foreground line-through' : 'text-foreground'}`}>

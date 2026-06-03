@@ -65,7 +65,7 @@ export default function ClauMemory() {
       title="Memória da Clau"
       subtitle="Conteúdo lido pela assistente em toda conversa"
       headerActions={
-        <Button onClick={save} disabled={saving || loading} className="bg-orange-500 hover:bg-orange-600 text-white">
+        <Button onClick={save} disabled={saving || loading}>
           <Save className="w-4 h-4 mr-2" />
           {saving ? 'Salvando…' : 'Salvar'}
         </Button>

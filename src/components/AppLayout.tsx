@@ -6,7 +6,6 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import NotificationBell from './NotificationBell';
-import ThemeToggle from './ThemeToggle';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -79,18 +78,9 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
               <span className="font-brand text-base tracking-[0.18em] text-sidebar-accent-foreground">VIGIA</span>
             </div>
             <div className="flex items-center gap-1">
-              <ThemeToggle />
-              <NotificationBell />
+              <NotificationBell className="relative p-2 rounded-lg text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/60 transition-colors" />
             </div>
           </header>
-        )}
-
-        {/* Desktop notification bell + theme toggle */}
-        {!isMobile && (
-          <div className="absolute top-4 right-6 z-10 flex items-center gap-1">
-            <ThemeToggle />
-            <NotificationBell />
-          </div>
         )}
 
         {/* Admin alert: no schedule for today */}
@@ -103,16 +93,32 @@ export default function AppLayout({ children, title, subtitle, headerActions }: 
           </div>
         )}
 
-        {title && (
+        {/* Desktop header: title + page actions + notification bell (in-flow, never floating) */}
+        {!isMobile ? (
           <header className="px-4 sm:px-8 pt-6 sm:pt-8 pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="font-brand text-2xl sm:text-3xl text-foreground tracking-wide">{title}</h1>
-                {subtitle && <p className="font-title italic text-sm text-muted-foreground mt-1">{subtitle}</p>}
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                {title && <h1 className="font-brand text-2xl sm:text-3xl text-foreground tracking-wide">{title}</h1>}
+                {title && subtitle && <p className="font-title italic text-sm text-muted-foreground mt-1">{subtitle}</p>}
               </div>
-              {headerActions && <div className="flex items-center gap-3">{headerActions}</div>}
+              <div className="flex items-center gap-3 shrink-0">
+                {headerActions}
+                <NotificationBell />
+              </div>
             </div>
           </header>
+        ) : (
+          title && (
+            <header className="px-4 sm:px-8 pt-6 pb-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="font-brand text-2xl sm:text-3xl text-foreground tracking-wide">{title}</h1>
+                  {subtitle && <p className="font-title italic text-sm text-muted-foreground mt-1">{subtitle}</p>}
+                </div>
+                {headerActions && <div className="flex items-center gap-3 shrink-0">{headerActions}</div>}
+              </div>
+            </header>
+          )
         )}
         <main className="px-4 sm:px-8 py-4 sm:py-6">{children}</main>
       </div>
