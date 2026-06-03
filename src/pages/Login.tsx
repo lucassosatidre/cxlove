@@ -98,14 +98,7 @@ export default function Login() {
         >
           <img src={vigiaLogo} alt="VIGIA" className="w-[180px] h-[180px] object-contain -mt-2" />
 
-          <h1 className="font-brand text-4xl mt-1 tracking-[0.18em]" style={{ color: '#061A33' }}>VIGIA</h1>
-          <div className="flex items-center gap-2 mt-1">
-            <span className="h-px w-6" style={{ background: '#C9972E' }} />
-            <p className="font-title italic text-base" style={{ color: '#8A5A16' }}>Operação &amp; Controle</p>
-            <span className="h-px w-6" style={{ background: '#C9972E' }} />
-          </div>
-
-          <p className="mt-5 text-xs uppercase tracking-[0.2em]" style={{ color: '#6B7280' }}>
+          <p className="mt-2 text-xs uppercase tracking-[0.2em]" style={{ color: '#6B7280' }}>
             Acesse sua conta
           </p>
 
