@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "176"
+VERSION = "177"
+# v177 (05/06/26): COMBO do DELIVERY ("2 X Pizza Grande + Refrigerante", o carro-chefe) agora DIVIDE
+#   em N pizzas separadas (igual o salao), pelos marcadores "1a/2a Pizza" — antes saia 1 caixa
+#   "Pizza Grande x2" com as 4 metades empilhadas. Cada sabor vai pra pizza certa (cur_caixa). Total
+#   de caixas/etiquetas inalterado (2 grandes + broto = 3). Bordas seguem como itens com o numero
+#   "Na Pizza" (colove anexa). Verificado: E1-E8 + S1-S8 + varredura de regressao.
 # v176 (05/06/26): SALAO reescrito (estava bem atras do delivery) + adicional/obs GRUDADOS no item:
 #   (1) ADICIONAL no salao virava FATIA ("1/4 Adicional de Cebola"). Agora eh_adicional -> nao conta
 #       fatia; vira "+ Adicional de X" colado na pizza. (2) OBSERVACAO (** **) no salao era IGNORADA
@@ -357,13 +362,26 @@ def extrair_itens_printrows(print_rows):
     display = []; total_caixas = 0; total_bebidas = 0; total_outros = 0
     em_zona = False; ultimo_tipo = None; em_obs = False; obs_acc = []
     pend_adic = None   # adicional aguardando a obs da linha seguinte -> vira a nota "(calabresa)"
+    cur_caixa = None; combo_nome = None; combo_doce = False; combo_pizzas = {}; combo_mult = 1   # combo "2 X Pizza" dividido
+    def _alvo():
+        nonlocal cur_caixa, total_caixas
+        if cur_caixa is not None: return cur_caixa
+        if combo_nome:                                 # combo ATIVO sem pizza atual -> cria a caixa do combo PRIMEIRO
+            c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": combo_mult, "sabores_raw": []}
+            combo_pizzas[1] = c; display.append(c); total_caixas += combo_mult; cur_caixa = c; return c
+        for d in reversed(display):                    # so DEPOIS cai na ultima caixa (item anterior) -> nunca rouba caixa do item passado
+            if d["tipo"] in ("caixa_salgada", "caixa_doce"): return d
+        return None
     def _add_adic(nome, qty):
         nonlocal pend_adic, total_outros
-        ad = [abreviar_sabor(nome), ""]
-        for d in reversed(display):
-            if d["tipo"] in ("caixa_salgada", "caixa_doce"):
-                d.setdefault("_adic", []).append(ad); pend_adic = ad; return
+        ad = [abreviar_sabor(nome), ""]; alvo = _alvo()
+        if alvo is not None:
+            alvo.setdefault("_adic", []).append(ad); pend_adic = ad; return
         display.append({"tipo": "outro", "nome": nome, "qty": qty, "sabores_raw": []}); total_outros += qty
+    def _attach_sabor(nome, qty):
+        alvo = _alvo()
+        if alvo is None: return False
+        alvo["sabores_raw"].append((qty, slots_do_tamanho(alvo["nome"]), abreviar_sabor(nome))); return True
     for row in print_rows:
         texto = limpar_tags(row)
         if "Qt.Descri" in texto: em_zona = True; continue
@@ -403,13 +421,19 @@ def extrair_itens_printrows(print_rows):
             if eh_borda(nome_raw):
                 display.append({"tipo": "borda", "nome": nome_raw, "qty": qty, "sabores_raw": []})
             elif eh_pizza_salgada(nome_raw):
-                mult = contar_pizzas_no_nome(nome_raw)
-                display.append({"tipo": "caixa_salgada", "nome": nome_sem_combo(nome_raw), "qty": qty*mult, "sabores_raw": []})
-                total_caixas += qty*mult
+                mult = contar_pizzas_no_nome(nome_raw); base = nome_sem_combo(nome_raw)
+                if mult > 1:                                   # combo "2 X Pizza" -> divide pelos marcadores "Na Pizza"
+                    combo_nome = base or "Pizza"; combo_doce = False; combo_pizzas = {}; combo_mult = mult; cur_caixa = None
+                else:
+                    c = {"tipo": "caixa_salgada", "nome": base, "qty": qty, "sabores_raw": []}
+                    display.append(c); total_caixas += qty; cur_caixa = c; combo_nome = None
             elif eh_pizza_broto(nome_raw):
-                mult = contar_pizzas_no_nome(nome_raw)
-                display.append({"tipo": "caixa_doce", "nome": nome_sem_combo(nome_raw), "qty": qty*mult, "sabores_raw": []})
-                total_caixas += qty*mult
+                mult = contar_pizzas_no_nome(nome_raw); base = nome_sem_combo(nome_raw)
+                if mult > 1:
+                    combo_nome = base or "Pizza"; combo_doce = True; combo_pizzas = {}; combo_mult = mult; cur_caixa = None
+                else:
+                    c = {"tipo": "caixa_doce", "nome": base, "qty": qty, "sabores_raw": []}
+                    display.append(c); total_caixas += qty; cur_caixa = c; combo_nome = None
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_bebidas += qty
             elif nome_raw:
@@ -419,22 +443,34 @@ def extrair_itens_printrows(print_rows):
         if ms:
             qty = int(ms.group(1)); nome_raw = limpar_nome(ms.group(2).strip())
             ultimo_tipo = "item"
+            if combo_nome:                                     # marcador "Na Pizza ..." -> cria/troca a pizza do combo
+                _ordn, _resto = _salao_marker_pizza(nome_raw)
+                if _ordn is not None:
+                    if _ordn not in combo_pizzas:
+                        c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": 1, "sabores_raw": []}
+                        combo_pizzas[_ordn] = c; display.append(c); total_caixas += 1
+                    cur_caixa = combo_pizzas[_ordn]
+                    _mf = re.match(r'^(\d+)/(\d+)\s+(.+)$', _resto)
+                    if _mf:                                    # "Na Pizza 1/2 Calabresa" -> sabor da pizza N
+                        cur_caixa["sabores_raw"].append((int(_mf.group(1)), int(_mf.group(2)), abreviar_sabor(_mf.group(3)))); continue
+                    if "sem borda" in _resto.lower(): continue
+                    # senao (borda): segue a classificacao normal mantendo o nome com o numero (colove usa)
             if eh_borda(nome_raw):
                 display.append({"tipo": "borda", "nome": nome_raw, "qty": qty, "sabores_raw": []})
             elif "sem borda" in nome_raw.lower(): continue   # "Sem Borda Recheada" nao e sabor
             elif eh_sabor_temx(nome_raw): continue
             elif eh_sabor_numerado(nome_raw): continue
             elif eh_pizza_salgada(nome_raw):
-                display.append({"tipo": "caixa_salgada", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_caixas += qty
+                c = {"tipo": "caixa_salgada", "nome": nome_raw, "qty": qty, "sabores_raw": []}; display.append(c); total_caixas += qty; cur_caixa = c
             elif eh_pizza_broto(nome_raw):
-                display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_caixas += qty
+                c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}; display.append(c); total_caixas += qty; cur_caixa = c
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_bebidas += qty
             elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
-                display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_caixas += qty
+                c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}; display.append(c); total_caixas += qty; cur_caixa = c
             elif eh_adicional(nome_raw):                       # "Adicional de X" -> GRUDA na pizza ("+ X"), NAO fatia
                 _add_adic(nome_raw, qty)
-            elif _anexar_sabor(display, nome_raw, qty):        # "-Nx Sabor" (Temx) -> sabor da pizza salgada
+            elif _attach_sabor(nome_raw, qty):                 # "-Nx Sabor" (Temx) -> sabor da pizza atual
                 pass
             elif nome_raw:
                 display.append({"tipo": "outro", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_outros += qty
@@ -442,30 +478,40 @@ def extrair_itens_printrows(print_rows):
         if eh_fracao(texto_limpo):
             num, den, sabor = extrair_sabor_fracao(texto_limpo)
             if sabor and num and den and "sem borda" not in sabor.lower():  # "Sem Borda Recheada" nao e sabor
-                for d in reversed(display):
-                    if d["tipo"] in ("caixa_salgada", "caixa_doce"):
-                        d["sabores_raw"].append((num, den, sabor)); break
+                alvo = _alvo()
+                if alvo is not None: alvo["sabores_raw"].append((num, den, sabor))   # vai pra pizza atual (cur_caixa no combo)
             ultimo_tipo = "sabor"; continue
         ms2 = re.match(r'^-\s*(.+?)(?:\s{2,}[\d,.]+)?$', texto_limpo)
         if ms2:
             nome_raw = limpar_nome(ms2.group(1).strip())
             ultimo_tipo = "item"
+            if combo_nome:                                     # marcador "Na Pizza ..." (sub-linha sem 'x')
+                _ordn, _resto = _salao_marker_pizza(nome_raw)
+                if _ordn is not None:
+                    if _ordn not in combo_pizzas:
+                        c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": 1, "sabores_raw": []}
+                        combo_pizzas[_ordn] = c; display.append(c); total_caixas += 1
+                    cur_caixa = combo_pizzas[_ordn]
+                    _mf = re.match(r'^(\d+)/(\d+)\s+(.+)$', _resto)
+                    if _mf:
+                        cur_caixa["sabores_raw"].append((int(_mf.group(1)), int(_mf.group(2)), abreviar_sabor(_mf.group(3)))); continue
+                    if "sem borda" in _resto.lower(): continue
             if eh_borda(nome_raw):
                 display.append({"tipo": "borda", "nome": nome_raw, "qty": 1, "sabores_raw": []})
             elif "sem borda" in nome_raw.lower(): continue   # "Sem Borda Recheada" nao e sabor
             elif eh_sabor_temx(nome_raw): continue
             elif eh_sabor_numerado(nome_raw): continue
             elif eh_pizza_salgada(nome_raw):
-                display.append({"tipo": "caixa_salgada", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_caixas += 1
+                c = {"tipo": "caixa_salgada", "nome": nome_raw, "qty": 1, "sabores_raw": []}; display.append(c); total_caixas += 1; cur_caixa = c
             elif eh_pizza_broto(nome_raw):
-                display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_caixas += 1
+                c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}; display.append(c); total_caixas += 1; cur_caixa = c
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_bebidas += 1
             elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
-                display.append({"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_caixas += 1
+                c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}; display.append(c); total_caixas += 1; cur_caixa = c
             elif eh_adicional(nome_raw):                       # "Adicional de X" -> GRUDA na pizza ("+ X"), NAO fatia
                 _add_adic(nome_raw, 1)
-            elif _anexar_sabor(display, nome_raw, 1):          # "-Sabor" solto -> sabor da pizza salgada
+            elif _attach_sabor(nome_raw, 1):                   # "-Sabor" solto -> sabor da pizza atual
                 pass
             elif nome_raw and len(nome_raw) > 2:
                 display.append({"tipo": "outro", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_outros += 1
