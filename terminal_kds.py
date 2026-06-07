@@ -268,6 +268,7 @@ def montar_comanda(id_sale, grupos):
         "version":1, "id_sale":str(id_sale), "numero_pedido":numero, "order_type":order_type,
         "canal":canal, "codigo_canal":"", "cliente_nome":cliente, "pagamento_cat":"", "hora_pedido":"",
         "items":items, "total_caixas":total_caixas, "total_entrega":total_entrega, "label_printed":True,
+        "source":"terminal",  # marca a FONTE (o servidor so aceita comanda da fonte oficial; etiqueta=pc)
         "_tipo_saipos":tipo_saipos, "_mesa":mesa,  # campos extras so pra log (servidor ignora)
     }
 
