@@ -860,6 +860,134 @@ def extrair_itens_salao(print_rows):
         out.append(d)
     return out
 
+# ============================================================================
+# MODO KDS (robo): le o estruturado do Saipos (Firebase) e devolve o MESMO 'display'
+# que extrair_itens_salao -> reusa agrupar_display + aplicar_regras_display + empurrar_comanda.
+# Mesma estrutura, fonte diferente. So funcoes NOVAS (nao toca o caminho do papel). Validado: 17/17 casos do MANUAL.
+# ============================================================================
+_KDS_SWEET_ADIC = ["amendoim", "leite condensado", "coco ralado", "pacoca", "paçoca", "morango",
+                   "abacaxi", "bombom beijinho", "bombom sonho de valsa", "sonho de valsa", "beijinho",
+                   "sorvete de creme", "sorvete"]
+def _kds_low(s):
+    s = (s or "").lower()
+    for a, b in [("á","a"),("à","a"),("â","a"),("ã","a"),("é","e"),("ê","e"),("í","i"),("ó","o"),("ô","o"),("õ","o"),("ú","u"),("ç","c")]:
+        s = s.replace(a, b)
+    return s
+def _kds_eh_adic_doce(nome):
+    x = _kds_low(nome); return any(a in x for a in [_kds_low(z) for z in _KDS_SWEET_ADIC])
+def _kds_fl_sab(d):
+    """Copia EXATA da conversao final de extrair_itens_salao (_fl/_adic -> sabores)."""
+    fl = d.get("_fl", []); ad = d.get("_adic", []); sab = []
+    if fl:
+        tem_fr = any(den is not None for (_, den, _) in fl)
+        if tem_fr:
+            grupos = {}; ordem = []
+            for num, den, nome in fl:
+                den = den or slots_do_tamanho(d["nome"]); k = (den, nome)
+                if k not in grupos: grupos[k] = 0; ordem.append(k)
+                grupos[k] += num
+            for den, nome in ordem: sab.append(f"{grupos[(den, nome)]}/{den} {nome}")
+        else:
+            nomes = [n for (_, _, n) in fl]; ordem = []
+            for n in nomes:
+                if n not in ordem: ordem.append(n)
+            if len(ordem) == 1: sab = [ordem[0]]
+            else:
+                total = len(nomes)
+                for n in ordem: sab.append(f"{nomes.count(n)}/{total} {n}")
+    for a in ad: sab.append(f"+ {a[0]}" + (f" ({a[1]})" if a[1] else ""))
+    return sab
+def _kds_attach(cur, nome):
+    mf = re.match(r'^(\d+)/(\d+)\s+(.+)$', nome)
+    if mf: num, den, sab = int(mf.group(1)), int(mf.group(2)), mf.group(3).strip()
+    else: num, den, sab = 1, None, nome
+    cur["_fl"].append((num, den, abreviar_sabor(sab)))
+def _kds_classifica(display, cur, doce_ctx, texto):
+    """Espelha o tratamento de sub-linha do extrair_itens_salao, lendo a escolha do KDS."""
+    nome = (texto or "").strip()
+    if not nome: return
+    low2 = nome.lower()
+    if eh_borda(nome):
+        display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    elif "sem borda" in low2:
+        return
+    elif _salao_eh_bebida(nome):
+        display.append({"tipo": "bebida", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    elif eh_adicional(nome) or (doce_ctx and _kds_eh_adic_doce(nome)):
+        if cur is not None: cur["_adic"].append([abreviar_sabor(nome), ""])
+        else: display.append({"tipo": "outro", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    elif (eh_pizza_broto(nome) or eh_sabor_doce(nome)) and (cur is None or (cur["tipo"] == "caixa_salgada" and not eh_broto_doce(cur["nome"]))):
+        display.append({"tipo": "caixa_doce", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    elif eh_sabor_numerado(nome):
+        return
+    else:
+        if cur is not None: _kds_attach(cur, nome)
+        else: display.append({"tipo": "outro", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+def _kds_frac(t):
+    m = re.match(r'^(\d+)/(\d+)\s', (t or "").strip())
+    return (int(m.group(1)), int(m.group(2))) if m else (None, None)
+def _kds_combo(display, base, doce, chs, mult):
+    """Combo 'Nx Pizza': divide por MARCADOR ('1a/2a Pizza') OU por FRACAO (1/1=uma pizza; 1/2+1/2=outra)."""
+    pizzas = {}; ordem = []; cur = None; achou_marc = False
+    frac_pizza = None; frac_acc = 0
+    def nova(key):
+        p = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": 1, "_fl": [], "_adic": []}
+        pizzas[key] = p; ordem.append(key); display.append(p); return p
+    for c in chs:
+        ordn, resto = _salao_marker_pizza(c)
+        if ordn is not None:
+            achou_marc = True; cur = pizzas.get(ordn) or nova(ordn); _kds_classifica(display, cur, doce, resto); continue
+        if eh_borda(c) or "sem borda" in c.lower() or _salao_eh_bebida(c) or eh_adicional(c) or eh_pizza_broto(c) or eh_sabor_doce(c):
+            _kds_classifica(display, cur, doce, c); continue
+        num, den = _kds_frac(c)
+        if not achou_marc and den:
+            if frac_pizza is None or frac_acc >= den:
+                frac_pizza = nova(len(ordem) + 1); frac_acc = 0
+            cur = frac_pizza; _kds_attach(cur, c); frac_acc += num
+            if frac_acc >= den: frac_pizza = None
+        else:
+            if cur is None: cur = nova(1)
+            _kds_classifica(display, cur, doce, c)
+def extrair_itens_kds(grupos):
+    """Converte os grupos ativos do KDS (1 id_sale) no display do extrair_itens_salao."""
+    display = []
+    for g in grupos:
+        itens = g.get("items") or {}
+        it_iter = itens.values() if isinstance(itens, dict) else itens
+        for it in it_iter:
+            if not isinstance(it, dict) or str(it.get("deleted", "")).upper() == "Y": continue
+            desc = (it.get("desc_sale_item") or "").strip()
+            qty = max(1, int(it.get("quantity") or 1)); low = desc.lower()
+            chs = []
+            cis = it.get("choice_items") or {}
+            ci_iter = cis.values() if isinstance(cis, dict) else cis
+            for ci in ci_iter:
+                if isinstance(ci, dict) and str(ci.get("deleted", "")).upper() != "Y":
+                    txt = (ci.get("desc_sale_item_choice") or "").strip()
+                    if txt: chs.append(txt)
+            notes = (it.get("notes") or "").strip()
+            if "pizza" in low:
+                nome_clean = limpar_nome(desc); mult = contar_pizzas_no_nome(nome_clean)
+                base = re.sub(r'\s+sal[aã]o\b', '', nome_sem_combo(nome_clean), flags=re.IGNORECASE).strip() or "Pizza"
+                doce = eh_broto_doce(desc) or ("broto doce" in low)
+                if mult > 1:
+                    _kds_combo(display, base, doce, chs, mult)
+                else:
+                    cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": qty, "_fl": [], "_adic": []}
+                    display.append(cur)
+                    for c in chs: _kds_classifica(display, cur, doce, c)
+                if notes: display.append({"tipo": "outro", "nome": f"Obs: {notes}", "qty": 1, "_fl": [], "_adic": []})
+            elif _salao_eh_bebida(desc):
+                display.append({"tipo": "bebida", "nome": desc, "qty": qty, "_fl": [], "_adic": []})
+            else:
+                cur = {"tipo": "outro", "nome": desc, "qty": qty, "_fl": [], "_adic": []}
+                display.append(cur)
+                for c in chs: _kds_classifica(display, cur, False, c)
+    out = []
+    for d in display:
+        out.append({"tipo": d["tipo"], "nome": d["nome"], "qty": d["qty"], "sabores": _kds_fl_sab(d)})
+    return out
+
 def agrupar_display(display):
     resultado = []; i = 0
     while i < len(display):

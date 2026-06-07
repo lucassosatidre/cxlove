@@ -13,8 +13,9 @@
 import json, ssl, sys, os, time, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "2"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "3"             # versao do terminal. O auto-update compara este numero com o do GitHub.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/terminal_kds.py"
+ETIQUETA_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"  # o CEREBRO (parser+IA)
 UPDATE_EVERY = 300        # checa atualizacao a cada 5 min (e no boot)
 EMAIL   = "terminalimpressoras@saipos.com"
 SENHA   = ""              # NAO cole a senha aqui (este arquivo vai pro GitHub publico).
@@ -98,7 +99,30 @@ def ler_kds():
     if c == 200 and isinstance(data, dict): return data
     log("ERRO leitura KDS:", c, str(data)[:200]); return None
 
-# ---------- TRADUCAO Saipos -> itens da comanda (espelha o parse do salao) ----------
+# ---------- CEREBRO: baixa e importa o etiqueta_saipos.py (parser maduro + IA). Fonte unica. ----------
+ETQ = None
+def carrega_etiqueta():
+    global ETQ
+    try:
+        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+        req = urllib.request.Request(ETIQUETA_URL, headers={"Cache-Control": "no-cache"})
+        conteudo = urllib.request.urlopen(req, timeout=25, context=ctx).read().decode("utf-8")
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etiqueta_saipos.py")
+        with open(p, "w", encoding="utf-8") as f: f.write(conteudo)
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("etiqueta_saipos", p)
+        m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+        if not (hasattr(m, "extrair_itens_kds") and hasattr(m, "agrupar_display") and hasattr(m, "aplicar_regras_display")):
+            log("  ERRO: etiqueta sem extrair_itens_kds (versao antiga?)"); return False
+        ETQ = m
+        try: ETQ._carregar_regras()   # carrega o dicionario da IA (no-op se 'aplicar' desligado no servidor)
+        except Exception: pass
+        log("  cerebro da etiqueta carregado (extrair_itens_kds + IA).")
+        return True
+    except Exception as e:
+        log("  ERRO carregando cerebro da etiqueta:", e); return False
+
+# ---------- (legado: parser proprio do robo — NAO usado mais; montar_comanda usa o cerebro da etiqueta) ----------
 def _norm(s): return (s or "").strip()
 BEB = ["caneca","refri","coca","pepsi","guaran","fanta","sprite","del valle","kombucha","bally","pureza",
        "antarctica","tonica","agua","água","lata","refrigerante","chopp","cerveja","heineken","brahma","skol",
@@ -141,11 +165,16 @@ def consolida(arr, denom):
     return [f"{cnt[s]}/{total} {s}" for s in order]
 
 # ---------- COMBO "Nx Pizza..." (carro-chefe) -> divide em N pizzas separadas ----------
-def conta_pizzas(nome):  # "2x Pizza Grande + Refrigerante" -> 2
-    m = re.match(r'^\s*(\d+)\s*x\s+', _low(nome))
+def _tira_marcador(s):  # tira "# #"/"**" das pontas (Saipos embrulha o nome do combo nisso)
+    s = re.sub(r'^[\s#*]+', '', s or '')
+    s = re.sub(r'[\s#*]+$', '', s)
+    return s.strip()
+def conta_pizzas(nome):  # "# # 2 X Pizza Grande SALAO # #" -> 2
+    m = re.match(r'^\s*(\d+)\s*x\s+', _low(_tira_marcador(nome)))
     return int(m.group(1)) if m else 1
-def nome_sem_combo(nome):  # tira o "Nx ", o "+ Refrigerante" e o sufixo "Salao" -> "Pizza Grande"
-    n = re.sub(r'^\s*\d+\s*x\s+', '', nome or '', flags=re.I)
+def nome_sem_combo(nome):  # tira "# #", "Nx ", "+ Refrigerante" e o sufixo "Salao" -> "Pizza Grande"
+    n = _tira_marcador(nome)
+    n = re.sub(r'^\s*\d+\s*x\s+', '', n, flags=re.I)
     n = re.sub(r'\s*\+\s*(refrigerante|refri|coca|pureza|bebida).*$', '', n, flags=re.I)
     n = re.sub(r'\s+sal[aã]o\b.*$', '', n, flags=re.I)
     return n.strip()
@@ -231,8 +260,9 @@ def traduzir_item(desc, qty, choices, notes, out, refs):
         if not achou and desc: refs.append({"tipo":"outro","nome":desc,"qty":qty,"sabores":[]})
 
 def montar_comanda(id_sale, grupos):
-    """Junta os grupos ativos de um id_sale -> payload pro ingest-comanda."""
-    out=[]; refs=[]; cliente=""; numero=""; canal=""; tipo_saipos=None; mesa=None; tem_table=False; num_delivery=None
+    """Junta os grupos ativos de um id_sale -> payload pro ingest-comanda.
+    ITENS via o CEREBRO da etiqueta (extrair_itens_kds + agrupar_display + IA) = mesma estrutura/regras do papel."""
+    cliente=""; numero=""; canal=""; tipo_saipos=None; mesa=None; tem_table=False; num_delivery=None
     for g in grupos:
         cliente = cliente or _norm(g.get("customerFirstName")) or _norm(g.get("desc_sale"))
         tipo_saipos = tipo_saipos or g.get("id_sale_type")
@@ -243,19 +273,8 @@ def montar_comanda(id_sale, grupos):
             tem_table=True
             mesa = mesa or (((to.get("table") or {}).get("desc_store_table")))
         canal = canal or (((g.get("partner") or {}).get("partner_sale") or {}).get("bgm_partner_sale") or "")
-        itens = g.get("items") or {}
-        it_iter = itens.values() if isinstance(itens, dict) else itens
-        for it in it_iter:
-            if not isinstance(it, dict): continue
-            if str(it.get("deleted","")).upper()=="Y": continue
-            ch=[]
-            cis = it.get("choice_items") or {}
-            ci_iter = cis.values() if isinstance(cis, dict) else cis
-            for ci in ci_iter:
-                if isinstance(ci, dict) and str(ci.get("deleted","")).upper()!="Y":
-                    ch.append(ci.get("desc_sale_item_choice"))
-            traduzir_item(it.get("desc_sale_item"), it.get("quantity"), ch, _norm(it.get("notes")), out, refs)
-    items = out + refs
+    # CEREBRO UNICO: o mesmo parser/regras/IA da etiqueta (sem parser paralelo)
+    items = ETQ.aplicar_regras_display(ETQ.agrupar_display(ETQ.extrair_itens_kds(grupos)), "comanda")
     total_caixas = sum(1 for d in items if d["tipo"] in ("caixa_salgada","caixa_doce"))
     total_entrega = sum(1 for d in items if d["tipo"]!="borda")
     # id_sale_type: 1=ENTREGA, 2=RETIRADA, 3=SALAO (confirmado nos logs)
@@ -427,6 +446,9 @@ def main():
     if not SENHA:
         log("X  Falta a SENHA: crie um arquivo 'senha.txt' nesta pasta com a senha do terminalimpressoras@saipos.com."); return
     check_update()
+    # carrega o CEREBRO (etiqueta) antes de tudo — sem ele nao da pra montar comanda
+    while not carrega_etiqueta():
+        log("  cerebro nao carregou; tento de novo em 15s..."); time.sleep(15)
     if _carrega_enviados():
         log(f"  memoria carregada: {len(_enviados)} pedidos ja enviados (nao reenvio no restart).")
     else:
@@ -441,6 +463,8 @@ def main():
         loops += 1
         if passo_update and loops % passo_update == 0:
             check_update()
+            try: ETQ._carregar_regras()   # refresca o dicionario da IA (no-op se desligado)
+            except Exception: pass
         time.sleep(POLL_SEG)
 
 if __name__ == "__main__":
