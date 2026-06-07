@@ -13,14 +13,14 @@
 import json, ssl, sys, os, time, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "1"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "2"             # versao do terminal. O auto-update compara este numero com o do GitHub.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/terminal_kds.py"
 UPDATE_EVERY = 300        # checa atualizacao a cada 5 min (e no boot)
 EMAIL   = "terminalimpressoras@saipos.com"
 SENHA   = ""              # NAO cole a senha aqui (este arquivo vai pro GitHub publico).
                           # Crie um arquivo "senha.txt" NESTA PASTA com a senha do terminalimpressoras@saipos.com.
-ENVIAR  = False           # False = so loga (conferencia) | True = manda pra cozinha de verdade
-MODO_SOMBRA = True        # True = manda pra ABA FANTASMA do CO LOVE (valida SEM mexer na cozinha real). TEM PRIORIDADE.
+ENVIAR  = True            # False = so loga (conferencia) | True = manda pra cozinha de verdade
+MODO_SOMBRA = False       # True = manda pra ABA FANTASMA do CO LOVE (valida SEM mexer na cozinha real). TEM PRIORIDADE.
 POLL_SEG = 5              # de quantos em quantos segundos confere o KDS
 
 ID_STORE     = "42566"
@@ -286,6 +286,46 @@ def assinatura(payload):
     base = json.dumps(payload["items"], ensure_ascii=False, sort_keys=True)
     return hashlib.md5(base.encode("utf-8")).hexdigest()
 
+# ---------- MEMORIA PERSISTENTE (sobrevive a restart/auto-update -> reinicio NAO duplica) ----------
+_ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "enviados.json")
+def _salva_enviados():
+    try:
+        d = dict(list(_enviados.items())[-800:])  # cap pra nao crescer sem fim
+        with open(_ENV_FILE, "w", encoding="utf-8") as f: json.dump(d, f)
+    except Exception as e:
+        log("erro salvando enviados:", e)
+def _carrega_enviados():
+    """Carrega o que ja foi enviado. Devolve True se o arquivo existia; False = primeira vez (cold start)."""
+    try:
+        if os.path.exists(_ENV_FILE):
+            with open(_ENV_FILE, encoding="utf-8") as f: d = json.load(f)
+            if isinstance(d, dict):
+                for k, v in d.items(): _enviados[str(k)] = str(v)
+            return True
+    except Exception as e:
+        log("erro lendo enviados:", e)
+    return False
+def adotar_estado_atual():
+    """Cold start (sem arquivo de estado): ADOTA os pedidos que ja estao na tela como 'ja enviados'
+    SEM reenviar -> um restart/cutover nao recria comanda do que ja foi feito. So pedido NOVO a partir daqui."""
+    data = ler_kds()
+    if not isinstance(data, dict): return
+    agora_ms = time.time()*1000
+    por_sale = {}
+    for k, g in data.items():
+        if not isinstance(g, dict) or not ativo(g, agora_ms): continue
+        ids = g.get("id_sale")
+        if ids: por_sale.setdefault(str(ids), []).append(g)
+    n = 0
+    for ids, grupos in por_sale.items():
+        try:
+            payload = montar_comanda(ids, grupos)
+            if payload["total_caixas"] > 0:
+                _enviados[ids] = assinatura(payload); n += 1
+        except Exception: pass
+    _salva_enviados()
+    log(f"  COLD START: adotei {n} pedido(s) ja na tela como enviados (NAO reenvio). So pedidos novos a partir de agora.")
+
 def ciclo(primeira):
     data = ler_kds()
     if data is None: return
@@ -340,6 +380,8 @@ def ciclo(primeira):
         else:
             _enviados[ids]=sig
             log("  [CONFERENCIA - nao enviei] MANDARIA:", resumo)
+    if enviadas:
+        _salva_enviados()
     if primeira and not ENVIAR:
         log("=== MODO CONFERENCIA: nada foi enviado. Confira os pedidos acima e mande o log pro assistente. ===")
 
@@ -385,6 +427,10 @@ def main():
     if not SENHA:
         log("X  Falta a SENHA: crie um arquivo 'senha.txt' nesta pasta com a senha do terminalimpressoras@saipos.com."); return
     check_update()
+    if _carrega_enviados():
+        log(f"  memoria carregada: {len(_enviados)} pedidos ja enviados (nao reenvio no restart).")
+    else:
+        adotar_estado_atual()   # primeira vez: nao reenvia o que ja esta na tela
     primeira=True; loops=0
     passo_update = max(1, int(UPDATE_EVERY // POLL_SEG)) if UPDATE_EVERY > 0 else 0
     while True:
