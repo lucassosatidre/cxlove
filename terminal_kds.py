@@ -13,7 +13,7 @@
 import json, ssl, sys, os, time, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "3"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "4"             # versao do terminal. O auto-update compara este numero com o do GitHub.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/terminal_kds.py"
 ETIQUETA_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"  # o CEREBRO (parser+IA)
 UPDATE_EVERY = 300        # checa atualizacao a cada 5 min (e no boot)

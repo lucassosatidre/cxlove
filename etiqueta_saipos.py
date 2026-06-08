@@ -927,27 +927,69 @@ def _kds_frac(t):
     m = re.match(r'^(\d+)/(\d+)\s', (t or "").strip())
     return (int(m.group(1)), int(m.group(2))) if m else (None, None)
 def _kds_combo(display, base, doce, chs, mult):
-    """Combo 'Nx Pizza': divide por MARCADOR ('1a/2a Pizza') OU por FRACAO (1/1=uma pizza; 1/2+1/2=outra)."""
-    pizzas = {}; ordem = []; cur = None; achou_marc = False
-    frac_pizza = None; frac_acc = 0
-    def nova(key):
-        p = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": 1, "_fl": [], "_adic": []}
-        pizzas[key] = p; ordem.append(key); display.append(p); return p
-    for c in chs:
-        ordn, resto = _salao_marker_pizza(c)
-        if ordn is not None:
-            achou_marc = True; cur = pizzas.get(ordn) or nova(ordn); _kds_classifica(display, cur, doce, resto); continue
-        if eh_borda(c) or "sem borda" in c.lower() or _salao_eh_bebida(c) or eh_adicional(c) or eh_pizza_broto(c) or eh_sabor_doce(c):
-            _kds_classifica(display, cur, doce, c); continue
-        num, den = _kds_frac(c)
-        if not achou_marc and den:
-            if frac_pizza is None or frac_acc >= den:
-                frac_pizza = nova(len(ordem) + 1); frac_acc = 0
-            cur = frac_pizza; _kds_attach(cur, c); frac_acc += num
-            if frac_acc >= den: frac_pizza = None
+    """Combo 'Nx Pizza' lido do KDS estruturado. NAO existe 1/4: cada pizza e um GRUPO de escolha
+    distinto (id_store_choice). Os sabores vem SEM marcador (delivery) ou com '1a Pizza ...' na 1a
+    (salao), sempre em grupos diferentes. Entao: agrupa os sabores por grupo (1 grupo = 1 pizza, na
+    ordem que aparecem), divide cada pizza em metades/tercos, anexa a borda da pizza certa (o marcador
+    'Na Pizza' segue no nome da borda pro servidor casar) e poe a nota do sabor como 'Obs:'. Bebida /
+    broto doce / sabor doce / adicional doce sao do combo todo -> viram refs (rodape)."""
+    grupos_ordem = []          # ordem de aparicao das chaves de grupo -> 1 pizza cada
+    grupo_fl = {}              # chave -> [(num, den, nome)]
+    grupo_notas = {}           # chave -> [(sabor, nota)]
+    bordas = []                # [(ordn|None, nome_original)]
+    adics = []                 # [(ordn|None, nome)]
+    extras = []                # textos -> _kds_classifica como ref (bebida/broto/doce)
+    for ch in chs:
+        if isinstance(ch, dict):
+            txt = (ch.get("txt") or "").strip(); gk = ch.get("grp"); nota = (ch.get("notes") or "").strip()
         else:
-            if cur is None: cur = nova(1)
-            _kds_classifica(display, cur, doce, c)
+            txt = str(ch or "").strip(); gk = None; nota = ""
+        if not txt: continue
+        ordn, resto = _salao_marker_pizza(txt)
+        low = txt.lower()
+        if eh_borda(txt) or "sem borda" in low:
+            bordas.append((ordn, txt)); continue                    # mantem 'Na Pizza' (colove casa por ordinal)
+        if _salao_eh_bebida(txt) or eh_pizza_broto(txt) or eh_sabor_doce(txt) or _kds_eh_adic_doce(txt):
+            extras.append(txt); continue                            # combo inteiro: bebida / broto / doce
+        if eh_adicional(txt):
+            adics.append((ordn, resto if ordn is not None else txt)); continue
+        # SABOR: agrupa por grupo (chave = id_store_choice; senao ordinal/posicao)
+        nome_sab = resto if ordn is not None else txt
+        key = gk if gk is not None else (("ord", ordn) if ordn is not None else ("pos", len(grupos_ordem)))
+        if key not in grupo_fl:
+            grupos_ordem.append(key); grupo_fl[key] = []; grupo_notas[key] = []
+        mf = re.match(r'^(\d+)/(\d+)\s+(.+)$', nome_sab)
+        if mf: num, den, sab = int(mf.group(1)), int(mf.group(2)), mf.group(3).strip()
+        else:  num, den, sab = 1, None, nome_sab
+        sab = abreviar_sabor(sab)
+        grupo_fl[key].append((num, den, sab))
+        if nota: grupo_notas[key].append((sab, nota))
+    n_pizzas = max(mult, len(grupos_ordem), 1)
+    pizzas = []
+    for i in range(n_pizzas):
+        key = grupos_ordem[i] if i < len(grupos_ordem) else None
+        pizzas.append((key, {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": 1,
+                             "_fl": (grupo_fl[key] if key is not None else []), "_adic": []}))
+    # adicionais: com ordinal -> aquela pizza; sem -> 1a pizza
+    for ordn, nome in adics:
+        idx = (ordn - 1) if (ordn and 1 <= ordn <= n_pizzas) else 0
+        pizzas[idx][1]["_adic"].append([abreviar_sabor(nome), ""])
+    # bordas por ordinal (a maioria tem '1a/2a Pizza'); sem ordinal cai por ordem de emissao
+    bord_ord = {}; bord_sem = []
+    for ordn, nome in bordas:
+        if ordn and 1 <= ordn <= n_pizzas: bord_ord.setdefault(ordn, []).append(nome)
+        else: bord_sem.append(nome)
+    # EMITE: cada pizza -> caixa, Obs (nota do sabor), borda da pizza
+    for i, (key, cx) in enumerate(pizzas, start=1):
+        display.append(cx)
+        for sab, nt in (grupo_notas.get(key) or []):
+            display.append({"tipo": "outro", "nome": f"Obs: {sab}: {nt}", "qty": 1, "_fl": [], "_adic": []})
+        for nome in bord_ord.get(i, []):
+            display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    for nome in bord_sem:
+        display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    for txt in extras:
+        _kds_classifica(display, None, True, txt)
 def extrair_itens_kds(grupos):
     """Converte os grupos ativos do KDS (1 id_sale) no display do extrair_itens_salao."""
     display = []
@@ -958,13 +1000,15 @@ def extrair_itens_kds(grupos):
             if not isinstance(it, dict) or str(it.get("deleted", "")).upper() == "Y": continue
             desc = (it.get("desc_sale_item") or "").strip()
             qty = max(1, int(it.get("quantity") or 1)); low = desc.lower()
-            chs = []
+            chs = []                                                   # [{txt, grp, notes}] — grp = id_store_choice (divide combo por pizza); notes = obs do sabor
             cis = it.get("choice_items") or {}
             ci_iter = cis.values() if isinstance(cis, dict) else cis
             for ci in ci_iter:
                 if isinstance(ci, dict) and str(ci.get("deleted", "")).upper() != "Y":
                     txt = (ci.get("desc_sale_item_choice") or "").strip()
-                    if txt: chs.append(txt)
+                    if txt:
+                        gk = (ci.get("choice_item") or {}).get("id_store_choice")
+                        chs.append({"txt": txt, "grp": gk, "notes": (ci.get("notes") or "").strip()})
             notes = (it.get("notes") or "").strip()
             if "pizza" in low:
                 nome_clean = limpar_nome(desc); mult = contar_pizzas_no_nome(nome_clean)
@@ -975,14 +1019,21 @@ def extrair_itens_kds(grupos):
                 else:
                     cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": qty, "_fl": [], "_adic": []}
                     display.append(cur)
-                    for c in chs: _kds_classifica(display, cur, doce, c)
+                    notas_sabor = []                                   # obs colada no sabor (ex.: "milho na brocolis", "pouco molho")
+                    for ch in chs:
+                        _kds_classifica(display, cur, doce, ch["txt"])
+                        nt = ch.get("notes")
+                        if nt and not (eh_borda(ch["txt"]) or _salao_eh_bebida(ch["txt"])):
+                            notas_sabor.append((abreviar_sabor(_salao_marker_pizza(ch["txt"])[1]), nt))
+                    for sab, nt in notas_sabor:
+                        display.append({"tipo": "outro", "nome": f"Obs: {sab}: {nt}", "qty": 1, "_fl": [], "_adic": []})
                 if notes: display.append({"tipo": "outro", "nome": f"Obs: {notes}", "qty": 1, "_fl": [], "_adic": []})
             elif _salao_eh_bebida(desc):
                 display.append({"tipo": "bebida", "nome": desc, "qty": qty, "_fl": [], "_adic": []})
             else:
                 cur = {"tipo": "outro", "nome": desc, "qty": qty, "_fl": [], "_adic": []}
                 display.append(cur)
-                for c in chs: _kds_classifica(display, cur, False, c)
+                for ch in chs: _kds_classifica(display, cur, False, ch["txt"])
     out = []
     for d in display:
         out.append({"tipo": d["tipo"], "nome": d["nome"], "qty": d["qty"], "sabores": _kds_fl_sab(d)})
