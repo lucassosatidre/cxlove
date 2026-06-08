@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "178"
+VERSION = "179"
+# v179 (08/06/26): COMBO do KDS/terminal: ADICIONAL DOCE (ex "Adicional de Leite Condensado") caia
+#   solto como item "outro" em vez de grudar no broto doce. No _kds_combo o adicional doce ia pra
+#   lista 'extras' e era processado com cur=None -> nunca achava o broto. Agora gruda no broto doce
+#   (vira "+ X" no card), tolerando adicional antes/depois do broto em chs. Adicional salgado (na
+#   pizza, por ordinal) e o caminho avulso (_kds_classifica com cur) ja funcionavam. Harness: 4 casos.
 # v178 (08/06/26): COMBO do SALAO no KDS/terminal: "Sem Borda Recheada" virava um item de BORDA
 #   ("BORDA: Recheada" na comanda) -> INVERSAO de sentido: cliente pediu SEM borda e o pizzaiolo
 #   era mandado fazer borda recheada. _kds_combo era o UNICO dos 8 pontos de "sem borda" que jogava
@@ -994,8 +999,24 @@ def _kds_combo(display, base, doce, chs, mult):
             display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
     for nome in bord_sem:
         display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
+    # EXTRAS do combo (bebida / broto doce / sabor doce / adicional DOCE). O adicional doce gruda no
+    # broto doce (igual o salgado gruda na pizza), virando "+ X" no card — antes caia solto como "outro".
+    # Como no KDS o adicional pode vir ANTES ou DEPOIS do broto, segura os orfaos e gruda quando o broto
+    # aparece; sobra sem nenhum broto doce -> outro (degradado, raro).
+    cur_doce = None; adic_orfaos = []
     for txt in extras:
+        if (eh_adicional(txt) or _kds_eh_adic_doce(txt)) and not eh_pizza_broto(txt) and not _salao_eh_bebida(txt) and not eh_borda(txt):
+            if cur_doce is not None: cur_doce["_adic"].append([abreviar_sabor(txt), ""])
+            else: adic_orfaos.append(txt)
+            continue
+        _before = len(display)
         _kds_classifica(display, None, True, txt)
+        if len(display) > _before and display[-1].get("tipo") == "caixa_doce":
+            cur_doce = display[-1]
+            for o in adic_orfaos: cur_doce["_adic"].append([abreviar_sabor(o), ""])
+            adic_orfaos = []
+    for o in adic_orfaos:
+        display.append({"tipo": "outro", "nome": o, "qty": 1, "_fl": [], "_adic": []})
 def extrair_itens_kds(grupos):
     """Converte os grupos ativos do KDS (1 id_sale) no display do extrair_itens_salao."""
     display = []
