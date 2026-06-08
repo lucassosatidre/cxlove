@@ -13,7 +13,10 @@
 import json, ssl, sys, os, time, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "4"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "5"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v5 (08/06/26): o robo agora RECARREGA o cerebro (etiqueta_saipos.py) a cada ciclo de update, nao so
+#   no boot -> correcoes do parser (borda/adicional/etc.) passam a valer sem reiniciar o robo. Antes o
+#   cerebro so era lido ao (re)iniciar; bump so do etiqueta_saipos NAO chegava no robo em execucao.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/terminal_kds.py"
 ETIQUETA_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"  # o CEREBRO (parser+IA)
 UPDATE_EVERY = 300        # checa atualizacao a cada 5 min (e no boot)
@@ -101,8 +104,9 @@ def ler_kds():
 
 # ---------- CEREBRO: baixa e importa o etiqueta_saipos.py (parser maduro + IA). Fonte unica. ----------
 ETQ = None
+_ETQ_VER = None
 def carrega_etiqueta():
-    global ETQ
+    global ETQ, _ETQ_VER
     try:
         ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
         req = urllib.request.Request(ETIQUETA_URL, headers={"Cache-Control": "no-cache"})
@@ -117,7 +121,10 @@ def carrega_etiqueta():
         ETQ = m
         try: ETQ._carregar_regras()   # carrega o dicionario da IA (no-op se 'aplicar' desligado no servidor)
         except Exception: pass
-        log("  cerebro da etiqueta carregado (extrair_itens_kds + IA).")
+        nova = getattr(m, "VERSION", "?")
+        if nova != _ETQ_VER:          # so loga quando a versao do cerebro muda (evita spam a cada 5min)
+            log(f"  cerebro da etiqueta carregado: v{nova} (antes v{_ETQ_VER}).")
+            _ETQ_VER = nova
         return True
     except Exception as e:
         log("  ERRO carregando cerebro da etiqueta:", e); return False
@@ -462,9 +469,10 @@ def main():
             log("erro no ciclo:", type(e).__name__, e)
         loops += 1
         if passo_update and loops % passo_update == 0:
-            check_update()
-            try: ETQ._carregar_regras()   # refresca o dicionario da IA (no-op se desligado)
-            except Exception: pass
+            check_update()              # atualiza o terminal_kds.py (reinicia so se a VERSION mudou)
+            carrega_etiqueta()          # RECARREGA o cerebro (etiqueta_saipos.py): pega correcoes do parser
+                                        # sem reiniciar o robo. Falha de download mantem o cerebro anterior.
+                                        # (ja refresca o dicionario da IA por dentro.)
         time.sleep(POLL_SEG)
 
 if __name__ == "__main__":
