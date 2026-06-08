@@ -4,7 +4,13 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "180"
+VERSION = "181"
+# v181 (08/06/26): 3 correcoes do COMBO achadas na auditoria (rodando o parser real em 6 dimensoes):
+#   (1) [ALTA] combo de broto DOCE ("2x Pizza Broto Doce") DOBRAVA as caixas (N vazias + N com o sabor
+#       virando nome) -> agora o sabor doce do PROPRIO combo doce fica na caixa (so desvia p/ extras se a
+#       base NAO e doce). (2) [ALTA] borda SEM ordinal (combo do DELIVERY) grudava toda na ULTIMA pizza ->
+#       agora casa pela CHAVE do grupo (id_store_choice), 1 borda por pizza. (3) [MEDIA] combo perdia a
+#       observacao do proprio broto doce. Harness: 5 casos + regressao borda/sem-borda/adic-nota/amendoim.
 # v180 (08/06/26): COMBO do KDS/terminal: a OBSERVACAO do adicional (ex "Adicional de Milho" com nota
 #   "na de bacon") era descartada -> agora vai junto "+ Adicional de Milho (na de bacon)", igual o salao
 #   do papel. Vale p/ adicional salgado (na pizza) e doce (no broto). _kds_combo agora carrega a nota
@@ -963,9 +969,10 @@ def _kds_combo(display, base, doce, chs, mult):
         low = txt.lower()
         if "sem borda" in low: continue                             # "Sem Borda Recheada" = SEM borda -> nao e borda NEM sabor, pula (igual papel L793 e _kds_classifica L912)
         if eh_borda(txt):
-            bordas.append((ordn, txt)); continue                    # mantem 'Na Pizza' (colove casa por ordinal)
-        if _salao_eh_bebida(txt) or eh_pizza_broto(txt) or eh_sabor_doce(txt) or _kds_eh_adic_doce(txt):
-            extras.append((txt, nota)); continue                    # combo: bebida / broto / doce / adic doce (+ nota)
+            bordas.append((ordn, gk, txt)); continue                # guarda o GRUPO p/ casar a borda na pizza certa (delivery nao manda ordinal)
+        if _salao_eh_bebida(txt) or _kds_eh_adic_doce(txt) or ((eh_pizza_broto(txt) or eh_sabor_doce(txt)) and not doce):
+            extras.append((txt, nota)); continue                    # bebida / adic doce SEMPRE; broto+sabor doce so se a base NAO e doce
+            # (combo de broto DOCE: o sabor doce e a fatia da PROPRIA caixa -> cai no agrupamento, nao em extras)
         if eh_adicional(txt):
             adics.append((ordn, resto if ordn is not None else txt, nota)); continue   # nota = obs do adicional ("na de bacon")
         # SABOR: agrupa por grupo (chave = id_store_choice; senao ordinal/posicao)
@@ -989,17 +996,23 @@ def _kds_combo(display, base, doce, chs, mult):
     for ordn, nome, nota in adics:
         idx = (ordn - 1) if (ordn and 1 <= ordn <= n_pizzas) else 0
         pizzas[idx][1]["_adic"].append([abreviar_sabor(nome), nota])
-    # bordas por ordinal (a maioria tem '1a/2a Pizza'); sem ordinal cai por ordem de emissao
-    bord_ord = {}; bord_sem = []
-    for ordn, nome in bordas:
-        if ordn and 1 <= ordn <= n_pizzas: bord_ord.setdefault(ordn, []).append(nome)
+    # bordas: por ordinal (1a/2a Pizza) -> senao pelo GRUPO (mesmo id_store_choice da pizza; delivery NAO
+    # manda ordinal) -> senao por ordem de emissao (1 por pizza). Antes, sem ordinal TODAS caiam em bord_sem
+    # e saiam DEPOIS de todas as pizzas -> no combo delivery a 1a pizza ficava sem borda e a ultima com 2.
+    bord_por_pizza = {}; bord_sem = []; _bseq = 0
+    for ordn, gk, nome in bordas:
+        idx = None
+        if ordn and 1 <= ordn <= n_pizzas: idx = ordn
+        elif gk is not None and gk in grupos_ordem: idx = grupos_ordem.index(gk) + 1
+        elif _bseq < n_pizzas: idx = _bseq + 1; _bseq += 1
+        if idx is not None and 1 <= idx <= n_pizzas: bord_por_pizza.setdefault(idx, []).append(nome)
         else: bord_sem.append(nome)
     # EMITE: cada pizza -> caixa, Obs (nota do sabor), borda da pizza
     for i, (key, cx) in enumerate(pizzas, start=1):
         display.append(cx)
         for sab, nt in (grupo_notas.get(key) or []):
             display.append({"tipo": "outro", "nome": f"Obs: {sab}: {nt}", "qty": 1, "_fl": [], "_adic": []})
-        for nome in bord_ord.get(i, []):
+        for nome in bord_por_pizza.get(i, []):
             display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
     for nome in bord_sem:
         display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": []})
@@ -1017,6 +1030,8 @@ def _kds_combo(display, base, doce, chs, mult):
         _kds_classifica(display, None, True, txt)
         if len(display) > _before and display[-1].get("tipo") == "caixa_doce":
             cur_doce = display[-1]
+            if nota:    # obs do cliente no proprio broto doce (espelha a pizza unica L1036)
+                display.append({"tipo": "outro", "nome": f"Obs: {nota}", "qty": 1, "_fl": [], "_adic": []})
             for o, onota in adic_orfaos: cur_doce["_adic"].append([abreviar_sabor(o), onota])
             adic_orfaos = []
     for o, onota in adic_orfaos:
