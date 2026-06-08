@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "177"
+VERSION = "178"
+# v178 (08/06/26): COMBO do SALAO no KDS/terminal: "Sem Borda Recheada" virava um item de BORDA
+#   ("BORDA: Recheada" na comanda) -> INVERSAO de sentido: cliente pediu SEM borda e o pizzaiolo
+#   era mandado fazer borda recheada. _kds_combo era o UNICO dos 8 pontos de "sem borda" que jogava
+#   na lista de bordas em vez de pular. Agora pula (igual papel L793 e _kds_classifica L912). Borda
+#   de verdade (chocolate/catupiry) intacta. Reproduzido com a mesa 56 real + 3 casos no harness.
 # v177 (05/06/26): COMBO do DELIVERY ("2 X Pizza Grande + Refrigerante", o carro-chefe) agora DIVIDE
 #   em N pizzas separadas (igual o salao), pelos marcadores "1a/2a Pizza" — antes saia 1 caixa
 #   "Pizza Grande x2" com as 4 metades empilhadas. Cada sabor vai pra pizza certa (cur_caixa). Total
@@ -947,7 +952,8 @@ def _kds_combo(display, base, doce, chs, mult):
         if not txt: continue
         ordn, resto = _salao_marker_pizza(txt)
         low = txt.lower()
-        if eh_borda(txt) or "sem borda" in low:
+        if "sem borda" in low: continue                             # "Sem Borda Recheada" = SEM borda -> nao e borda NEM sabor, pula (igual papel L793 e _kds_classifica L912)
+        if eh_borda(txt):
             bordas.append((ordn, txt)); continue                    # mantem 'Na Pizza' (colove casa por ordinal)
         if _salao_eh_bebida(txt) or eh_pizza_broto(txt) or eh_sabor_doce(txt) or _kds_eh_adic_doce(txt):
             extras.append(txt); continue                            # combo inteiro: bebida / broto / doce
