@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "184"
+VERSION = "185"
+# v185 (08/06/26): (1) ADICIONAL sem ordinal num COMBO 2x agora vai em TODAS as pizzas (montadores
+#   diferentes fazem cada uma; antes so na 1a). (2) BROTO cujo SABOR e doce ("Pizza Broto" + "Chocolate
+#   Mesclado", SEM "Doce" no nome) era classificado SALGADO -> saia VAZIO, o sabor doce flutuava como caixa
+#   solta e a borda ficava orfa (embaralhava 2 brotos). Agora detecta doce pelo SABOR (todos os sabores
+#   doces -> broto doce), no caminho unico e no combo. Harness broto_matrix (2D) + obs_geral_borda_doce.
 # v184 (08/06/26): 2 correcoes. (1) OBS GERAL do pedido num COMBO 2x agora vai em CADA pizza/comanda
 #   (montadores diferentes fazem a 1a e a 2a) — _kds_combo recebe item_nota e emite "Obs:" por pizza;
 #   pizza unica (mult==1) segue emitindo 1x. (2) BORDA do BROTO DOCE ia parar na pizza SALGADA (o split
@@ -1019,10 +1024,14 @@ def _kds_combo(display, base, doce, chs, mult, item_nota=""):
         key = grupos_ordem[i] if i < len(grupos_ordem) else None
         pizzas.append((key, {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": 1,
                              "_fl": (grupo_fl[key] if key is not None else []), "_adic": []}))
-    # adicionais: com ordinal -> aquela pizza; sem -> 1a pizza. Leva a nota do adicional ("na de bacon").
+    # adicionais: COM ordinal ("1a/2a Pizza") -> aquela pizza; SEM ordinal -> em TODAS as pizzas do combo
+    # (decisao do dono: o adicional do combo pode ser de qualquer pizza, e montadores diferentes fazem cada
+    # uma -> tem que aparecer em todas). Leva a nota do adicional junto.
     for ordn, nome, nota in adics:
-        idx = (ordn - 1) if (ordn and 1 <= ordn <= n_pizzas) else 0
-        pizzas[idx][1]["_adic"].append([abreviar_sabor(nome), nota])
+        if ordn and 1 <= ordn <= n_pizzas:
+            pizzas[ordn - 1][1]["_adic"].append([abreviar_sabor(nome), nota])
+        else:
+            for _k, _cx in pizzas: _cx["_adic"].append([abreviar_sabor(nome), nota])
     # bordas: por ordinal (1a/2a Pizza) -> senao pelo GRUPO (mesmo id_store_choice da pizza; delivery NAO
     # manda ordinal) -> senao por ordem de emissao (1 por pizza). Antes, sem ordinal TODAS caiam em bord_sem
     # e saiam DEPOIS de todas as pizzas -> no combo delivery a 1a pizza ficava sem borda e a ultima com 2.
@@ -1085,6 +1094,12 @@ def extrair_itens_kds(grupos):
                 nome_clean = limpar_nome(desc); mult = contar_pizzas_no_nome(nome_clean)
                 base = re.sub(r'\s+sal[aã]o\b', '', nome_sem_combo(nome_clean), flags=re.IGNORECASE).strip() or "Pizza"
                 doce = eh_broto_doce(desc) or ("broto doce" in low)
+                # broto cujo SABOR e doce (ex.: "Pizza Broto" + "Chocolate Mesclado", sem "Doce" no nome) = broto
+                # DOCE. Sem isso o broto saia vazio (salgado), o sabor doce flutuava como caixa solta e a borda
+                # ficava orfa. So promove se TODOS os sabores (fora borda/bebida/adicional) forem doces.
+                if not doce and ("broto" in low or "brotinho" in low):
+                    _sab = [c["txt"] for c in chs if not eh_borda(c["txt"]) and not _salao_eh_bebida(c["txt"]) and not eh_adicional(c["txt"])]
+                    if _sab and all(eh_sabor_doce(s) for s in _sab): doce = True
                 if mult > 1:
                     _kds_combo(display, base, doce, chs, mult, notes)
                 else:
