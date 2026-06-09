@@ -13,7 +13,10 @@
 import json, ssl, sys, os, time, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "5"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "6"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v6 (09/06/26): DIAGNOSTICO temporario — anexa no payload (kds_debug) o resumo de TODAS as fichas que o
+#   robo viu no KDS no ciclo, p/ mapear ficha de broto que aparece separada (estacao diferente) e nao
+#   agrupa no pedido. Sem efeito no fluxo; servidor guarda no comanda_events p/ analise. Remover depois.
 # v5 (08/06/26): o robo agora RECARREGA o cerebro (etiqueta_saipos.py) a cada ciclo de update, nao so
 #   no boot -> correcoes do parser (borda/adicional/etc.) passam a valer sem reiniciar o robo. Antes o
 #   cerebro so era lido ao (re)iniciar; bump so do etiqueta_saipos NAO chegava no robo em execucao.
@@ -295,6 +298,7 @@ def montar_comanda(id_sale, grupos):
         "canal":canal, "codigo_canal":"", "cliente_nome":cliente, "pagamento_cat":"", "hora_pedido":"",
         "items":items, "total_caixas":total_caixas, "total_entrega":total_entrega, "label_printed":True,
         "source":"terminal",  # marca a FONTE (o servidor so aceita comanda da fonte oficial; etiqueta=pc)
+        "kds_debug":_KDS_SNAP,  # DIAGNOSTICO temporario: todas as fichas vistas no KDS neste ciclo
         "_tipo_saipos":tipo_saipos, "_mesa":mesa,  # campos extras so pra log (servidor ignora)
     }
 
@@ -308,6 +312,7 @@ def ativo(g, agora_ms):
     return any(isinstance(it,dict) and str(it.get("deleted","")).upper()!="Y" for it in it_iter)
 
 _enviados = {}  # id_sale -> hash do conteudo ja mandado (evita reenviar igual)
+_KDS_SNAP = []  # DIAGNOSTICO: ultimo snapshot das fichas do KDS (vai no payload p/ mapear ficha de broto separada)
 def assinatura(payload):
     base = json.dumps(payload["items"], ensure_ascii=False, sort_keys=True)
     return hashlib.md5(base.encode("utf-8")).hexdigest()
@@ -359,13 +364,21 @@ def ciclo(primeira):
     # agrupa grupos ativos por id_sale
     por_sale = {}
     tipos_vistos = {}
+    global _KDS_SNAP; _snap = []
     for k, g in data.items():
         if not isinstance(g, dict): continue
         tipos_vistos[g.get("id_sale_type")] = tipos_vistos.get(g.get("id_sale_type"),0)+1
+        try:  # DIAGNOSTICO (temporario): resumo de TODA ficha do KDS, p/ mapear fichas que nao agrupam (broto em estacao separada)
+            _its = g.get("items") or {}; _itv = list(_its.values()) if isinstance(_its, dict) else (_its or [])
+            _d = [str((it or {}).get("desc_sale_item",""))[:26] for it in _itv if isinstance(it, dict) and str(it.get("deleted","")).upper() != "Y"][:3]
+            _tbl = ((g.get("table_order") or {}).get("table") or {}).get("desc_store_table")
+            _snap.append({"k": str(k)[:18], "s": str(g.get("id_sale") or ""), "t": g.get("id_sale_type"), "a": 1 if ativo(g, agora_ms) else 0, "tbl": _tbl, "d": _d})
+        except Exception: pass
         if not ativo(g, agora_ms): continue
         ids = g.get("id_sale")
         if not ids: continue
         por_sale.setdefault(str(ids), []).append(g)
+    _KDS_SNAP = _snap[:60]
     log(f"KDS: {len(data)} grupos no banco | {len(por_sale)} pedidos ativos | tipos id_sale_type vistos: {tipos_vistos}")
     # MODO CONFERENCIA: mostra o "cru" dos pedidos ativos (1x cada), pra mapear os campos (cliente/numero/bairro)
     if not ENVIAR and not MODO_SOMBRA:
