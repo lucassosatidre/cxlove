@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "183"
+VERSION = "184"
+# v184 (08/06/26): 2 correcoes. (1) OBS GERAL do pedido num COMBO 2x agora vai em CADA pizza/comanda
+#   (montadores diferentes fazem a 1a e a 2a) — _kds_combo recebe item_nota e emite "Obs:" por pizza;
+#   pizza unica (mult==1) segue emitindo 1x. (2) BORDA do BROTO DOCE ia parar na pizza SALGADA (o split
+#   joga borda solta na ultima salgada) -> agora a borda de um broto doce fica NO proprio broto (campo
+#   _bordas -> "Borda: X" nos sabores dele, igual obs/adic do broto). Harness obs_geral_borda_doce.
 # v183 (08/06/26): OBS COLADA NO ITEM (decisao do dono, mapeado com pedido de teste com obs em todo campo).
 #   Cada observacao (lapis do Saipos) agora viaja COLADA no item a que pertence, nos 2 caminhos (pizza unica
 #   + combo): SABOR -> "1/3 X (obs: ...)" (_fl ganhou 4o campo = nota); BORDA/BEBIDA/BROTO -> campo "_obs"
@@ -933,6 +938,8 @@ def _kds_fl_sab(d):
             if len(ordem) == 1: sab = [_comobs(ordem[0], gnotas[ordem[0]])]
             else:
                 for nome in ordem: sab.append(_comobs(f"{cnt[nome]}/{total} {nome}", gnotas[nome]))
+    bd = [f"Borda: {nome_borda_curto(bn)}" + (f" (obs: {bnt})" if bnt else "") for bn, bnt in d.get("_bordas", [])]
+    sab = bd + sab   # borda do PROPRIO broto doce na frente (nao vira borda solta que iria pra salgada)
     for a in ad: sab.append(f"+ {a[0]}" + (f" ({a[1]})" if a[1] else ""))
     if d.get("_obs"): sab.append(f"Obs: {d['_obs']}")   # obs do PROPRIO item (ex.: broto doce) viaja junto, nao vira item "Obs:" solto
     return sab
@@ -948,7 +955,10 @@ def _kds_classifica(display, cur, doce_ctx, texto, nota=""):
     if not nome: return
     low2 = nome.lower()
     if eh_borda(nome):
-        display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
+        if cur is not None and cur.get("tipo") == "caixa_doce":
+            cur.setdefault("_bordas", []).append((nome, nota))   # borda do PROPRIO broto doce -> fica NELE (senao o split joga na ultima salgada)
+        else:
+            display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
     elif "sem borda" in low2:
         return
     elif _salao_eh_bebida(nome):
@@ -966,7 +976,7 @@ def _kds_classifica(display, cur, doce_ctx, texto, nota=""):
 def _kds_frac(t):
     m = re.match(r'^(\d+)/(\d+)\s', (t or "").strip())
     return (int(m.group(1)), int(m.group(2))) if m else (None, None)
-def _kds_combo(display, base, doce, chs, mult):
+def _kds_combo(display, base, doce, chs, mult, item_nota=""):
     """Combo 'Nx Pizza' lido do KDS estruturado. NAO existe 1/4: cada pizza e um GRUPO de escolha
     distinto (id_store_choice). Os sabores vem SEM marcador (delivery) ou com '1a Pizza ...' na 1a
     (salao), sempre em grupos diferentes. Entao: agrupa os sabores por grupo (1 grupo = 1 pizza, na
@@ -1027,6 +1037,8 @@ def _kds_combo(display, base, doce, chs, mult):
     # EMITE: cada pizza -> caixa + borda (a nota do SABOR ja vai colada no proprio sabor; a da BORDA, na borda via _obs)
     for i, (key, cx) in enumerate(pizzas, start=1):
         display.append(cx)
+        if item_nota:   # obs GERAL do pedido vai em CADA pizza do combo (montadores diferentes p/ a 1a e a 2a)
+            display.append({"tipo": "outro", "nome": f"Obs: {item_nota}", "qty": 1, "_fl": [], "_adic": []})
         for nome, bnota in bord_por_pizza.get(i, []):
             display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": bnota})
     for nome, bnota in bord_sem:
@@ -1074,15 +1086,16 @@ def extrair_itens_kds(grupos):
                 base = re.sub(r'\s+sal[aã]o\b', '', nome_sem_combo(nome_clean), flags=re.IGNORECASE).strip() or "Pizza"
                 doce = eh_broto_doce(desc) or ("broto doce" in low)
                 if mult > 1:
-                    _kds_combo(display, base, doce, chs, mult)
+                    _kds_combo(display, base, doce, chs, mult, notes)
                 else:
                     cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": qty, "_fl": [], "_adic": []}
                     display.append(cur)
                     for ch in chs:
                         _kds_classifica(display, cur, doce, ch["txt"], (ch.get("notes") or "").strip())   # nota COLADA no item (sabor/borda/adic/broto/bebida)
-                if notes:
-                    if mult == 1 and doce: cur["_obs"] = notes   # broto doce: obs do item fica no broto (nao vira "Obs:" solto que iria pra salgada)
+                if notes and mult == 1:
+                    if doce: cur["_obs"] = notes   # broto doce: obs do item fica no broto (nao vira "Obs:" solto que iria pra salgada)
                     else: display.append({"tipo": "outro", "nome": f"Obs: {notes}", "qty": 1, "_fl": [], "_adic": []})
+                # mult>1 (combo): a obs geral do pedido ja foi colada em CADA pizza dentro de _kds_combo
             elif _salao_eh_bebida(desc):
                 display.append({"tipo": "bebida", "nome": desc, "qty": qty, "_fl": [], "_adic": []})
             else:
