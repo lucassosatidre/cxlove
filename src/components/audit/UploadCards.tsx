@@ -736,10 +736,25 @@ export function UploadVRCard({ period, ensurePeriod, onAfter }: UploadCardProps)
 // ─────────────────────────────────────────────────────────────────────────────
 // Pluxee — XLSX (formato novo, mai/2026 em diante: 3 arquivos)
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper genérico para uploads Pluxee XLSX.
+// Detecta o TIPO do arquivo Pluxee pelo cabeçalho (não pelo nome do arquivo
+// nem pelo card onde foi solto). Pagamentos tem coluna Status; Vendas não.
+function detectPluxeeType(rows: any[][]): 'vendas' | 'pagamentos' | null {
+  const norm = (s: any) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  let pag = false, ven = false;
+  for (let i = 0; i < Math.min(rows.length, 60); i++) {
+    const j = (rows[i] || []).map(norm).join(' | ');
+    if (j.includes('status') && j.includes('autoriza') && j.includes('valor bruto')) pag = true;
+    else if (j.includes('data da transacao') && j.includes('data de pagamento')) ven = true;
+  }
+  return pag ? 'pagamentos' : ven ? 'vendas' : null;
+}
+
+// Sobe arquivos Pluxee roteando CADA arquivo pro robô certo conforme o tipo
+// detectado no cabeçalho — assim tanto faz em qual card (Vendas/Pagamentos) o
+// usuário soltou; o sistema separa. `defaultFn` só decide o desempate se não
+// der pra detectar.
 function usePluxeeXlsxUploader(
-  fnName: 'import-pluxee-vendas-xlsx' | 'import-pluxee-pagamentos-xlsx',
-  sheetMatcher: (n: string) => boolean,
+  defaultFn: 'import-pluxee-vendas-xlsx' | 'import-pluxee-pagamentos-xlsx',
   ensurePeriod: () => Promise<AuditPeriodLite | null>,
   onAfter: () => Promise<void> | void,
 ) {
@@ -758,10 +773,11 @@ function usePluxeeXlsxUploader(
       try {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-        const sheetName = wb.SheetNames.find(n => sheetMatcher(n.toLowerCase())) ?? wb.SheetNames[0];
-        const sheet = wb.Sheets[sheetName];
+        const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
         if (!rows.length) throw new Error('Aba vazia');
+        const type = detectPluxeeType(rows) ?? (defaultFn.includes('pagamento') ? 'pagamentos' : 'vendas');
+        const fnName = type === 'pagamentos' ? 'import-pluxee-pagamentos-xlsx' : 'import-pluxee-vendas-xlsx';
         const { data, error } = await supabase.functions.invoke(fnName, {
           body: { audit_period_id: p.id, rows, file_name: file.name },
         });
@@ -777,7 +793,7 @@ function usePluxeeXlsxUploader(
           throw new Error(detail);
         }
         if (!data?.success) throw new Error(data?.error || 'Falha no import');
-        summaries.push(data.message ?? `${file.name}: ok`);
+        summaries.push(`${data.message ?? 'ok'} (${type})`);
       } catch (e: any) {
         failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
       }
@@ -793,7 +809,7 @@ export function UploadPluxeeVendasCard({ ensurePeriod, onAfter }: UploadCardProp
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  const upload = usePluxeeXlsxUploader('import-pluxee-vendas-xlsx', n => n.includes('vendas'), ensurePeriod, onAfter);
+  const upload = usePluxeeXlsxUploader('import-pluxee-vendas-xlsx', ensurePeriod, onAfter);
   const handleFiles = async (files: File[]) => {
     setUploading(true);
     try { await upload(files, setProgress); }
@@ -807,8 +823,8 @@ export function UploadPluxeeVendasCard({ ensurePeriod, onAfter }: UploadCardProp
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          XLSX "extrato_vendas" do portal Pluxee. 1 arquivo do mês de competência —
-          define todas as vendas do mês e a data esperada de pagamento.
+          Pode soltar aqui os XLSX do Pluxee — <strong>vendas e/ou pagamentos</strong>: o sistema
+          identifica cada um e manda pro lugar certo. Use os arquivos do <strong>mês de competência</strong>.
         </p>
         <input
           ref={inputRef} type="file" accept=".xlsx" multiple className="hidden"
@@ -827,7 +843,7 @@ export function UploadPluxeePagamentosCard({ ensurePeriod, onAfter }: UploadCard
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
-  const upload = usePluxeeXlsxUploader('import-pluxee-pagamentos-xlsx', n => n.includes('pagamento'), ensurePeriod, onAfter);
+  const upload = usePluxeeXlsxUploader('import-pluxee-pagamentos-xlsx', ensurePeriod, onAfter);
   const handleFiles = async (files: File[]) => {
     setUploading(true);
     try { await upload(files, setProgress); }
@@ -841,9 +857,9 @@ export function UploadPluxeePagamentosCard({ ensurePeriod, onAfter }: UploadCard
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          XLSX "extrato_pagamentos" do portal Pluxee. Confirma status PAGO/ERRO e descontos.
-          Envie 1 arquivo do mês de competência E 1 do mês posterior — vendas do fim do mês
-          fecham só no extrato do mês seguinte.
+          XLSX "extrato_pagamentos" do portal Pluxee (Status PAGO/ERRO + descontos). Pode soltar
+          vendas e pagamentos juntos aqui — o sistema separa. Use o <strong>mês de competência</strong>;
+          a cauda do fim do mês (paga no mês seguinte) já entra como taxa provisionada.
         </p>
         <input
           ref={inputRef} type="file" accept=".xlsx" multiple className="hidden"
