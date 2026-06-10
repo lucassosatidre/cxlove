@@ -547,9 +547,26 @@ export default function AuditVouchersV2() {
       if (Number(liquidoDeclared) > 0) expectMatch++;
       if (meta.lot_bb_deposit_id) matched++;
     }
+    // REGRA DURA: vendido = competência cheia da Maquinona (POS). Soma o
+    // pendente (vendas do mês ainda não creditadas pela operadora) provisionando
+    // a taxa, mantendo Vendido = Líquido + Descontos. Mesmo cálculo do overview.
+    const maqVendido = maquinonaVouchers
+      .filter(m => m.deposit_group === selectedOperadora
+        && m.sale_date >= competenciaIni && m.sale_date < competenciaFim)
+      .reduce((s, m) => s + Number(m.gross_amount || 0), 0);
+    let pendenteVendas = 0, provisaoTaxa = 0;
+    const pendente = Math.round((maqVendido - subtotal) * 100) / 100;
+    if (pendente > 0.01) {
+      const taxaEf = (subtotal > 0 && descontos > 0) ? descontos / subtotal : 0.10;
+      provisaoTaxa = Math.round(pendente * taxaEf * 100) / 100;
+      subtotal += pendente;
+      liquido += (pendente - provisaoTaxa);
+      descontos += provisaoTaxa;
+      pendenteVendas = pendente;
+    }
     const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
-    return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, expectMatch, taxaPct };
-  }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot, crossPeriodItems, selectedOperadora]);
+    return { count, countParcial, countAguardando, salesCount, subtotal, descontos, liquido, matched, expectMatch, taxaPct, pendenteVendas, provisaoTaxa };
+  }, [allOperadoraLots, competenciaByLot, allItemsByLot, overrideByLot, crossPeriodItems, selectedOperadora, maquinonaVouchers, competenciaIni, competenciaFim]);
 
   // Cross-check Maquinona × operadora atual.
   // Lista também as divergências individuais: vendas que estão só em um dos lados
@@ -1130,7 +1147,8 @@ export default function AuditVouchersV2() {
             <div className="grid gap-3 grid-cols-2 md:grid-cols-6 mb-4 text-sm">
               <Stat label="Lotes" value={`${operadoraStats.count} (${operadoraStats.salesCount} vendas)`}
                 hint={operadoraStats.countParcial > 0 ? `${operadoraStats.countParcial} parcial(is)` : undefined} />
-              <Stat label="Vendido (bruto)" value={fmt(operadoraStats.subtotal)} />
+              <Stat label="Vendido (bruto)" value={fmt(operadoraStats.subtotal)}
+                hint={operadoraStats.pendenteVendas > 0.01 ? `inclui ${fmt(operadoraStats.pendenteVendas)} a receber (prov. ${fmt(operadoraStats.provisaoTaxa)})` : undefined} />
               <Stat label="Descontos"
                 value={fmt(operadoraStats.descontos)}
                 className="text-amber-700 dark:text-amber-400"
@@ -1988,7 +2006,7 @@ function OverviewGrid({
   }, [lots, allItemsByLot]);
 
   const statsPorOperadora = useMemo(() => {
-    const result: Record<string, { count: number; salesCount: number; subtotal: number; descontos: number; liquido: number; taxaPct: number; matched: number; aguardando: number }> = {};
+    const result: Record<string, { count: number; salesCount: number; subtotal: number; descontos: number; liquido: number; taxaPct: number; matched: number; aguardando: number; pendenteVendas: number; provisaoTaxa: number }> = {};
     const overrideByLot = new Map<string, CompOverride>();
     for (const o of overrides) overrideByLot.set(o.lot_id, o);
 
@@ -2073,11 +2091,32 @@ function OverviewGrid({
         liquido += liquidoDeclared * proporcao;
         if (meta.lot_bb_deposit_id) matched++;
       }
+      // REGRA DURA (Total Bruto = VENDIDO no mês): o vendido é a venda por
+      // COMPETÊNCIA na Maquinona (POS), não só a parcela já creditada pela
+      // operadora. A Maquinona declara o voucher cheio (ex: Ticket 3.768,63);
+      // o extrato da operadora cobre só o que já creditou (ex: 2.979,22). A
+      // diferença = vendas do mês ainda não creditadas (Ticket credita até
+      // D+30). Provisiona mantendo Vendido = Líquido + Descontos:
+      //   subtotal += pendente ; liquido += pendente - taxaEstimada ; descontos += taxaEstimada
+      const maqVendido = maquinonaVouchers
+        .filter(m => m.deposit_group === op
+          && m.sale_date >= competenciaIni && m.sale_date < competenciaFim)
+        .reduce((s, m) => s + Number(m.gross_amount || 0), 0);
+      let pendenteVendas = 0, provisaoTaxa = 0;
+      const pendente = Math.round((maqVendido - subtotal) * 100) / 100;
+      if (pendente > 0.01) {
+        const taxaEf = (subtotal > 0 && descontos > 0) ? descontos / subtotal : 0.10;
+        provisaoTaxa = Math.round(pendente * taxaEf * 100) / 100;
+        subtotal += pendente;
+        liquido += (pendente - provisaoTaxa);
+        descontos += provisaoTaxa;
+        pendenteVendas = pendente;
+      }
       const taxaPct = subtotal > 0 ? (descontos / subtotal) * 100 : 0;
-      result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando };
+      result[op] = { count, salesCount, subtotal, descontos, liquido, taxaPct, matched, aguardando, pendenteVendas, provisaoTaxa };
     }
     return result;
-  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim, operadoraTemItens, crossPeriodItems]);
+  }, [lots, allItemsByLot, overrides, competenciaIni, competenciaFim, operadoraTemItens, crossPeriodItems, maquinonaVouchers]);
 
   // Totais consolidados das 4 operadoras
   const totals = useMemo(() => {
@@ -2162,6 +2201,12 @@ function OverviewGrid({
                           <span className="text-muted-foreground">Pareados c/ BB</span>
                           <span>{s.matched} / {s.count}</span>
                         </div>
+                        {s.pendenteVendas > 0.01 && (
+                          <div className="flex justify-between border-t pt-1 text-[11px]">
+                            <span className="text-amber-700 dark:text-amber-400">a receber (não creditado)</span>
+                            <span className="text-amber-700 dark:text-amber-400">{fmt(s.pendenteVendas)} · prov. {fmt(s.provisaoTaxa)}</span>
+                          </div>
+                        )}
                       </div>
                     </>
                   )}
