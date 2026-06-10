@@ -472,6 +472,41 @@ export type Database = {
           },
         ]
       }
+      audit_ifood_daily_sales: {
+        Row: {
+          audit_period_id: string
+          bruto_venda: number
+          id: string
+          loja_id_curto: string
+          pedidos_count: number
+          sale_date: string
+        }
+        Insert: {
+          audit_period_id: string
+          bruto_venda?: number
+          id?: string
+          loja_id_curto: string
+          pedidos_count?: number
+          sale_date: string
+        }
+        Update: {
+          audit_period_id?: string
+          bruto_venda?: number
+          id?: string
+          loja_id_curto?: string
+          pedidos_count?: number
+          sale_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "audit_ifood_daily_sales_audit_period_id_fkey"
+            columns: ["audit_period_id"]
+            isOneToOne: false
+            referencedRelation: "audit_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_ifood_lancamentos: {
         Row: {
           audit_period_id: string
@@ -968,6 +1003,7 @@ export type Database = {
         Row: {
           closed_at: string | null
           closed_by: string | null
+          closed_snapshot: Json | null
           created_at: string
           created_by: string | null
           id: string
@@ -983,6 +1019,7 @@ export type Database = {
         Insert: {
           closed_at?: string | null
           closed_by?: string | null
+          closed_snapshot?: Json | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -998,6 +1035,7 @@ export type Database = {
         Update: {
           closed_at?: string | null
           closed_by?: string | null
+          closed_snapshot?: Json | null
           created_at?: string
           created_by?: string | null
           id?: string
