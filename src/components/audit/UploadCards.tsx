@@ -11,6 +11,33 @@ import { extractPdfText } from '@/lib/pdf-text-extract';
 
 export type AuditPeriodLite = { id: string; month: number; year: number; status: string };
 
+// Alguns portais (ex: Ticket Edenred) exportam XLSX com o range declarado
+// (!ref) MENOR que os dados reais — ex: declara A1:O37 num arquivo de 153
+// linhas. O SheetJS confia no !ref e corta a leitura, então só uma fração do
+// arquivo é lida (bug real: Ticket lia 4 de 18 lotes). Aqui recalculamos o
+// !ref de cada aba varrendo as células reais ANTES de qualquer leitura.
+function fixSheetRange(sheet: XLSX.WorkSheet) {
+  const keys = Object.keys(sheet).filter((k) => !k.startsWith('!'));
+  if (!keys.length) return;
+  let minC = Infinity, minR = Infinity, maxC = -Infinity, maxR = -Infinity;
+  for (const k of keys) {
+    const c = XLSX.utils.decode_cell(k);
+    if (c.c < minC) minC = c.c;
+    if (c.r < minR) minR = c.r;
+    if (c.c > maxC) maxC = c.c;
+    if (c.r > maxR) maxR = c.r;
+  }
+  sheet['!ref'] = XLSX.utils.encode_range({ s: { c: minC, r: minR }, e: { c: maxC, r: maxR } });
+}
+
+// Lê o workbook e corrige o !ref de TODAS as abas (ver fixSheetRange).
+// Use SEMPRE no lugar de XLSX.read direto nos uploads de auditoria.
+function readWorkbookFixed(buf: ArrayBuffer): XLSX.WorkBook {
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  for (const name of wb.SheetNames) fixSheetRange(wb.Sheets[name]);
+  return wb;
+}
+
 // Parse CSV line respeitando aspas duplas. Padrão CSV simples: vírgula como
 // separador, aspas como delimitadores de string (com escape "" pra aspa interna).
 function parseCsvLine(line: string): string[] {
@@ -69,7 +96,7 @@ export function UploadMaquinonaCard({ period, ensurePeriod, onAfter }: UploadCar
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const wb = readWorkbookFixed(buf);
           const norm = (s: string) =>
             s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
           const sheetName = wb.SheetNames.find(n => norm(n) === 'transacoes');
@@ -207,7 +234,7 @@ export function UploadCresolCard({ period, ensurePeriod, onAfter }: UploadCardPr
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const wb = readWorkbookFixed(buf);
           const sheet = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
 
@@ -299,7 +326,7 @@ export function UploadBBCard({ period, ensurePeriod, onAfter }: UploadCardProps)
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+          const workbook = readWorkbookFixed(buf);
           const sheetName = workbook.SheetNames[0];
           if (!sheetName) throw new Error('Arquivo sem abas');
           const sheet = workbook.Sheets[sheetName];
@@ -407,7 +434,7 @@ export function UploadTicketCard({ period, ensurePeriod, onAfter }: UploadCardPr
           let invokeBody: any;
           if (/\.xlsx$/i.test(file.name)) {
             const buf = await file.arrayBuffer();
-            const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+            const workbook = readWorkbookFixed(buf);
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
             invokeBody = { audit_period_id: p.id, file_name: file.name, rows };
@@ -528,7 +555,7 @@ export function UploadAleloCard({ period, ensurePeriod, onAfter }: UploadCardPro
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+          const workbook = readWorkbookFixed(buf);
           let sheetName = workbook.SheetNames.find(n => n.trim().toLowerCase() === 'extrato');
           if (!sheetName) {
             for (const candidate of workbook.SheetNames) {
@@ -637,7 +664,7 @@ export function UploadVRCard({ period, ensurePeriod, onAfter }: UploadCardProps)
         setProgress({ current: i + 1, total: xls.length });
         try {
           const buf = await file.arrayBuffer();
-          const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+          const workbook = readWorkbookFixed(buf);
 
           let kind: 'reembolsos' | 'vendas' | null = null;
           let sheetName: string | undefined;
@@ -772,7 +799,7 @@ function usePluxeeXlsxUploader(
       setProgress({ current: i + 1, total: xlsx.length });
       try {
         const buf = await file.arrayBuffer();
-        const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+        const wb = readWorkbookFixed(buf);
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
         if (!rows.length) throw new Error('Aba vazia');
@@ -985,7 +1012,7 @@ export function UploadBrendiCard({ period, ensurePeriod, onAfter }: UploadCardPr
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const wb = readWorkbookFixed(buf);
           // Aba esperada: "Resultado da consulta" — fallback primeira aba
           const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('resultado')) ?? wb.SheetNames[0];
           const sheet = wb.Sheets[sheetName];
@@ -1099,7 +1126,7 @@ export function UploadSaiposCard({ period, ensurePeriod, onAfter }: UploadCardPr
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const wb = readWorkbookFixed(buf);
           const sheetName = wb.SheetNames.find(n => n.toLowerCase().includes('vendas')) ?? wb.SheetNames[0];
           const sheet = wb.Sheets[sheetName];
           // raw: true = valores nativos (number/Date/string), evita formatação locale
@@ -1232,7 +1259,7 @@ export function UploadIfoodOrdersCard({ period, ensurePeriod, onAfter }: UploadC
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const wb = readWorkbookFixed(buf);
           const sheet = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');
@@ -1330,7 +1357,7 @@ export function UploadIfoodExtratoDetalhadoCard({ period, ensurePeriod, onAfter 
         setProgress({ current: i + 1, total: xlsx.length });
         try {
           const buf = await file.arrayBuffer();
-          const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+          const wb = readWorkbookFixed(buf);
           const sheet = wb.Sheets[wb.SheetNames[0]];
           const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
           if (!rows.length) throw new Error('Aba vazia');

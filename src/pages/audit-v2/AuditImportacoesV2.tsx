@@ -611,9 +611,15 @@ export default function AuditImportacoesV2() {
                           const filesNeeded = doc.filesPerSlot;
                           // Contagem de imports completados desse file_type (proxy pra slots multi-arquivo)
                           const importsCount = docImports.length;
+                          // Fallback de status: alguns docs não geram intakeRow no ym
+                          // esperado (ex: Pluxee — o lote é datado pelo pagamento e o
+                          // arquivo de pagamentos às vezes só atualiza lotes existentes
+                          // sem criar novos). Se há import completo do file_type
+                          // suficiente, o slot de competência conta como preenchido.
+                          const compHasImport = slot === 'comp' && importsCount >= filesNeeded;
                           const slotFilled = filesNeeded > 1
-                            ? !!intakeRow && importsCount >= filesNeeded
-                            : !!intakeRow;
+                            ? (!!intakeRow || compHasImport) && importsCount >= filesNeeded
+                            : (!!intakeRow || compHasImport);
                           const expandKey = `${doc.docId}|${ym}`;
                           const isExpanded = expanded[expandKey];
 

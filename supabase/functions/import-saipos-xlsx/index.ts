@@ -264,10 +264,26 @@ Deno.serve(async (req) => {
       if (ym) breakdownByMonth[ym] = (breakdownByMonth[ym] ?? 0) + 1;
     }
 
+    // Dedup por order_id_parceiro: o export "Vendas por período" às vezes
+    // repete o mesmo pedido em 2 linhas (linha de continuação com total=0, ou
+    // duplicata idêntica). O upsert estoura "ON CONFLICT cannot affect row a
+    // second time" se 2 linhas do mesmo id caem no MESMO batch. Mantém a linha
+    // de MAIOR total (descarta a de total 0). Caso real mai/26: 3 ids dup em
+    // 4417 → import falhava em 4000/4918.
+    const ordersById = new Map<string, any>();
+    let collapsedDups = 0;
+    for (const o of orders) {
+      const prev = ordersById.get(o.order_id_parceiro);
+      if (!prev) { ordersById.set(o.order_id_parceiro, o); continue; }
+      collapsedDups++;
+      if (Number(o.total ?? 0) > Number(prev.total ?? 0)) ordersById.set(o.order_id_parceiro, o);
+    }
+    const dedupedOrders = [...ordersById.values()];
+
     let inserted = 0;
     const CHUNK = 200;
-    for (let i = 0; i < orders.length; i += CHUNK) {
-      const chunk = orders.slice(i, i + CHUNK);
+    for (let i = 0; i < dedupedOrders.length; i += CHUNK) {
+      const chunk = dedupedOrders.slice(i, i + CHUNK);
       const { error: insErr, count } = await supabase
         .from('audit_saipos_orders')
         .upsert(chunk, { onConflict: 'audit_period_id,order_id_parceiro', count: 'exact' });
@@ -294,7 +310,8 @@ Deno.serve(async (req) => {
       by_canal: byCanal,
       by_pagamento: byPagamento,
       breakdown_by_month: breakdownByMonth,
-      message: `${inserted} pedidos Saipos importados`,
+      collapsed_duplicates: collapsedDups,
+      message: `${inserted} pedidos Saipos importados${collapsedDups > 0 ? ` (${collapsedDups} linha(s) duplicada(s) do mesmo pedido unificadas)` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-saipos-xlsx error', e);
