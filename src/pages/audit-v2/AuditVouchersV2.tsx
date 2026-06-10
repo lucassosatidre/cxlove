@@ -924,6 +924,7 @@ export default function AuditVouchersV2() {
             lots={lots}
             allItemsByLot={allItemsByLot}
             overrides={overrides}
+            maquinonaVouchers={maquinonaVouchers}
             month={month}
             year={year}
             competenciaIni={competenciaIni}
@@ -1980,11 +1981,12 @@ function CompetenciaOverrideInput({
 // Overview: mini-cards comparativos por operadora pra visão consolidada do mês.
 // Cada card mostra lotes, bruto, descontos, taxa efetiva da operadora.
 function OverviewGrid({
-  lots, allItemsByLot, overrides, month, year, competenciaIni, competenciaFim, onSelectOperadora, crossPeriodItems,
+  lots, allItemsByLot, overrides, maquinonaVouchers, month, year, competenciaIni, competenciaFim, onSelectOperadora, crossPeriodItems,
 }: {
   lots: Lot[];
   allItemsByLot: Record<string, LotItem[]>;
   overrides: CompOverride[];
+  maquinonaVouchers: MaquinonaSale[];
   month: number;
   year: number;
   competenciaIni: string;
