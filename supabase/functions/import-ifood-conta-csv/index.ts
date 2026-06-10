@@ -7,9 +7,12 @@
 //   0=data (YYYY-MM-DD), 1=descrição (texto), 2=valor (BR pt: vírgula decimal),
 //   3=categoria (Repasse iFood | Antecipação | Pix | Transferência)
 //
-// Filtra apenas linhas com categoria='Repasse iFood' ou 'Antecipação'.
-// As demais (Pix, Transferência) são fluxo de tesouraria, irrelevantes pra
-// reconciliação iFood Marketplace v2.
+// Importa linhas com categoria='Repasse iFood' ou 'Antecipação' (núcleo da
+// reconciliação iFood Marketplace v2). CRÉDITOS (valor>0) de outras categorias
+// (ex: 'Transferência recebida') entram como categoria='nao_reconhecido' —
+// campo informativo, dinheiro que entrou na conta sem identificação. Débitos
+// de outras categorias (Pix saída, Transferência enviada) seguem ignorados:
+// fluxo de tesouraria.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
 
@@ -141,6 +144,8 @@ Deno.serve(async (req) => {
     const movimentos: any[] = [];
     let ignoradosCategoria = 0;
     let ignoradosSemData = 0;
+    let naoReconhecidoCount = 0;
+    let naoReconhecidoTotal = 0;
     const categoriasVistas: Record<string, number> = {};
     let csvIdx = 0;
 
@@ -155,9 +160,16 @@ Deno.serve(async (req) => {
 
       if (!dataStr) { ignoradosSemData++; continue; }
 
-      let categoria: 'repasse' | 'taxa_antecip' | null = null;
+      let categoria: 'repasse' | 'taxa_antecip' | 'nao_reconhecido' | null = null;
       if (catLow === 'repasse ifood') categoria = 'repasse';
       else if (catLow === 'antecipação' || catLow === 'antecipacao') categoria = 'taxa_antecip';
+      // Crédito de categoria desconhecida (ex: 'Transferência recebida'):
+      // importa como 'nao_reconhecido' — entrou dinheiro sem identificação.
+      else if (valor > 0) {
+        categoria = 'nao_reconhecido';
+        naoReconhecidoCount++;
+        naoReconhecidoTotal += valor;
+      }
 
       if (!categoria) { ignoradosCategoria++; continue; }
 
@@ -196,14 +208,17 @@ Deno.serve(async (req) => {
       status: 'completed', imported_rows: inserted,
     }).eq('id', importRec.id);
 
+    const round2 = (n: number) => Math.round(n * 100) / 100;
     return new Response(JSON.stringify({
       success: true,
       total_rows: dataRows.length,
       imported_rows: inserted,
       ignored_categoria: ignoradosCategoria,
       ignored_no_data: ignoradosSemData,
+      nao_reconhecido_count: naoReconhecidoCount,
+      total_nao_reconhecido: round2(naoReconhecidoTotal),
       categorias_vistas: categoriasVistas,
-      message: `${inserted} movimentos iFood Pago importados (${ignoradosCategoria} fora de escopo, ${ignoradosSemData} sem data).`,
+      message: `${inserted} movimentos iFood Pago importados (${ignoradosCategoria} fora de escopo, ${ignoradosSemData} sem data, ${naoReconhecidoCount} créditos não reconhecidos).`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-ifood-conta-csv error', e);

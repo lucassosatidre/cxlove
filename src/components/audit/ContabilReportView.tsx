@@ -56,6 +56,20 @@ function SubHeader({ children }: { children: ReactNode }) {
   );
 }
 
+// Nota/alerta destacada (custo negativo, provisão estimada, match pendente)
+function NotaAlerta({ tone = 'warning', children }: { tone?: 'negative' | 'warning'; children: ReactNode }) {
+  return (
+    <div className={cn(
+      'rounded-md border px-3 py-2 text-xs font-medium',
+      tone === 'negative'
+        ? 'border-rose-500/40 bg-rose-500/10 text-rose-800 dark:text-rose-300'
+        : 'border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-300',
+    )}>
+      {children}
+    </div>
+  );
+}
+
 type Col = { label: string; align?: 'left' | 'right'; width?: string };
 
 function StyledTable({ columns, rows }: { columns: Col[]; rows: (string | number)[][] }) {
@@ -152,6 +166,13 @@ function PageResumo({ data }: { data: ContabilPdfData }) {
   }
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
 
+  const negativos = data.resumoPorCategoria.filter(r => r.custo_negativo);
+  const estimadas = data.resumoPorCategoria.filter(r => r.estimada);
+  const pendentes = [
+    data.brendi?.pendente_match ? 'Brendi' : null,
+    data.ifood?.pendente_match ? 'iFood' : null,
+  ].filter(Boolean);
+
   return (
     <Card>
       <CardContent className="py-5 space-y-4">
@@ -175,6 +196,29 @@ function PageResumo({ data }: { data: ContabilPdfData }) {
             rows={rows}
           />
         </div>
+        {negativos.length > 0 && (
+          <NotaAlerta tone="negative">
+            ⚠ Recebido maior que vendido em {negativos.map(r => r.nome).join(', ')} — custo negativo, verificar conciliação.
+          </NotaAlerta>
+        )}
+        {((data.brendi?.custo_total ?? 0) < -0.005 || (data.ifood?.custo_total ?? 0) < -0.005) && (
+          <NotaAlerta tone="negative">
+            ⚠ {[
+              (data.brendi?.custo_total ?? 0) < -0.005 ? 'Brendi' : null,
+              (data.ifood?.custo_total ?? 0) < -0.005 ? 'iFood' : null,
+            ].filter(Boolean).join(' e ')}: recebido maior que vendido — custo negativo, verificar conciliação.
+          </NotaAlerta>
+        )}
+        {estimadas.length > 0 && (
+          <NotaAlerta>
+            ⚠ Custo de {estimadas.map(r => r.nome).join(', ')} inclui taxa estimada (provisão) — ver seção Vouchers.
+          </NotaAlerta>
+        )}
+        {pendentes.length > 0 && (
+          <NotaAlerta>
+            ⚠ {pendentes.join(' e ')}: pendente de execução do match — recebido/custo ainda não conciliados.
+          </NotaAlerta>
+        )}
       </CardContent>
     </Card>
   );
@@ -194,6 +238,7 @@ function PageMaquinona({ data }: { data: ContabilPdfData }) {
   }
   const totPct = totVendido > 0 ? (totCusto / totVendido) * 100 : 0;
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
+  const negativos = data.resumoPorCategoria.filter(r => cats.includes(r.categoria) && r.custo_negativo);
 
   return (
     <Card>
@@ -218,6 +263,11 @@ function PageMaquinona({ data }: { data: ContabilPdfData }) {
             rows={rows}
           />
         </div>
+        {negativos.length > 0 && (
+          <NotaAlerta tone="negative">
+            ⚠ Recebido maior que vendido em {negativos.map(r => r.nome).join(', ')} — custo negativo, verificar conciliação Cresol.
+          </NotaAlerta>
+        )}
       </CardContent>
     </Card>
   );
@@ -228,15 +278,25 @@ function PageVouchers({ data }: { data: ContabilPdfData }) {
   const cats = ['alelo', 'ticket', 'vr', 'pluxee'] as ContabilCategoria[];
   let totQtd = 0, totVendido = 0, totRecebido = 0, totCusto = 0;
   const rows: (string | number)[][] = [];
+  const comProvisao: typeof data.resumoPorCategoria = [];
   for (const cat of cats) {
     const r = data.resumoPorCategoria.find(x => x.categoria === cat);
-    if (!r || (r.vendido === 0 && r.qtd === 0)) continue;
-    const pct = r.vendido > 0 ? (r.custo / r.vendido) * 100 : 0;
-    rows.push([CATEGORIA_LABELS[cat], fmtInt(r.qtd), fmtNum(r.vendido), fmtNum(r.recebido), fmtNum(r.custo), fmtPct(pct)]);
+    if (!r || (r.vendido === 0 && r.qtd === 0 && !r.estimada)) continue;
+    // Linha da operadora mostra o custo APURADO; a provisão (F2) vira linha
+    // própria abaixo — a soma da coluna fecha com o TOTAL (que inclui ambas).
+    const provisao = r.provisao_taxa ?? 0;
+    const custoApurado = r.custo - provisao;
+    const pct = r.vendido > 0 ? (custoApurado / r.vendido) * 100 : 0;
+    rows.push([CATEGORIA_LABELS[cat], fmtInt(r.qtd), fmtNum(r.vendido), fmtNum(r.recebido), fmtNum(custoApurado), fmtPct(pct)]);
+    if (r.estimada && provisao > 0) {
+      comProvisao.push(r);
+      rows.push(['↳ Taxa estimada (provisão) ⚠', '—', '—', '—', fmtNum(provisao), '—']);
+    }
     totQtd += r.qtd; totVendido += r.vendido; totRecebido += r.recebido; totCusto += r.custo;
   }
   const totPct = totVendido > 0 ? (totCusto / totVendido) * 100 : 0;
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
+  const negativos = data.resumoPorCategoria.filter(r => cats.includes(r.categoria) && r.custo_negativo);
 
   return (
     <Card>
@@ -261,6 +321,17 @@ function PageVouchers({ data }: { data: ContabilPdfData }) {
             rows={rows}
           />
         </div>
+        {comProvisao.map(r => (
+          <NotaAlerta key={r.categoria}>
+            ⚠ {r.nome}: {fmtBRL(r.vendas_pendentes ?? 0)} em vendas aguardando extrato da operadora —
+            taxa estimada pela média do mês ({fmtBRL(r.provisao_taxa ?? 0)}), pagamento pendente de confirmação.
+          </NotaAlerta>
+        ))}
+        {negativos.length > 0 && (
+          <NotaAlerta tone="negative">
+            ⚠ Recebido maior que vendido em {negativos.map(r => r.nome).join(', ')} — custo negativo, verificar conciliação BB.
+          </NotaAlerta>
+        )}
       </CardContent>
     </Card>
   );
@@ -271,9 +342,13 @@ function PageBrendi({ data }: { data: ContabilPdfData }) {
   if (!data.brendi) return null;
   const b = data.brendi;
   const pctTotal = b.vendido_bruto > 0 ? (b.custo_total / b.vendido_bruto) * 100 : 0;
+  // Mensalidade vem do campo dedicado; o resto do custo oculto (diffs de
+  // match que não são mensalidade) entra como linha separada.
+  const outrasDiffs = b.custo_oculto - b.mensalidade;
   const rows: (string | number)[][] = [
     ['Taxas transacionais', fmtNum(b.taxa_declarada)],
-    ['Mensalidade', fmtNum(b.custo_oculto)],
+    ['Mensalidade', fmtNum(b.mensalidade)],
+    ['Outras diferenças de match', fmtNum(outrasDiffs)],
     ['TOTAL', fmtNum(b.custo_total)],
   ];
   return (
@@ -285,6 +360,17 @@ function PageBrendi({ data }: { data: ContabilPdfData }) {
           <Kpi eyebrow="Total líquido" value={fmtBRL(b.recebido_bb)} hint={`${fmtInt(b.dias_uteis)} dias úteis com depósito`} tone="positive" />
           <Kpi eyebrow="Custo total" value={`${fmtBRL(b.custo_total)} · ${fmtPct(pctTotal)}`} tone="negative" />
         </div>
+        {b.pendente_match && (
+          <NotaAlerta>
+            ⚠ Pendente de execução do match — recebido/custo oculto ainda não conciliados com o extrato BB.
+            Execute pela aba Importações.
+          </NotaAlerta>
+        )}
+        {b.custo_total < -0.005 && (
+          <NotaAlerta tone="negative">
+            ⚠ Recebido maior que vendido — custo negativo, verificar conciliação.
+          </NotaAlerta>
+        )}
         <div>
           <SubHeader>Detalhamento de cobranças</SubHeader>
           <StyledTable
@@ -340,6 +426,9 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
     ['Promoções loja (subsídio absorvido)', fmtNum(Math.abs(i.promocoes_loja))],
     ['Pgto direto loja (dinheiro/maquinininha)', fmtNum(i.recebido_direto)],
   ];
+  if ((i.entrada_nao_reconhecida ?? 0) > 0) {
+    informativo.push(['Entrada não reconhecida (conta iFood)', fmtNum(i.entrada_nao_reconhecida ?? 0)]);
+  }
 
   return (
     <Card>
@@ -350,6 +439,17 @@ function PageIfood({ data }: { data: ContabilPdfData }) {
           <Kpi eyebrow="Total líquido" value={fmtBRL(i.liquido_efetivo)} hint={`${i.repasses_count} repasses, após antecipação`} tone="positive" />
           <Kpi eyebrow="Custo total" value={`${fmtBRL(i.custo_total)} · ${fmtPct(i.taxa_efetiva_pct)}`} tone="negative" />
         </div>
+        {i.pendente_match && (
+          <NotaAlerta>
+            ⚠ Pendente de execução do match — repasses ainda não importados/conciliados.
+            Execute pela aba Importações.
+          </NotaAlerta>
+        )}
+        {i.custo_total < -0.005 && (
+          <NotaAlerta tone="negative">
+            ⚠ Recebido maior que vendido — custo negativo, verificar conciliação.
+          </NotaAlerta>
+        )}
         {i.valor_vendas_portal > 0 && (
           <div className="text-xs text-muted-foreground border-l-2 border-border/60 pl-3">
             <span className="font-medium">Valor das vendas no portal iFood:</span>{' '}

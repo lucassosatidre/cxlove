@@ -13,7 +13,6 @@ import { Plus, ArrowRight, Loader2, Lock, LockOpen, History } from 'lucide-react
 import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
 import { periodLabel as makePeriodLabel } from '@/lib/audit-pdf';
 import { ReopenDialog } from '@/components/audit/PeriodCloseDialog';
-import { fetchAllPaginated } from '@/lib/supabase-pagination';
 
 type AuditPeriod = {
   id: string;
@@ -145,19 +144,15 @@ export default function AuditDashboardV2() {
   }, []);
 
   const loadPeriodData = async (periodId: string) => {
-    // ifoodCompRows pode passar de 1000 em meses cheios → usa fetchAllPaginated.
     // (audit_daily_matches max ~31 rows/mês; demais queries pequenas, OK.)
     // vw_period_imports não existe no schema atual — substituído por query direta
     // em audit_imports (mesmos dados). file_type vira source 1:1.
-    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }, ifoodCompRows] = await Promise.all([
+    const [{ data: imps }, { data: totalsRpc }, { data: depsRpc }, { data: dMatches }, { data: logRows }] = await Promise.all([
       supabase.from('audit_imports').select('file_type,status,file_name,imported_rows,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: false }),
       supabase.rpc('get_audit_period_totals', { p_period_id: periodId }),
       supabase.rpc('get_audit_period_deposits', { p_period_id: periodId }),
       supabase.from('audit_daily_matches').select('match_date,expected_amount,deposited_amount,difference,transaction_count,status').eq('audit_period_id', periodId).order('match_date'),
       supabase.from('audit_period_log').select('id,action,user_id,reason,created_at').eq('audit_period_id', periodId).order('created_at', { ascending: true }),
-      fetchAllPaginated<any>(
-        supabase.from('audit_bank_deposits').select('matched_competencia_amount,matched_adjacente_amount').eq('audit_period_id', periodId).eq('bank', 'cresol').eq('category', 'ifood'),
-      ),
     ]);
     setImports((imps as AuditImport[]) ?? []);
     // allImports = mesma fonte de imps, com source = file_type
@@ -454,7 +449,10 @@ export default function AuditDashboardV2() {
         {(() => {
           const recebidoCresol = ifoodCompetencia || totals.recebido;
           const vendido = totals.vendido;
-          const custoTotal = vendido - recebidoCresol;
+          // Custo total = declarado + oculto comprovado (totals.custo, calculado
+          // em setTotals). NÃO usar vendido − recebidoCresol: isso contava
+          // depósito ainda não conciliado como se fosse custo.
+          const custoTotal = totals.custo;
           return (
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

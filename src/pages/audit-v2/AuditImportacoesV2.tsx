@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import {
   Loader2, CheckCircle2, Circle, Play, FileText, Trash2, AlertTriangle,
-  ChevronDown, ChevronRight, Info, CopyCheck,
+  ChevronDown, ChevronRight, Info, CopyCheck, XCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -69,6 +69,8 @@ type SlotKind = 'comp' | 'post';
 type DocSpec = {
   docId: string;                 // bate com RPC doc_id
   label: string;
+  /** Dica curta de onde baixar o arquivo (mostrada como subtítulo) */
+  hint?: string;
   format: string;
   slots: SlotKind[];
   filesPerSlot: number;
@@ -90,6 +92,24 @@ const GROUP_LABELS: Record<DocSpec['group'], string> = {
   brendi: 'Brendi',
   ifood: 'iFood Marketplace',
 };
+
+// ───────── etapas do botão Executar Auditoria ─────────
+type AuditStepState = {
+  key: string;
+  label: string;
+  status: 'pending' | 'running' | 'ok' | 'error';
+  detail?: string;
+};
+
+const AUDIT_STEPS: Array<{ key: string; label: string }> = [
+  { key: 'maquinona', label: 'Maquinona × Cresol (cartão/pix)' },
+  { key: 'voucher_ticket', label: 'Voucher Ticket' },
+  { key: 'voucher_alelo', label: 'Voucher Alelo' },
+  { key: 'voucher_vr', label: 'Voucher VR' },
+  { key: 'voucher_pluxee', label: 'Voucher Pluxee' },
+  { key: 'brendi', label: 'Brendi × Banco do Brasil' },
+  { key: 'ifood', label: 'iFood Marketplace' },
+];
 
 // ───────── helpers de mês ─────────
 const ymOf = (year: number, month: number): string =>
@@ -123,6 +143,7 @@ export default function AuditImportacoesV2() {
   const [intake, setIntake] = useState<IntakeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningAudit, setRunningAudit] = useState(false);
+  const [auditSteps, setAuditSteps] = useState<AuditStepState[] | null>(null);
   const [toDelete, setToDelete] = useState<ImportRow | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -233,39 +254,81 @@ export default function AuditImportacoesV2() {
     }
   };
 
+  // ───────── Executar Auditoria — sequência completa com reset ─────────
+  // Único botão de execução do módulo. Roda, em ordem:
+  // run-audit-match → match-vouchers (ticket/alelo/vr/pluxee) → match-brendi → match-ifood-marketplace.
+  const updateStep = (key: string, patch: Partial<AuditStepState>) =>
+    setAuditSteps(steps => (steps ?? []).map(s => (s.key === key ? { ...s, ...patch } : s)));
+
   const runFullAudit = async () => {
     const p = await ensurePeriod();
     if (!p) return;
     setRunningAudit(true);
-    const results: string[] = [];
-    try {
+    setAuditSteps(AUDIT_STEPS.map(d => ({ ...d, status: 'pending' as const })));
+    let failures = 0;
+
+    const runStep = async (key: string, fn: () => Promise<string>) => {
+      updateStep(key, { status: 'running' });
       try {
+        const detail = await fn();
+        updateStep(key, { status: 'ok', detail });
+      } catch (e: any) {
+        failures++;
+        updateStep(key, { status: 'error', detail: e?.message ?? 'Erro desconhecido' });
+      }
+    };
+
+    try {
+      // 1) Maquinona × Cresol (a edge apaga e recalcula os matches do período)
+      await runStep('maquinona', async () => {
         const { data, error } = await supabase.functions.invoke('run-audit-match', { body: { audit_period_id: p.id } });
         if (error) throw new Error(error.message);
-        results.push(data?.success
-          ? `Maquinona × Cresol: ${data.daily_matches_count ?? 0} dias casados`
-          : `Maquinona × Cresol: ${data?.error || 'falha'}`);
-      } catch (e: any) { results.push(`Maquinona × Cresol: erro — ${e?.message ?? 'desconhecido'}`); }
+        if (!data?.success) throw new Error(data?.error || 'falha');
+        return `${data.daily_matches_count ?? 0} dias casados`;
+      });
 
-      try {
-        await dispatchAutoMatchVouchers(p.id, ['ticket', 'alelo', 'vr', 'pluxee']);
-        results.push('Vouchers: match disparado');
-      } catch (e: any) { results.push(`Vouchers: erro — ${e?.message ?? 'desconhecido'}`); }
+      // 2) Vouchers — uma chamada por operadora (reset=true), igual ao dispatchAutoMatchVouchers
+      for (const op of ['ticket', 'alelo', 'vr', 'pluxee'] as const) {
+        await runStep(`voucher_${op}`, async () => {
+          const { data, error } = await supabase.functions.invoke('match-vouchers', {
+            body: { audit_period_id: p.id, operadora: op, reset: true },
+          });
+          if (error) throw new Error(error.message);
+          if (!data?.success) throw new Error(data?.error || 'Erro desconhecido');
+          const ambig = (data.ambiguous ?? []) as string[];
+          const matched = `${data.matched ?? 0} lotes pareados`;
+          return ambig.length > 0 ? `${matched} · ${ambig.length} ambíguos` : matched;
+        });
+      }
 
-      try {
+      // 3) Brendi (reset=true dentro do dispatch)
+      await runStep('brendi', async () => {
         const res = await dispatchMatchBrendi(p.id);
-        if (res) results.push(`Brendi: ${res.daily.rows} dias · ${res.crosscheck.ok} ok`);
-        else results.push('Brendi: erro (ver toasts)');
-      } catch (e: any) { results.push(`Brendi: erro — ${e?.message ?? 'desconhecido'}`); }
+        if (!res) throw new Error('falha no match Brendi (detalhe no aviso acima)');
+        return `${res.daily?.rows ?? 0} dias · ${res.crosscheck?.ok ?? 0} pedidos ok`;
+      });
 
-      try {
+      // 4) iFood Marketplace (reset=true dentro do dispatch)
+      await runStep('ifood', async () => {
         const res = await dispatchMatchIfoodMarketplace(p.id);
-        if (res) results.push(`iFood Mkt: ${res.repasses.total} repasses`);
-        else results.push('iFood Marketplace: erro (ver toasts)');
-      } catch (e: any) { results.push(`iFood Marketplace: erro — ${e?.message ?? 'desconhecido'}`); }
+        if (!res) throw new Error('falha no match iFood (detalhe no aviso acima)');
+        return `${res.repasses?.total ?? 0} repasses`;
+      });
 
       await refresh(p.id);
-      toast.success('✓ Auditoria concluída', { description: results.join(' · '), duration: 8000 });
+      // run-audit-match muda o status do período pra 'conciliado' — recarrega o badge
+      const { data: refreshed } = await supabase
+        .from('audit_periods').select('*').eq('id', p.id).maybeSingle();
+      if (refreshed) setPeriod(refreshed as AuditPeriodLite);
+
+      if (failures === 0) {
+        toast.success('✓ Auditoria concluída — todas as etapas rodaram', { duration: 8000 });
+      } else {
+        toast.error(`Auditoria terminou com ${failures} etapa(s) com erro`, {
+          description: 'Veja o detalhe de cada etapa no painel de progresso.',
+          duration: 10000,
+        });
+      }
     } finally {
       setRunningAudit(false);
     }
@@ -274,49 +337,65 @@ export default function AuditImportacoesV2() {
   const DOCS: DocSpec[] = useMemo(() => [
     // Maquinona
     {
-      docId: 'maquinona', label: 'Maquinona iFood', format: '.xlsx',
+      docId: 'maquinona', label: '01 MAQUININHA (Maquinona) — Relatório de Transações',
+      hint: 'Portal iFood Pago/Maquinona → Relatórios → Transações, mês cheio',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['maquinona'],
       group: 'maquinona', Component: UploadMaquinonaCard,
     },
     {
-      docId: 'cresol', label: 'Extrato Cresol', format: '.xlsx',
+      docId: 'cresol', label: '02 CRESOL — Extrato Conta Corrente',
+      hint: 'IB Cresol → Extrato, de 01 do mês até 01 do mês seguinte + mês seguinte',
+      format: '.xlsx',
       slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['cresol'],
       group: 'maquinona', Component: UploadCresolCard,
       postReason: 'crédito D+1 das vendas do fim do mês',
     },
     // Vouchers
     {
-      docId: 'bb', label: 'Extrato Banco do Brasil', format: '.xlsx',
+      docId: 'bb', label: '03 BANCO DO BRASIL — Extrato Conta Corrente',
+      hint: 'BB → Extrato Excel, mês cheio + mês seguinte',
+      format: '.xlsx',
       slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['bb'],
       group: 'vouchers', Component: UploadBBCard,
       postReason: 'crédito D+1 dos depósitos voucher',
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket', 'alelo', 'pluxee', 'vr']); },
     },
     {
-      docId: 'ticket', label: 'Reembolsos Ticket', format: '.pdf',
+      docId: 'ticket', label: '04 TICKET — Extrato de Reembolso Detalhado',
+      hint: 'Portal Ticket → Financeiro, período de 01 do mês até a data mais futura possível',
+      format: '.pdf',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['ticket'],
       group: 'vouchers', Component: UploadTicketCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket']); },
     },
     {
-      docId: 'alelo', label: 'Extrato Alelo', format: '.xlsx',
+      docId: 'alelo', label: '05 ALELO — Vendas (aba Extrato)',
+      hint: 'Portal Alelo → Vendas → Exportar, mês cheio',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['alelo'],
       group: 'vouchers', Component: UploadAleloCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['alelo']); },
     },
     {
-      docId: 'vr', label: 'Vale Refeição (VR)', format: '.xls',
+      docId: 'vr', label: '06 VR — Guias de Reembolso + Relatório de Transação de Venda',
+      hint: 'Portal VR → Extratos, mês cheio (2 arquivos)',
+      format: '.xls',
       slots: ['comp'], filesPerSlot: 2, fileTypes: ['vr', 'vr_vendas'],
       group: 'vouchers', Component: UploadVRCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['vr']); },
     },
     {
-      docId: 'pluxee_vendas', label: 'Pluxee — Extrato de Vendas', format: '.xlsx',
+      docId: 'pluxee_vendas', label: '07 PLUXEE — Extrato de Vendas',
+      hint: 'Portal Pluxee, vendas: mês cheio',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['pluxee_vendas'],
       group: 'vouchers', Component: UploadPluxeeVendasCard,
     },
     {
-      docId: 'pluxee_pagamentos', label: 'Pluxee — Extrato de Pagamentos', format: '.xlsx',
+      docId: 'pluxee_pagamentos', label: '07 PLUXEE — Extrato de Pagamentos',
+      hint: 'Portal Pluxee, pagamentos: mês + mês seguinte',
+      format: '.xlsx',
       slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['pluxee_pagamentos'],
       group: 'vouchers', Component: UploadPluxeePagamentosCard,
       postReason: 'pagamento pode cair no mês seguinte',
@@ -324,28 +403,38 @@ export default function AuditImportacoesV2() {
     },
     // Brendi
     {
-      docId: 'brendi', label: 'Pedidos Brendi', format: '.xlsx',
+      docId: 'brendi', label: '08 BRENDI — Tabela de Pedidos',
+      hint: 'Painel Brendi → Pedidos → Exportar, mês cheio',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['brendi'],
       group: 'brendi', Component: UploadBrendiCard,
     },
     {
-      docId: 'saipos', label: 'Vendas Saipos', format: '.xlsx',
+      docId: 'saipos', label: '09 SAIPOS — Vendas por período',
+      hint: 'Saipos → Relatórios → Vendas por período, mês cheio',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['saipos'],
       group: 'brendi', Component: UploadSaiposCard,
     },
     // iFood
     {
-      docId: 'ifood_extrato_detalhado', label: 'Extrato Detalhado iFood', format: '.xlsx',
+      docId: 'ifood_extrato_detalhado', label: '10 IFOOD — Extrato Detalhado (2 lojas)',
+      hint: 'Portal Parceiro → Financeiro → Conciliação, competência do mês',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 2, fileTypes: ['ifood_extrato_detalhado'],
       group: 'ifood', Component: UploadIfoodExtratoDetalhadoCard,
     },
     {
-      docId: 'ifood_orders', label: 'Relatório de Pedidos iFood', format: '.xlsx',
+      docId: 'ifood_orders', label: '11 IFOOD — Relatório de Pedidos (2 lojas)',
+      hint: 'Portal Parceiro → Pedidos → Exportar, mês cheio',
+      format: '.xlsx',
       slots: ['comp'], filesPerSlot: 2, fileTypes: ['ifood_orders'],
       group: 'ifood', Component: UploadIfoodOrdersCard,
     },
     {
-      docId: 'ifood_conta_csv', label: 'Conta iFood Pago (CSV)', format: '.csv',
+      docId: 'ifood_conta_csv', label: '12 IFOOD — Conta Digital extrato CSV',
+      hint: 'App iFood → Conta Digital → Extrato, mês + mês seguinte',
+      format: '.csv',
       slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['ifood_conta_csv'],
       group: 'ifood', Component: UploadIfoodContaCsvCard,
       postReason: 'antecipação pode cair no mês seguinte',
@@ -449,6 +538,34 @@ export default function AuditImportacoesV2() {
           </CardContent>
         </Card>
 
+        {/* Progresso por etapa da auditoria */}
+        {auditSteps && (
+          <Card>
+            <CardContent className="py-3 space-y-1.5">
+              <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Progresso da auditoria ({auditSteps.filter(s => s.status === 'ok').length} de {auditSteps.length} etapas)
+              </div>
+              {auditSteps.map(s => (
+                <div key={s.key} className="flex items-start gap-2 text-sm">
+                  {s.status === 'running'
+                    ? <Loader2 className="h-4 w-4 animate-spin text-primary shrink-0 mt-0.5" />
+                    : s.status === 'ok'
+                      ? <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                      : s.status === 'error'
+                        ? <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                        : <Circle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
+                  <span className={s.status === 'pending' ? 'text-muted-foreground' : 'font-medium'}>{s.label}</span>
+                  {s.detail && (
+                    <span className={`text-xs mt-0.5 ${s.status === 'error' ? 'text-rose-700 dark:text-rose-400 font-medium' : 'text-muted-foreground'}`}>
+                      — {s.status === 'error' ? `erro: ${s.detail}` : s.detail}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Grupos */}
         {groups.map(group => {
           const docsInGroup = DOCS.filter(d => d.group === group);
@@ -478,6 +595,11 @@ export default function AuditImportacoesV2() {
                             <CopyCheck className="h-3 w-3" />
                             {[...dups.values()].reduce((a, l) => a + l.length, 0)} arquivos duplicados — pode apagar os repetidos
                           </Badge>
+                        )}
+                        {doc.hint && (
+                          <span className="basis-full pl-6 text-[11px] text-muted-foreground">
+                            {doc.hint}
+                          </span>
                         )}
                       </div>
 

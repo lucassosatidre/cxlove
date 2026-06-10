@@ -7,6 +7,7 @@
 // Schema destino: audit_bank_deposits com bank='cresol' + category='ifood'.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -68,7 +69,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: period } = await supabase
-      .from('audit_periods').select('id,status').eq('id', audit_period_id).maybeSingle();
+      .from('audit_periods').select('id,status,month,year').eq('id', audit_period_id).maybeSingle();
     if (!period) {
       return new Response(JSON.stringify({ error: 'Período não encontrado' }), {
         status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -119,6 +120,25 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: `Erro ao registrar: ${importErr.message}` }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Validação de competência: bloqueia 100% mismatch (PDF Cresol de mês X
+    // sendo importado num período de mês Y). Lote misto (alguns depósitos do
+    // mês ant/post entrando) passa. Mesmo padrão do import-cresol XLSX.
+    const periodCheck = validatePeriodMatch(
+      deposits.map(d => d.deposit_date),
+      { month: period.month, year: period.year },
+      'Cresol PDF',
+      [-1, 0, 1],
+    );
+    if (!periodCheck.ok) {
+      await supabase.from('audit_imports').update({
+        status: 'failed', error_message: periodCheck.error,
+      }).eq('id', importRec.id);
+      return new Response(JSON.stringify({
+        error: periodCheck.error,
+        breakdown_by_month: periodCheck.breakdown,
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // Insere com upsert por row_hash (calculado por trigger no banco) — idempotente

@@ -572,7 +572,7 @@ export default function AuditIfoodV2() {
                 ⚠ {unmatchedCresolDeps.length} depósito(s) Cresol no mês sem lote Maquinona pareado
               </div>
               <p className="text-xs text-muted-foreground">
-                Esses depósitos chegaram na Cresol mas o algoritmo não encontrou venda Maquinona correspondente (tolerance 10%, janela 14d). Possíveis causas: estorno, ajuste manual do iFood, ou referem-se a vendas de meses muito adjacentes.
+                Esses depósitos chegaram na Cresol mas o algoritmo não encontrou venda Maquinona correspondente (match por dia útil seguinte à venda — D+1, calendário SC — com tolerância de 15% no valor; PIX agrupado 3%/7d). Possíveis causas: estorno, ajuste manual do iFood, ou referem-se a vendas de meses muito adjacentes.
               </p>
               <table className="w-full text-xs mt-2">
                 <thead className="text-[10px] text-muted-foreground">

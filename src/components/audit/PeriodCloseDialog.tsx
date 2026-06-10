@@ -35,13 +35,16 @@ export function CloseConfirmDialog({
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-sm">
-              <p>Ao fechar este período:</p>
+              <p>Fechar o período <strong>trava o mês</strong>:</p>
               <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                <li>Nenhuma nova importação poderá ser feita</li>
-                <li>A conciliação não poderá ser reexecutada</li>
-                <li>Apenas visualização e exportação serão permitidas</li>
+                <li>Uma cópia (backup) do relatório contábil é salva neste momento</li>
+                <li>A tela de Relatórios passa a mostrar esse backup — os números <strong>não mudam mais</strong>, mesmo que arquivos sejam reimportados</li>
+                <li>Nenhuma nova importação ou reexecução de auditoria deve ser feita num mês fechado</li>
               </ul>
-              <p className="text-xs text-muted-foreground">Apenas administradores poderão reabrir.</p>
+              <p className="text-xs text-muted-foreground">
+                Precisa mexer de novo? Use "Reabrir o mês": o período volta a ficar aberto,
+                e o backup do fechamento é mantido no histórico. Apenas administradores podem reabrir.
+              </p>
               <div className="space-y-1.5 pt-2">
                 <label className="text-xs font-medium">Digite "FECHAR" para confirmar:</label>
                 <Input value={text} onChange={(e) => setText(e.target.value)} autoFocus disabled={loading} />
@@ -84,11 +87,17 @@ export function ReopenDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle className="flex items-center gap-2">
-            <LockOpen className="h-5 w-5" /> Reabrir Período — {periodLabel}
+            <LockOpen className="h-5 w-5" /> Reabrir o mês — {periodLabel}
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3 text-sm">
-              <p>Esta ação será registrada no histórico.</p>
+              <p>
+                Reabrir destrava o mês: o período volta ao status <strong>aberto</strong> e
+                será preciso reexecutar a auditoria em Importações para gerar relatórios de novo.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                O backup salvo no fechamento é <strong>mantido</strong> e esta reabertura será registrada no histórico.
+              </p>
               <div className="space-y-1.5">
                 <label className="text-xs font-medium">Motivo da reabertura (obrigatório, mínimo 10 caracteres):</label>
                 <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} disabled={loading} autoFocus />
@@ -101,7 +110,7 @@ export function ReopenDialog({
           <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
           <Button onClick={handle} disabled={!ok || loading} className="gap-2">
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockOpen className="h-4 w-4" />}
-            Reabrir Período
+            Reabrir o mês
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

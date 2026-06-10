@@ -45,6 +45,13 @@ export type ContabilResumoRow = {
   vendido: number;
   recebido: number;
   custo: number;
+  // Custo base (vendido − recebido) negativo: recebido > vendido — alerta.
+  custo_negativo?: boolean;
+  // F2 — provisão de taxa: vendas Maquinona da bandeira ainda sem extrato da
+  // operadora. provisao_taxa já está somada em `custo` (estimada=true).
+  estimada?: boolean;
+  vendas_pendentes?: number;
+  provisao_taxa?: number;
 };
 
 export type ContabilDiaRow = {
@@ -73,6 +80,9 @@ export type ContabilBrendi = {
   custo_total: number;
   mensalidade: number;
   mensalidade_count: number;
+  // true quando audit_brendi_daily está vazio (match ainda não rodou) —
+  // vendido vem dos pedidos, recebido/custo oculto ficam em 0.
+  pendente_match?: boolean;
 };
 
 export type ContabilIfood = {
@@ -107,6 +117,10 @@ export type ContabilIfood = {
   ressarc: number;
   promo_ifood: number;
   taxa_servico_cliente: number;
+  // Créditos 'nao_reconhecido' na conta iFood Pago — informativo (não soma).
+  entrada_nao_reconhecida?: number;
+  // true quando não há repasses importados (match pendente) mas há vendas.
+  pendente_match?: boolean;
 };
 
 export type ContabilPdfData = {
@@ -198,6 +212,18 @@ function sectionTitle(doc: jsPDF, eyebrow: string, title: string, y: number) {
   doc.line(PAGE_MARGIN, y + 12.5, PAGE_MARGIN + 14, y + 12.5);
 
   return y + 18;
+}
+
+// Nota/alerta abaixo de tabelas (texto pequeno colorido, com wrap).
+// Retorna o próximo y disponível.
+function noteLine(doc: jsPDF, text: string, y: number, color: [number, number, number]) {
+  const pageW = doc.internal.pageSize.getWidth();
+  doc.setFont(FONT, 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...color);
+  const lines = doc.splitTextToSize(text, pageW - PAGE_MARGIN * 2);
+  doc.text(lines, PAGE_MARGIN, y);
+  return y + lines.length * 3.8 + 2;
 }
 
 // Rótulo de seção secundária (H3)
@@ -471,6 +497,28 @@ function pageResumoConsolidado(doc: jsPDF, data: ContabilPdfData) {
   ]);
 
   styledTable(doc, y, ['Categoria', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [50, 22, 32, 32, 28, 22]);
+
+  // Alertas/notas abaixo da tabela
+  let ny = (doc as any).lastAutoTable.finalY + 6;
+  const negativos = data.resumoPorCategoria.filter(r => r.custo_negativo);
+  if (negativos.length > 0) {
+    ny = noteLine(doc, `⚠ Recebido maior que vendido em ${negativos.map(r => r.nome).join(', ')} — custo negativo, verificar conciliação.`, ny, NEGATIVE);
+  }
+  if (data.brendi?.custo_total != null && data.brendi.custo_total < -0.005) {
+    ny = noteLine(doc, '⚠ Brendi: recebido maior que vendido — custo negativo, verificar conciliação.', ny, NEGATIVE);
+  }
+  if (data.ifood?.custo_total != null && data.ifood.custo_total < -0.005) {
+    ny = noteLine(doc, '⚠ iFood: recebido maior que vendido — custo negativo, verificar conciliação.', ny, NEGATIVE);
+  }
+  const estimadas = data.resumoPorCategoria.filter(r => r.estimada);
+  if (estimadas.length > 0) {
+    ny = noteLine(doc, `⚠ Custo de ${estimadas.map(r => r.nome).join(', ')} inclui taxa estimada (provisão) — ver Seção 3.`, ny, PRIMARY_DARK);
+  }
+  if (data.brendi?.pendente_match || data.ifood?.pendente_match) {
+    const quem = [data.brendi?.pendente_match ? 'Brendi' : null, data.ifood?.pendente_match ? 'iFood' : null]
+      .filter(Boolean).join(' e ');
+    noteLine(doc, `⚠ ${quem}: pendente de execução do match — recebido/custo ainda não conciliados.`, ny, PRIMARY_DARK);
+  }
 }
 
 // ═══ Página 3: Maquinona iFood ═════════════════════════════════════════════
@@ -517,6 +565,17 @@ function pageMaquinona(doc: jsPDF, data: ContabilPdfData) {
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
 
   styledTable(doc, y, ['Meio de pagamento', 'Qtd', 'Vendido', 'Recebido', 'Custo', '%'], rows, [50, 22, 32, 32, 28, 22]);
+
+  const negativos = data.resumoPorCategoria
+    .filter(r => cats.includes(r.categoria) && r.custo_negativo);
+  if (negativos.length > 0) {
+    noteLine(
+      doc,
+      `⚠ Recebido maior que vendido em ${negativos.map(r => r.nome).join(', ')} — custo negativo, verificar conciliação Cresol.`,
+      (doc as any).lastAutoTable.finalY + 6,
+      NEGATIVE,
+    );
+  }
 }
 
 // ═══ Página 4: Vouchers ════════════════════════════════════════════════════
@@ -552,22 +611,59 @@ function pageVouchers(doc: jsPDF, data: ContabilPdfData) {
   y = subTitle(doc, 'Detalhamento por operadora', y);
 
   const rows: any[] = [];
+  const comProvisao: ContabilResumoRow[] = [];
   for (const cat of cats) {
     const r = data.resumoPorCategoria.find(x => x.categoria === cat);
-    if (!r || (r.vendido === 0 && r.qtd === 0)) continue;
-    const pct = r.vendido > 0 ? (r.custo / r.vendido) * 100 : 0;
+    if (!r || (r.vendido === 0 && r.qtd === 0 && !r.estimada)) continue;
+    // Linha da operadora mostra o custo APURADO (sem a provisão); a provisão
+    // entra como linha própria logo abaixo — assim a soma da coluna fecha
+    // com o TOTAL (que já inclui a provisão).
+    const provisao = r.provisao_taxa ?? 0;
+    const custoApurado = r.custo - provisao;
+    const pct = r.vendido > 0 ? (custoApurado / r.vendido) * 100 : 0;
     rows.push([
       CATEGORIA_LABELS[cat],
       fmtInt(r.qtd),
       fmtNum(r.vendido),
       fmtNum(r.recebido),
-      fmtNum(r.custo),
+      fmtNum(custoApurado),
       fmtPct(pct),
     ]);
+    if (r.estimada && provisao > 0) {
+      comProvisao.push(r);
+      rows.push([
+        `  ↳ Taxa estimada (provisão) ⚠`,
+        '—', '—', '—',
+        fmtNum(provisao),
+        '—',
+      ]);
+    }
   }
   rows.push(['TOTAL', fmtInt(totQtd), fmtNum(totVendido), fmtNum(totRecebido), fmtNum(totCusto), fmtPct(totPct)]);
 
   styledTable(doc, y, ['Operadora', 'Qtd Vendas', 'Vendido', 'Recebido', 'Custo', '%'], rows, [50, 28, 32, 32, 28, 22]);
+
+  // Notas abaixo da tabela
+  let ny = (doc as any).lastAutoTable.finalY + 6;
+  for (const r of comProvisao) {
+    ny = noteLine(
+      doc,
+      `⚠ ${r.nome}: ${fmtBRL(r.vendas_pendentes ?? 0)} em vendas aguardando extrato da operadora — `
+      + `taxa estimada pela média do mês (${fmtBRL(r.provisao_taxa ?? 0)}), pagamento pendente de confirmação.`,
+      ny,
+      PRIMARY_DARK,
+    );
+  }
+  const negativos = data.resumoPorCategoria
+    .filter(r => cats.includes(r.categoria) && r.custo_negativo);
+  if (negativos.length > 0) {
+    noteLine(
+      doc,
+      `⚠ Recebido maior que vendido em ${negativos.map(r => r.nome).join(', ')} — custo negativo, verificar conciliação BB.`,
+      ny,
+      NEGATIVE,
+    );
+  }
 }
 
 // ═══ Página 5: Brendi ══════════════════════════════════════════════════════
@@ -588,12 +684,25 @@ function pageBrendi(doc: jsPDF, data: ContabilPdfData) {
   kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(b.custo_total)}  ·  ${fmtPct(pctTotal)}`, '', NEGATIVE);
   y += 32;
 
+  if (b.pendente_match) {
+    y = noteLine(doc, '⚠ Pendente de execução do match — recebido/custo oculto ainda não conciliados com o extrato BB. Execute pela aba Importações.', y, PRIMARY_DARK);
+    y += 2;
+  }
+  if (b.custo_total < -0.005) {
+    y = noteLine(doc, '⚠ Recebido maior que vendido — custo negativo, verificar conciliação.', y, NEGATIVE);
+    y += 2;
+  }
+
   // Breakdown
   y = subTitle(doc, 'Detalhamento de cobranças', y);
 
+  // Mensalidade vem do campo dedicado; o resto do custo oculto (diffs de
+  // match que não são mensalidade) entra como linha separada.
+  const outrasDiffs = b.custo_oculto - b.mensalidade;
   const rows: any[] = [
     ['Taxas transacionais', fmtNum(b.taxa_declarada)],
-    ['Mensalidade', fmtNum(b.custo_oculto)],
+    ['Mensalidade', fmtNum(b.mensalidade)],
+    ['Outras diferenças de match', fmtNum(outrasDiffs)],
     ['TOTAL', fmtNum(b.custo_total)],
   ];
 
@@ -620,6 +729,15 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
   kpiBox(doc, PAGE_MARGIN + kpiW + 4, y, kpiW, 24, 'Total líquido', fmtBRL(i.liquido_efetivo), `${i.repasses_count} repasses, após antecipação`, POSITIVE);
   kpiBox(doc, PAGE_MARGIN + (kpiW + 4) * 2, y, kpiW, 24, 'Custo total', `${fmtBRL(i.custo_total)}  ·  ${fmtPct(i.taxa_efetiva_pct)}`, 'Comissão + taxas + logística + Frota + ADS', NEGATIVE);
   y += 32;
+
+  if (i.pendente_match) {
+    y = noteLine(doc, '⚠ Pendente de execução do match — repasses ainda não importados/conciliados. Execute pela aba Importações.', y, PRIMARY_DARK);
+    y += 2;
+  }
+  if (i.custo_total < -0.005) {
+    y = noteLine(doc, '⚠ Recebido maior que vendido — custo negativo, verificar conciliação.', y, NEGATIVE);
+    y += 2;
+  }
 
   // Cross-reference: valor declarado pelo iFood no portal (subtotal + entrega)
   // — confronta com o (vendido_bruto + recebido_direto) que vem dos repasses.
@@ -685,6 +803,9 @@ function pageIfood(doc: jsPDF, data: ContabilPdfData) {
     ['Promoções loja (subsídio absorvido)', fmtNum(Math.abs(i.promocoes_loja))],
     ['Pgto direto loja (dinheiro/maquinininha)', fmtNum(i.recebido_direto)],
   ];
+  if ((i.entrada_nao_reconhecida ?? 0) > 0) {
+    informativo.push(['Entrada não reconhecida (conta iFood)', fmtNum(i.entrada_nao_reconhecida ?? 0)]);
+  }
 
   autoTable(doc, {
     startY: y,

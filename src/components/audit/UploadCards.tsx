@@ -87,10 +87,30 @@ export function UploadMaquinonaCard({ period, ensurePeriod, onAfter }: UploadCar
             body: { audit_period_id: p.id, file_name: file.name, rows, summary_rows },
           });
 
-          if (error) throw new Error(error.message);
+          if (error) {
+            // 400/failed: FunctionsHttpError vem com message genérica
+            // ("non-2xx") — extrai a mensagem real do body (ex: competência
+            // errada detectada pelo validador do mês).
+            let detail = error.message ?? 'erro';
+            try {
+              const ctx = (error as any).context;
+              if (ctx && typeof ctx.json === 'function') {
+                const bj = await ctx.json();
+                if (bj?.error) detail = bj.error;
+              }
+            } catch { /* noop */ }
+            throw new Error(detail);
+          }
           if ((data as any)?.error) throw new Error((data as any).error);
           if (data && (data as any).success === false) throw new Error((data as any).error || 'Falha na importação');
-          totalImported += Number((data as any)?.imported_rows ?? 0);
+          const newRows = Number((data as any)?.imported_rows ?? 0);
+          const updRows = Number((data as any)?.updated_rows ?? 0);
+          // Defensivo: 0 novas E 0 atualizadas = nada entrou (reimport do
+          // mesmo arquivo atualiza, então updated_rows > 0 é ok).
+          if (newRows + updRows === 0) {
+            throw new Error('0 transações importadas — arquivo não tem vendas no mês desta página. Confira o mês do arquivo.');
+          }
+          totalImported += newRows;
           const diag = (data as any)?.diagnostic;
           if (diag?.skipped_no_date) {
             totalSkippedNoDate += Number(diag.skipped_no_date);
@@ -135,7 +155,7 @@ export function UploadMaquinonaCard({ period, ensurePeriod, onAfter }: UploadCar
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
           XLSX exportado da Maquinona (aba "Transações") — vendas crédito/débito/PIX/voucher.
-          Idealmente <strong>3 arquivos</strong>: mês anterior + competência + posterior.
+          <strong>1 arquivo</strong>: o mês cheio da competência (01 ao último dia). Arquivo de outro mês é recusado.
         </p>
         <input
           ref={inputRef}
@@ -1369,6 +1389,7 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
     setUploading(true);
     setProgress({ current: 0, total: csvs.length });
     let totalImported = 0;
+    let totalNaoReconhecido = 0;
     const failures: string[] = [];
 
     try {
@@ -1395,11 +1416,16 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Conta iFood Pago');
           totalImported += Number(data.imported_rows ?? 0);
+          totalNaoReconhecido += Number(data.total_nao_reconhecido ?? 0);
         } catch (e: any) {
           failures.push(`${file.name}: ${e?.message ?? 'erro'}`);
         }
       }
 
+      if (totalNaoReconhecido > 0) {
+        const fmt = totalNaoReconhecido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        toast.info(`R$ ${fmt} entraram na conta sem identificação (campo informativo)`);
+      }
       if (failures.length === 0) {
         toast.success(`${totalImported} movimentos importados (conta iFood Pago)`);
       } else {

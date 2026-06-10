@@ -27,15 +27,6 @@ import DriverManagement from "./pages/DriverManagement";
 import Etiquetas from "./pages/Etiquetas";
 import MachineRegistry from "./pages/MachineRegistry";
 import CheckinAudit from "./pages/CheckinAudit";
-import AuditDashboard from "./pages/audit/AuditDashboard";
-import AuditEntry from "./pages/audit/AuditEntry";
-import AuditImport from "./pages/audit/AuditImport";
-import AuditIfood from "./pages/audit/AuditIfood";
-import AuditVouchers from "./pages/audit/AuditVouchers";
-import AuditBrendi from "./pages/audit/AuditBrendi";
-import AuditIfoodMarketplace from "./pages/audit/AuditIfoodMarketplace";
-import AuditImportacoes from "./pages/audit/AuditImportacoes";
-import AuditRelatorios from "./pages/audit/AuditRelatorios";
 import AuditEntryV2 from "./pages/audit-v2/AuditEntryV2";
 import AuditDashboardV2 from "./pages/audit-v2/AuditDashboardV2";
 import AuditVouchersV2 from "./pages/audit-v2/AuditVouchersV2";
@@ -127,19 +118,20 @@ const App = () => (
             <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
             <Route path="/admin/maquininhas" element={<ProtectedRoute><SectorGuard sector="tele"><MachineRegistry /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/audit" element={<ProtectedRoute><SectorGuard sector="tele"><CheckinAudit /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria" element={<ProtectedRoute><SectorGuard sector="tele"><AuditEntry /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/maquinona" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboard /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/importar" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImport /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/ifood" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfood /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/vouchers" element={<ProtectedRoute><SectorGuard sector="tele"><AuditVouchers /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/match" element={<Navigate to="/admin/auditoria/importacoes" replace />} />
-            <Route path="/admin/auditoria/conciliacao" element={<Navigate to="/admin/auditoria/importacoes" replace />} />
-            <Route path="/admin/auditoria/auditar-mes" element={<Navigate to="/admin/auditoria/importacoes" replace />} />
-            <Route path="/admin/auditoria/brendi" element={<ProtectedRoute><SectorGuard sector="tele"><AuditBrendi /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/ifood-marketplace" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfoodMarketplace /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/importacoes" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImportacoes /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/auditoria/relatorios" element={<ProtectedRoute><SectorGuard sector="tele"><AuditRelatorios /></SectorGuard></ProtectedRoute>} />
-            {/* Auditoria v2 — paralela em testes */}
+            {/* Auditoria v1 aposentada — redireciona tudo pra v2 */}
+            <Route path="/admin/auditoria" element={<Navigate to="/admin/auditoria-v2" replace />} />
+            <Route path="/admin/auditoria/maquinona" element={<Navigate to="/admin/auditoria-v2/maquinona" replace />} />
+            <Route path="/admin/auditoria/importar" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
+            <Route path="/admin/auditoria/ifood" element={<Navigate to="/admin/auditoria-v2/maquinona" replace />} />
+            <Route path="/admin/auditoria/vouchers" element={<Navigate to="/admin/auditoria-v2/vouchers" replace />} />
+            <Route path="/admin/auditoria/match" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
+            <Route path="/admin/auditoria/conciliacao" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
+            <Route path="/admin/auditoria/auditar-mes" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
+            <Route path="/admin/auditoria/brendi" element={<Navigate to="/admin/auditoria-v2/brendi" replace />} />
+            <Route path="/admin/auditoria/ifood-marketplace" element={<Navigate to="/admin/auditoria-v2/ifood-marketplace" replace />} />
+            <Route path="/admin/auditoria/importacoes" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
+            <Route path="/admin/auditoria/relatorios" element={<Navigate to="/admin/auditoria-v2/relatorios" replace />} />
+            {/* Auditoria v2 — oficial */}
             <Route path="/admin/auditoria-v2" element={<ProtectedRoute><SectorGuard sector="tele"><AuditEntryV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria-v2/importacoes" element={<ProtectedRoute><SectorGuard sector="tele"><AuditImportacoesV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria-v2/maquinona" element={<ProtectedRoute><SectorGuard sector="tele"><AuditDashboardV2 /></SectorGuard></ProtectedRoute>} />

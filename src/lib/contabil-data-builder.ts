@@ -32,10 +32,12 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
 
   // ─── Maquinona — audit_card_transactions ─────────────────────────────────
   // Custo = gross - net (engloba taxa transação + antecipação + promoção).
+  // deposit_group entra pra provisão de voucher (F2): vendas Maquinona da
+  // bandeira que ainda não apareceram em extrato da operadora.
   const cardTxs: any[] = await fetchAllPaginated<any>(
     supabase
       .from('audit_card_transactions')
-      .select('payment_method, sale_date, gross_amount, net_amount')
+      .select('payment_method, sale_date, gross_amount, net_amount, deposit_group')
       .eq('audit_period_id', periodId),
   );
 
@@ -55,9 +57,11 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
       .gte('match_date', monthStart)
       .lt('match_date', nextMonth),
   );
+  // Só diffs NEGATIVOS contam como custo oculto (espelha o dashboard).
+  // Diff positivo (Cresol pagou a mais) não compensa retenção de outro dia.
   const custoOcultoMaquinona = (dailyMatches ?? [])
     .filter((d: any) => d.status === 'matched' || d.status === 'partial')
-    .reduce((s: number, d: any) => s + Number(d.difference ?? 0), 0);
+    .reduce((s: number, d: any) => s + Math.min(0, Number(d.difference ?? 0)), 0);
 
   // ─── Vouchers — audit_voucher_lots + items + overrides ──────────────────
   const voucherLots: any[] = await fetchAllPaginated<any>(
@@ -85,6 +89,53 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
           .in('lot_id', voucherLotIds),
       )
     : [];
+
+  // ─── Vouchers cross-period (G4) ──────────────────────────────────────────
+  // Vendas de fim de mês cujo lote vive no period SEGUINTE (ex: venda 30/04
+  // com crédito 04/05 → lote no period maio) sumiam do relatório porque a
+  // query acima só pega lotes .eq(audit_period_id). Replica a lógica da tela
+  // AuditVouchersV2: busca items por data_transacao na janela do mês cujo
+  // lote pertence a OUTRO period e carrega esses lotes pro mesmo rateio.
+  const crossItemsRaw: any[] = await fetchAllPaginated<any>(
+    (supabase as any)
+      .from('audit_voucher_lot_items')
+      .select('lot_id, data_transacao, valor')
+      .gte('data_transacao', monthStart)
+      .lt('data_transacao', nextMonth),
+  );
+  const localLotIdSet = new Set(voucherLotIds);
+  const crossItemsByLot = new Map<string, any[]>();
+  for (const it of (crossItemsRaw ?? []) as any[]) {
+    if (localLotIdSet.has(it.lot_id)) continue;
+    const arr = crossItemsByLot.get(it.lot_id) ?? [];
+    arr.push(it);
+    crossItemsByLot.set(it.lot_id, arr);
+  }
+  const crossLotIds = Array.from(crossItemsByLot.keys());
+  let crossLots: any[] = [];
+  const crossLotTotalItemsSum = new Map<string, number>(); // soma de TODOS os items do lote (todos os meses)
+  if (crossLotIds.length > 0) {
+    const [crossLotsRes, allCrossItems] = await Promise.all([
+      (supabase as any)
+        .from('audit_voucher_lots')
+        .select('id, operadora, subtotal_vendas, total_descontos, valor_liquido')
+        .in('id', crossLotIds)
+        .in('operadora', ['ticket', 'alelo', 'vr', 'pluxee']),
+      fetchAllPaginated<any>(
+        (supabase as any)
+          .from('audit_voucher_lot_items')
+          .select('lot_id, valor')
+          .in('lot_id', crossLotIds),
+      ),
+    ]);
+    crossLots = (crossLotsRes.data ?? []) as any[];
+    for (const it of (allCrossItems ?? []) as any[]) {
+      crossLotTotalItemsSum.set(
+        it.lot_id,
+        (crossLotTotalItemsSum.get(it.lot_id) ?? 0) + Number(it.valor ?? 0),
+      );
+    }
+  }
 
   const monthDays = new Date(year, month, 0).getDate();
   const competenciaIni = monthStart;
@@ -155,24 +206,34 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     }
   }
 
-  // Ajuste Cresol → Pix (custo oculto Maquinona vai pro Pix por convenção)
-  const ajustePix = -custoOcultoMaquinona;
-  if (Math.abs(ajustePix) > 0.01) {
-    const pix = ensureAgg(resumoMap, 'pix');
-    pix.recebido -= ajustePix;
-    pix.custo += ajustePix;
+  // Ajuste Cresol: distribui o custo oculto Maquinona proporcionalmente entre
+  // crédito/débito/pix pelo vendido de cada um. (Antes ia tudo pro Pix por
+  // convenção, o que inflava a taxa efetiva do Pix e subestimava as demais —
+  // a retenção do daily_match é do lote inteiro, não de um meio específico.)
+  const ajusteTotal = -custoOcultoMaquinona;
+  if (Math.abs(ajusteTotal) > 0.01) {
+    const maquinonaCats: ContabilCategoria[] = ['credito', 'debito', 'pix'];
+    const vendidoMaquinona = maquinonaCats
+      .reduce((s, c) => s + (resumoMap.get(c)?.vendido ?? 0), 0);
+    for (const c of maquinonaCats) {
+      const agg = resumoMap.get(c);
+      if (!agg || agg.vendido <= 0 || vendidoMaquinona <= 0) continue;
+      const ajusteCat = ajusteTotal * (agg.vendido / vendidoMaquinona);
+      agg.recebido -= ajusteCat;
+      agg.custo += ajusteCat;
 
-    // Modo detalhado: distribui o ajuste pelos dias proporcionalmente ao vendido
-    // de cada dia. Mantém a tabela diária fidedigna ao consolidado e ao extrato
-    // bancário Cresol (sem o ajuste, o detalhado mostraria custo Pix < real).
-    if (mode === 'detalhado') {
-      const pixDays = detMap.get('pix');
-      if (pixDays && pix.vendido > 0) {
-        for (const dayAgg of pixDays.values()) {
-          const proporcao = dayAgg.vendido / pix.vendido;
-          const ajusteDia = ajustePix * proporcao;
-          dayAgg.recebido -= ajusteDia;
-          dayAgg.custo += ajusteDia;
+      // Modo detalhado: distribui o ajuste da categoria pelos dias
+      // proporcionalmente ao vendido de cada dia. Mantém a tabela diária
+      // fidedigna ao consolidado e ao extrato bancário Cresol.
+      if (mode === 'detalhado') {
+        const catDays = detMap.get(c);
+        if (catDays) {
+          for (const dayAgg of catDays.values()) {
+            const proporcao = dayAgg.vendido / agg.vendido;
+            const ajusteDia = ajusteCat * proporcao;
+            dayAgg.recebido -= ajusteDia;
+            dayAgg.custo += ajusteDia;
+          }
         }
       }
     }
@@ -281,20 +342,98 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     }
   }
 
-  // Força a equação contábil: custo = vendido - recebido. Garante que
-  // sum(vendido) = sum(recebido) + sum(custo) na tabela consolidada.
-  // Diferenças vs valor declarado (ex: portal VR declarou R$469 mas banco
-  // entregou R$121 a mais) viram parte do custo apurado real.
+  // Agrega os lotes cross-period (G4) — MESMO rateio proporcional da tela
+  // AuditVouchersV2: vendido = soma dos items no mês; custo/líquido
+  // proporcionais ao subtotal declarado do lote inteiro.
+  for (const lot of crossLots) {
+    const cat = mapVoucherCat(lot.operadora);
+    if (!cat) continue;
+    const entries = crossItemsByLot.get(lot.id) ?? [];
+    if (entries.length === 0) continue;
+    const compValor = entries.reduce((s: number, e: any) => s + Number(e.valor ?? 0), 0);
+    const totalItemsSum = crossLotTotalItemsSum.get(lot.id) ?? 0;
+    const totalDeclared = Number(lot.subtotal_vendas ?? 0) > 0
+      ? Number(lot.subtotal_vendas)
+      : totalItemsSum;
+    const proporcao = totalDeclared > 0 ? compValor / totalDeclared : 0;
+    const liquidoDeclared = Number(lot.valor_liquido ?? 0);
+    const descontosDeclared = (totalDeclared > 0 && liquidoDeclared > 0 && totalDeclared >= liquidoDeclared)
+      ? totalDeclared - liquidoDeclared
+      : Math.abs(Number(lot.total_descontos ?? 0));
+    const custoLote = descontosDeclared * proporcao;
+    const recebidoLote = liquidoDeclared * proporcao;
+    const r = ensureAgg(resumoMap, cat);
+    r.qtd += entries.length;
+    r.vendido += compValor;
+    r.recebido += recebidoLote;
+    r.custo += custoLote;
+
+    if (mode === 'detalhado') {
+      const entriesValidas = entries.filter((e: any) => {
+        const d = Number(String(e.data_transacao).slice(8, 10));
+        return d >= 1 && d <= monthDays;
+      });
+      if (entriesValidas.length > 0) {
+        const custoPorDia = custoLote / entriesValidas.length;
+        const recebidoPorDia = recebidoLote / entriesValidas.length;
+        for (const e of entriesValidas) {
+          const d = Number(String(e.data_transacao).slice(8, 10));
+          const dr = ensureDayAgg(cat, d);
+          dr.qtd += 1;
+          dr.vendido += Number(e.valor ?? 0);
+          dr.recebido += recebidoPorDia;
+          dr.custo += custoPorDia;
+        }
+      }
+    }
+  }
+
+  // ─── Provisão de taxa por operadora (F2 — requisito do dono) ─────────────
+  // Vendas Maquinona da bandeira (deposit_group) no mês que ainda NÃO
+  // apareceram em nenhum extrato da operadora (lot_items) = vendas pendentes.
+  // A taxa dessas vendas é provisionada pela taxa efetiva dos lotes
+  // confirmados no mês (custo/vendas); sem base, fallback 10%.
+  const voucherCats: ContabilCategoria[] = ['alelo', 'ticket', 'vr', 'pluxee'];
+  const provisaoPorCat = new Map<ContabilCategoria, { vendas_pendentes: number; provisao_taxa: number }>();
+  for (const cat of voucherCats) {
+    let vendasMaq = 0;
+    for (const t of (cardTxs ?? []) as any[]) {
+      if ((t.deposit_group ?? '') !== cat) continue;
+      if (txMonth(t.sale_date) !== periodYM) continue;
+      vendasMaq += Number(t.gross_amount ?? 0);
+    }
+    if (vendasMaq <= 0) continue;
+    const agg = resumoMap.get(cat);
+    const coberto = agg?.vendido ?? 0;
+    const vendasPendentes = Math.round((vendasMaq - coberto) * 100) / 100;
+    if (vendasPendentes <= 0.01) continue;
+    const taxaEfetiva = (agg && agg.vendido > 0 && agg.custo > 0)
+      ? agg.custo / agg.vendido
+      : 0.10; // sem base no mês → fallback 10%
+    const provisaoTaxa = Math.round(vendasPendentes * taxaEfetiva * 100) / 100;
+    provisaoPorCat.set(cat, { vendas_pendentes: vendasPendentes, provisao_taxa: provisaoTaxa });
+  }
+
+  // Equação contábil: custo = vendido - recebido CRU (sem clamp em zero).
+  // Negativo (recebido > vendido) vira flag de alerta em vez de sumir — assim
+  // a identidade Vendido = Recebido + Custo sempre fecha na consolidada.
+  // A provisão (F2) soma por cima do custo apurado, com flag estimada.
   const resumoPorCategoria: ContabilResumoRow[] = CATEGORIAS_ORDEM
     .filter(c => c !== 'brendi')
     .map(c => {
       const a = resumoMap.get(c);
       const vendido = a?.vendido ?? 0;
       const recebido = a?.recebido ?? 0;
+      const custoBase = vendido - recebido;
+      const prov = provisaoPorCat.get(c);
       return {
         categoria: c, nome: CATEGORIA_LABELS[c],
         qtd: a?.qtd ?? 0, vendido, recebido,
-        custo: Math.max(0, vendido - recebido),
+        custo: custoBase + (prov?.provisao_taxa ?? 0),
+        custo_negativo: custoBase < -0.005 || undefined,
+        estimada: prov ? true : undefined,
+        vendas_pendentes: prov?.vendas_pendentes,
+        provisao_taxa: prov?.provisao_taxa,
       };
     });
 
@@ -321,6 +460,8 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     { data: brendiOrdersMes },
     { data: ifoodRepasses },
     { count: ifoodOrdersCount },
+    { data: ifoodDailySales },
+    { data: ifoodContaNaoRec },
   ] = await Promise.all([
     sb.from('audit_brendi_daily')
       .select('expected_amount, expected_liquido, taxa_calculada, received_amount, diff, status, sale_date')
@@ -352,6 +493,18 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
       .gte('sale_date', monthStart)
       .lt('sale_date', nextMonth)
       .neq('status_pedido', 'CANCELADO'),
+    // G3 — bruto VENDIDO por sale_date direto do extrato detalhado do app
+    // (preferencial sobre audit_ifood_repasses, que é competência de REPASSE).
+    sb.from('audit_ifood_daily_sales')
+      .select('sale_date, bruto_venda, pedidos_count')
+      .eq('audit_period_id', periodId)
+      .gte('sale_date', monthStart)
+      .lt('sale_date', nextMonth),
+    // Entradas na conta iFood Pago sem identificação — informativo no relatório.
+    sb.from('audit_ifood_conta_movimentos')
+      .select('valor')
+      .eq('audit_period_id', periodId)
+      .eq('categoria', 'nao_reconhecido'),
   ]);
 
 
@@ -383,9 +536,14 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   const brendiTaxaDeclarada = sumB('taxa_calculada');
   const brendiEsperado = sumB('expected_liquido');
   const brendiRecebido = sumB('received_amount');
-  const brendiCustoOculto = brendiEsperado - brendiRecebido;
+  // G2 — daily vazio NÃO pode sumir com o vendido do mês: se há pedidos em
+  // audit_brendi_orders (por sale_date), monta o bloco mesmo sem match rodado
+  // — recebido/custo oculto ficam em 0 com flag pendente_match=true.
+  const brendiPendenteMatch = bd.length === 0;
+  const brendiCustoOculto = brendiPendenteMatch ? 0 : brendiEsperado - brendiRecebido;
   const brendiCustoTotal = brendiVendido - brendiRecebido;
-  const brendiData = bd.length > 0 ? {
+  const brendiTemDados = bd.length > 0 || (brendiCountMes ?? 0) > 0 || brendiVendido > 0;
+  const brendiData = brendiTemDados ? {
     vendido_bruto: brendiVendido,
     pedidos_count_mes: brendiCountMes ?? 0,
     pedidos_importados_3meses: brendiCount3m ?? 0,
@@ -399,11 +557,21 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     mensalidade: bd.filter(r => r.status === 'mensalidade_descontada')
       .reduce((s, r) => s + Math.abs(Number(r.diff ?? 0)), 0),
     mensalidade_count: bd.filter(r => r.status === 'mensalidade_descontada').length,
+    pendente_match: brendiPendenteMatch || undefined,
   } : undefined;
 
   const ifoodRows = (ifoodRepasses ?? []) as any[];
   const sumI = (k: string) => ifoodRows.reduce((s, r) => s + Number(r[k] ?? 0), 0);
-  const brutoVenda = sumI('bruto_venda');
+  // G3 — vendido_bruto preferencial: audit_ifood_daily_sales (bruto VENDIDO
+  // por sale_date, importado do extrato detalhado do app). Os repasses são
+  // competência de REPASSE e cruzam mês — ficam como fallback pra meses
+  // antigos sem a tabela nova.
+  const ifdRows = (ifoodDailySales ?? []) as any[];
+  const dailyBrutoVenda = ifdRows.reduce((s, r) => s + Number(r.bruto_venda ?? 0), 0);
+  const dailyPedidosCount = ifdRows.reduce((s, r) => s + Number(r.pedidos_count ?? 0), 0);
+  const temDailySales = ifdRows.length > 0 && dailyBrutoVenda > 0;
+  const brutoRepasses = sumI('bruto_venda');
+  const brutoVenda = temDailySales ? dailyBrutoVenda : brutoRepasses;
   const pgtoDireto = sumI('pgto_direto_loja');
   const comissao = Math.abs(sumI('comissao'));
   const taxaTrans = Math.abs(sumI('taxa_transacao'));
@@ -425,17 +593,26 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   // Garante que tabela consolidada feche matematicamente. Esse valor reflete
   // o que efetivamente saiu da loja: taxas brutas (custoTotal) menos ajustes
   // positivos (reembolsos/ressarc/promo iFood) mais taxa antecipação.
-  const custoRealIfood = Math.max(0, brutoVenda - liquidoEfetivoTotal);
-  const ifoodData = ifoodRows.length > 0 ? {
+  // CRU (sem Math.max em zero): negativo (recebido > vendido) vira flag de
+  // alerta — preserva a identidade Vendido = Recebido + Custo.
+  const custoRealIfood = brutoVenda - liquidoEfetivoTotal;
+  // Entradas 'nao_reconhecido' da conta iFood Pago — informativo.
+  const entradaNaoReconhecida = ((ifoodContaNaoRec ?? []) as any[])
+    .reduce((s, r) => s + Number(r.valor ?? 0), 0);
+  // G2 (iFood) — sem repasses importados mas COM vendas no mês (daily sales
+  // ou pedidos): monta o bloco com pendente_match=true em vez de sumir.
+  const ifoodPendenteMatch = ifoodRows.length === 0;
+  const ifoodTemDados = ifoodRows.length > 0 || temDailySales || (ifoodOrdersCount ?? 0) > 0;
+  const ifoodData = ifoodTemDados ? {
     vendido_bruto: brutoVenda,
-    vendido_online: brutoVenda,
+    vendido_online: brutoRepasses,
     valor_vendas_portal: valorVendasPortal,
     recebido_direto: pgtoDireto,
     liquido_esperado: sumI('liquido_esperado'),
     recebido_repasse: sumI('conta_recebido'),
     liquido_efetivo: liquidoEfetivoTotal,
     repasses_count: ifoodRows.length,
-    pedidos_count: ifoodOrdersCount ?? 0,
+    pedidos_count: temDailySales && dailyPedidosCount > 0 ? dailyPedidosCount : (ifoodOrdersCount ?? 0),
     custo_total: custoRealIfood,
     // Taxa efetiva = custo real / faturamento total iFood (online + direto loja).
     taxa_efetiva_pct: (brutoVenda + pgtoDireto) > 0
@@ -458,6 +635,8 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
     ressarc: sumI('ressarc'),
     promo_ifood: sumI('promo_ifood'),
     taxa_servico_cliente: Math.abs(sumI('taxa_servico_cliente')),
+    entrada_nao_reconhecida: entradaNaoReconhecida,
+    pendente_match: ifoodPendenteMatch || undefined,
   } : undefined;
 
   return {

@@ -345,14 +345,16 @@ Deno.serve(async (req) => {
     };
     const bbWindowStart = daysAdd(periodMonthStart, -5);
     const bbWindowEnd = daysAdd(periodNextMonthStart, 7);
-    const { data: bbDeps } = await supabase
-      .from('audit_bank_deposits')
-      .select('id, deposit_date, detail, amount')
-      .gte('deposit_date', bbWindowStart)
-      .lt('deposit_date', bbWindowEnd)
-      .eq('bank', 'bb')
-      .eq('category', 'brendi')
-      .order('deposit_date', { ascending: true });
+    const bbDeps = await fetchAllPaginated<any>(
+      supabase
+        .from('audit_bank_deposits')
+        .select('id, deposit_date, detail, amount')
+        .gte('deposit_date', bbWindowStart)
+        .lt('deposit_date', bbWindowEnd)
+        .eq('bank', 'bb')
+        .eq('category', 'brendi')
+        .order('deposit_date', { ascending: true }),
+    );
     console.log(`[match-brendi] BB deps cross-period window ${bbWindowStart}..${bbWindowEnd}: ${bbDeps?.length ?? 0}`);
 
     // Re-indexa BB por SALE_DATE de origem (= prefix DD/MM - 1 calendar day).

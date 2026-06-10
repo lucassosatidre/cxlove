@@ -15,14 +15,28 @@ import { buildContabilData, generateContabilReport } from '@/lib/contabil-data-b
 import { ContabilReportView } from '@/components/audit/ContabilReportView';
 import { CloseConfirmDialog, ReopenDialog } from '@/components/audit/PeriodCloseDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import type { ContabilPdfData } from '@/lib/audit-pdf-contabil';
+import { generateContabilPdf, type ContabilPdfData } from '@/lib/audit-pdf-contabil';
 
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-type AuditPeriod = { id: string; month: number; year: number; status: string };
+// Backup do relatório gravado em audit_periods.closed_snapshot no "Fechar Período"
+type ClosedSnapshot = {
+  resumido: ContabilPdfData;
+  detalhado: ContabilPdfData;
+  saved_at: string;
+};
+
+type AuditPeriod = {
+  id: string;
+  month: number;
+  year: number;
+  status: string;
+  closed_at?: string | null;
+  closed_snapshot?: ClosedSnapshot | null;
+};
 
 export default function AuditRelatoriosV2() {
   const { user } = useAuth();
@@ -53,28 +67,54 @@ export default function AuditRelatoriosV2() {
 
   const handleClose = async () => {
     if (!period || !user) return;
+
+    // Congela o relatório do mês: monta os dados (resumido + detalhado) e grava
+    // em closed_snapshot. Com o período fechado, a tela renderiza desse backup.
+    let res = resumidoData;
+    let det = detalhadoData;
+    try {
+      if (!res || !det) {
+        [res, det] = await Promise.all([
+          buildContabilData({ periodId: period.id, month, year, emittedBy: user?.email ?? 'Admin', mode: 'resumido' }),
+          buildContabilData({ periodId: period.id, month, year, emittedBy: user?.email ?? 'Admin', mode: 'detalhado' }),
+        ]);
+      }
+    } catch (e: any) {
+      toast.error('Erro ao montar o backup do relatório', { description: e?.message ?? 'Erro desconhecido' });
+      return;
+    }
+
     const nowIso = new Date().toISOString();
+    const snapshot: ClosedSnapshot = { resumido: res, detalhado: det, saved_at: nowIso };
     const { error } = await supabase
       .from('audit_periods')
-      .update({ status: 'fechado', closed_at: nowIso, closed_by: user.id, updated_at: nowIso })
+      .update({
+        status: 'fechado', closed_at: nowIso, closed_by: user.id, updated_at: nowIso,
+        closed_snapshot: snapshot,
+      } as any)
       .eq('id', period.id);
     if (error) {
       toast.error('Erro ao fechar', { description: error.message });
       return;
     }
     await supabase.from('audit_period_log').insert({
-      audit_period_id: period.id, action: 'fechado', user_id: user.id, reason: null,
+      audit_period_id: period.id, action: 'fechado', user_id: user.id,
+      reason: 'Backup do relatório contábil salvo no fechamento (closed_snapshot)',
     });
-    toast.success(`✓ Período ${MONTHS[month - 1]}/${year} fechado`);
+    toast.success(`✓ Período ${MONTHS[month - 1]}/${year} fechado e travado`, {
+      description: 'Backup do relatório salvo. Os números não mudam mais até reabrir.',
+    });
     setCloseOpen(false);
     await reloadPeriod();
   };
 
   const handleReopen = async (reason: string) => {
     if (!period || !user) return;
+    // Volta pra 'aberto' (precisa reexecutar a auditoria em Importações).
+    // O closed_snapshot é MANTIDO como backup do fechamento anterior.
     const { error } = await supabase
       .from('audit_periods')
-      .update({ status: 'conciliado', closed_at: null, closed_by: null, updated_at: new Date().toISOString() })
+      .update({ status: 'aberto', closed_at: null, closed_by: null, updated_at: new Date().toISOString() })
       .eq('id', period.id);
     if (error) {
       toast.error('Erro ao reabrir', { description: error.message });
@@ -83,7 +123,9 @@ export default function AuditRelatoriosV2() {
     await supabase.from('audit_period_log').insert({
       audit_period_id: period.id, action: 'reaberto', user_id: user.id, reason,
     });
-    toast.success('✓ Período reaberto');
+    toast.success('✓ Mês reaberto', {
+      description: 'O backup do fechamento foi mantido. Reexecute a auditoria em Importações.',
+    });
     setReopenOpen(false);
     await reloadPeriod();
   };
@@ -117,6 +159,12 @@ export default function AuditRelatoriosV2() {
   // de período pra evitar requests duplicados.
   useEffect(() => {
     if (!period || period.status === 'aberto') return;
+    // Mês TRAVADO: renderiza do snapshot salvo no fechamento — não recalcula ao vivo.
+    if (period.status === 'fechado' && period.closed_snapshot?.resumido) {
+      setResumidoData(period.closed_snapshot.resumido);
+      setDetalhadoData(period.closed_snapshot.detalhado ?? null);
+      return;
+    }
     let active = true;
     (async () => {
       setLoadingData(true);
@@ -150,6 +198,13 @@ export default function AuditRelatoriosV2() {
     }
     setGenerating(mode);
     try {
+      // Mês travado: o PDF sai do snapshot do fechamento, não do cálculo ao vivo
+      const snapData = period.status === 'fechado' ? period.closed_snapshot?.[mode] : null;
+      if (snapData) {
+        generateContabilPdf(mode, snapData);
+        toast.success('✓ Relatório Contábil gerado (do backup do fechamento)');
+        return;
+      }
       await generateContabilReport({
         periodId: period.id,
         month,
@@ -227,14 +282,33 @@ export default function AuditRelatoriosV2() {
                   <Lock className="h-4 w-4" /> Fechar Período
                 </Button>
               )}
-              {period && isClosed && (
-                <Button variant="outline" onClick={() => setReopenOpen(true)} className="gap-2">
-                  <LockOpen className="h-4 w-4" /> Reabrir Período
-                </Button>
-              )}
             </div>
           </CardContent>
         </Card>
+
+        {/* Mês travado — banner do snapshot + Reabrir */}
+        {isClosed && (
+          <Card className="border-green-600/30 bg-green-500/5">
+            <CardContent className="py-3 flex flex-wrap items-center gap-3 text-sm">
+              <Lock className="h-4 w-4 text-green-700 dark:text-green-400 shrink-0" />
+              <span>
+                ✅ Mês auditado e travado em{' '}
+                <strong>
+                  {period?.closed_at
+                    ? new Date(period.closed_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                    : '—'}
+                </strong>{' '}
+                — backup salvo.
+                {period?.closed_snapshot?.resumido
+                  ? ' Os números abaixo vêm do backup do fechamento (não são recalculados).'
+                  : ' (Fechado antes da trava por snapshot — exibindo cálculo ao vivo.)'}
+              </span>
+              <Button variant="outline" size="sm" onClick={() => setReopenOpen(true)} className="gap-2 ml-auto">
+                <LockOpen className="h-4 w-4" /> Reabrir o mês
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Relatórios — KPIs do mês + collapsibles com visualização inline */}
         {canGenerate && (

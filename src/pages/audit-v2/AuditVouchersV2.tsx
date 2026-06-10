@@ -198,7 +198,6 @@ export default function AuditVouchersV2() {
   const [maquinonaVouchers, setMaquinonaVouchers] = useState<MaquinonaSale[]>([]);
   const [overrides, setOverrides] = useState<CompOverride[]>([]);
   const [expandedLot, setExpandedLot] = useState<string | null>(null);
-  const [matching, setMatching] = useState(false);
   const [expandedDeposit, setExpandedDeposit] = useState<string | null>(null);
   const [itemsByLot, setItemsByLot] = useState<Record<string, LotItem[]>>({});
   const [allItemsByLot, setAllItemsByLot] = useState<Record<string, LotItem[]>>({});
@@ -715,31 +714,6 @@ export default function AuditVouchersV2() {
     return map;
   }, [lots]);
 
-  const handleAutoMatch = async () => {
-    if (!period) return;
-    setMatching(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('match-vouchers', {
-        // reset: true — limpa auto-matches anteriores (preserva manuais via
-        // eq manual=false) e re-roda do zero. Garante que mudanças de
-        // tolerância ou ordem de passes refletem na conciliação atual.
-        body: { audit_period_id: period.id, operadora: selectedOperadora, reset: true },
-      });
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error || 'Falha no match');
-      const ambig = (data.ambiguous ?? []) as string[];
-      toast.success(data.message ?? `${data.matched} pareados`, {
-        description: ambig.length > 0 ? `${ambig.length} ambíguos (resolva manualmente)` : 'OK',
-      });
-      if (ambig.length > 0) console.warn('Match ambíguos:', ambig);
-      await refresh(period.id);
-    } catch (e: any) {
-      toast.error('Erro no auto-match', { description: e?.message ?? 'Erro inesperado' });
-    } finally {
-      setMatching(false);
-    }
-  };
-
   const setLotMatchSecondary = async (lotId: string, depositId: string | null) => {
     const lot = lots.find(l => l.id === lotId);
     const dep1 = lot?.bb_deposit_id ? deposits.find(d => d.id === lot.bb_deposit_id) : null;
@@ -1140,19 +1114,16 @@ export default function AuditVouchersV2() {
                     : `Ver todos os lotes (${allOperadoraLots.length})`}
                 </Button>
               )}
-              {allOperadoraLots.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleAutoMatch}
-                  disabled={matching || !period}
-                  className="gap-2 text-xs text-muted-foreground"
-                  title="Re-rodar auto-match (já roda automático ao subir extrato BB ou voucher — use só se algo ficou pendente)"
-                >
-                  {matching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  🔧 Re-rodar match
-                </Button>
-              )}
+              {/* O match roda pelo botão único da aba Importações (não mais aqui) */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate('/admin/auditoria-v2/importacoes')}
+                className="gap-1 text-xs text-muted-foreground"
+                title="O match roda automático ao subir extrato BB ou voucher. Pra re-executar, use o botão único da aba Importações."
+              >
+                Executar pela aba Importações <ChevronRight className="h-3.5 w-3.5" />
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -1171,6 +1142,23 @@ export default function AuditVouchersV2() {
                 hint={operadoraStats.countAguardando > 0 ? 'parciais sem override fora do total' : undefined} />
               <Stat label="Pareados c/ BB" value={`${operadoraStats.matched} / ${operadoraStats.expectMatch}`} />
             </div>
+
+            {/* Provisão (F2): vendas Maquinona ainda sem lote da operadora.
+                Mesma regra do relatório contábil — taxa estimada pela taxa
+                efetiva do mês (fallback 10% sem base). */}
+            {(() => {
+              const vendasSemLote = crossCheck.onlyMaq.reduce((s, m) => s + m.gross_amount, 0);
+              if (vendasSemLote <= 0.01) return null;
+              const temBase = operadoraStats.subtotal > 0 && operadoraStats.descontos > 0;
+              const taxaBase = temBase ? operadoraStats.descontos / operadoraStats.subtotal : 0.10;
+              const provisao = vendasSemLote * taxaBase;
+              return (
+                <div className="mb-4 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+                  ⚠ {fmt(vendasSemLote)} em vendas aguardando extrato da operadora — taxa provisionada
+                  em {fmt(provisao)} (estimada {temBase ? 'pela taxa efetiva do mês' : 'em 10%, sem base no mês'}).
+                </div>
+              );
+            })()}
 
             {visibleOperadoraLots.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">

@@ -2,6 +2,7 @@
 // Receives pre-parsed JSON rows from the frontend. Avoids large base64 payloads
 // and edge-runtime XLSX parsing timeouts on big files.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
+import { validatePeriodMatch } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -213,6 +214,9 @@ Deno.serve(async (req) => {
     let skippedDuplicate = 0;
     let skippedOutOfPeriod = 0;
     const diagSampleNoDate: any[] = [];
+    // Todas as datas de venda parseadas (incl. fora do mês) — alimenta o
+    // validador de competência com o breakdown por mês.
+    const allSaleDates: string[] = [];
     for (const r of rows) {
       const transactionId = String(pick(r, 'ID da transacao', 'ID da transação') ?? '').trim();
       if (!transactionId) { skippedNoTxId++; continue; }
@@ -231,6 +235,7 @@ Deno.serve(async (req) => {
         }
         continue;
       }
+      allSaleDates.push(saleDateStr);
       // Calcula se a venda pertence ao mês de competência do período
       const [yStr, mStr] = saleDateStr.split('-');
       const isCompetencia = Number(mStr) === period.month && Number(yStr) === period.year;
@@ -275,6 +280,37 @@ Deno.serve(async (req) => {
         deposit_group: calcDepositGroup(payment, brand),
         is_competencia: isCompetencia,
       });
+    }
+
+    // Validação de competência (mesmo padrão do import-cresol/import-bb):
+    // se NENHUMA data de venda cai no mês do período, rejeita 400. Antes o
+    // filtro is_competencia descartava tudo em SILÊNCIO e o import ficava
+    // 'completed' com 0 linhas — parecia sucesso, mas não importou nada.
+    const periodCheck = validatePeriodMatch(
+      allSaleDates,
+      { month: period.month, year: period.year },
+      'Maquinona',
+      [0],
+    );
+    if (!periodCheck.ok || txs.length === 0) {
+      const errMsg = !periodCheck.ok
+        ? periodCheck.error
+        : 'Arquivo não tem vendas no mês desta página — confira o mês do arquivo.';
+      await supabase.from('audit_imports').update({
+        status: 'failed', error_message: errMsg,
+        imported_rows: 0, duplicate_rows: 0,
+      }).eq('id', importRec.id);
+      return new Response(JSON.stringify({
+        error: errMsg,
+        breakdown_by_month: periodCheck.breakdown,
+        diagnostic: {
+          skipped_no_date: skippedNoDate,
+          skipped_no_tx_id: skippedNoTxId,
+          skipped_duplicate: skippedDuplicate,
+          skipped_out_of_period: skippedOutOfPeriod,
+          sample_no_date: diagSampleNoDate,
+        },
+      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // UPSERT real (UPDATE quando existe) — antes usava ignoreDuplicates:true

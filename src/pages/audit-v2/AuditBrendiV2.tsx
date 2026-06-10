@@ -13,9 +13,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
-import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, Info } from 'lucide-react';
 import {
-  UploadBrendiCard, UploadSaiposCard, dispatchMatchBrendi,
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
 import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
@@ -89,10 +88,11 @@ export default function AuditBrendiV2() {
 
   const [period, setPeriod] = useState<AuditPeriodLite | null>(null);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
 
   const [daily, setDaily] = useState<DailyRow[]>([]);
-  const [crosscheck, setCrosscheck] = useState<CrosscheckResult | null>(null);
+  // O match não roda mais por aqui — é disparado pelo botão "Executar Auditoria"
+  // na aba Importações. O cross-check ao vivo fica null até a próxima execução lá.
+  const [crosscheck] = useState<CrosscheckResult | null>(null);
   const [imports, setImports] = useState<Array<{ file_type: string; status: string; created_at: string; imported_rows: number }>>([]);
   const [brendiOrdersCount, setBrendiOrdersCount] = useState(0);
   const [brendiCashbackTotal, setBrendiCashbackTotal] = useState(0);
@@ -202,18 +202,6 @@ export default function AuditBrendiV2() {
     return p;
   };
 
-  const handleMatch = async () => {
-    if (!period) return;
-    setRunning(true);
-    const result = await dispatchMatchBrendi(period.id);
-    if (result) {
-      setCrosscheck(result.crosscheck);
-      toast.success(result.message);
-      await refresh(period.id);
-    }
-    setRunning(false);
-  };
-
   const onUploadAfter = async () => {
     if (period) await refresh(period.id);
   };
@@ -293,15 +281,12 @@ export default function AuditBrendiV2() {
             ) : (
               <Badge variant="secondary">Sem período (será criado no upload)</Badge>
             )}
-            <div className="ml-auto">
-              <Button
-                onClick={handleMatch}
-                disabled={!canMatch || running}
-                className="gap-2"
-              >
-                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {running ? 'Executando…' : 'Executar match Brendi'}
-              </Button>
+            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <Info className="h-4 w-4 shrink-0" />
+              <span>
+                O match roda pelo botão <strong>Executar Auditoria</strong> na aba{' '}
+                <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a>.
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -311,7 +296,7 @@ export default function AuditBrendiV2() {
             <CardContent className="py-3 text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600" />
               <span>
-                Importe <strong>Brendi</strong> e <strong>Saipos</strong> em <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a> antes de executar o match.
+                Importe <strong>Brendi</strong> e <strong>Saipos</strong> em <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a> e execute a auditoria por lá.
               </span>
             </CardContent>
           </Card>
@@ -340,12 +325,7 @@ export default function AuditBrendiV2() {
         )}
 
         {tab === 'crosscheck' && (
-          <CrosscheckTab
-            crosscheck={crosscheck}
-            onRefresh={handleMatch}
-            running={running}
-            canMatch={canMatch}
-          />
+          <CrosscheckTab crosscheck={crosscheck} />
         )}
 
         {tab === 'diario' && (
@@ -436,7 +416,7 @@ function ResumoTab({
                   tone={crosscheck.value_mismatch_count > 0 ? 'amber' : 'normal'} />
               </>
             ) : (
-              <p className="text-muted-foreground">Execute o match pra ver o cross-check.</p>
+              <p className="text-muted-foreground">Execute a auditoria na aba Importações pra ver o cross-check.</p>
             )}
             <hr className="my-2" />
             <Row label="Dias matched (direto)" value={String(daily.filter(d => d.status === 'matched').length)} />
@@ -454,20 +434,16 @@ function ResumoTab({
 }
 
 function CrosscheckTab({
-  crosscheck, onRefresh, running, canMatch,
+  crosscheck,
 }: {
   crosscheck: CrosscheckResult | null;
-  onRefresh: () => Promise<void>;
-  running: boolean;
-  canMatch: boolean;
 }) {
   if (!crosscheck) {
     return (
       <Card>
         <CardContent className="py-8 text-sm text-center text-muted-foreground">
-          {canMatch
-            ? <Button onClick={onRefresh} disabled={running}>{running ? 'Executando…' : 'Executar cross-check agora'}</Button>
-            : 'Importe Brendi + Saipos e execute o match pra ver o cross-check.'}
+          O cross-check é gerado pelo botão <strong>Executar Auditoria</strong> na aba{' '}
+          <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a>.
         </CardContent>
       </Card>
     );

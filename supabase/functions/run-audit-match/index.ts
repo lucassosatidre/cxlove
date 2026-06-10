@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     // ===== iFOOD MATCH (lote-a-lote por valor) =====
     // Estratégia: cada lote (sale_date × tipo PIX/CARD) na Maquinona corresponde
     // a UM depósito Cresol específico. O extrato bancário tem 1 lançamento por
-    // (sale_date × tipo). Match valor-a-valor com tolerância 5% pra detectar
+    // (sale_date × tipo). Match valor-a-valor com tolerância 15% pra detectar
     // taxa oculta (PIX retido sem declaração, antecipação extra, etc).
     //
     // Vantagens vs match por expected_deposit_date:
@@ -293,9 +293,7 @@ Deno.serve(async (req) => {
       if (dailyErr) throw dailyErr;
     }
 
-    // ===== CLASSIFY DEPOSITS (matched / fora_periodo / nao_identificado) =====
-    const { error: clsIfoodErr } = await supabase.rpc('classify_ifood_deposits', { p_period_id: audit_period_id });
-    if (clsIfoodErr) console.error('classify_ifood_deposits error', clsIfoodErr);
+    // classify_ifood_deposits removido: gravava match_status/matched_competencia_amount por data de crédito (anti-padrão sale_date) e nenhum KPI lê esses campos.
 
     // Update period status
     await supabase

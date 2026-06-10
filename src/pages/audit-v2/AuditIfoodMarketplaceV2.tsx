@@ -14,7 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUserRole } from '@/hooks/useUserRole';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Loader2, RefreshCw, AlertCircle, CheckCircle2, Copy } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, Copy } from 'lucide-react';
 import {
   UploadIfoodExtratoDetalhadoCard, UploadIfoodContaCsvCard, UploadIfoodOrdersCard,
   dispatchMatchIfoodMarketplace,
@@ -93,7 +93,7 @@ const MONTHS = [
 
 const STATUS_VARIANTS: Record<string, { label: string; className: string }> = {
   matched: { label: '✓ Matched', className: 'bg-green-500/15 text-green-700 dark:text-green-400' },
-  matched_aprox: { label: '✓ Aprox', className: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' },
+  matched_aprox: { label: '✓ Aprox', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   pending: { label: 'Aguardando', className: 'bg-muted text-muted-foreground' },
   unmatched: { label: '⚠ Manual', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400' },
   sem_repasse: { label: 'Sem repasse', className: 'bg-rose-500/15 text-rose-700 dark:text-rose-400' },
@@ -120,6 +120,8 @@ export default function AuditIfoodMarketplaceV2() {
   const [stores, setStores] = useState<string[]>([]);
   const [matchDebug, setMatchDebug] = useState<any>(null);
   const [debugOpen, setDebugOpen] = useState(false);
+  // Entradas na conta iFood Pago sem identificação (categoria='nao_reconhecido') — informativo
+  const [naoReconhecido, setNaoReconhecido] = useState<{ total: number; count: number }>({ total: 0, count: 0 });
 
   // URL sync
   useEffect(() => {
@@ -135,7 +137,7 @@ export default function AuditIfoodMarketplaceV2() {
     // cast pra any: tipos novos (audit_ifood_repasses/lancamentos) ainda não
     // estão no types.ts até Lovable regenerar após aplicar a migration.
     const sb: any = supabase;
-    const [{ data: repassesData }, { data: imps }, { data: lojasData }] = await Promise.all([
+    const [{ data: repassesData }, { data: imps }, { data: lojasData }, { data: naoRecData }] = await Promise.all([
       sb
         .from('audit_ifood_repasses')
         .select('*')
@@ -152,10 +154,19 @@ export default function AuditIfoodMarketplaceV2() {
         .from('audit_ifood_lancamentos')
         .select('store_id_curto')
         .eq('audit_period_id', periodId),
+      sb
+        .from('audit_ifood_conta_movimentos')
+        .select('valor')
+        .eq('audit_period_id', periodId)
+        .eq('categoria', 'nao_reconhecido'),
     ]);
     setRepasses(((repassesData ?? []) as unknown) as Repasse[]);
     setImports((imps ?? []) as any);
     setStores([...new Set((lojasData ?? []).map((r: any) => r.store_id_curto).filter(Boolean))] as string[]);
+    setNaoReconhecido({
+      total: (naoRecData ?? []).reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+      count: (naoRecData ?? []).length,
+    });
   };
 
   useEffect(() => {
@@ -169,7 +180,7 @@ export default function AuditIfoodMarketplaceV2() {
       if (!active) return;
       setPeriod(p);
       if (p) await refresh(p.id);
-      else { setRepasses([]); setImports([]); setStores([]); }
+      else { setRepasses([]); setImports([]); setStores([]); setNaoReconhecido({ total: 0, count: 0 }); }
       setLoading(false);
     })();
     return () => { active = false; };
@@ -338,16 +349,15 @@ export default function AuditIfoodMarketplaceV2() {
             ) : (
               <Badge variant="secondary">Sem período (criado no upload)</Badge>
             )}
-            <div className="ml-auto flex gap-2">
+            <div className="ml-auto flex items-center gap-2">
               {matchDebug && (
                 <Button variant="outline" size="sm" onClick={() => setDebugOpen(true)}>
                   Diagnóstico
                 </Button>
               )}
-              <Button onClick={handleMatch} disabled={!canMatch || running} className="gap-2">
-                {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {running ? 'Executando…' : 'Executar match iFood'}
-              </Button>
+              <span className="text-xs text-muted-foreground">
+                Match: execute pela aba <a href="/admin/auditoria-v2/importacoes" className="underline font-semibold">Importações</a>
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -371,7 +381,7 @@ export default function AuditIfoodMarketplaceV2() {
           </TabsList>
         </Tabs>
 
-        {tab === 'resumo' && <ResumoTab totals={totals} repasses={repassesFiltrados} />}
+        {tab === 'resumo' && <ResumoTab totals={totals} repasses={repassesFiltrados} naoReconhecido={naoReconhecido} />}
         {tab === 'repasses' && <RepassesTab repasses={repassesFiltrados} />}
         {tab === 'crosscheck' && (
           <CrosscheckTab crosscheck={crosscheck} onRefresh={handleMatch} running={running} canMatch={canMatch} />
@@ -431,7 +441,7 @@ function Checklist({ label, done, count, target, optional }: { label: string; do
   );
 }
 
-function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
+function ResumoTab({ totals, repasses, naoReconhecido }: { totals: any; repasses: Repasse[]; naoReconhecido: { total: number; count: number } }) {
   // Conta de ciclos = datas únicas de repasse (não linhas/lojas)
   const ciclosCount = new Set(repasses.map(r => r.data_repasse_esperada)).size;
   // Faturamento total iFood = online + direto loja (universo da plataforma)
@@ -443,8 +453,25 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
   // Subtotal único (Taxas + Marketing fundidos)
   const subtotalTaxas = totals.custos_taxas + totals.custos_marketing;
 
+  // Soma das diferenças absolutas dos ciclos com match aproximado — avisa
+  // quando passa de R$ 50 (pode esconder retenção/taxa não declarada).
+  const aproxDiffTotal = repasses
+    .filter(r => r.status === 'matched_aprox')
+    .reduce((s, r) => s + Math.abs(Number(r.diff ?? 0)), 0);
+
   return (
     <div className="space-y-4">
+      {aproxDiffTotal > 50 && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="py-3 text-sm flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+            <span>
+              Os ciclos com match aproximado (✓ Aprox) somam <strong>{fmt(aproxDiffTotal)}</strong> de diferença absoluta — revise os repasses na aba "Repasses semanais" antes de fechar o mês.
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard title="Vendido pelo iFood (online)" value={fmt(totals.vendido_total)} />
         <KpiCard title="Líquido esperado" value={fmt(totals.liquido_esperado)}
@@ -455,6 +482,17 @@ function ResumoTab({ totals, repasses }: { totals: any; repasses: Repasse[] }) {
         <KpiCard title="Recebido direto pela loja" value={fmt(totals.pgto_direto_loja)}
           hint="Pgto na entrega + Dinheiro (não passa pelo iFood Pago)" />
       </div>
+
+      <Card className="border-dashed border-muted-foreground/30">
+        <CardContent className="py-4">
+          <p className="text-xs uppercase text-muted-foreground tracking-wide">Entrada não reconhecida</p>
+          <p className="text-2xl font-semibold mt-1">{fmt(naoReconhecido.total)}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            valor que entrou na conta sem identificação — informativo
+            {naoReconhecido.count > 0 ? ` · ${naoReconhecido.count} lançamento(s) na conta iFood Pago` : ''}
+          </p>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card>
@@ -515,7 +553,7 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
     return Array.from(byDate.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([data, items]) => {
-        const totalBruto = items.reduce((s, r) => s + Number(r.liquido_esperado || 0), 0);
+        const totalLiquidoEsperado = items.reduce((s, r) => s + Number(r.liquido_esperado || 0), 0);
         const totalLiquido = items.reduce((s, r) => s + Number(r.liquido_efetivo ?? r.conta_recebido ?? 0), 0);
         const taxaAntecip = items.reduce((s, r) => s + Math.abs(Number(r.conta_taxa_antecip || 0)), 0);
         const dataRecebimento = items.find(r => r.conta_data_recebimento)?.conta_data_recebimento ?? null;
@@ -533,7 +571,7 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
           : statuses.has('matched_aprox')
           ? 'matched_aprox'
           : 'matched';
-        return { data, items, totalBruto, totalLiquido, taxaAntecip, dataRecebimento, periodoIni, periodoFim, status };
+        return { data, items, totalLiquidoEsperado, totalLiquido, taxaAntecip, dataRecebimento, periodoIni, periodoFim, status };
       });
   }, [repasses]);
 
@@ -561,7 +599,7 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
             <TableRow>
               <TableHead>Data esperada</TableHead>
               <TableHead>Período apuração</TableHead>
-              <TableHead className="text-right">Total Bruto</TableHead>
+              <TableHead className="text-right">Líquido esperado</TableHead>
               <TableHead className="text-right">Total Líquido</TableHead>
               <TableHead className="text-right">Taxa de antecipação</TableHead>
               <TableHead>Status</TableHead>
@@ -583,7 +621,7 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
                         ? `${fmtDate(g.periodoIni)} a ${fmtDate(g.periodoFim)}`
                         : '—'}
                     </TableCell>
-                    <TableCell className="text-right font-medium">{fmt(g.totalBruto)}</TableCell>
+                    <TableCell className="text-right font-medium">{fmt(g.totalLiquidoEsperado)}</TableCell>
                     <TableCell className="text-right font-medium">
                       {g.totalLiquido > 0 ? (
                         <div>{fmt(g.totalLiquido)}<div className="text-[10px] text-muted-foreground">{g.dataRecebimento ? fmtDate(g.dataRecebimento) : ''}</div></div>
@@ -602,7 +640,7 @@ function RepassesTab({ repasses }: { repasses: Repasse[] }) {
                             <div className="text-xs font-semibold mb-2 text-muted-foreground">
                               {storeName(r.store_id_curto)} · {r.periodo_apuracao_inicio && r.periodo_apuracao_fim
                                 ? `${fmtDate(r.periodo_apuracao_inicio)} a ${fmtDate(r.periodo_apuracao_fim)}`
-                                : '—'} · Bruto {fmt(Number(r.liquido_esperado))} · Líq {fmt(Number(r.liquido_efetivo ?? r.conta_recebido ?? 0))}
+                                : '—'} · Líq. esperado {fmt(Number(r.liquido_esperado))} · Líq. recebido {fmt(Number(r.liquido_efetivo ?? r.conta_recebido ?? 0))}
                             </div>
                             <RepasseDetalhe r={r} />
                           </div>

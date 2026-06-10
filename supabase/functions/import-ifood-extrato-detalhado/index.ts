@@ -327,7 +327,8 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Cleanup: DELETE lançamentos e repasses anteriores desta loja+period
+    // Cleanup: DELETE lançamentos, repasses e vendas diárias anteriores desta
+    // loja+period (reimport idempotente)
     await supabase
       .from('audit_ifood_lancamentos')
       .delete()
@@ -338,6 +339,11 @@ Deno.serve(async (req) => {
       .delete()
       .eq('audit_period_id', audit_period_id)
       .eq('store_id_curto', storeIdCurto);
+    await supabase
+      .from('audit_ifood_daily_sales')
+      .delete()
+      .eq('audit_period_id', audit_period_id)
+      .eq('loja_id_curto', storeIdCurto);
 
     // Registra import
     const { data: importRec, error: importErr } = await supabase
@@ -610,6 +616,50 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ─── Agregação em audit_ifood_daily_sales ──────────────────────────────
+    // Bruto VENDIDO por DATA DA VENDA (data_criacao_pedido_associado, só a
+    // parte date) + loja. REGRA DURA da auditoria: competência da venda, nunca
+    // data do crédito. Só lançamentos de venda (fato_gerador='venda', tipo
+    // 'entrada financeira' = categoria_calc 'bruto_venda') com impacto=SIM.
+    // Registros antigos do period+loja já foram deletados no cleanup acima.
+    type DailyAcc = { bruto: number; pedidos: Set<string>; semPedido: number };
+    const daily = new Map<string, DailyAcc>();
+    for (const l of lancamentos) {
+      if (l.categoria_calc !== 'bruto_venda') continue;
+      if (l.impacto_no_repasse !== 'SIM') continue;
+      const saleDate = toIsoDate(l.data_criacao_pedido_associado);
+      if (!saleDate) continue;
+      if (!daily.has(saleDate)) daily.set(saleDate, { bruto: 0, pedidos: new Set(), semPedido: 0 });
+      const d = daily.get(saleDate)!;
+      d.bruto += Number(l.valor ?? 0);
+      // pedidos_count = pedidos distintos; lançamento sem pedido associado
+      // conta como 1 pedido próprio (não dá pra agrupar)
+      if (l.pedido_associado_ifood) d.pedidos.add(l.pedido_associado_ifood);
+      else d.semPedido++;
+    }
+    const dailySalesPayload = Array.from(daily.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([saleDate, d]) => ({
+        audit_period_id,
+        loja_id_curto: storeIdCurto,
+        sale_date: saleDate,
+        bruto_venda: round2(d.bruto),
+        pedidos_count: d.pedidos.size + d.semPedido,
+      }));
+    if (dailySalesPayload.length > 0) {
+      const { error: dsErr } = await supabase
+        .from('audit_ifood_daily_sales')
+        .insert(dailySalesPayload);
+      if (dsErr) {
+        await supabase.from('audit_imports').update({
+          status: 'failed', error_message: `Erro ao agregar vendas diárias: ${dsErr.message}`,
+        }).eq('id', importRec.id);
+        return new Response(JSON.stringify({ error: `Erro ao agregar vendas diárias: ${dsErr.message}` }), {
+          status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
     await supabase.from('audit_imports').update({
       status: 'completed', imported_rows: inserted,
     }).eq('id', importRec.id);
@@ -622,6 +672,7 @@ Deno.serve(async (req) => {
       loja_id: lojaIdLong,
       competencia: competenciaArquivo,
       repasses_gerados: repassesPayload.length,
+      daily_sales_gerados: dailySalesPayload.length,
       breakdown_by_categoria: Object.fromEntries(
         Object.entries(breakdownByCategoria).map(([k, v]) => [k, { count: v.count, soma: round2(v.soma) }])
       ),
