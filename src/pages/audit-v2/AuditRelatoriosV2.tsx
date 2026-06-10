@@ -62,7 +62,7 @@ export default function AuditRelatoriosV2() {
   const reloadPeriod = async () => {
     if (!period) return;
     const { data } = await supabase.from('audit_periods').select('*').eq('id', period.id).maybeSingle();
-    if (data) setPeriod(data as AuditPeriod);
+    if (data) setPeriod(data as unknown as AuditPeriod);
   };
 
   const handleClose = async () => {
@@ -146,7 +146,7 @@ export default function AuditRelatoriosV2() {
       const { data } = await supabase
         .from('audit_periods').select('*').eq('month', month).eq('year', year).maybeSingle();
       if (!active) return;
-      setPeriod((data as AuditPeriod) ?? null);
+      setPeriod((data as unknown as AuditPeriod) ?? null);
       setResumidoData(null);
       setDetalhadoData(null);
       setLoading(false);
