@@ -417,19 +417,33 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
   // Equação contábil: custo = vendido - recebido CRU (sem clamp em zero).
   // Negativo (recebido > vendido) vira flag de alerta em vez de sumir — assim
   // a identidade Vendido = Recebido + Custo sempre fecha na consolidada.
-  // A provisão (F2) soma por cima do custo apurado, com flag estimada.
+  //
+  // REGRA DURA (Total Bruto = VENDIDO no mês): o vendido do voucher é a venda
+  // por COMPETÊNCIA na Maquinona (POS), não só a parcela já creditada no extrato
+  // da operadora. A diferença (vendas_pendentes) é venda do mês cujo crédito
+  // ainda não caiu (ex: Ticket credita até D+30). Pra a identidade
+  // Vendido = Recebido + Custo continuar fechando, a provisão entra assim:
+  //   vendido  += vendas_pendentes                 (passa a ser o bruto cheio)
+  //   recebido += vendas_pendentes - provisao_taxa (líquido provisionado a receber)
+  //   custo    += provisao_taxa                     (taxa estimada sobre o pendente)
+  // Linhas com provisão ficam marcadas (estimada=true) e expõem
+  // vendas_pendentes/provisao_taxa pro relatório anotar "inclui a receber".
   const resumoPorCategoria: ContabilResumoRow[] = CATEGORIAS_ORDEM
     .filter(c => c !== 'brendi')
     .map(c => {
       const a = resumoMap.get(c);
-      const vendido = a?.vendido ?? 0;
-      const recebido = a?.recebido ?? 0;
-      const custoBase = vendido - recebido;
+      const vendidoCoberto = a?.vendido ?? 0;
+      const recebidoCoberto = a?.recebido ?? 0;
+      const custoBase = vendidoCoberto - recebidoCoberto;
       const prov = provisaoPorCat.get(c);
+      const vendasPend = prov?.vendas_pendentes ?? 0;
+      const provTaxa = prov?.provisao_taxa ?? 0;
       return {
         categoria: c, nome: CATEGORIA_LABELS[c],
-        qtd: a?.qtd ?? 0, vendido, recebido,
-        custo: custoBase + (prov?.provisao_taxa ?? 0),
+        qtd: a?.qtd ?? 0,
+        vendido: vendidoCoberto + vendasPend,
+        recebido: recebidoCoberto + (vendasPend - provTaxa),
+        custo: custoBase + provTaxa,
         custo_negativo: custoBase < -0.005 || undefined,
         estimada: prov ? true : undefined,
         vendas_pendentes: prov?.vendas_pendentes,
@@ -501,10 +515,15 @@ export async function buildContabilData(params: GenerateContabilParams): Promise
       .gte('sale_date', monthStart)
       .lt('sale_date', nextMonth),
     // Entradas na conta iFood Pago sem identificação — informativo no relatório.
+    // Filtra pela competência do mês (data): o user importa a conta do mês +
+    // mês seguinte (pra pegar antecipação que cai depois), mas o "não
+    // reconhecido" de junho não é do fechamento de maio.
     sb.from('audit_ifood_conta_movimentos')
       .select('valor')
       .eq('audit_period_id', periodId)
-      .eq('categoria', 'nao_reconhecido'),
+      .eq('categoria', 'nao_reconhecido')
+      .gte('data', monthStart)
+      .lt('data', nextMonth),
   ]);
 
 

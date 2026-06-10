@@ -377,7 +377,12 @@ Deno.serve(async (req) => {
     const taxasUsadas = new Set<string>();
     const taxaPorRepasse = new Map<string, number>();
     for (const t of taxas) {
-      const subtotalEsperado = Number(t.valor) / ANTECIP_RATE;
+      // taxa.valor é DÉBITO (negativo no extrato PDF da conta; o CSV antigo
+      // vinha positivo). Usa SEMPRE o módulo: subtotalEsperado = |taxa|/1.99%
+      // tem que bater com o repasse POSITIVO. Sem o abs, o PDF quebrava o Pass 3
+      // (liquido_efetivo ficava NULL → antecipação não descontada).
+      const taxaAbs = Math.abs(Number(t.valor));
+      const subtotalEsperado = taxaAbs / ANTECIP_RATE;
       // Procura antecipação MATCHED do mesmo dia com valor próximo. Filtrar
       // por matched é crítico: se a antecipação é de outra competência (ex:
       // jan/26 paga em fev/26 mas não importamos jan), a taxa associada não
@@ -406,7 +411,7 @@ Deno.serve(async (req) => {
         const rep = repassesById.get(repId);
         if (!rep) continue;
         const proporcao = exp.soma > 0 ? Number(rep.liquido_esperado) / exp.soma : 0;
-        const taxaLoja = Math.round(Number(t.valor) * proporcao * 100) / 100;
+        const taxaLoja = Math.round(taxaAbs * proporcao * 100) / 100;
         taxaPorRepasse.set(repId, (taxaPorRepasse.get(repId) ?? 0) + taxaLoja);
       }
     }

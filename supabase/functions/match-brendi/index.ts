@@ -334,10 +334,9 @@ Deno.serve(async (req) => {
       brendiBySaleDate.set(key, cur);
     }
 
-    // Pega depósitos BB Brendi.
-    // Cross-period: o usuário pode ter importado o extrato BB de abril dentro
-    // do period março. Filtrar por audit_period_id perde esses deps. Janela:
-    // mês de competência ± buffer (D-5 / D+7) cobre D+1 útil cross-month.
+    // Pega depósitos BB Brendi do PRÓPRIO período (ver filtro abaixo). A janela
+    // de data ± buffer (D-5 / D+7) cobre o D+1 útil cross-month DENTRO do
+    // período — o user sobe o BB do mês + mês seguinte no mesmo período.
     const daysAdd = (iso: string, n: number): string => {
       const dt = new Date(iso + 'T00:00:00Z');
       dt.setUTCDate(dt.getUTCDate() + n);
@@ -345,10 +344,17 @@ Deno.serve(async (req) => {
     };
     const bbWindowStart = daysAdd(periodMonthStart, -5);
     const bbWindowEnd = daysAdd(periodNextMonthStart, 7);
+    // FILTRA pelo audit_period_id atual. Sem isso, depósitos BB com datas de
+    // maio que foram importados num OUTRO período (ex: extrato de abril que
+    // varou pra 26/05 pra cobrir D+1) entram na janela e o MESMO crédito é
+    // contado 2× (ids diferentes, dedup por id não pega) → received dobrado.
+    // O período de competência já recebe o BB do mês + mês seguinte (o user
+    // sobe os 2 arquivos no mesmo período), então o filtro cobre o D+1.
     const bbDeps = await fetchAllPaginated<any>(
       supabase
         .from('audit_bank_deposits')
         .select('id, deposit_date, detail, amount')
+        .eq('audit_period_id', audit_period_id)
         .gte('deposit_date', bbWindowStart)
         .lt('deposit_date', bbWindowEnd)
         .eq('bank', 'bb')
