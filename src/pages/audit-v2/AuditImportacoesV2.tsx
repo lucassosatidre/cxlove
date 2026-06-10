@@ -364,7 +364,7 @@ export default function AuditImportacoesV2() {
     {
       docId: 'ticket', label: '04 TICKET — Extrato de Reembolso Detalhado',
       hint: 'Portal Ticket → Financeiro, período de 01 do mês até a data mais futura possível',
-      format: '.pdf',
+      format: '.pdf/.xlsx',
       slots: ['comp'], filesPerSlot: 1, fileTypes: ['ticket'],
       group: 'vouchers', Component: UploadTicketCard,
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['ticket']); },
@@ -432,9 +432,9 @@ export default function AuditImportacoesV2() {
       group: 'ifood', Component: UploadIfoodOrdersCard,
     },
     {
-      docId: 'ifood_conta_csv', label: '12 IFOOD — Conta Digital extrato CSV',
-      hint: 'App iFood → Conta Digital → Extrato, mês + mês seguinte',
-      format: '.csv',
+      docId: 'ifood_conta_csv', label: '12 IFOOD — Conta Digital (extrato)',
+      hint: 'App iFood → Conta Digital → Extrato (CSV ou PDF), mês + mês seguinte',
+      format: '.csv/.pdf',
       slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['ifood_conta_csv'],
       group: 'ifood', Component: UploadIfoodContaCsvCard,
       postReason: 'antecipação pode cair no mês seguinte',

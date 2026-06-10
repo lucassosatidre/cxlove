@@ -389,6 +389,107 @@ function parseTicketRefund(text: string): { lots: ParsedLot[]; warnings: string[
 // ============================================================
 // Handler
 // ============================================================
+// ============================================================
+// Parser do MESMO "Extrato de Reembolso Detalhado" da Ticket, mas em XLSX
+// (o portal Edenred passou a exportar planilha em vez de PDF). Colunas
+// detectadas por NOME. Cada Nº de reembolso agrupa suas vendas (linhas
+// COMPRA/TEF) + linhas-resumo (Subtotal de Vendas / Tarifas / Total de
+// Descontos / Valor Líquido). Devolve a MESMA estrutura ParsedLot do PDF,
+// então todo o roteamento/insert a jusante é idêntico.
+// ============================================================
+function parseTicketRefundXlsx(rows: any[][]): { lots: ParsedLot[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const norm = (s: any) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  let hi = -1;
+  for (let i = 0; i < Math.min(rows.length, 40); i++) {
+    const c = (rows[i] || []).map(norm);
+    if (c.some((x: string) => x.includes('reembolso')) && c.some((x: string) => x.includes('valor da transac'))) { hi = i; break; }
+  }
+  if (hi < 0) return { lots: [], warnings: ['Cabeçalho XLSX Ticket não encontrado (esperado "Número do reembolso" + "Valor da transação").'] };
+  const hdr = (rows[hi] || []).map(norm);
+  const ci = (...needles: string[]) => hdr.findIndex((h: string) => needles.some((n) => h.includes(n)));
+  const cReemb = ci('numero do reembolso', 'reembolso');
+  const cContr = ci('numero do contrato', 'contrato');
+  const cProd = ci('produto');
+  const cCorte = ci('data de corte', 'corte');
+  const cCred = ci('credito', 'debito');
+  const cEstab = ci('cod');
+  const cTx = ci('data da transac');
+  const cPost = ci('data de postagem', 'postagem');
+  const cDoc = ci('numero do documento', 'documento');
+  const cTipo = ci('tipo de transac');
+  const cDesc = ci('descricao do lancamento', 'descricao');
+  const cCartao = ci('numero do cartao', 'cartao');
+  const cVal = ci('valor da transac');
+  const cCnpj = ci('cnpj');
+
+  const xdate = (v: any): string | null => {
+    if (v == null) return null;
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    const s = String(v).trim();
+    let m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    return null;
+  };
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  const lots: ParsedLot[] = [];
+  const byReemb: Record<string, ParsedLot> = {};
+  let current: ParsedLot | null = null;
+  for (const r of rows.slice(hi + 1)) {
+    if (!r || !r.some((c: any) => c != null && String(c).trim() !== '')) continue;
+    const reemb = String(r[cReemb] ?? '').trim();
+    const desc = String(r[cDesc] ?? '').trim();
+    const tipo = String(r[cTipo] ?? '').trim().toLowerCase();
+    const dl = desc.toLowerCase();
+    const valor = parseValor(String(r[cVal] ?? ''));
+    const isCompra = tipo === 'tef' || /compra/.test(dl);
+    if (isCompra && reemb) {
+      if (!byReemb[reemb]) {
+        current = {
+          numero_reembolso: reemb,
+          numero_contrato: String(r[cContr] ?? '').trim(),
+          produto: String(r[cProd] ?? '').trim(),
+          data_corte: xdate(r[cCorte]),
+          data_credito: xdate(r[cCred]) ?? '',
+          cod_estabelecimento: String(r[cEstab] ?? '').trim() || null,
+          items: [], subtotal_vendas: 0, descontos: {}, total_descontos: 0, valor_liquido: 0,
+        };
+        byReemb[reemb] = current;
+        lots.push(current);
+      } else {
+        current = byReemb[reemb];
+      }
+      if (valor != null) current.items.push({
+        data_transacao: xdate(r[cTx]) ?? '',
+        data_postagem: xdate(r[cPost]),
+        numero_documento: String(r[cDoc] ?? '').trim() || null,
+        numero_cartao_mascarado: String(r[cCartao] ?? '').trim() || null,
+        valor,
+        cnpj: String(r[cCnpj] ?? '').trim() || null,
+      });
+      continue;
+    }
+    // Linhas-resumo: pertencem ao lote da própria linha (col reembolso) ou ao corrente.
+    const lot = (reemb && byReemb[reemb]) ? byReemb[reemb] : current;
+    if (!lot || valor == null) continue;
+    if (/subtotal de vendas/.test(dl)) lot.subtotal_vendas = valor;
+    else if (/total de descontos/.test(dl)) lot.total_descontos = valor;
+    else if (/valor l[ií]quido/.test(dl)) lot.valor_liquido = valor;
+    else if (isInformationalNotDiscount(desc)) { /* Valor Antecipado: informativo, não é custo */ }
+    else if (valor !== 0) { const k = normalizeDiscountKey(desc); lot.descontos[k] = (lot.descontos[k] ?? 0) + valor; }
+  }
+  // Reconciliação dos campos faltantes (espelha o parser de PDF).
+  for (const l of lots) {
+    const sumDesc = Object.values(l.descontos).reduce((s, v) => s + v, 0);
+    if (!l.subtotal_vendas) l.subtotal_vendas = round2(l.items.reduce((s, it) => s + it.valor, 0));
+    if (!l.total_descontos && sumDesc) l.total_descontos = round2(sumDesc);
+    if (!l.valor_liquido) l.valor_liquido = round2(l.subtotal_vendas - l.total_descontos);
+    if (!l.items.length) warnings.push(`Lote ${l.numero_reembolso} sem itens de venda.`);
+  }
+  return { lots, warnings };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -421,9 +522,10 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_name, raw_text } = body || {};
-    if (!audit_period_id || !file_name || !raw_text) {
-      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, raw_text)' }), {
+    const { audit_period_id, file_name, raw_text, rows } = body || {};
+    const isXlsx = Array.isArray(rows) && rows.length > 0;
+    if (!audit_period_id || !file_name || (!raw_text && !isXlsx)) {
+      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, e raw_text [PDF] ou rows [XLSX])' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -442,26 +544,26 @@ Deno.serve(async (req) => {
     }
     const wasConciliado = period.status === 'conciliado';
 
-    console.log(`[import-ticket-pdf] starting parse — text length=${raw_text.length}`);
+    console.log(`[import-ticket-pdf] starting parse — ${isXlsx ? `xlsx rows=${rows.length}` : `pdf text length=${raw_text?.length ?? 0}`}`);
 
     let lots: any[] = [];
     let warnings: string[] = [];
     try {
-      const result = parseTicketRefund(raw_text);
+      const result = isXlsx ? parseTicketRefundXlsx(rows) : parseTicketRefund(raw_text);
       lots = result.lots;
       warnings = result.warnings;
       console.log(`[import-ticket-pdf] parse OK — ${lots.length} lots, ${warnings.length} warnings`);
     } catch (parseErr: any) {
       console.error('[import-ticket-pdf] parse threw', parseErr);
       return new Response(JSON.stringify({
-        error: `Erro ao parsear PDF: ${parseErr?.message ?? 'erro desconhecido'}`,
-        diagnostic: { text_length: raw_text.length, sample: raw_text.substring(0, 500) },
+        error: `Erro ao parsear ${isXlsx ? 'XLSX' : 'PDF'}: ${parseErr?.message ?? 'erro desconhecido'}`,
+        diagnostic: { source: isXlsx ? 'xlsx' : 'pdf', text_length: raw_text?.length ?? 0, rows_length: isXlsx ? rows.length : 0 },
       }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (lots.length === 0) {
       return new Response(JSON.stringify({
-        error: 'Nenhum lote reconhecido no PDF. Verifique se o arquivo é o "Extrato de Reembolsos Detalhado" da Ticket.',
+        error: 'Nenhum lote reconhecido. Verifique se o arquivo é o "Extrato de Reembolsos Detalhado" da Ticket (PDF ou XLSX).',
         warnings,
       }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },

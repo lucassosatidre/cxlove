@@ -383,9 +383,9 @@ export function UploadTicketCard({ period, ensurePeriod, onAfter }: UploadCardPr
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
   const handleFiles = async (files: File[]) => {
-    const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    const pdfs = files.filter(f => /\.(pdf|xlsx)$/i.test(f.name));
     const invalid = files.length - pdfs.length;
-    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — apenas .pdf é aceito`);
+    if (invalid > 0) toast.error(`${invalid} arquivo(s) ignorado(s) — aceita .pdf ou .xlsx`);
     if (pdfs.length === 0) return;
 
     setUploading(true);
@@ -404,9 +404,19 @@ export function UploadTicketCard({ period, ensurePeriod, onAfter }: UploadCardPr
         const file = pdfs[i];
         setProgress({ current: i + 1, total: pdfs.length });
         try {
-          const rawText = await extractPdfText(file);
+          let invokeBody: any;
+          if (/\.xlsx$/i.test(file.name)) {
+            const buf = await file.arrayBuffer();
+            const workbook = XLSX.read(buf, { type: 'array', cellDates: true });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: null, raw: true });
+            invokeBody = { audit_period_id: p.id, file_name: file.name, rows };
+          } else {
+            const rawText = await extractPdfText(file);
+            invokeBody = { audit_period_id: p.id, file_name: file.name, raw_text: rawText };
+          }
           const { data, error } = await supabase.functions.invoke('import-ticket-pdf', {
-            body: { audit_period_id: p.id, file_name: file.name, raw_text: rawText },
+            body: invokeBody,
           });
           if (error) {
             let detail = error.message ?? 'erro desconhecido';
@@ -459,18 +469,18 @@ export function UploadTicketCard({ period, ensurePeriod, onAfter }: UploadCardPr
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
         <FileText className="h-5 w-5 text-amber-600" />
-        <CardTitle className="text-base">Reembolsos Ticket (.pdf)</CardTitle>
+        <CardTitle className="text-base">Reembolsos Ticket (.pdf ou .xlsx)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          PDF "Extrato de Reembolsos Detalhado" do portal Ticket Edenred.
-          Cada Nº Reembolso vira 1 lote = 1 depósito esperado no BB.
-          Pode selecionar mais de 1 PDF (ex: meses separados).
+          "Extrato de Reembolsos Detalhado" do portal Ticket Edenred — em PDF
+          ou XLSX (o portal exporta os dois). Cada Nº Reembolso vira 1 lote = 1
+          depósito esperado no BB. Pode selecionar mais de 1 arquivo (ex: meses separados).
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept=".pdf"
+          accept=".pdf,.xlsx"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -1381,9 +1391,9 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
 
   const handleFiles = async (files: File[]) => {
-    const csvs = files.filter(f => f.name.toLowerCase().endsWith('.csv'));
+    const csvs = files.filter(f => /\.(csv|pdf)$/i.test(f.name));
     if (csvs.length === 0) {
-      toast.error('Apenas .csv é aceito');
+      toast.error('Aceita .csv ou .pdf');
       return;
     }
     setUploading(true);
@@ -1400,18 +1410,23 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
         const file = csvs[i];
         setProgress({ current: i + 1, total: csvs.length });
         try {
-          // Lê texto cru — xlsx.js convertia datas ISO em formato americano
-          // M/D/YY e o edge descartava todas as antecipações por "sem data".
-          let text = await file.text();
-          // Remove BOM utf-8 se presente
-          if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-          const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
-          const rows = lines.map(line => parseCsvLine(line));
-          if (!rows.length) throw new Error('CSV vazio');
-
-          // clear_existing desabilitado: cada upload individual faz upsert.
+          let invokeBody: any;
+          if (/\.pdf$/i.test(file.name)) {
+            // PDF da conta digital iFood: manda o texto cru pro edge extrair.
+            const rawText = await extractPdfText(file);
+            invokeBody = { audit_period_id: p.id, raw_text: rawText, file_name: file.name, clear_existing: false };
+          } else {
+            // CSV: lê texto cru — xlsx.js convertia datas ISO em formato americano
+            // M/D/YY e o edge descartava todas as antecipações por "sem data".
+            let text = await file.text();
+            if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+            const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+            const rows = lines.map(line => parseCsvLine(line));
+            if (!rows.length) throw new Error('CSV vazio');
+            invokeBody = { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false };
+          }
           const { data, error } = await supabase.functions.invoke('import-ifood-conta-csv', {
-            body: { audit_period_id: p.id, rows, file_name: file.name, clear_existing: false },
+            body: invokeBody,
           });
           if (error) throw new Error(error.message);
           if (!data?.success) throw new Error(data?.error || 'Falha no import Conta iFood Pago');
@@ -1443,18 +1458,19 @@ export function UploadIfoodContaCsvCard({ period, ensurePeriod, onAfter }: Uploa
     <Card>
       <CardHeader className="pb-3 flex flex-row items-center gap-2 space-y-0">
         <Landmark className="h-5 w-5 text-orange-600" />
-        <CardTitle className="text-base">iFood — Conta iFood Pago (.csv)</CardTitle>
+        <CardTitle className="text-base">iFood — Conta iFood Pago (.csv ou .pdf)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-xs text-muted-foreground">
-          Extrato CSV da <strong>conta iFood Pago</strong> (banco do iFood). <strong>Importe 2 arquivos</strong>:
-          o do mês de competência <em>e</em> o do mês seguinte (alguns ciclos antecipam no mês
-          posterior). Apenas linhas "Repasse iFood" e "Antecipação" são processadas.
+          Extrato da <strong>conta iFood Pago</strong> (banco do iFood) — em CSV ou PDF.
+          <strong> Importe 2 arquivos</strong>: o do mês de competência <em>e</em> o do mês seguinte
+          (alguns ciclos antecipam no mês posterior). Repasse e Antecipação viram repasse/taxa;
+          créditos sem identificação entram como "não reconhecido".
         </p>
         <input
           ref={inputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.pdf"
           multiple
           className="hidden"
           onChange={(e) => {

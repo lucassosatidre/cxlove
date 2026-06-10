@@ -88,12 +88,28 @@ Deno.serve(async (req) => {
     }
     const wasConciliado = period.status === 'conciliado';
 
-    // Cresol export: header on row 9 (index 9), data starts row 10.
-    // Frontend sends the raw matrix (header=1). Skip until row 10 if needed,
-    // otherwise just iterate and let the date/amount filters drop noise rows.
-    const dataRows = rows.length > 10
-      ? rows.slice(10).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''))
-      : rows.filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
+    // Cresol export: detecta a linha de cabeçalho ("Data ... Valor") e as
+    // colunas por NOME — o layout varia entre exportações (em umas o Valor
+    // fica na 5ª coluna, em outras na 3ª). Fallback: layout antigo (0,1,4).
+    const norm = (s: any) => String(s ?? '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    let headerIdx = -1;
+    let colData = 0, colDesc = 1, colVal = 4;
+    for (let i = 0; i < Math.min(rows.length, 25); i++) {
+      const cells = (rows[i] || []).map(norm);
+      const dIdx = cells.findIndex((c: string) => c === 'data');
+      const vIdx = cells.findIndex((c: string) => c === 'valor' || c.startsWith('valor'));
+      if (dIdx !== -1 && vIdx !== -1) {
+        headerIdx = i; colData = dIdx; colVal = vIdx;
+        const descIdx = cells.findIndex((c: string) =>
+          c.includes('histor') || c.includes('descri') || c.includes('lanca'));
+        colDesc = descIdx !== -1 ? descIdx : dIdx + 1;
+        break;
+      }
+    }
+    const dataRows = (headerIdx !== -1 ? rows.slice(headerIdx + 1)
+      : rows.length > 10 ? rows.slice(10) : rows)
+      .filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
     const totalRows = dataRows.length;
 
     const { data: importRec, error: importErr } = await supabase
@@ -114,9 +130,9 @@ Deno.serve(async (req) => {
     const deposits: any[] = [];
     let skippedNonIfood = 0;
     for (const r of dataRows) {
-      const rawDate = r[0];
-      const description = r[1] != null ? String(r[1]).trim() : '';
-      const amount = parseNumber(r[4]);
+      const rawDate = r[colData];
+      const description = r[colDesc] != null ? String(r[colDesc]).trim() : '';
+      const amount = parseNumber(r[colVal]);
 
       if (!description) continue;
       if (/consulta posicao|periodo de/i.test(description) && !rawDate) continue;

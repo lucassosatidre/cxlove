@@ -54,6 +54,30 @@ function normLower(s: any): string {
   return String(s ?? '').normalize('NFC').trim().toLowerCase();
 }
 
+// Extrai os lançamentos do PDF "Extrato da Conta Digital iFood" (o portal
+// exporta PDF, não só CSV). Cada linha: <data> <movimentação> <descrição> <valor>.
+// Movimentação ∈ {Pix, Repasse iFood, Antecipação, Transferência}. Devolve a
+// MESMA forma de linha do CSV: [data, descrição, valor, categoriaTexto], onde
+// categoriaTexto = 'Repasse iFood' (crédito do repasse) | 'Antecipação' (taxa) |
+// '' (deixa o sinal do valor decidir: crédito sem rótulo = não reconhecido).
+function parseContaPdf(text: string): any[][] {
+  const out: any[][] = [];
+  const re = /(\d{2}\/\d{2}\/\d{4})\s+(Pix|Repasse iFood|Antecipa[çc][ãa]o|Transfer[êe]ncia)\s+(.+?)\s+(-?\s*R\$\s*[\d.,]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const data = m[1];
+    const mov = m[2];
+    const desc = m[3].trim();
+    const valor = m[4];
+    const movL = mov.toLowerCase();
+    let catText = '';
+    if (movL.includes('repasse')) catText = 'Repasse iFood';
+    else if (movL.startsWith('antecipa')) catText = 'Antecipação';
+    out.push([data, `${mov} ${desc}`.trim(), valor, catText]);
+  }
+  return out;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -85,9 +109,10 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { audit_period_id, file_name, rows, clear_existing } = body || {};
-    if (!audit_period_id || !file_name || !Array.isArray(rows)) {
-      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, rows)' }), {
+    const { audit_period_id, file_name, rows, raw_text, clear_existing } = body || {};
+    const isPdf = !!raw_text && !Array.isArray(rows);
+    if (!audit_period_id || !file_name || (!Array.isArray(rows) && !raw_text)) {
+      return new Response(JSON.stringify({ error: 'Parâmetros obrigatórios ausentes (audit_period_id, file_name, e rows [CSV] ou raw_text [PDF])' }), {
         status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -109,22 +134,31 @@ Deno.serve(async (req) => {
       await supabase.from('audit_ifood_conta_movimentos').delete().eq('audit_period_id', audit_period_id);
     }
 
-    // Detect header. CSV header expected: "data da transação","descrição","valor","categoria"
-    let headerIdx = -1;
-    for (let i = 0; i < Math.min(rows.length, 3); i++) {
-      const r = rows[i];
-      if (!r || !Array.isArray(r)) continue;
-      const cells = r.map((c: any) => normLower(c));
-      const hasData = cells.some(c => c.includes('data') && c.includes('transa'));
-      const hasCat = cells.some(c => c === 'categoria' || c.includes('categoria'));
-      if (hasData && hasCat) { headerIdx = i; break; }
+    let dataRows: any[][];
+    if (isPdf) {
+      // PDF da conta digital: extrai os lançamentos do texto.
+      dataRows = parseContaPdf(raw_text);
+      if (!dataRows.length) {
+        return new Response(JSON.stringify({ error: 'Nenhum lançamento reconhecido no PDF. Verifique se é o "Extrato da Conta Digital iFood".' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    } else {
+      // CSV: detecta header "data da transação","descrição","valor","categoria"
+      let headerIdx = -1;
+      for (let i = 0; i < Math.min(rows.length, 3); i++) {
+        const r = rows[i];
+        if (!r || !Array.isArray(r)) continue;
+        const cells = r.map((c: any) => normLower(c));
+        const hasData = cells.some(c => c.includes('data') && c.includes('transa'));
+        const hasCat = cells.some(c => c === 'categoria' || c.includes('categoria'));
+        if (hasData && hasCat) { headerIdx = i; break; }
+      }
+      if (headerIdx < 0) {
+        return new Response(JSON.stringify({ error: 'Header CSV iFood Pago não encontrado. Esperado: "data da transação", "descrição", "valor", "categoria".' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+      dataRows = rows.slice(headerIdx + 1).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
     }
-    if (headerIdx < 0) {
-      return new Response(JSON.stringify({ error: 'Header CSV iFood Pago não encontrado. Esperado: "data da transação", "descrição", "valor", "categoria".' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-
-    const dataRows = rows.slice(headerIdx + 1).filter((r: any[]) => r && r.some((c: any) => c != null && c !== ''));
 
     const { data: importRec, error: importErr } = await supabase
       .from('audit_imports').insert({
