@@ -209,18 +209,19 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Nenhum pagamento encontrado no extrato_pagamentos.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const periodCheck = validatePeriodMatch(pagamentos.map(p => p.data_pagamento), { month: period.month, year: period.year }, 'Pluxee Pagamentos', [0]);
+    // Valida e filtra por data_transacao (competência da venda), não
+    // data_pagamento. Isso permite importar o arquivo do mês seguinte (ex:
+    // junho para uma auditoria de maio) — ele contém vendas de maio pagas
+    // em junho. O validador usa [-1, 0, 1] pq o arquivo pode ter mix de meses
+    // próximos; o filtro usa [0] pra manter só as vendas do mês correto.
+    const periodCheck = validatePeriodMatch(pagamentos.map(p => p.data_transacao), { month: period.month, year: period.year }, 'Pluxee Pagamentos', [-1, 0, 1]);
     if (!periodCheck.ok) {
       return new Response(JSON.stringify({ error: periodCheck.error, breakdown_by_month: periodCheck.breakdown }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Filtra pagamentos pelo mês alvo (data_pagamento) com offset ZERO.
-    // ANTES usava [0, 1] (mês alvo + 1) — engolia pagamentos do mês seguinte.
-    // Mesmo padrão de bug do Ticket/VR: arquivo de mar engolia pagamentos
-    // de abril, depois o cross-period dup check bloqueava o reimport correto.
     const periodFilter = filterToPeriod(
       pagamentos,
-      (p) => p.data_pagamento,
+      (p) => p.data_transacao,
       { month: period.month, year: period.year },
       [0],
     );
