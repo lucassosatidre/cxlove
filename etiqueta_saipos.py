@@ -4,7 +4,13 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "186"
+VERSION = "187"
+# v187 (13/06/26): ETIQUETA do DELIVERY — combo "2x Pizza Grande" do iFood (e qualquer combo SEM os
+#   marcadores "Na Pizza") saia com as fatias TODAS numa caixa qty=2 -> consolidar somava "3/2 Calabresa"
+#   nas DUAS etiquetas (pedido 168 real). Agora, no fim do extrair_itens_printrows, toda caixa com qty>1 e
+#   dividida em qty pizzas enchendo por SLOTS do tamanho (2 p/ Grande): ex [1/2,1/2,1/2 Cal + 1/2 Port] ->
+#   Pizza 1 "2/2 Calabresa" + Pizza 2 "1/2 Calabresa,1/2 Portuguesa". Combo COM marcador (Brendi, v186) ja
+#   sai como caixas qty 1 -> nao re-divide. Harness: 168 iFood + 205/196 Brendi + unica + 2x mesmo sabor.
 # v186 (13/06/26): ETIQUETA do DELIVERY — combo "2x Pizza Grande" virava 1 pizza com 4 sabores em vez de
 #   2 pizzas com 2 sabores cada (pedido 205 real). O marcador no papel da Brendi vem como "-1 1a Pizza com
 #   Borda de X" (qty colada, SEM 'x') -> caia no ramo ms2 do extrair_itens_printrows, que NAO tirava o "1 "
@@ -579,6 +585,32 @@ def extrair_itens_printrows(print_rows):
                         d["sabores_raw"][-1] = (n, de, abreviar_sabor(novo.strip())); break
             elif display:
                 display[-1]["nome"] = limpar_nome(display[-1]["nome"] + texto_limpo)
+    # COMBO SEM MARCADOR (iFood: "2x Pizza Grande" + lista de "-1/2 X" SEM "Na Pizza"): a caixa fica com
+    # qty>1 e TODAS as fatias empilhadas (consolidar somaria -> "3/2 Calabresa", bug pedido 168). Divide em
+    # qty pizzas enchendo por SLOTS do tamanho (2 p/ Grande), igual ao split do colove. Combo COM marcador
+    # (Brendi) ja saiu como caixas qty 1 -> nao entra aqui. Pizza unica (qty 1) tambem nao.
+    _novo = []
+    for d in display:
+        _q = int(d.get("qty") or 1)
+        if d.get("tipo") in ("caixa_salgada", "caixa_doce") and _q > 1:
+            _raw = list(d.get("sabores_raw") or [])
+            _sl = slots_do_tamanho(d.get("nome", "")) or max(1, -(-len(_raw) // _q))  # ceil
+            _baldes = [[] for _ in range(_q)]; _cheio = [0] * _q; _ci = 0
+            for _r in _raw:                                    # enche por SLOTS OCUPADOS (num): 2/2 ocupa 2, 1/2 ocupa 1
+                _occ = int(_r[0]) if (isinstance(_r, (list, tuple)) and _r) else 1
+                while _ci < _q - 1 and _cheio[_ci] >= _sl: _ci += 1
+                _baldes[_ci].append(_r); _cheio[_ci] += _occ
+            _base = next((b for b in _baldes if b), [])        # caixa vazia repete a 1a (combo de sabor unico)
+            _adic = d.get("_adic")
+            for _k in range(_q):
+                _nd = dict(d); _nd["qty"] = 1
+                _nd["sabores_raw"] = list(_baldes[_k] if _baldes[_k] else _base)
+                _nd.pop("_adic", None)
+                if _adic and _k == 0: _nd["_adic"] = _adic     # adicional (raro) fica na 1a pizza
+                _novo.append(_nd)
+        else:
+            _novo.append(d)
+    display = _novo
     for d in display:
         d["sabores"] = consolidar_sabores(d.get("sabores_raw", []))
         for nome, nota in d.get("_adic", []):                  # adicionais GRUDADOS na pizza, sem fracao
