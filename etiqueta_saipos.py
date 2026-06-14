@@ -4,7 +4,13 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "185"
+VERSION = "186"
+# v186 (13/06/26): ETIQUETA do DELIVERY — combo "2x Pizza Grande" virava 1 pizza com 4 sabores em vez de
+#   2 pizzas com 2 sabores cada (pedido 205 real). O marcador no papel da Brendi vem como "-1 1a Pizza com
+#   Borda de X" (qty colada, SEM 'x') -> caia no ramo ms2 do extrair_itens_printrows, que NAO tirava o "1 "
+#   da frente -> _salao_marker_pizza nao reconhecia o marcador -> combo nao dividia. Agora tira a qty antes
+#   do marcador (igual o ms/mp ja faziam). KDS/comanda ja lia certo (caminho separado). Harness: 205 + 196
+#   (combo+broto) + pizza unica + unica+broto, todos batendo.
 # v185 (08/06/26): (1) ADICIONAL sem ordinal num COMBO 2x agora vai em TODAS as pizzas (montadores
 #   diferentes fazem cada uma; antes so na 1a). (2) BROTO cujo SABOR e doce ("Pizza Broto" + "Chocolate
 #   Mesclado", SEM "Doce" no nome) era classificado SALGADO -> saia VAZIO, o sabor doce flutuava como caixa
@@ -526,7 +532,10 @@ def extrair_itens_printrows(print_rows):
             nome_raw = limpar_nome(ms2.group(1).strip())
             ultimo_tipo = "item"
             if combo_nome:                                     # marcador "Na Pizza ..." (sub-linha sem 'x')
-                _ordn, _resto = _salao_marker_pizza(nome_raw)
+                # No DELIVERY o marcador vem com a qty colada ("-1 1a Pizza com Borda..."); o ms2 NAO
+                # tira o "1 " da frente (so o ms/mp tiram) -> o marcador nao era reconhecido e o combo
+                # de 2 pizzas virava 1 pizza com 4 sabores (bug pedido 205, 13/06). Tira a qty antes.
+                _ordn, _resto = _salao_marker_pizza(re.sub(r'^\d+\s+', '', nome_raw))
                 if _ordn is not None:
                     if _ordn not in combo_pizzas:
                         c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": 1, "sabores_raw": []}
