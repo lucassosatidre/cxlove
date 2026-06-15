@@ -86,6 +86,7 @@ export default function SalonReconciliation() {
   const [reconciliationStatus, setReconciliationStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const [filterMatch, setFilterMatch] = useState('all');
+  const [filterPayment, setFilterPayment] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
