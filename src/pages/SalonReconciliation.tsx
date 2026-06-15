@@ -86,6 +86,7 @@ export default function SalonReconciliation() {
   const [reconciliationStatus, setReconciliationStatus] = useState('pending');
   const [search, setSearch] = useState('');
   const [filterMatch, setFilterMatch] = useState('all');
+  const [filterPayment, setFilterPayment] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
@@ -178,8 +179,50 @@ export default function SalonReconciliation() {
     return map;
   }, [transactions]);
 
+  // Normalize payment method strings into canonical buckets so the dropdown isn't polluted with variants.
+  const normalizePaymentMethod = (raw: string): string => {
+    const s = (raw || '').trim();
+    if (!s) return '';
+    const k = s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (k.includes('pix')) return 'Pix';
+    if (k.includes('dinheiro') || k === 'cash') return 'Dinheiro';
+    if (k.includes('credit')) return 'Crédito';
+    if (k.includes('debit')) return 'Débito';
+    if (k.includes('voucher') || k.includes('ticket') || k.includes('alelo') ||
+        k.includes('sodexo') || k.includes('vr') || k.includes('vale') ||
+        k.includes('refeicao') || k.includes('pluxee')) return 'Voucher/Ticket';
+    return s;
+  };
+
+  const splitMethods = (raw: string): string[] =>
+    (raw || '').split(',').map(m => m.trim()).filter(Boolean);
+
+  const orderMatchesPayment = (o: SalonOrder, sel: string): boolean => {
+    if (sel === 'all') return true;
+    return splitMethods(o.payment_method).some(m => normalizePaymentMethod(m) === sel);
+  };
+
+  const txMatchesPayment = (tx: SalonCardTx, sel: string): boolean => {
+    if (sel === 'all') return true;
+    return normalizePaymentMethod(tx.payment_method) === sel;
+  };
+
+  const paymentOptions = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => splitMethods(o.payment_method).forEach(m => {
+      const n = normalizePaymentMethod(m);
+      if (n) set.add(n);
+    }));
+    transactions.forEach(tx => {
+      const n = normalizePaymentMethod(tx.payment_method);
+      if (n) set.add(n);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  }, [orders, transactions]);
+
   const unmatchedTransactions = useMemo(() =>
-    transactions.filter(tx => !tx.matched_order_id), [transactions]);
+    transactions.filter(tx => !tx.matched_order_id && txMatchesPayment(tx, filterPayment)),
+    [transactions, filterPayment]);
 
   const waiterMap = useMemo(() =>
     buildWaiterMap(transactions.map(tx => tx.machine_serial)), [transactions]);
@@ -201,9 +244,9 @@ export default function SalonReconciliation() {
       pending: machineOrders.length - matched,
       external: externalOrders.length,
       txTotal: transactions.length,
-      txUnmatched: unmatchedTransactions.length,
+      txUnmatched: transactions.filter(tx => !tx.matched_order_id).length,
     };
-  }, [eligibleOrders, matchedOrderIds, transactions, unmatchedTransactions, orderClassifications]);
+  }, [eligibleOrders, matchedOrderIds, transactions, orderClassifications]);
 
   const filtered = useMemo(() => {
     return eligibleOrders.filter(o => {
@@ -215,9 +258,16 @@ export default function SalonReconciliation() {
       if (filterMatch === 'matched' && !matchedOrderIds.has(o.id)) return false;
       if (filterMatch === 'unmatched' && (matchedOrderIds.has(o.id) || cls?.isExternal)) return false;
       if (filterMatch === 'external' && !cls?.isExternal) return false;
+      if (!orderMatchesPayment(o, filterPayment)) return false;
       return true;
     });
-  }, [eligibleOrders, search, filterMatch, matchedOrderIds, orderClassifications]);
+  }, [eligibleOrders, search, filterMatch, filterPayment, matchedOrderIds, orderClassifications]);
+
+  const filteredOrdersSummary = useMemo(() => {
+    if (filterPayment === 'all') return null;
+    const sum = filtered.reduce((acc, o) => acc + (o.total_amount || 0), 0);
+    return { count: filtered.length, sum };
+  }, [filtered, filterPayment]);
 
   const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
@@ -737,6 +787,24 @@ export default function SalonReconciliation() {
                 <SelectItem value="external">Fora da maquininha</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={filterPayment} onValueChange={setFilterPayment}>
+              <SelectTrigger className="w-[200px] h-9">
+                <SelectValue placeholder="Forma de pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Forma: Todas</SelectItem>
+                {paymentOptions.map(opt => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filteredOrdersSummary && (
+              <div className="flex items-center px-3 h-9 rounded-md border border-border bg-muted text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{filteredOrdersSummary.count}</span>
+                <span className="mx-1">pedidos •</span>
+                <span className="font-mono tabular-nums font-medium text-foreground">{formatCurrency(filteredOrdersSummary.sum)}</span>
+              </div>
+            )}
           </div>
         </div>
 
