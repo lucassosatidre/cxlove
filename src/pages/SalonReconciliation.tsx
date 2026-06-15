@@ -787,6 +787,24 @@ export default function SalonReconciliation() {
                 <SelectItem value="external">Fora da maquininha</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={filterPayment} onValueChange={setFilterPayment}>
+              <SelectTrigger className="w-[200px] h-9">
+                <SelectValue placeholder="Forma de pagamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Forma: Todas</SelectItem>
+                {paymentOptions.map(opt => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filteredOrdersSummary && (
+              <div className="flex items-center px-3 h-9 rounded-md border border-border bg-muted text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{filteredOrdersSummary.count}</span>
+                <span className="mx-1">pedidos •</span>
+                <span className="font-mono tabular-nums font-medium text-foreground">{formatCurrency(filteredOrdersSummary.sum)}</span>
+              </div>
+            )}
           </div>
         </div>
 
