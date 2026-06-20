@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "187"
+VERSION = "188"
+# v188 (20/06/26): COMANDA/KDS — combo pedido Nx (quantity>1) saia 1x so. O extrair_itens_kds usava o
+#   multiplicador do NOME do combo ("2 X Pizza" = 2 pizzas/combo) mas IGNORAVA o quantity do item (quantas
+#   vezes o combo foi pedido). Pedido real iFood "2x Pizza Grande + Coca" pedido 2x virava 2 pizzas + 1 Coca
+#   em vez de 4 pizzas + 2 Cocas. Agora emite o combo `qty` vezes. So o caminho do KDS/comanda (a etiqueta
+#   ja dividia caixa qty>1 desde v187). Harness: combo_grp_qty2 (4 pizzas + 2 bebidas) + qty1 sem regressao.
 # v187 (13/06/26): ETIQUETA do DELIVERY — combo "2x Pizza Grande" do iFood (e qualquer combo SEM os
 #   marcadores "Na Pizza") saia com as fatias TODAS numa caixa qty=2 -> consolidar somava "3/2 Calabresa"
 #   nas DUAS etiquetas (pedido 168 real). Agora, no fim do extrair_itens_printrows, toda caixa com qty>1 e
@@ -1142,7 +1147,11 @@ def extrair_itens_kds(grupos):
                     _sab = [c["txt"] for c in chs if not eh_borda(c["txt"]) and not _salao_eh_bebida(c["txt"]) and not eh_adicional(c["txt"])]
                     if _sab and all(eh_sabor_doce(s) for s in _sab): doce = True
                 if mult > 1:
-                    _kds_combo(display, base, doce, chs, mult, notes)
+                    # v188: o combo pode ter sido pedido Nx (quantity>1). mult = pizzas POR combo (do nome
+                    # "2 X Pizza"); qty = quantas vezes o combo foi pedido. Antes o qty era ignorado -> 1 combo
+                    # so. Agora emite o combo qty vezes (ex.: "2x Pizza Grande+Coca" 2x -> 4 pizzas + 2 Cocas).
+                    for _ in range(max(1, qty)):
+                        _kds_combo(display, base, doce, chs, mult, notes)
                 else:
                     cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": qty, "_fl": [], "_adic": []}
                     display.append(cur)
