@@ -2050,13 +2050,18 @@ export type Database = {
       }
       imported_orders: {
         Row: {
+          cancelled_at: string | null
           confirmed_at: string | null
           confirmed_by: string | null
           daily_closing_id: string | null
           delivery_person: string | null
           id: string
           import_id: string
+          is_cancelled: boolean
           is_confirmed: boolean
+          manual_cash_amount: number
+          migrated_at: string | null
+          migrated_to_salon: boolean
           order_number: string
           partner_order_number: string | null
           payment_method: string
@@ -2066,13 +2071,18 @@ export type Database = {
           total_amount: number
         }
         Insert: {
+          cancelled_at?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           daily_closing_id?: string | null
           delivery_person?: string | null
           id?: string
           import_id: string
+          is_cancelled?: boolean
           is_confirmed?: boolean
+          manual_cash_amount?: number
+          migrated_at?: string | null
+          migrated_to_salon?: boolean
           order_number: string
           partner_order_number?: string | null
           payment_method: string
@@ -2082,13 +2092,18 @@ export type Database = {
           total_amount?: number
         }
         Update: {
+          cancelled_at?: string | null
           confirmed_at?: string | null
           confirmed_by?: string | null
           daily_closing_id?: string | null
           delivery_person?: string | null
           id?: string
           import_id?: string
+          is_cancelled?: boolean
           is_confirmed?: boolean
+          manual_cash_amount?: number
+          migrated_at?: string | null
+          migrated_to_salon?: boolean
           order_number?: string
           partner_order_number?: string | null
           payment_method?: string

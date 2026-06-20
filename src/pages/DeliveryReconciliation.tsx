@@ -8,10 +8,14 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
-  Banknote, ShieldCheck, RotateCcw, Rocket, QrCode, Wallet
+  Banknote, ShieldCheck, RotateCcw, Rocket, QrCode, Wallet, MoreVertical, Store, Ban, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
@@ -45,6 +49,9 @@ interface Order {
   delivery_person: string | null;
   sale_time: string | null;
   is_confirmed: boolean;
+  is_cancelled?: boolean;
+  manual_cash_amount?: number;
+  migrated_to_salon?: boolean;
 }
 
 interface CardTransaction {
@@ -104,6 +111,13 @@ export default function DeliveryReconciliation() {
   const [hasAutoReprocessed, setHasAutoReprocessed] = useState(false);
   const [activeTab, setActiveTab] = useState<'classic' | 'atlas'>('classic');
   const [machineReadingsData, setMachineReadingsData] = useState<Array<{ machine_serial: string; delivery_person: string }>>([]);
+  // Agrupamento de transações (item 2) + ações de pedido (itens 3 e 4)
+  const [groupingOrder, setGroupingOrder] = useState<Order | null>(null);
+  const [groupSelectedTxIds, setGroupSelectedTxIds] = useState<Set<string>>(new Set());
+  const [groupCash, setGroupCash] = useState<string>('');
+  const [groupSaving, setGroupSaving] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
+  const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -115,7 +129,7 @@ export default function DeliveryReconciliation() {
     const [{ data: closing }, { data: ordData }, { data: txData }, { data: snapData }, { data: mrData }] = await Promise.all([
       supabase.from('daily_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('imported_orders')
-        .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed')
+        .select('id, order_number, payment_method, total_amount, delivery_person, sale_time, is_confirmed, is_cancelled, manual_cash_amount, migrated_to_salon')
         .eq('daily_closing_id', id!),
       supabase.from('card_transactions')
         .select('*')
@@ -189,10 +203,20 @@ export default function DeliveryReconciliation() {
     setLoading(false);
   }, [id]);
 
+  // Pedidos ativos = nem cancelados, nem migrados para o salão
+  const activeOrders = useMemo(
+    () => orders.filter(o => !o.is_cancelled && !o.migrated_to_salon),
+    [orders]
+  );
+  const inactiveOrders = useMemo(
+    () => orders.filter(o => o.is_cancelled || o.migrated_to_salon),
+    [orders]
+  );
+
   // Filter orders to only show offline card payments (not cash, not online)
   // Prioritize breakdowns (operator-entered data) over raw Saipos payment_method
   const offlineOrders = useMemo(() => {
-    return orders.filter(o => {
+    return activeOrders.filter(o => {
       const orderBreakdowns = breakdowns.filter(b => b.imported_order_id === o.id);
       
       // If there are breakdowns, use them to determine if order has physical card payments
@@ -215,7 +239,7 @@ export default function DeliveryReconciliation() {
       });
       return hasOfflineCard;
     });
-  }, [orders, breakdowns]);
+  }, [activeOrders, breakdowns]);
 
   // Map order ID → all matched transactions (supports combined matches with 2 txs per order)
   const matchedOrderIds = useMemo(() => {
@@ -360,7 +384,7 @@ export default function DeliveryReconciliation() {
       return null;
     };
 
-    for (const order of orders) {
+    for (const order of activeOrders) {
       const orderBks = breakdownsByOrder.get(order.id);
       if (orderBks && orderBks.length > 0) {
         for (const b of orderBks) {
@@ -385,13 +409,13 @@ export default function DeliveryReconciliation() {
     }
 
     return totals;
-  }, [orders, breakdowns]);
+  }, [activeOrders, breakdowns]);
 
   const allDeliveryPersons = useMemo(() => {
     const set = new Set<string>();
-    orders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
+    activeOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
     return Array.from(set).sort();
-  }, [orders]);
+  }, [activeOrders]);
 
   const confirmedDriverNames = useMemo(() => confirmedDrivers.map(d => d.nome), [confirmedDrivers]);
 
@@ -481,7 +505,7 @@ export default function DeliveryReconciliation() {
           machine_serial: tx.machine_serial || '',
           sale_time: tx.sale_time || '',
         })),
-        orders.map(o => ({
+        activeOrders.map(o => ({
           id: o.id,
           order_number: o.order_number,
           payment_method: o.payment_method,
@@ -517,7 +541,7 @@ export default function DeliveryReconciliation() {
     } finally {
       setImporting(false);
     }
-  }, [user, id, orders, breakdowns, loadData]);
+  }, [user, id, activeOrders, breakdowns, loadData]);
 
   const reprocessAutomaticMatches = useCallback(async () => {
     if (!id || isReprocessing || transactions.length === 0) return;
@@ -549,7 +573,7 @@ export default function DeliveryReconciliation() {
             machine_serial: tx.machine_serial || '',
             sale_time: tx.sale_time || '',
           })),
-        orders
+        activeOrders
           .filter(order => !manualOrderIds.has(order.id))
           .map(order => ({
             id: order.id,
@@ -590,7 +614,7 @@ export default function DeliveryReconciliation() {
       setIsReprocessing(false);
       setHasAutoReprocessed(true);
     }
-  }, [breakdowns, id, isReprocessing, loadData, orders, transactions]);
+  }, [breakdowns, id, isReprocessing, loadData, activeOrders, transactions]);
 
   useEffect(() => {
     if (loading || hasAutoReprocessed || transactions.length === 0) return;
@@ -704,6 +728,105 @@ export default function DeliveryReconciliation() {
       setDragTxId(null);
     }
   }, [dragTxId, manualMatch]);
+
+  // ===== Item 2: agrupar várias transações + parte em dinheiro =====
+  const openGroupDialog = useCallback((order: Order) => {
+    const alreadyMatched = transactions.filter(t => t.matched_order_id === order.id).map(t => t.id);
+    setGroupingOrder(order);
+    setGroupSelectedTxIds(new Set(alreadyMatched));
+    setGroupCash(order.manual_cash_amount ? String(order.manual_cash_amount) : '');
+  }, [transactions]);
+
+  const handleConfirmGroup = useCallback(async () => {
+    if (!groupingOrder) return;
+    setGroupSaving(true);
+    try {
+      const cash = parseFloat(groupCash.replace(',', '.')) || 0;
+      const selectedIds = Array.from(groupSelectedTxIds);
+
+      // Solta transações que estavam neste pedido e foram desmarcadas
+      const previouslyLinked = transactions.filter(t => t.matched_order_id === groupingOrder.id).map(t => t.id);
+      const toUnlink = previouslyLinked.filter(tid => !groupSelectedTxIds.has(tid));
+      if (toUnlink.length > 0) {
+        await supabase.from('card_transactions')
+          .update({ matched_order_id: null, match_type: null, match_confidence: null })
+          .in('id', toUnlink);
+      }
+
+      // Vincula as selecionadas a este pedido (manual)
+      if (selectedIds.length > 0) {
+        await supabase.from('card_transactions')
+          .update({ matched_order_id: groupingOrder.id, match_type: 'manual', match_confidence: 'high' })
+          .in('id', selectedIds);
+      }
+
+      // Grava a parte em dinheiro declarada
+      await supabase.from('imported_orders')
+        .update({ manual_cash_amount: cash })
+        .eq('id', groupingOrder.id);
+
+      toast.success('Pedido agrupado e conciliado.');
+      setGroupingOrder(null);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao agrupar transações.');
+    } finally {
+      setGroupSaving(false);
+    }
+  }, [groupingOrder, groupCash, groupSelectedTxIds, transactions, loadData]);
+
+  // ===== Item 4: marcar pedido como cancelado / reativar =====
+  const handleCancelOrder = useCallback(async (order: Order) => {
+    setBusyOrderId(order.id);
+    try {
+      // Solta vínculos de maquininha do pedido cancelado
+      await supabase.from('card_transactions')
+        .update({ matched_order_id: null, match_type: null, match_confidence: null })
+        .eq('matched_order_id', order.id);
+      await supabase.from('imported_orders')
+        .update({ is_cancelled: true, cancelled_at: new Date().toISOString(), manual_cash_amount: 0 })
+        .eq('id', order.id);
+      toast.success(`Pedido #${order.order_number} marcado como cancelado.`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao cancelar pedido.');
+    } finally {
+      setBusyOrderId(null);
+    }
+  }, [loadData]);
+
+  const handleReactivateOrder = useCallback(async (order: Order) => {
+    setBusyOrderId(order.id);
+    try {
+      await supabase.from('imported_orders')
+        .update({ is_cancelled: false, cancelled_at: null })
+        .eq('id', order.id);
+      toast.success(`Pedido #${order.order_number} reativado.`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao reativar pedido.');
+    } finally {
+      setBusyOrderId(null);
+    }
+  }, [loadData]);
+
+  // ===== Item 3: migrar pedido para o caixa salão do mesmo dia =====
+  const handleMigrateToSalon = useCallback(async (order: Order) => {
+    setBusyOrderId(order.id);
+    try {
+      const { data, error } = await supabase.functions.invoke('migrate-order-to-salon', {
+        body: { order_id: order.id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Pedido #${order.order_number} migrado para o caixa salão.`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao migrar para o salão.');
+    } finally {
+      setBusyOrderId(null);
+    }
+  }, [loadData]);
 
   const handleFinalizeReconciliation = useCallback(async () => {
     if (!id || !isAdmin) return;
@@ -1199,6 +1322,9 @@ export default function DeliveryReconciliation() {
                 const confidence = matchedTxs?.[0]?.match_confidence;
                 const isCombined = matchedTxs && matchedTxs.length > 1;
                 const totalMatchedAmount = matchedTxs?.reduce((s, t) => s + t.gross_amount, 0) || 0;
+                const cashDeclared = order.manual_cash_amount || 0;
+                const accountedAmount = totalMatchedAmount + cashDeclared;
+                const residual = order.total_amount - accountedAmount;
                 const pendingInfo = pendingMeta.get(order.id);
 
                 return (
@@ -1255,6 +1381,30 @@ export default function DeliveryReconciliation() {
                             {pendingInfo.label}
                           </Badge>
                         )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={busyOrderId === order.id}>
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openGroupDialog(order)}>
+                              <Layers className="h-4 w-4 mr-2" />
+                              Agrupar transações
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleMigrateToSalon(order)}>
+                              <Store className="h-4 w-4 mr-2" />
+                              Migrar p/ salão
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleCancelOrder(order)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Ban className="h-4 w-4 mr-2" />
+                              Marcar como cancelado
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
@@ -1333,17 +1483,19 @@ export default function DeliveryReconciliation() {
                             </Button>
                           </div>
                         ))}
-                        {isCombined && (
+                        {(isCombined || cashDeclared > 0) && (
                           <div className="mt-1 text-[10px] text-muted-foreground">
-                            Soma: <span className="font-mono-tabular font-medium">{formatCurrency(totalMatchedAmount)}</span>
-                            {Math.abs(totalMatchedAmount - order.total_amount) > 0.01 && (
-                              <span className="text-warning ml-1">
-                                Δ {formatCurrency(Math.abs(order.total_amount - totalMatchedAmount))}
-                              </span>
+                            Cartões: <span className="font-mono-tabular font-medium">{formatCurrency(totalMatchedAmount)}</span>
+                            {cashDeclared > 0 && (
+                              <span className="ml-1">+ dinheiro <span className="font-mono-tabular font-medium text-success">{formatCurrency(cashDeclared)}</span></span>
+                            )}
+                            <span className="ml-1">= <span className="font-mono-tabular font-medium">{formatCurrency(accountedAmount)}</span></span>
+                            {Math.abs(residual) > 0.01 && (
+                              <span className="text-warning ml-1">Δ {formatCurrency(Math.abs(residual))}</span>
                             )}
                           </div>
                         )}
-                        {!isCombined && matchedTxs[0].match_type !== 'exact' && matchedTxs[0].gross_amount !== order.total_amount && (
+                        {!isCombined && cashDeclared === 0 && matchedTxs[0].match_type !== 'exact' && matchedTxs[0].gross_amount !== order.total_amount && (
                           <div className="mt-1 text-warning text-[10px]">
                             Δ {formatCurrency(Math.abs(order.total_amount - matchedTxs[0].gross_amount))}
                           </div>
@@ -1371,6 +1523,53 @@ export default function DeliveryReconciliation() {
                 </div>
               )}
             </div>
+
+            {/* Pedidos cancelados / migrados para o salão */}
+            {inactiveOrders.length > 0 && (
+              <div className="mt-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground"
+                  onClick={() => setShowInactive(v => !v)}
+                >
+                  {showInactive ? <ChevronUp className="h-3.5 w-3.5 mr-1" /> : <ChevronDown className="h-3.5 w-3.5 mr-1" />}
+                  Cancelados / migrados ({inactiveOrders.length})
+                </Button>
+                {showInactive && (
+                  <div className="space-y-1.5 mt-2">
+                    {inactiveOrders.map(order => (
+                      <div key={order.id} className="bg-muted/40 rounded-lg border border-border/60 p-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {order.is_cancelled ? (
+                            <Badge variant="secondary" className="text-[10px] bg-destructive/10 text-destructive border border-destructive/20">
+                              <Ban className="h-3 w-3 mr-1" />Cancelado
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border border-primary/20">
+                              <Store className="h-3 w-3 mr-1" />Salão
+                            </Badge>
+                          )}
+                          <span className="text-sm font-medium text-foreground truncate">#{order.order_number}</span>
+                          <span className="text-xs text-muted-foreground font-mono-tabular">{formatCurrency(order.total_amount)}</span>
+                        </div>
+                        {order.is_cancelled && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-xs"
+                            disabled={busyOrderId === order.id}
+                            onClick={() => handleReactivateOrder(order)}
+                          >
+                            <RotateCcw className="h-3 w-3 mr-1" />Reativar
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Right: Unmatched Transactions */}
@@ -1467,6 +1666,110 @@ export default function DeliveryReconciliation() {
       )}
       </>
       )}
+
+      {/* Dialog: agrupar transações + parte em dinheiro (item 2) */}
+      <Dialog open={!!groupingOrder} onOpenChange={(o) => { if (!o) setGroupingOrder(null); }}>
+        <DialogContent className="max-w-lg">
+          {groupingOrder && (() => {
+            const candidates = transactions.filter(
+              t => !t.matched_order_id || t.matched_order_id === groupingOrder.id
+            );
+            const selectedSum = candidates
+              .filter(t => groupSelectedTxIds.has(t.id))
+              .reduce((s, t) => s + t.gross_amount, 0);
+            const cash = parseFloat(groupCash.replace(',', '.')) || 0;
+            const remaining = groupingOrder.total_amount - selectedSum - cash;
+            const canConfirm = Math.abs(remaining) < 0.01;
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Agrupar pagamentos — Pedido #{groupingOrder.order_number}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between bg-muted rounded-lg px-3 py-2 border border-border">
+                    <span className="text-xs text-muted-foreground">Total do pedido</span>
+                    <span className="text-sm font-bold font-mono-tabular text-foreground">{formatCurrency(groupingOrder.total_amount)}</span>
+                  </div>
+
+                  <div>
+                    <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Transações da maquininha</Label>
+                    <div className="mt-1.5 space-y-1 max-h-56 overflow-auto">
+                      {candidates.length === 0 && (
+                        <p className="text-xs text-muted-foreground py-2">Nenhuma transação disponível para vincular.</p>
+                      )}
+                      {candidates.map(tx => {
+                        const checked = groupSelectedTxIds.has(tx.id);
+                        const person = tx.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(tx.machine_serial)) : null;
+                        return (
+                          <label
+                            key={tx.id}
+                            className={`flex items-center gap-2 rounded-md border px-2.5 py-2 cursor-pointer ${checked ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={() => setGroupSelectedTxIds(prev => {
+                                const next = new Set(prev);
+                                if (next.has(tx.id)) next.delete(tx.id); else next.add(tx.id);
+                                return next;
+                              })}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-medium text-foreground">{tx.payment_method}</span>
+                                <span className="text-sm font-mono-tabular font-medium text-foreground">{formatCurrency(tx.gross_amount)}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                                {person && <span className="text-primary flex items-center gap-0.5"><Truck className="h-2.5 w-2.5" />{person}</span>}
+                                {tx.sale_time && <span><Clock className="h-2.5 w-2.5 inline mr-0.5" />{tx.sale_time}</span>}
+                                {tx.machine_serial && <span className="font-mono-tabular">{tx.machine_serial.slice(-6)}</span>}
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="group-cash" className="text-[11px] uppercase tracking-wider text-muted-foreground">Valor recebido em dinheiro</Label>
+                    <Input
+                      id="group-cash"
+                      inputMode="decimal"
+                      placeholder="0,00"
+                      value={groupCash}
+                      onChange={e => setGroupCash(e.target.value)}
+                      className="mt-1.5 h-9"
+                    />
+                  </div>
+
+                  <div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Cartões selecionados</span><span className="font-mono-tabular">{formatCurrency(selectedSum)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Dinheiro</span><span className="font-mono-tabular">{formatCurrency(cash)}</span></div>
+                    <div className="flex justify-between border-t border-border pt-1 font-medium">
+                      <span>{canConfirm ? 'Confere com o total' : 'Falta para fechar'}</span>
+                      <span className={`font-mono-tabular ${canConfirm ? 'text-success' : 'text-warning'}`}>
+                        {canConfirm ? formatCurrency(groupingOrder.total_amount) : formatCurrency(remaining)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" size="sm" onClick={() => setGroupingOrder(null)} disabled={groupSaving}>Cancelar</Button>
+                  <Button
+                    size="sm"
+                    className="bg-success hover:bg-success/90 text-success-foreground"
+                    onClick={handleConfirmGroup}
+                    disabled={!canConfirm || groupSaving}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-1" />
+                    {groupSaving ? 'Salvando...' : 'Conciliar pedido'}
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
       </div>
     </div>
   );
