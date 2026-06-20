@@ -255,6 +255,21 @@ export default function DeliveryReconciliation() {
     });
   }, [activeOrders, breakdowns]);
 
+  // Pedidos só em dinheiro (sem cartão): listados como informativos, não exigem conciliação.
+  const cashOnlyOrders = useMemo(() => {
+    const cardIds = new Set(offlineOrders.map(o => o.id));
+    return activeOrders.filter(o => {
+      if (cardIds.has(o.id)) return false;
+      const bks = breakdowns.filter(b => b.imported_order_id === o.id);
+      if (bks.length > 0) {
+        return bks.some(b => b.payment_type === 'fisico' && b.amount > 0 && normalizeDeliveryMethod(b.payment_method_name) === 'dinheiro');
+      }
+      return o.payment_method.split(',').map(m => m.trim()).some(m => normalizeDeliveryMethod(m) === 'dinheiro');
+    });
+  }, [activeOrders, offlineOrders, breakdowns]);
+
+  const cashOnlyIds = useMemo(() => new Set(cashOnlyOrders.map(o => o.id)), [cashOnlyOrders]);
+
   // Map order ID → all matched transactions (supports combined matches with 2 txs per order)
   const matchedOrderIds = useMemo(() => {
     const map = new Map<string, CardTransaction[]>();
@@ -421,8 +436,8 @@ export default function DeliveryReconciliation() {
       const txs = matchedOrderIds.get(o.id);
       return txs?.[0]?.match_confidence === 'high';
     }).length;
-    return { total, matched, pending: total - matched, highConf, divergent: divergenceMap.size, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
-  }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions, divergenceMap]);
+    return { total, matched, pending: total - matched, highConf, divergent: divergenceMap.size, cash: cashOnlyOrders.length, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
+  }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions, divergenceMap, cashOnlyOrders]);
 
   const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
@@ -530,26 +545,34 @@ export default function DeliveryReconciliation() {
     { key: 'credito', label: 'Crédito' },
     { key: 'debito', label: 'Débito' },
     { key: 'voucher', label: 'Voucher' },
+    { key: 'dinheiro', label: 'Dinheiro' },
   ];
   const paymentMethodsFilter = useMemo(() => {
     const present = new Set<NormalizedDeliveryMethod>();
-    offlineOrders.forEach(o => orderPhysicalMethods(o).forEach(m => present.add(m)));
+    [...offlineOrders, ...cashOnlyOrders].forEach(o => orderPhysicalMethods(o).forEach(m => present.add(m)));
     return PAYMENT_FILTER_OPTIONS.filter(opt => present.has(opt.key));
-  }, [offlineOrders, orderPhysicalMethods]);
+  }, [offlineOrders, cashOnlyOrders, orderPhysicalMethods]);
 
   const filtered = useMemo(() => {
-    return offlineOrders.filter(o => {
+    return [...offlineOrders, ...cashOnlyOrders].filter(o => {
+      const isCash = cashOnlyIds.has(o.id);
       if (search && !o.order_number.toLowerCase().includes(search.toLowerCase())) return false;
-      if (filterMatch === 'matched' && !matchedOrderIds.has(o.id)) return false;
-      if (filterMatch === 'unmatched' && matchedOrderIds.has(o.id)) return false;
+      // Pedidos em dinheiro não precisam de conciliação: só aparecem sem filtro de status/divergência
+      if (isCash) {
+        if (filterMatch !== 'all') return false;
+        if (filterDivergence !== 'all') return false;
+      } else {
+        if (filterMatch === 'matched' && !matchedOrderIds.has(o.id)) return false;
+        if (filterMatch === 'unmatched' && matchedOrderIds.has(o.id)) return false;
+        if (filterDivergence !== 'all') {
+          const kinds = divergenceMap.get(o.id);
+          if (!kinds) return false;
+          if (filterDivergence !== 'any' && !kinds.has(filterDivergence as DivergenceKind)) return false;
+        }
+      }
       if (filterDeliveryPerson !== 'all' && o.delivery_person !== filterDeliveryPerson) return false;
       if (filterPaymentMethod !== 'all') {
         if (!orderPhysicalMethods(o).includes(filterPaymentMethod as NormalizedDeliveryMethod)) return false;
-      }
-      if (filterDivergence !== 'all') {
-        const kinds = divergenceMap.get(o.id);
-        if (!kinds) return false;
-        if (filterDivergence !== 'any' && !kinds.has(filterDivergence as DivergenceKind)) return false;
       }
       return true;
     }).sort((a, b) => {
@@ -557,7 +580,7 @@ export default function DeliveryReconciliation() {
       const bNum = parseInt(b.order_number.replace(/\D/g, ''), 10) || 0;
       return aNum - bNum;
     });
-  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, filterDivergence, matchedOrderIds, orderPhysicalMethods, divergenceMap]);
+  }, [offlineOrders, cashOnlyOrders, cashOnlyIds, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, filterDivergence, matchedOrderIds, orderPhysicalMethods, divergenceMap]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -1378,6 +1401,24 @@ export default function DeliveryReconciliation() {
                 <p className={`text-sm font-semibold font-mono-tabular ${stats.divergent > 0 ? 'text-amber-600' : 'text-foreground'}`}>{stats.divergent}</p>
               </div>
             </button>
+            {stats.cash > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilterPaymentMethod(filterPaymentMethod === 'dinheiro' ? 'all' : 'dinheiro')}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 border min-w-[120px] text-left transition-colors ${
+                  filterPaymentMethod === 'dinheiro'
+                    ? 'bg-success/15 border-success/50 ring-1 ring-success/30'
+                    : 'bg-success/5 border-success/40 hover:bg-success/10'
+                }`}
+                title="Mostrar só pedidos em dinheiro"
+              >
+                <Banknote className="h-4 w-4 text-success" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Dinheiro</p>
+                  <p className="text-sm font-semibold text-success font-mono-tabular">{stats.cash}</p>
+                </div>
+              </button>
+            )}
             <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
               <Truck className="h-4 w-4 text-muted-foreground" />
               <div>
@@ -1433,11 +1474,13 @@ export default function DeliveryReconciliation() {
               {paymentMethodsFilter.map(pm => {
                 const icon = pm.key === 'pix'
                   ? <QrCode className="h-3.5 w-3.5 text-primary" />
-                  : pm.key === 'voucher'
-                    ? <CreditCard className="h-3.5 w-3.5 text-warning" />
-                    : pm.key === 'debito'
-                      ? <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                      : <CreditCard className="h-3.5 w-3.5 text-accent-foreground" />;
+                  : pm.key === 'dinheiro'
+                    ? <Banknote className="h-3.5 w-3.5 text-success" />
+                    : pm.key === 'voucher'
+                      ? <CreditCard className="h-3.5 w-3.5 text-warning" />
+                      : pm.key === 'debito'
+                        ? <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                        : <CreditCard className="h-3.5 w-3.5 text-accent-foreground" />;
                 return (
                   <SelectItem key={pm.key} value={pm.key}>
                     <span className="flex items-center gap-2">{icon}{pm.label}</span>
@@ -1484,6 +1527,54 @@ export default function DeliveryReconciliation() {
             </h3>
             <div className="space-y-2">
               {filtered.map(order => {
+                // Pedido só em dinheiro: card informativo, sem conciliação de cartão
+                if (cashOnlyIds.has(order.id)) {
+                  return (
+                    <div key={order.id} className="bg-card rounded-lg border border-success/40 bg-success/5 p-3 row-transition">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="h-6 w-6 rounded-full flex items-center justify-center bg-success/80 text-success-foreground">
+                            <Banknote className="h-3.5 w-3.5" />
+                          </div>
+                          <div>
+                            <span className="font-medium text-foreground">#{order.order_number}</span>
+                            <span className="text-xs text-muted-foreground ml-2">{order.delivery_person || '—'}</span>
+                            {order.sale_time && (
+                              <span className="text-xs text-muted-foreground ml-2">
+                                <Clock className="h-3 w-3 inline mr-0.5" />{order.sale_time}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono-tabular font-medium text-foreground">{formatCurrency(order.total_amount)}</span>
+                          <Badge variant="secondary" className="text-[10px] bg-success/15 text-success border border-success/30">
+                            <Banknote className="h-3 w-3 mr-1" />Dinheiro
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground">sem conciliação</span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" disabled={busyOrderId === order.id}>
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openGroupDialog(order)}>
+                                <Layers className="h-4 w-4 mr-2" />Agrupar transações
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleMigrateToSalon(order)}>
+                                <Store className="h-4 w-4 mr-2" />Migrar p/ salão
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleCancelOrder(order)} className="text-destructive focus:text-destructive">
+                                <Ban className="h-4 w-4 mr-2" />Marcar como cancelado
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
                 const matchedTxs = matchedOrderIds.get(order.id);
                 const isMatched = !!matchedTxs && matchedTxs.length > 0;
                 const confidence = matchedTxs?.[0]?.match_confidence;
