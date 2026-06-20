@@ -4,7 +4,16 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "188"
+VERSION = "189"
+# v189 (20/06/26): ETIQUETA do DELIVERY (extrair_itens_printrows) — 3 bugs de combo iFood (pedidos reais
+#   147/227/229/36). (1) QUEBRA DE LINHA do Saipos ("...Refrigerante Te"+"mx", "...Recheada T"+"EMX",
+#   "Catupir"+"y") corrompia nome ("GrandeEMX") e criava caixa fantasma -> pre-passo junta fragmento (1-6
+#   letras) na linha anterior. (2) COMBO "2x Pizza Grande" com marcador SO na 1a pizza (227) nao dividia ->
+#   split agora dispara por TRANSBORDO de fatias (ceil(ocupado/slots)), nao so por qty>1. (3) _alvo() criava
+#   a 1a pizza do combo com qty=combo_mult -> com marcador "2a Pizza" o split DUPLICAVA a 1a (229) -> qty=1.
+#   (4) BROTO cujo sabor e doce ("Sensacao") virava caixa vazia + doce separada (36) -> promove a doce (v185
+#   do KDS portado). (5) ADICIONAL com fracao ("-1/2 Adicional de Milho") era lido como fatia e o split o
+#   isolava numa pizza fantasma (147) -> vira "+ X" (regra v176). Varredura 196 pedidos reais: 0 regressao.
 # v188 (20/06/26): COMANDA/KDS — combo pedido Nx (quantity>1) saia 1x so. O extrair_itens_kds usava o
 #   multiplicador do NOME do combo ("2 X Pizza" = 2 pizzas/combo) mas IGNORAVA o quantity do item (quantas
 #   vezes o combo foi pedido). Pedido real iFood "2x Pizza Grande + Coca" pedido 2x virava 2 pizzas + 1 Coca
@@ -416,6 +425,20 @@ def _flush_obs(display, obs_acc, pend_adic=None):
     display.append({"tipo": "outro", "nome": f"Obs: {txt}", "qty": 1, "sabores_raw": []})
 
 def extrair_itens_printrows(print_rows):
+    # v189 PRE-PASSO: o Saipos QUEBRA linhas longas (ex.: "...Refrigerante Te"+"mx",
+    # "...Recheada T"+"EMX", "Catupir"+"y"). O fragmento solto na linha seguinte virava nome
+    # corrompido ("GrandeEMX") ou caixa fantasma (pedido 229). Junta o fragmento (1-6 letras puras,
+    # sem '-'/dígito/espaço) no FIM da linha anterior, só no miolo de itens.
+    _rows = []; _inz = False
+    for _r in print_rows:
+        _t = limpar_tags(_r).strip()
+        if "Qt.Descri" in _t: _inz = True; _rows.append(_r); continue
+        if "Quantidade de itens" in _t: _inz = False; _rows.append(_r); continue
+        if _inz and _rows and re.match(r'^[A-Za-zÀ-ÿ]{1,6}$', _t) and limpar_tags(_rows[-1]).strip():
+            _rows[-1] = limpar_tags(_rows[-1]).rstrip() + _t   # continuação -> cola no fim da anterior
+            continue
+        _rows.append(_r)
+    print_rows = _rows
     display = []; total_caixas = 0; total_bebidas = 0; total_outros = 0
     em_zona = False; ultimo_tipo = None; em_obs = False; obs_acc = []
     pend_adic = None   # adicional aguardando a obs da linha seguinte -> vira a nota "(calabresa)"
@@ -424,8 +447,11 @@ def extrair_itens_printrows(print_rows):
         nonlocal cur_caixa, total_caixas
         if cur_caixa is not None: return cur_caixa
         if combo_nome:                                 # combo ATIVO sem pizza atual -> cria a caixa do combo PRIMEIRO
-            c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": combo_mult, "sabores_raw": []}
-            combo_pizzas[1] = c; display.append(c); total_caixas += combo_mult; cur_caixa = c; return c
+            # v189: qty=1 (não combo_mult). Se NÃO houver marcador "Nª Pizza", todas as fatias caem aqui e o
+            # split-por-transbordo no fim divide em ceil(ocupado/slots) pizzas. Se HOUVER marcador, a 2ª pizza
+            # vira outra caixa — e a 1ª NÃO pode ficar com qty=combo_mult (senão o split a duplicava, pedido 229).
+            c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": 1, "sabores_raw": []}
+            combo_pizzas[1] = c; display.append(c); total_caixas += 1; cur_caixa = c; return c
         for d in reversed(display):                    # so DEPOIS cai na ultima caixa (item anterior) -> nunca rouba caixa do item passado
             if d["tipo"] in ("caixa_salgada", "caixa_doce"): return d
         return None
@@ -524,7 +550,11 @@ def extrair_itens_printrows(print_rows):
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": qty, "sabores_raw": []}); total_bebidas += qty
             elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
-                c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}; display.append(c); total_caixas += qty; cur_caixa = c
+                if cur_caixa is not None and "broto" in (cur_caixa.get("nome") or "").lower() and not cur_caixa.get("sabores_raw"):
+                    cur_caixa["tipo"] = "caixa_doce"           # v189: broto cujo SABOR é doce (ex "Sensação") -> o sabor é DELE, promove a doce (não cria caixa nova; portado do KDS v185)
+                    cur_caixa["sabores_raw"].append((1, slots_do_tamanho(cur_caixa.get("nome") or "") or 1, abreviar_sabor(re.sub(r'^\d+\s+', '', nome_raw))))
+                else:
+                    c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": qty, "sabores_raw": []}; display.append(c); total_caixas += qty; cur_caixa = c
             elif eh_adicional(nome_raw):                       # "Adicional de X" -> GRUDA na pizza ("+ X"), NAO fatia
                 _add_adic(nome_raw, qty)
             elif _attach_sabor(nome_raw, qty):                 # "-Nx Sabor" (Temx) -> sabor da pizza atual
@@ -535,6 +565,9 @@ def extrair_itens_printrows(print_rows):
         if eh_fracao(texto_limpo):
             num, den, sabor = extrair_sabor_fracao(texto_limpo)
             if sabor and num and den and "sem borda" not in sabor.lower():  # "Sem Borda Recheada" nao e sabor
+                if eh_adicional(sabor):                # v189: "-1/2 Adicional de Milho" e ADICIONAL (+ X), NAO fatia
+                    _add_adic(sabor, 1)                #   (regra v176). Sem isso ele inflava as fatias e o split
+                    ultimo_tipo = "item"; continue     #   por transbordo criava uma pizza fantasma "2/2 Adicional" (pedido 147).
                 alvo = _alvo()
                 if alvo is not None: alvo["sabores_raw"].append((num, den, sabor))   # vai pra pizza atual (cur_caixa no combo)
             ultimo_tipo = "sabor"; continue
@@ -568,7 +601,11 @@ def extrair_itens_printrows(print_rows):
             elif eh_bebida(nome_raw):
                 display.append({"tipo": "bebida", "nome": nome_raw, "qty": 1, "sabores_raw": []}); total_bebidas += 1
             elif eh_sabor_doce(nome_raw):                      # broto doce sem prefixo "Pizza Broto de"
-                c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}; display.append(c); total_caixas += 1; cur_caixa = c
+                if cur_caixa is not None and "broto" in (cur_caixa.get("nome") or "").lower() and not cur_caixa.get("sabores_raw"):
+                    cur_caixa["tipo"] = "caixa_doce"           # v189: broto cujo SABOR é doce -> sabor DELE, promove a doce
+                    cur_caixa["sabores_raw"].append((1, slots_do_tamanho(cur_caixa.get("nome") or "") or 1, abreviar_sabor(re.sub(r'^\d+\s+', '', nome_raw))))
+                else:
+                    c = {"tipo": "caixa_doce", "nome": nome_raw, "qty": 1, "sabores_raw": []}; display.append(c); total_caixas += 1; cur_caixa = c
             elif eh_adicional(nome_raw):                       # "Adicional de X" -> GRUDA na pizza ("+ X"), NAO fatia
                 _add_adic(nome_raw, 1)
             elif _attach_sabor(nome_raw, 1):                   # "-Sabor" solto -> sabor da pizza atual
@@ -594,20 +631,28 @@ def extrair_itens_printrows(print_rows):
     # qty>1 e TODAS as fatias empilhadas (consolidar somaria -> "3/2 Calabresa", bug pedido 168). Divide em
     # qty pizzas enchendo por SLOTS do tamanho (2 p/ Grande), igual ao split do colove. Combo COM marcador
     # (Brendi) ja saiu como caixas qty 1 -> nao entra aqui. Pizza unica (qty 1) tambem nao.
+    # v189: nº de pizzas da caixa = o MAIOR entre a qty (combo iFood "2x", qty>1) e quantas pizzas as
+    # fatias OCUPAM (ex.: 4 metades numa Grande de 2 slots = 2 pizzas). O 2º caso cobre o combo com
+    # marcador só na 1ª pizza (pedido 227: 1 caixa qty=1 com 4 metades empilhadas -> divide em 2).
     _novo = []
     for d in display:
         _q = int(d.get("qty") or 1)
-        if d.get("tipo") in ("caixa_salgada", "caixa_doce") and _q > 1:
+        if d.get("tipo") in ("caixa_salgada", "caixa_doce"):
             _raw = list(d.get("sabores_raw") or [])
-            _sl = slots_do_tamanho(d.get("nome", "")) or max(1, -(-len(_raw) // _q))  # ceil
-            _baldes = [[] for _ in range(_q)]; _cheio = [0] * _q; _ci = 0
+            _sl = slots_do_tamanho(d.get("nome", "")) or 1
+            _occ_tot = sum((int(_r[0]) if (isinstance(_r, (list, tuple)) and _r) else 1) for _r in _raw)
+            _np = max(_q, (-(-_occ_tot // _sl)) if _sl else 1)   # ceil(ocupado/slots)
+        else:
+            _np = 1
+        if d.get("tipo") in ("caixa_salgada", "caixa_doce") and _np > 1:
+            _baldes = [[] for _ in range(_np)]; _cheio = [0] * _np; _ci = 0
             for _r in _raw:                                    # enche por SLOTS OCUPADOS (num): 2/2 ocupa 2, 1/2 ocupa 1
                 _occ = int(_r[0]) if (isinstance(_r, (list, tuple)) and _r) else 1
-                while _ci < _q - 1 and _cheio[_ci] >= _sl: _ci += 1
+                while _ci < _np - 1 and _cheio[_ci] >= _sl: _ci += 1
                 _baldes[_ci].append(_r); _cheio[_ci] += _occ
             _base = next((b for b in _baldes if b), [])        # caixa vazia repete a 1a (combo de sabor unico)
             _adic = d.get("_adic")
-            for _k in range(_q):
+            for _k in range(_np):
                 _nd = dict(d); _nd["qty"] = 1
                 _nd["sabores_raw"] = list(_baldes[_k] if _baldes[_k] else _base)
                 _nd.pop("_adic", None)
