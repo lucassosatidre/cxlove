@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "189"
+VERSION = "190"
+# v190 (20/06/26): AUTO-UPDATE da FROTA. A checagem de versao nova (check_update a cada 30min) estava
+#   DEPOIS do "if not cfg: continue" no sofia_poll_loop -> so o PC do caixa (com sofia_caixa.json)
+#   atualizava sozinho; os PCs de COZINHA so pegavam versao nova ao REINICIAR. Resultado: o combo do
+#   pedido #0033 (20/06 17:29) saiu duplicado (3 pizzas em vez de 2) porque o PC ainda rodava v187,
+#   mesmo com a correcao v189 ja publicada as 17:10. Agora o check_update roda em TODO PC, sempre.
 # v189 (20/06/26): ETIQUETA do DELIVERY (extrair_itens_printrows) — 3 bugs de combo iFood (pedidos reais
 #   147/227/229/36). (1) QUEBRA DE LINHA do Saipos ("...Refrigerante Te"+"mx", "...Recheada T"+"EMX",
 #   "Catupir"+"y") corrompia nome ("GrandeEMX") e criava caixa fantasma -> pre-passo junta fragmento (1-6
@@ -2435,6 +2440,14 @@ def sofia_poll_loop():
     last_update = time.time()
     while True:
         try:
+            # v190: a auto-atualizacao roda SEMPRE (em TODO PC da frota), nao so no caixa com Sofia.
+            # Antes ficava DEPOIS do "if not cfg: continue" -> num PC de cozinha (sem sofia_caixa.json)
+            # nunca era alcancada e o PC so pegava versao nova ao REINICIAR. Foi por isso que o pedido
+            # #0033 (20/06 17:29) saiu com a correcao de combo v189 (push 17:10) ainda em v187 no PC.
+            if time.time() - last_update > SOFIA_UPDATE_EVERY:
+                last_update = time.time()
+                try: check_update()
+                except: pass
             cfg = _sofia_config()
             if not cfg:
                 time.sleep(SOFIA_POLL_INTERVAL); continue
@@ -2467,10 +2480,6 @@ def sofia_poll_loop():
                         agora = time.time()
                         for pid in todos_ids: _sofia_impressos[pid] = agora
                         log(f"  SOFIA: {len(todos_ids)} pedido(s) impresso(s) e confirmado(s)")
-            if time.time() - last_update > SOFIA_UPDATE_EVERY:
-                last_update = time.time()
-                try: check_update()
-                except: pass
         except Exception as e:
             log(f"  SOFIA poll erro: {e}")
         time.sleep(SOFIA_POLL_INTERVAL)
