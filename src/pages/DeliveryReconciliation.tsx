@@ -365,6 +365,29 @@ export default function DeliveryReconciliation() {
     return meta;
   }, [breakdowns, matchedOrderIds, offlineOrders, orderContexts, transactions]);
 
+  // Parte NÃO-cartão já conhecida pelo Saipos: dinheiro (breakdown físico dinheiro) e
+  // "já recebido" = online/já-pago + VOUCHER PARCEIRO DESCONTO (classificado como online).
+  const orderNonCardKnown = useCallback((orderId: string) => {
+    const bks = breakdowns.filter(b => b.imported_order_id === orderId);
+    let saiposCash = 0;
+    let online = 0;
+    bks.forEach(b => {
+      if (b.payment_type === 'online') online += b.amount; // inclui voucher parceiro desconto
+      else if (normalizeDeliveryMethod(b.payment_method_name) === 'dinheiro') saiposCash += b.amount;
+    });
+    return { saiposCash, online };
+  }, [breakdowns]);
+
+  // Resumo financeiro completo de um pedido conciliado (valor real x partes)
+  const orderMoney = useCallback((order: Order, matchedSum: number) => {
+    const { saiposCash, online } = orderNonCardKnown(order.id);
+    const manualCash = order.manual_cash_amount || 0;
+    const cash = saiposCash + manualCash;
+    const explained = matchedSum + cash + online;
+    const remainder = order.total_amount - explained; // o que "ficou pra trás" / falta explicar
+    return { total: order.total_amount, card: matchedSum, cash, saiposCash, manualCash, online, remainder };
+  }, [orderNonCardKnown]);
+
   // Divergências de cada pedido já conciliado (método/estrutura/combinado/entregador/valor)
   const divergenceMap = useMemo(() => {
     const map = new Map<string, Set<DivergenceKind>>();
@@ -373,8 +396,11 @@ export default function DeliveryReconciliation() {
       if (!txs || txs.length === 0) return;
       const kinds = new Set<DivergenceKind>();
       const sum = txs.reduce((s, t) => s + t.gross_amount, 0);
-      const cash = order.manual_cash_amount || 0;
-      if (Math.abs(order.total_amount - sum - cash) > 0.01) kinds.add('valor');
+      // Divergência de valor = sobra valor SEM explicação. Conta cartões + dinheiro
+      // (Saipos e declarado) + já recebido (online/voucher parceiro desconto) contra o
+      // valor REAL da comanda. Se ainda falta, é divergência.
+      const { remainder } = orderMoney(order, sum);
+      if (Math.abs(remainder) > 0.01) kinds.add('valor');
       const orderPerson = order.delivery_person?.trim().toLowerCase();
       txs.forEach(tx => {
         if (tx.match_type === 'exact_method_divergence') kinds.add('metodo');
@@ -386,7 +412,7 @@ export default function DeliveryReconciliation() {
       if (kinds.size > 0) map.set(order.id, kinds);
     });
     return map;
-  }, [offlineOrders, matchedOrderIds, serialToDeliveryPerson]);
+  }, [offlineOrders, matchedOrderIds, serialToDeliveryPerson, orderMoney]);
 
   const stats = useMemo(() => {
     const total = offlineOrders.length;
@@ -874,6 +900,23 @@ export default function DeliveryReconciliation() {
       await loadData();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao reativar pedido.');
+    } finally {
+      setBusyOrderId(null);
+    }
+  }, [loadData]);
+
+  // Marca o valor que "ficou pra trás" como pagamento em dinheiro
+  const handleMarkRemainderCash = useCallback(async (order: Order, remainder: number) => {
+    setBusyOrderId(order.id);
+    try {
+      const newCash = Math.round(((order.manual_cash_amount || 0) + remainder) * 100) / 100;
+      await supabase.from('imported_orders')
+        .update({ manual_cash_amount: newCash })
+        .eq('id', order.id);
+      toast.success(`${formatCurrency(remainder)} marcado como dinheiro no pedido #${order.order_number}.`);
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao marcar dinheiro.');
     } finally {
       setBusyOrderId(null);
     }
@@ -1446,9 +1489,11 @@ export default function DeliveryReconciliation() {
                 const confidence = matchedTxs?.[0]?.match_confidence;
                 const isCombined = matchedTxs && matchedTxs.length > 1;
                 const totalMatchedAmount = matchedTxs?.reduce((s, t) => s + t.gross_amount, 0) || 0;
-                const cashDeclared = order.manual_cash_amount || 0;
-                const accountedAmount = totalMatchedAmount + cashDeclared;
-                const residual = order.total_amount - accountedAmount;
+                const money = orderMoney(order, totalMatchedAmount);
+                // Mostra o detalhamento quando há mais de uma parte ou algo a explicar
+                const showBreakdown = isMatched && (
+                  isCombined || money.cash > 0 || money.online > 0 || Math.abs(money.remainder) > 0.01
+                );
                 const pendingInfo = pendingMeta.get(order.id);
                 const divergences = divergenceMap.get(order.id);
                 const isDivergent = !!divergences && divergences.size > 0;
@@ -1622,21 +1667,31 @@ export default function DeliveryReconciliation() {
                             </Button>
                           </div>
                         ))}
-                        {(isCombined || cashDeclared > 0) && (
-                          <div className="mt-1 text-[10px] text-muted-foreground">
-                            Cartões: <span className="font-mono-tabular font-medium">{formatCurrency(totalMatchedAmount)}</span>
-                            {cashDeclared > 0 && (
-                              <span className="ml-1">+ dinheiro <span className="font-mono-tabular font-medium text-success">{formatCurrency(cashDeclared)}</span></span>
+                        {showBreakdown && (
+                          <div className="mt-1.5 text-[10px] text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <span>Comanda: <span className="font-mono-tabular font-medium text-foreground">{formatCurrency(money.total)}</span></span>
+                            <span>· Cartão: <span className="font-mono-tabular font-medium">{formatCurrency(money.card)}</span></span>
+                            {money.cash > 0.01 && (
+                              <span>· Dinheiro: <span className="font-mono-tabular font-medium text-success">{formatCurrency(money.cash)}</span></span>
                             )}
-                            <span className="ml-1">= <span className="font-mono-tabular font-medium">{formatCurrency(accountedAmount)}</span></span>
-                            {Math.abs(residual) > 0.01 && (
-                              <span className="text-warning ml-1">Δ {formatCurrency(Math.abs(residual))}</span>
+                            {money.online > 0.01 && (
+                              <span>· Já recebido: <span className="font-mono-tabular font-medium text-primary">{formatCurrency(money.online)}</span></span>
                             )}
-                          </div>
-                        )}
-                        {!isCombined && cashDeclared === 0 && matchedTxs[0].match_type !== 'exact' && matchedTxs[0].gross_amount !== order.total_amount && (
-                          <div className="mt-1 text-warning text-[10px]">
-                            Δ {formatCurrency(Math.abs(order.total_amount - matchedTxs[0].gross_amount))}
+                            {Math.abs(money.remainder) > 0.01 && (
+                              <span className="text-warning font-medium">· Falta explicar: {formatCurrency(money.remainder)}</span>
+                            )}
+                            {money.remainder > 0.01 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-5 px-1.5 text-[10px] border-success/50 text-success hover:bg-success/10"
+                                disabled={busyOrderId === order.id}
+                                onClick={() => handleMarkRemainderCash(order, money.remainder)}
+                              >
+                                <Banknote className="h-2.5 w-2.5 mr-1" />
+                                marcar como dinheiro
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1817,7 +1872,8 @@ export default function DeliveryReconciliation() {
               .filter(t => groupSelectedTxIds.has(t.id))
               .reduce((s, t) => s + t.gross_amount, 0);
             const cash = parseFloat(groupCash.replace(',', '.')) || 0;
-            const remaining = groupingOrder.total_amount - selectedSum - cash;
+            const known = orderNonCardKnown(groupingOrder.id); // dinheiro Saipos + já recebido (online/voucher)
+            const remaining = groupingOrder.total_amount - selectedSum - cash - known.saiposCash - known.online;
             const canConfirm = Math.abs(remaining) < 0.01;
             return (
               <>
@@ -1882,8 +1938,15 @@ export default function DeliveryReconciliation() {
                   </div>
 
                   <div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Total da comanda</span><span className="font-mono-tabular">{formatCurrency(groupingOrder.total_amount)}</span></div>
                     <div className="flex justify-between"><span className="text-muted-foreground">Cartões selecionados</span><span className="font-mono-tabular">{formatCurrency(selectedSum)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Dinheiro</span><span className="font-mono-tabular">{formatCurrency(cash)}</span></div>
+                    {known.saiposCash > 0.01 && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Dinheiro (Saipos)</span><span className="font-mono-tabular">{formatCurrency(known.saiposCash)}</span></div>
+                    )}
+                    {known.online > 0.01 && (
+                      <div className="flex justify-between"><span className="text-muted-foreground">Já recebido (online/voucher)</span><span className="font-mono-tabular text-primary">{formatCurrency(known.online)}</span></div>
+                    )}
+                    <div className="flex justify-between"><span className="text-muted-foreground">Dinheiro (informar)</span><span className="font-mono-tabular text-success">{formatCurrency(cash)}</span></div>
                     <div className="flex justify-between border-t border-border pt-1 font-medium">
                       <span>{canConfirm ? 'Confere com o total' : 'Falta para fechar'}</span>
                       <span className={`font-mono-tabular ${canConfirm ? 'text-success' : 'text-warning'}`}>
