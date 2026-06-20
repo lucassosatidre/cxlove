@@ -82,6 +82,17 @@ interface UndoAction {
 const normalizeSerial = (s: string | null | undefined): string =>
   s ? s.replace(/^S1F2-000/, '') : '';
 
+// Tipos de divergência em um match já conciliado
+type DivergenceKind = 'metodo' | 'estrutura' | 'combinado_nd' | 'entregador' | 'valor';
+
+const DIVERGENCE_LABELS: Record<DivergenceKind, string> = {
+  metodo: 'Método divergente',
+  estrutura: 'Estrutura divergente',
+  combinado_nd: 'Combinado não declarado',
+  entregador: 'Entregador divergente',
+  valor: 'Diferença de valor',
+};
+
 export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -102,6 +113,7 @@ export default function DeliveryReconciliation() {
   const [filterMatch, setFilterMatch] = useState('all');
   const [filterDeliveryPerson, setFilterDeliveryPerson] = useState('all');
   const [filterPaymentMethod, setFilterPaymentMethod] = useState('all');
+  const [filterDivergence, setFilterDivergence] = useState('all');
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
   const [dragTxId, setDragTxId] = useState<string | null>(null);
   const [cashSnapshotDataAbertura, setCashSnapshotDataAbertura] = useState<{ counts: Record<string, number>; total: number; updated_at: string } | null>(null);
@@ -353,6 +365,29 @@ export default function DeliveryReconciliation() {
     return meta;
   }, [breakdowns, matchedOrderIds, offlineOrders, orderContexts, transactions]);
 
+  // Divergências de cada pedido já conciliado (método/estrutura/combinado/entregador/valor)
+  const divergenceMap = useMemo(() => {
+    const map = new Map<string, Set<DivergenceKind>>();
+    offlineOrders.forEach(order => {
+      const txs = matchedOrderIds.get(order.id);
+      if (!txs || txs.length === 0) return;
+      const kinds = new Set<DivergenceKind>();
+      const sum = txs.reduce((s, t) => s + t.gross_amount, 0);
+      const cash = order.manual_cash_amount || 0;
+      if (Math.abs(order.total_amount - sum - cash) > 0.01) kinds.add('valor');
+      const orderPerson = order.delivery_person?.trim().toLowerCase();
+      txs.forEach(tx => {
+        if (tx.match_type === 'exact_method_divergence') kinds.add('metodo');
+        if (tx.match_type === 'exact_structure_divergence') kinds.add('estrutura');
+        if (tx.match_type === 'combined_undeclared') kinds.add('combinado_nd');
+        const inferred = tx.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(tx.machine_serial)) : null;
+        if (inferred && orderPerson && inferred.trim().toLowerCase() !== orderPerson) kinds.add('entregador');
+      });
+      if (kinds.size > 0) map.set(order.id, kinds);
+    });
+    return map;
+  }, [offlineOrders, matchedOrderIds, serialToDeliveryPerson]);
+
   const stats = useMemo(() => {
     const total = offlineOrders.length;
     const matched = offlineOrders.filter(o => matchedOrderIds.has(o.id)).length;
@@ -360,8 +395,8 @@ export default function DeliveryReconciliation() {
       const txs = matchedOrderIds.get(o.id);
       return txs?.[0]?.match_confidence === 'high';
     }).length;
-    return { total, matched, pending: total - matched, highConf, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
-  }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions]);
+    return { total, matched, pending: total - matched, highConf, divergent: divergenceMap.size, txTotal: transactions.length, txUnmatched: unmatchedTransactions.length };
+  }, [offlineOrders, matchedOrderIds, transactions, unmatchedTransactions, divergenceMap]);
 
   const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
 
@@ -485,13 +520,18 @@ export default function DeliveryReconciliation() {
       if (filterPaymentMethod !== 'all') {
         if (!orderPhysicalMethods(o).includes(filterPaymentMethod as NormalizedDeliveryMethod)) return false;
       }
+      if (filterDivergence !== 'all') {
+        const kinds = divergenceMap.get(o.id);
+        if (!kinds) return false;
+        if (filterDivergence !== 'any' && !kinds.has(filterDivergence as DivergenceKind)) return false;
+      }
       return true;
     }).sort((a, b) => {
       const aNum = parseInt(a.order_number.replace(/\D/g, ''), 10) || 0;
       const bNum = parseInt(b.order_number.replace(/\D/g, ''), 10) || 0;
       return aNum - bNum;
     });
-  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, matchedOrderIds, orderPhysicalMethods]);
+  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, filterDivergence, matchedOrderIds, orderPhysicalMethods, divergenceMap]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -1277,6 +1317,24 @@ export default function DeliveryReconciliation() {
                 <p className="text-sm font-semibold text-warning font-mono-tabular">{stats.pending}</p>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setFilterDivergence(filterDivergence === 'any' ? 'all' : 'any')}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 border min-w-[120px] text-left transition-colors ${
+                filterDivergence !== 'all'
+                  ? 'bg-amber-500/15 border-amber-500/50 ring-1 ring-amber-500/30'
+                  : stats.divergent > 0
+                    ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/15'
+                    : 'bg-muted border-border hover:bg-muted/70'
+              }`}
+              title="Mostrar só pedidos com divergência"
+            >
+              <AlertTriangle className={`h-4 w-4 ${stats.divergent > 0 ? 'text-amber-600' : 'text-muted-foreground'}`} />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">Divergências</p>
+                <p className={`text-sm font-semibold font-mono-tabular ${stats.divergent > 0 ? 'text-amber-600' : 'text-foreground'}`}>{stats.divergent}</p>
+              </div>
+            </button>
             <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
               <Truck className="h-4 w-4 text-muted-foreground" />
               <div>
@@ -1353,6 +1411,23 @@ export default function DeliveryReconciliation() {
               <SelectItem value="unmatched">Pendentes</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={filterDivergence} onValueChange={setFilterDivergence}>
+            <SelectTrigger className={`w-[200px] h-9 ${filterDivergence !== 'all' ? 'border-amber-500/60 text-amber-700 dark:text-amber-400' : ''}`}>
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className={`h-3.5 w-3.5 ${filterDivergence !== 'all' ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                <SelectValue placeholder="Divergências" />
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas (sem filtro)</SelectItem>
+              <SelectItem value="any">⚠ Só com divergência{stats.divergent > 0 ? ` (${stats.divergent})` : ''}</SelectItem>
+              <SelectItem value="metodo">{DIVERGENCE_LABELS.metodo}</SelectItem>
+              <SelectItem value="estrutura">{DIVERGENCE_LABELS.estrutura}</SelectItem>
+              <SelectItem value="combinado_nd">{DIVERGENCE_LABELS.combinado_nd}</SelectItem>
+              <SelectItem value="entregador">{DIVERGENCE_LABELS.entregador}</SelectItem>
+              <SelectItem value="valor">{DIVERGENCE_LABELS.valor}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -1375,18 +1450,22 @@ export default function DeliveryReconciliation() {
                 const accountedAmount = totalMatchedAmount + cashDeclared;
                 const residual = order.total_amount - accountedAmount;
                 const pendingInfo = pendingMeta.get(order.id);
+                const divergences = divergenceMap.get(order.id);
+                const isDivergent = !!divergences && divergences.size > 0;
 
                 return (
                   <div
                     key={order.id}
                     className={`bg-card rounded-lg border p-3 row-transition ${
-                      isMatched
-                        ? confidence === 'high'
-                          ? 'border-success/50 bg-success/5'
-                          : confidence === 'medium'
-                            ? 'border-primary/50 bg-primary/5'
-                            : 'border-warning/50 bg-warning/5'
-                        : 'border-border hover:border-primary/30'
+                      isDivergent
+                        ? 'border-amber-500/70 bg-amber-500/10 ring-1 ring-amber-500/40 shadow-[inset_4px_0_0_0_hsl(var(--warning))]'
+                        : isMatched
+                          ? confidence === 'high'
+                            ? 'border-success/50 bg-success/5'
+                            : confidence === 'medium'
+                              ? 'border-primary/50 bg-primary/5'
+                              : 'border-warning/50 bg-warning/5'
+                          : 'border-border hover:border-primary/30'
                     }`}
                     onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('ring-2', 'ring-primary'); }}
                     onDragLeave={(e) => { e.currentTarget.classList.remove('ring-2', 'ring-primary'); }}
@@ -1428,6 +1507,14 @@ export default function DeliveryReconciliation() {
                         {!isMatched && pendingInfo && (
                           <Badge variant="secondary" className={`text-[10px] border ${pendingInfo.tone}`}>
                             {pendingInfo.label}
+                          </Badge>
+                        )}
+                        {isDivergent && (
+                          <Badge variant="secondary" className="text-[10px] font-semibold border border-amber-500/60 bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            {divergences!.size === 1
+                              ? DIVERGENCE_LABELS[Array.from(divergences!)[0]]
+                              : `${divergences!.size} divergências`}
                           </Badge>
                         )}
                         <DropdownMenu>
@@ -1505,10 +1592,12 @@ export default function DeliveryReconciliation() {
                                   }
                                 })();
                                 const isDivergence = tx.match_type === 'exact_method_divergence' || tx.match_type === 'exact_structure_divergence';
+                                const isUndeclared = tx.match_type === 'combined_undeclared';
+                                const isDivergentBadge = isDivergence || isUndeclared;
                                 const badgeColor = isDivergence
-                                  ? 'bg-amber-500/10 text-amber-600'
-                                  : tx.match_type === 'combined_undeclared'
-                                    ? 'bg-violet-500/10 text-violet-600'
+                                  ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/60 font-semibold'
+                                  : isUndeclared
+                                    ? 'bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/60 font-semibold'
                                     : confidence === 'high'
                                       ? 'bg-success/10 text-success'
                                       : confidence === 'medium'
@@ -1516,6 +1605,7 @@ export default function DeliveryReconciliation() {
                                         : 'bg-warning/10 text-warning';
                                 return (
                                   <Badge variant="secondary" className={`text-[9px] ${badgeColor}`}>
+                                    {isDivergentBadge && <AlertTriangle className="h-2.5 w-2.5 mr-1" />}
                                     {matchLabel}
                                   </Badge>
                                 );
