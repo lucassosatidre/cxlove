@@ -4,7 +4,16 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "190"
+VERSION = "191"
+# v191 (20/06/26): ETIQUETA do DELIVERY — COMBO carro-chefe pedido Nx (Qt>1) saía 1x só. O papel do iFood
+#   lista o combo UMA vez ("2  2x Pizza Grande + Refrigerante" = 2 pizzas/combo, pedido 2x) e a Qt do item
+#   (o "2 " da frente) era IGNORADA no ramo mult>1 do extrair_itens_printrows -> só 1 combo era emitido.
+#   Pedido real #128 (20/06): 4 pizzas + 2 Cocas viravam 2 pizzas + 1 Coca na etiqueta (o KDS já saía certo,
+#   pois extrair_itens_kds emite o combo qty vezes desde v188). Mesma falha no #2 (hoje). Agora a etiqueta
+#   replica os itens do combo (pizzas + bebida + borda) qty vezes ANTES do split por slots. Combo COM
+#   marcador "Nª Pizza" (Brendi) NÃO replica (combo_marker) -> pizzas já enumeradas. Harness: #128/#2 (4+2),
+#   combo 1x sem regressão, simples 2x, marcador 1x/2x, combo+borda. Diff old/new em ~12 pedidos REAIS de
+#   todos os caminhos (salão/Brendi/iFood/gigante×2/broto): idênticos exceto o #128 (2->4 caixas), confirmado.
 # v190 (20/06/26): AUTO-UPDATE da FROTA. A checagem de versao nova (check_update a cada 30min) estava
 #   DEPOIS do "if not cfg: continue" no sofia_poll_loop -> so o PC do caixa (com sofia_caixa.json)
 #   atualizava sozinho; os PCs de COZINHA so pegavam versao nova ao REINICIAR. Resultado: o combo do
@@ -448,6 +457,7 @@ def extrair_itens_printrows(print_rows):
     em_zona = False; ultimo_tipo = None; em_obs = False; obs_acc = []
     pend_adic = None   # adicional aguardando a obs da linha seguinte -> vira a nota "(calabresa)"
     cur_caixa = None; combo_nome = None; combo_doce = False; combo_pizzas = {}; combo_mult = 1   # combo "2 X Pizza" dividido
+    combo_open = None; combo_marker = False; combo_segs = []   # v191: combo pedido Nx (qty>1) SEM marcador -> replica o combo qty vezes
     def _alvo():
         nonlocal cur_caixa, total_caixas
         if cur_caixa is not None: return cur_caixa
@@ -506,12 +516,16 @@ def extrair_itens_printrows(print_rows):
         if mp:
             qty = int(mp.group(1)); nome_raw = limpar_nome(mp.group(2).strip())
             ultimo_tipo = "item"
+            if combo_open is not None:                         # v191: item de TOPO encerra o combo anterior (sub-itens vêm em "-...")
+                if combo_open[1] > 1 and not combo_marker: combo_segs.append((combo_open[0], len(display), combo_open[1]))
+                combo_open = None
             if eh_borda(nome_raw):
                 display.append({"tipo": "borda", "nome": nome_raw, "qty": qty, "sabores_raw": []})
             elif eh_pizza_salgada(nome_raw):
                 mult = contar_pizzas_no_nome(nome_raw); base = nome_sem_combo(nome_raw)
                 if mult > 1:                                   # combo "2 X Pizza" -> divide pelos marcadores "Na Pizza"
                     combo_nome = base or "Pizza"; combo_doce = False; combo_pizzas = {}; combo_mult = mult; cur_caixa = None
+                    combo_open = (len(display), qty); combo_marker = False   # v191: combo pedido `qty` vezes (iFood "2  2x Pizza...")
                 else:
                     c = {"tipo": "caixa_salgada", "nome": base, "qty": qty, "sabores_raw": []}
                     display.append(c); total_caixas += qty; cur_caixa = c; combo_nome = None
@@ -519,6 +533,7 @@ def extrair_itens_printrows(print_rows):
                 mult = contar_pizzas_no_nome(nome_raw); base = nome_sem_combo(nome_raw)
                 if mult > 1:
                     combo_nome = base or "Pizza"; combo_doce = True; combo_pizzas = {}; combo_mult = mult; cur_caixa = None
+                    combo_open = (len(display), qty); combo_marker = False   # v191
                 else:
                     c = {"tipo": "caixa_doce", "nome": base, "qty": qty, "sabores_raw": []}
                     display.append(c); total_caixas += qty; cur_caixa = c; combo_nome = None
@@ -534,6 +549,7 @@ def extrair_itens_printrows(print_rows):
             if combo_nome:                                     # marcador "Na Pizza ..." -> cria/troca a pizza do combo
                 _ordn, _resto = _salao_marker_pizza(nome_raw)
                 if _ordn is not None:
+                    combo_marker = True                        # v191: combo COM marcador (Brendi) -> NÃO replica (pizzas já enumeradas)
                     if _ordn not in combo_pizzas:
                         c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": 1, "sabores_raw": []}
                         combo_pizzas[_ordn] = c; display.append(c); total_caixas += 1
@@ -586,6 +602,7 @@ def extrair_itens_printrows(print_rows):
                 # de 2 pizzas virava 1 pizza com 4 sabores (bug pedido 205, 13/06). Tira a qty antes.
                 _ordn, _resto = _salao_marker_pizza(re.sub(r'^\d+\s+', '', nome_raw))
                 if _ordn is not None:
+                    combo_marker = True                        # v191: combo COM marcador (Brendi) -> NÃO replica
                     if _ordn not in combo_pizzas:
                         c = {"tipo": "caixa_doce" if combo_doce else "caixa_salgada", "nome": combo_nome, "qty": 1, "sabores_raw": []}
                         combo_pizzas[_ordn] = c; display.append(c); total_caixas += 1
@@ -632,6 +649,22 @@ def extrair_itens_printrows(print_rows):
                         d["sabores_raw"][-1] = (n, de, abreviar_sabor(novo.strip())); break
             elif display:
                 display[-1]["nome"] = limpar_nome(display[-1]["nome"] + texto_limpo)
+    # v191: COMBO pedido Nx (qty>1) SEM marcador — o PAPEL do iFood lista o combo UMA vez e a qty do item
+    # ("2  2x Pizza Grande + Refrigerante") era IGNORADA no ramo mult>1 -> saía 1 combo só (pedido #128 real
+    # 20/06: 4 pizzas + 2 Cocas viravam 2 pizzas + 1 Coca). O KDS/comanda já corrigia isso desde v188 (emite
+    # o combo qty vezes); a etiqueta não, pois a caixa do combo nasce com qty=1 no _alvo. Aqui replica os
+    # itens do combo (pizzas + bebida + borda) qty vezes ANTES do split por slots. Combo COM marcador
+    # (Brendi) fica de fora (combo_marker) -> pizzas já enumeradas, não re-multiplica.
+    if combo_open is not None and combo_open[1] > 1 and not combo_marker:
+        combo_segs.append((combo_open[0], len(display), combo_open[1]))
+    for _s, _e, _q in sorted(combo_segs, reverse=True):
+        _chunk = display[_s:_e]; _rep = []
+        for _ in range(_q):
+            for _d in _chunk:
+                _nd = dict(_d); _nd["sabores_raw"] = list(_d.get("sabores_raw") or [])
+                if "_adic" in _d: _nd["_adic"] = [list(_a) for _a in _d["_adic"]]
+                _rep.append(_nd)
+        display[_s:_e] = _rep
     # COMBO SEM MARCADOR (iFood: "2x Pizza Grande" + lista de "-1/2 X" SEM "Na Pizza"): a caixa fica com
     # qty>1 e TODAS as fatias empilhadas (consolidar somaria -> "3/2 Calabresa", bug pedido 168). Divide em
     # qty pizzas enchendo por SLOTS do tamanho (2 p/ Grande), igual ao split do colove. Combo COM marcador
