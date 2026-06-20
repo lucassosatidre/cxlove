@@ -27,10 +27,12 @@ import {
   getDeliveryAutoMatchContext,
   getDeliveryDisplayAmount,
   getDeliveryDisplayMethods,
+  normalizeDeliveryMethod,
+  type NormalizedDeliveryMethod,
 } from '@/lib/delivery-method-utils';
 import { classifyPendingOrder } from '@/lib/delivery-pending-classifier';
 import { useUserRole } from '@/hooks/useUserRole';
-import { formatCurrency } from '@/lib/payment-utils';
+import { formatCurrency, canonicalizePaymentMethod } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import {
   exportMatchesXLSX,
@@ -411,6 +413,30 @@ export default function DeliveryReconciliation() {
     return totals;
   }, [activeOrders, breakdowns]);
 
+  // Dinheiro teórico (Saipos): informativo, não exige match. Soma a parte em dinheiro
+  // de cada pedido (breakdown 'dinheiro', ou total quando o pedido é só dinheiro).
+  const cashTheoretical = useMemo(() => {
+    const byOrder = new Map<string, typeof breakdowns>();
+    breakdowns.forEach(b => {
+      if (!byOrder.has(b.imported_order_id)) byOrder.set(b.imported_order_id, []);
+      byOrder.get(b.imported_order_id)!.push(b);
+    });
+    let total = 0;
+    for (const order of activeOrders) {
+      const bks = byOrder.get(order.id);
+      if (bks && bks.length > 0) {
+        for (const b of bks) {
+          if (normalizeDeliveryMethod(b.payment_method_name) === 'dinheiro') total += b.amount;
+        }
+      } else {
+        const methods = order.payment_method.split(',').map(m => m.trim()).filter(Boolean);
+        const norms = methods.map(m => normalizeDeliveryMethod(m));
+        if (norms.length === 1 && norms[0] === 'dinheiro') total += order.total_amount;
+      }
+    }
+    return total;
+  }, [activeOrders, breakdowns]);
+
   const allDeliveryPersons = useMemo(() => {
     const set = new Set<string>();
     activeOrders.forEach(o => { if (o.delivery_person) set.add(o.delivery_person); });
@@ -428,18 +454,27 @@ export default function DeliveryReconciliation() {
     return [...confirmed.sort(), ...others.sort()];
   }, [offlineOrders, confirmedDriverNames]);
 
+  // Métodos físicos normalizados de um pedido (prioriza breakdowns do operador)
+  const orderPhysicalMethods = useCallback((o: Order): NormalizedDeliveryMethod[] => {
+    const orderBks = breakdowns.filter(b => b.imported_order_id === o.id && b.payment_type === 'fisico');
+    const src = orderBks.length > 0
+      ? orderBks.map(b => b.payment_method_name)
+      : o.payment_method.split(',');
+    return src.map(m => normalizeDeliveryMethod(m));
+  }, [breakdowns]);
+
+  // Filtro de forma de pagamento: categorias canônicas (sem duplicar à vista/parcelado etc)
+  const PAYMENT_FILTER_OPTIONS: { key: NormalizedDeliveryMethod; label: string }[] = [
+    { key: 'pix', label: '(COBRAR) Pix' },
+    { key: 'credito', label: 'Crédito' },
+    { key: 'debito', label: 'Débito' },
+    { key: 'voucher', label: 'Voucher' },
+  ];
   const paymentMethodsFilter = useMemo(() => {
-    const set = new Set<string>();
-    offlineOrders.forEach(o => {
-      const orderBks = breakdowns.filter(b => b.imported_order_id === o.id && b.payment_type === 'fisico');
-      if (orderBks.length > 0) {
-        orderBks.forEach(b => set.add(b.payment_method_name));
-      } else {
-        o.payment_method.split(',').map(m => m.trim()).filter(m => m).forEach(m => set.add(m));
-      }
-    });
-    return Array.from(set).sort();
-  }, [offlineOrders, breakdowns]);
+    const present = new Set<NormalizedDeliveryMethod>();
+    offlineOrders.forEach(o => orderPhysicalMethods(o).forEach(m => present.add(m)));
+    return PAYMENT_FILTER_OPTIONS.filter(opt => present.has(opt.key));
+  }, [offlineOrders, orderPhysicalMethods]);
 
   const filtered = useMemo(() => {
     return offlineOrders.filter(o => {
@@ -448,13 +483,7 @@ export default function DeliveryReconciliation() {
       if (filterMatch === 'unmatched' && matchedOrderIds.has(o.id)) return false;
       if (filterDeliveryPerson !== 'all' && o.delivery_person !== filterDeliveryPerson) return false;
       if (filterPaymentMethod !== 'all') {
-        const orderBks = breakdowns.filter(b => b.imported_order_id === o.id && b.payment_type === 'fisico');
-        if (orderBks.length > 0) {
-          if (!orderBks.some(b => b.payment_method_name === filterPaymentMethod)) return false;
-        } else {
-          const methods = o.payment_method.split(',').map(m => m.trim());
-          if (!methods.includes(filterPaymentMethod)) return false;
-        }
+        if (!orderPhysicalMethods(o).includes(filterPaymentMethod as NormalizedDeliveryMethod)) return false;
       }
       return true;
     }).sort((a, b) => {
@@ -462,7 +491,7 @@ export default function DeliveryReconciliation() {
       const bNum = parseInt(b.order_number.replace(/\D/g, ''), 10) || 0;
       return aNum - bNum;
     });
-  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, matchedOrderIds, breakdowns]);
+  }, [offlineOrders, search, filterMatch, filterDeliveryPerson, filterPaymentMethod, matchedOrderIds, orderPhysicalMethods]);
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -1099,6 +1128,13 @@ export default function DeliveryReconciliation() {
                 </div>
               );
             })()}
+            <div className="flex items-center gap-2 bg-success/5 rounded-lg px-3 py-2 border border-dashed border-success/40 min-w-[150px]">
+              <Banknote className="h-4 w-4 text-success" />
+              <div>
+                <p className="text-[10px] text-muted-foreground leading-tight">💵 Dinheiro (informativo)</p>
+                <p className="text-sm font-semibold text-success font-mono">{formatCurrency(cashTheoretical)}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1116,7 +1152,7 @@ export default function DeliveryReconciliation() {
       {/* 4. Total Recebido via Maquininhas - Real */}
       {(() => {
         const methodSummary: Record<string, { total: number; count: number }> = {
-          'Pix': { total: 0, count: 0 },
+          '(COBRAR) Pix': { total: 0, count: 0 },
           'Crédito': { total: 0, count: 0 },
           'Débito': { total: 0, count: 0 },
           'Voucher': { total: 0, count: 0 },
@@ -1124,7 +1160,7 @@ export default function DeliveryReconciliation() {
         transactions.forEach(tx => {
           const method = tx.payment_method?.toLowerCase() || 'outro';
           let label = 'Outro';
-          if (method.includes('pix')) label = 'Pix';
+          if (method.includes('pix')) label = '(COBRAR) Pix';
           else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
           else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
           else if (method.includes('voucher')) label = 'Voucher';
@@ -1132,9 +1168,9 @@ export default function DeliveryReconciliation() {
           methodSummary[label].total += tx.gross_amount;
           methodSummary[label].count += 1;
         });
-        const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher'];
+        const fixedOrder = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'];
         const iconMap: Record<string, React.ReactNode> = {
-          'Pix': <QrCode className="h-4 w-4 text-primary" />,
+          '(COBRAR) Pix': <QrCode className="h-4 w-4 text-primary" />,
           'Crédito': <CreditCard className="h-4 w-4 text-accent-foreground" />,
           'Débito': <CreditCard className="h-4 w-4 text-muted-foreground" />,
           'Voucher': <CreditCard className="h-4 w-4 text-warning" />,
@@ -1290,10 +1326,23 @@ export default function DeliveryReconciliation() {
           <Select value={filterPaymentMethod} onValueChange={setFilterPaymentMethod}>
             <SelectTrigger className="w-[180px] h-9"><SelectValue placeholder="Pagamento" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todas formas</SelectItem>
-              {paymentMethodsFilter.map(pm => (
-                <SelectItem key={pm} value={pm}>{pm}</SelectItem>
-              ))}
+              <SelectItem value="all">
+                <span className="flex items-center gap-2"><Wallet className="h-3.5 w-3.5 text-muted-foreground" />Todas as formas</span>
+              </SelectItem>
+              {paymentMethodsFilter.map(pm => {
+                const icon = pm.key === 'pix'
+                  ? <QrCode className="h-3.5 w-3.5 text-primary" />
+                  : pm.key === 'voucher'
+                    ? <CreditCard className="h-3.5 w-3.5 text-warning" />
+                    : pm.key === 'debito'
+                      ? <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                      : <CreditCard className="h-3.5 w-3.5 text-accent-foreground" />;
+                return (
+                  <SelectItem key={pm.key} value={pm.key}>
+                    <span className="flex items-center gap-2">{icon}{pm.label}</span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
           <Select value={filterMatch} onValueChange={setFilterMatch}>
@@ -1415,7 +1464,7 @@ export default function DeliveryReconciliation() {
                             <div className="flex items-center gap-2 text-xs">
                               <Link2 className="h-3 w-3 text-success" />
                               <span className="text-muted-foreground">
-                                {tx.payment_method} {tx.sale_time ? `(${tx.sale_time})` : ''}
+                                {canonicalizePaymentMethod(tx.payment_method)} {tx.sale_time ? `(${tx.sale_time})` : ''}
                                 {(() => {
                                   const inferredPerson = tx.machine_serial ? serialToDeliveryPerson.get(normalizeSerial(tx.machine_serial)) : null;
                                   const orderPerson = order.delivery_person?.trim().toLowerCase();
@@ -1604,7 +1653,7 @@ export default function DeliveryReconciliation() {
                       <GripVertical className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-foreground">{tx.payment_method}</span>
+                          <span className="text-xs font-medium text-foreground">{canonicalizePaymentMethod(tx.payment_method)}</span>
                           <span className="text-sm font-mono-tabular font-medium text-foreground">
                             {formatCurrency(tx.gross_amount)}
                           </span>
@@ -1715,7 +1764,7 @@ export default function DeliveryReconciliation() {
                             />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
-                                <span className="text-xs font-medium text-foreground">{tx.payment_method}</span>
+                                <span className="text-xs font-medium text-foreground">{canonicalizePaymentMethod(tx.payment_method)}</span>
                                 <span className="text-sm font-mono-tabular font-medium text-foreground">{formatCurrency(tx.gross_amount)}</span>
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-muted-foreground">

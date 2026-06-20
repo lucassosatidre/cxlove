@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { canonicalizePaymentMethod } from './payment-utils';
 
 export interface ParsedCardTransaction {
   sale_date: string; // YYYY-MM-DD
@@ -183,7 +184,7 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
           transactions.push({
             sale_date: parseDateStr(row[colMap.sale_date]),
             sale_time: String(row[colMap.sale_time] ?? '').trim(),
-            payment_method: String(row[colMap.payment_method] ?? '').trim(),
+            payment_method: canonicalizePaymentMethod(String(row[colMap.payment_method] ?? '').trim()),
             brand: String(row[colMap.brand] ?? '').trim(),
             gross_amount: grossAmount,
             net_amount: parseBRCurrency(row[colMap.net_amount]),
@@ -280,7 +281,7 @@ export function parseSalonCardTransactionFile(file: File): Promise<{ transaction
           transactions.push({
             sale_date: parseDateStr(row[colMap.sale_date]),
             sale_time: String(row[colMap.sale_time] ?? '').trim(),
-            payment_method: String(row[colMap.payment_method] ?? '').trim(),
+            payment_method: canonicalizePaymentMethod(String(row[colMap.payment_method] ?? '').trim()),
             brand: String(row[colMap.brand] ?? '').trim(),
             gross_amount: grossAmount,
             net_amount: parseBRCurrency(row[colMap.net_amount]),
@@ -373,7 +374,7 @@ export function parseAllCardTransactions(file: File): Promise<{
           const tx: ParsedCardTransaction = {
             sale_date: parseDateStr(row[colMap.sale_date]),
             sale_time: String(row[colMap.sale_time] ?? '').trim(),
-            payment_method: String(row[colMap.payment_method] ?? '').trim(),
+            payment_method: canonicalizePaymentMethod(String(row[colMap.payment_method] ?? '').trim()),
             brand: String(row[colMap.brand] ?? '').trim(),
             gross_amount: grossAmount,
             net_amount: parseBRCurrency(row[colMap.net_amount]),

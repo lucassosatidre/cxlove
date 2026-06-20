@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { CreditCard, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
+import { CreditCard, Trash2, Eye, ChevronDown, ChevronRight, AlertCircle, QrCode, Wallet, Banknote } from 'lucide-react';
 import { toast } from 'sonner';
 import SerialAutocomplete from '@/components/SerialAutocomplete';
 import PersonAutocomplete from '@/components/PersonAutocomplete';
@@ -26,6 +26,7 @@ interface MachineReading {
   credit_amount: number;
   voucher_amount: number;
   pix_amount: number;
+  cash_amount: number;
   debit_count: number;
   credit_count: number;
   voucher_count: number;
@@ -71,6 +72,7 @@ function parseRow(r: any): MachineReading {
     credit_amount: Number(r.credit_amount),
     voucher_amount: Number(r.voucher_amount),
     pix_amount: Number(r.pix_amount),
+    cash_amount: Number(r.cash_amount) || 0,
     debit_count: Number(r.debit_count) || 0,
     credit_count: Number(r.credit_count) || 0,
     voucher_count: Number(r.voucher_count) || 0,
@@ -113,7 +115,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     onCountChange?.(readings.length);
   }, [readings.length, onCountChange]);
 
-  const SELECT_COLS = 'id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount, debit_count, credit_count, voucher_count, pix_count';
+  const SELECT_COLS = 'id, machine_serial, delivery_person, debit_amount, credit_amount, voucher_amount, pix_amount, cash_amount, debit_count, credit_count, voucher_count, pix_count';
 
   const loadReadings = async () => {
     if (!closingId) { setLoading(false); return; }
@@ -304,11 +306,12 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
       credit: acc.credit + r.credit_amount,
       voucher: acc.voucher + r.voucher_amount,
       pix: acc.pix + r.pix_amount,
+      cash: acc.cash + r.cash_amount,
       debitCount: acc.debitCount + r.debit_count,
       creditCount: acc.creditCount + r.credit_count,
       voucherCount: acc.voucherCount + r.voucher_count,
       pixCount: acc.pixCount + r.pix_count,
-    }), { debit: 0, credit: 0, voucher: 0, pix: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0 });
+    }), { debit: 0, credit: 0, voucher: 0, pix: 0, cash: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0 });
   }, [readings]);
 
   const totalGeral = totals.debit + totals.credit + totals.voucher + totals.pix;
@@ -317,18 +320,19 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
   const noPersonLabel = `Sem ${personLabel.toLowerCase()}`;
 
   const byDriver = useMemo(() => {
-    const map: Record<string, { debit: number; credit: number; voucher: number; pix: number; debitCount: number; creditCount: number; voucherCount: number; pixCount: number; count: number }> = {};
+    const map: Record<string, { debit: number; credit: number; voucher: number; pix: number; cash: number; debitCount: number; creditCount: number; voucherCount: number; pixCount: number; count: number }> = {};
     for (const r of readings) {
       // Máquinas da Frota (cadastro) são agrupadas pelo nome da máquina (ex: "Frota 1"),
       // não como "Sem entregador" — elas pertencem à Frota Garantida.
       const cleaned = (r.machine_serial || '').replace(/^S1F2-000/, '');
       const reg = registry.get(cleaned);
       const name = reg?.category === 'frota' ? reg.friendly_name : (r.delivery_person || noPersonLabel);
-      if (!map[name]) map[name] = { debit: 0, credit: 0, voucher: 0, pix: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0, count: 0 };
+      if (!map[name]) map[name] = { debit: 0, credit: 0, voucher: 0, pix: 0, cash: 0, debitCount: 0, creditCount: 0, voucherCount: 0, pixCount: 0, count: 0 };
       map[name].debit += r.debit_amount;
       map[name].credit += r.credit_amount;
       map[name].voucher += r.voucher_amount;
       map[name].pix += r.pix_amount;
+      map[name].cash += r.cash_amount;
       map[name].debitCount += r.debit_count;
       map[name].creditCount += r.credit_count;
       map[name].voucherCount += r.voucher_count;
@@ -374,6 +378,13 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                   </div>
                 </div>
               ))}
+              <div className="flex items-center gap-2 bg-success/5 rounded-lg px-3 py-2 border border-dashed border-success/40 min-w-[150px]">
+                <Banknote className="h-4 w-4 text-success" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">💵 Dinheiro (informativo)</p>
+                  <p className="text-sm font-semibold text-success font-mono">{formatCurrency(totals.cash)}</p>
+                </div>
+              </div>
               <div className="flex items-center gap-2 bg-primary/10 rounded-lg px-3 py-2 border border-primary/30 min-w-[150px]">
                 <Wallet className="h-4 w-4 text-primary" />
                 <div>
@@ -402,7 +413,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                 }
                 <CreditCard className="h-4 w-4 text-primary" />
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Conferência de Maquininhas
+                  Conferência de {personLabel === 'Garçom' ? 'Garçons' : 'Entregadores'}
                 </span>
                 {readings.length > 0 && (
                   <span className="text-xs text-muted-foreground">({readings.length})</span>
@@ -540,7 +551,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                   </div>
                                 </div>
                               )}
-                              <div className={`grid grid-cols-4 gap-2 ${isTele ? 'pt-2' : ''}`}>
+                              <div className={`grid grid-cols-5 gap-2 ${isTele ? 'pt-2' : ''}`}>
                                 {PAYMENT_FIELDS.map(({ label, amountField, countField }) => {
                                   const amountVal = r[amountField];
                                   const countDisabled = isCompleted || amountVal === 0;
@@ -574,6 +585,20 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
                                     </div>
                                   );
                                 })}
+                                {/* Dinheiro — informativo, não exige match de cartão */}
+                                <div className="space-y-1">
+                                  <label className="text-[10px] text-success">💵 Dinheiro</label>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={r.cash_amount || ''}
+                                    onChange={(e) => updateField(r.id, 'cash_amount', parseFloat(e.target.value) || 0)}
+                                    className="h-8 text-xs font-mono w-full border-success/40 focus-visible:ring-success/40"
+                                    placeholder="0,00"
+                                    disabled={isCompleted}
+                                  />
+                                </div>
                               </div>
                             </div>
                           )}

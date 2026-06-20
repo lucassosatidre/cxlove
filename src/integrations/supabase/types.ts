@@ -2217,6 +2217,7 @@ export type Database = {
       }
       machine_readings: {
         Row: {
+          cash_amount: number
           created_at: string
           credit_amount: number
           credit_count: number
@@ -2235,6 +2236,7 @@ export type Database = {
           voucher_count: number
         }
         Insert: {
+          cash_amount?: number
           created_at?: string
           credit_amount?: number
           credit_count?: number
@@ -2253,6 +2255,7 @@ export type Database = {
           voucher_count?: number
         }
         Update: {
+          cash_amount?: number
           created_at?: string
           credit_amount?: number
           credit_count?: number

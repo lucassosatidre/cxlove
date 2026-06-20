@@ -9,6 +9,22 @@ export function isOnlinePayment(method: string): boolean {
   return ONLINE_KEYWORDS.some(kw => lower.includes(kw));
 }
 
+/**
+ * Nome canônico do Pix físico (cobrado na entrega). O Saipos manda "(COBRAR) Pix"
+ * e o arquivo da maquininha (iFood Pago) manda só "Pix" — são a mesma coisa.
+ * Padroniza para "(COBRAR) Pix" em todo o app. NÃO toca em Pix pago/online
+ * (ex: "(PAGO) Pix Banco do Brasil").
+ */
+export const CANONICAL_PIX = '(COBRAR) Pix';
+
+export function canonicalizePaymentMethod(method: string): string {
+  const norm = (method || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+  if (norm.includes('pix') && !norm.includes('pago') && !norm.includes('online') && !norm.includes('banco do brasil')) {
+    return CANONICAL_PIX;
+  }
+  return method;
+}
+
 export function classifyPaymentType(method: string): 'online' | 'fisico' {
   return isOnlinePayment(method) ? 'online' : 'fisico';
 }
