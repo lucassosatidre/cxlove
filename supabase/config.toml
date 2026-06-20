@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.sofia-extract-order]
 verify_jwt = false
+
+[functions.daily-resync-saipos]
+verify_jwt = false
+
+[functions.migrate-order-to-salon]
+verify_jwt = true
