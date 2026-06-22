@@ -475,9 +475,9 @@ Deno.serve(async (req) => {
         p_offset: String(updOffset),
       });
 
-      const updRes = await fetch(
+      const updRes = await fetchSaiposWithRetry(
         `https://data.saipos.io/v1/search_sales?${updParams.toString()}`,
-        { headers: { Authorization: `Bearer ${saiposToken}` } }
+        saiposToken!,
       );
 
       if (!updRes.ok) {
