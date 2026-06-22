@@ -204,11 +204,9 @@ Deno.serve(async (req) => {
         p_offset: String(offset),
       });
 
-      const apiRes = await fetch(
+      const apiRes = await fetchSaiposWithRetry(
         `https://data.saipos.io/v1/search_sales?${params.toString()}`,
-        {
-          headers: { Authorization: `Bearer ${saiposToken}` },
-        }
+        saiposToken!,
       );
 
       console.log("Saipos API response status:", apiRes.status);
