@@ -141,7 +141,9 @@ const App = () => (
             <Route path="/admin/auditoria-v2/ifood-marketplace" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfoodMarketplaceV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria-v2/relatorios" element={<ProtectedRoute><SectorGuard sector="tele"><AuditRelatoriosV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/clau/memoria" element={<ProtectedRoute><SectorGuard sector="tele"><ClauMemory /></SectorGuard></ProtectedRoute>} />
-            <Route path="/admin/sofia" element={<ProtectedRoute><SectorGuard sector="tele"><Sofia /></SectorGuard></ProtectedRoute>} />
+            {/* Sofia desativada (migrada para outro sistema) — redireciona para Home */}
+            <Route path="/admin/sofia" element={<Navigate to="/" replace />} />
+            {/* <Route path="/admin/sofia" element={<ProtectedRoute><SectorGuard sector="tele"><Sofia /></SectorGuard></ProtectedRoute>} /> */}
             {/* Redirect old test routes */}
             <Route path="/tele-teste" element={<Navigate to="/tele" replace />} />
             <Route path="/tele-teste/import" element={<Navigate to="/tele/import" replace />} />
