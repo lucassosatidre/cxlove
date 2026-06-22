@@ -188,7 +188,194 @@ Deno.serve(async (req) => {
       );
     }
 
+    }
+
+    // ====== REPLACE MODE (reimportação limpa "safe") ======
+    // Só apaga os antigos DEPOIS de já ter inserido os novos com sucesso.
+    if (body.replace === true) {
+      // 1) Buscar TODAS as vendas do dia (com retry) — mesma filtragem do modo normal
+      const replaceSales: any[] = [];
+      let rOffset = 0;
+      const rLimit = 1000;
+      try {
+        while (true) {
+          const params = new URLSearchParams({
+            p_date_column_filter: "shift_date",
+            p_filter_date_start: `${closing_date}T00:00:00`,
+            p_filter_date_end: `${closing_date}T23:59:59`,
+            p_limit: String(rLimit),
+            p_offset: String(rOffset),
+          });
+          const apiRes = await fetchSaiposWithRetry(
+            `https://data.saipos.io/v1/search_sales?${params.toString()}`,
+            saiposToken!,
+          );
+          if (!apiRes.ok) {
+            const errText = await apiRes.text();
+            console.error("[replace] Saipos API falhou após retries:", apiRes.status, errText);
+            return new Response(
+              JSON.stringify({ error: `Erro na API Saipos (replace): ${apiRes.status}`, details: errText, replaced: false }),
+              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const data = await apiRes.json().catch(() => null);
+          const sales = Array.isArray(data) ? data : (data?.data || data?.results || []);
+          const filtered = sales.filter((s: any) => s.id_sale_type === 1 && s.canceled !== "Y");
+          replaceSales.push(...filtered);
+          if (sales.length < rLimit) break;
+          rOffset += rLimit;
+        }
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        console.error("[replace] Erro definitivo ao buscar Saipos:", msg);
+        return new Response(
+          JSON.stringify({ error: `Saipos indisponível após retries: ${msg}`, replaced: false }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // 2) Criar UM novo registro de importação ANTES de inserir
+      const { data: newImport, error: newImpErr } = await supabaseAdmin
+        .from("imports")
+        .insert({
+          user_id: userId,
+          file_name: `saipos-api-replace-${closing_date}`,
+          total_rows: replaceSales.length,
+          new_rows: replaceSales.length,
+          duplicate_rows: 0,
+          daily_closing_id,
+          status: "completed",
+        })
+        .select("id")
+        .single();
+
+      if (newImpErr || !newImport) {
+        return new Response(
+          JSON.stringify({ error: `Erro ao criar import (replace): ${newImpErr?.message}`, replaced: false }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // 3) Mapear e inserir TODOS os pedidos (sem dedup) sob o novo import
+      if (replaceSales.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < replaceSales.length; i += batchSize) {
+          const slice = replaceSales.slice(i, i + batchSize);
+          const batch = slice.map((sale: any) => {
+            const payments = sale.payments || [];
+            const primaryPayment = payments.length > 0 ? payments[0].desc_store_payment_type || "" : "";
+            const paymentMethodStr = payments.length > 1
+              ? payments.map((p: any) => p.desc_store_payment_type || "").join(", ")
+              : primaryPayment;
+            const allOnline = isAllOnline(paymentMethodStr);
+            let saleTime: string | null = null;
+            if (sale.created_at) {
+              try {
+                const dt = new Date(sale.created_at);
+                saleTime = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+              } catch { saleTime = null; }
+            }
+            const partnerSale = sale.partner_sale || null;
+            let salesChannel: string | null = "Telefone";
+            if (partnerSale && partnerSale.desc_partner_sale) salesChannel = partnerSale.desc_partner_sale;
+            let deliveryPerson: string | null = null;
+            if (sale.delivery_man?.delivery_man_name) {
+              deliveryPerson = sale.delivery_man.delivery_man_name;
+            } else if (sale.delivery?.delivery_by === "PARTNER" || sale.partner_delivery?.partner_order_id) {
+              deliveryPerson = "Entrega Parceiro";
+            }
+            return {
+              import_id: newImport.id,
+              daily_closing_id,
+              order_number: String(sale.sale_number),
+              payment_method: paymentMethodStr,
+              total_amount: sale.total_amount || 0,
+              delivery_person: deliveryPerson,
+              sale_date: sale.shift_date || closing_date,
+              sale_time: saleTime,
+              sales_channel: salesChannel,
+              partner_order_number: partnerSale?.cod_sale2 || null,
+              is_confirmed: allOnline,
+              confirmed_at: allOnline ? new Date().toISOString() : null,
+              confirmed_by: allOnline ? userId : null,
+            };
+          });
+
+          const { error: insErr } = await supabaseAdmin.from("imported_orders").insert(batch);
+          if (insErr) {
+            console.error("[replace] insert error — preservando dados antigos:", insErr.message);
+            // Limpa import recém-criado (vazio/parcial) para não deixar lixo, sem tocar nos antigos
+            await supabaseAdmin.from("imports").delete().eq("id", newImport.id);
+            return new Response(
+              JSON.stringify({ error: `Erro ao inserir (replace): ${insErr.message}`, replaced: false }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // Breakdowns multi-pagamento
+          for (let j = 0; j < batch.length; j++) {
+            const sale = slice[j];
+            const payments = sale.payments || [];
+            if (payments.length > 1) {
+              const { data: orderData } = await supabaseAdmin
+                .from("imported_orders")
+                .select("id")
+                .eq("import_id", newImport.id)
+                .eq("order_number", batch[j].order_number)
+                .maybeSingle();
+              if (orderData) {
+                const breakdowns = payments.map((p: any) => ({
+                  imported_order_id: orderData.id,
+                  payment_method_name: p.desc_store_payment_type || "",
+                  amount: p.payment_amount || 0,
+                  payment_type: isOnlinePayment(p.desc_store_payment_type || "") ? "online" : "fisico",
+                  is_auto_calculated: false,
+                }));
+                await supabaseAdmin.from("order_payment_breakdowns").insert(breakdowns);
+              }
+            }
+          }
+        }
+      }
+
+      // 4) Só agora, com os novos garantidos, remover os ANTIGOS
+      // (a) desvincular maquininha
+      await supabaseAdmin
+        .from("card_transactions")
+        .update({ matched_order_id: null, match_type: null, match_confidence: null })
+        .eq("daily_closing_id", daily_closing_id)
+        .not("matched_order_id", "is", null);
+
+      // (b) apagar imports antigos (cascade remove imported_orders)
+      const { data: oldImports } = await supabaseAdmin
+        .from("imports")
+        .select("id")
+        .eq("daily_closing_id", daily_closing_id)
+        .neq("id", newImport.id);
+      const deletedOld = oldImports?.length || 0;
+      if (deletedOld > 0) {
+        await supabaseAdmin
+          .from("imports")
+          .delete()
+          .eq("daily_closing_id", daily_closing_id)
+          .neq("id", newImport.id);
+      }
+
+      return new Response(
+        JSON.stringify({
+          replaced: true,
+          total: replaceSales.length,
+          new_orders: replaceSales.length,
+          deleted_old_imports: deletedOld,
+          import_id: newImport.id,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    // ====== FIM REPLACE MODE ======
+
     // supabaseAdmin already created above with service role key
+
 
     // Fetch all pages from Saipos
     const allSales: any[] = [];
