@@ -21,6 +21,40 @@ function isAllOnline(paymentMethod: string): boolean {
   return methods.length >= 1 && methods.every((m) => isOnlinePayment(m));
 }
 
+// Helper: fetch the Saipos API with exponential-backoff retries to survive 504/5xx/429/network blips.
+// Returns the final Response (caller still handles !ok of the final attempt).
+async function fetchSaiposWithRetry(url: string, token: string, tentativas = 4): Promise<Response> {
+  const delays = [1500, 4000, 9000];
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < tentativas; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) return res;
+      // Retry on transient server errors / rate limits
+      if (res.status >= 500 || res.status === 429) {
+        const txt = await res.text().catch(() => "");
+        console.warn(`[saipos-retry] attempt ${attempt + 1}/${tentativas} status=${res.status} body=${txt.slice(0, 200)}`);
+        if (attempt < tentativas - 1) {
+          await new Promise((r) => setTimeout(r, delays[Math.min(attempt, delays.length - 1)]));
+          continue;
+        }
+        // exhausted: return the bad response so caller can handle
+        return new Response(txt, { status: res.status });
+      }
+      // Non-retryable client error: return as-is
+      return res;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[saipos-retry] attempt ${attempt + 1}/${tentativas} threw:`, err instanceof Error ? err.message : String(err));
+      if (attempt < tentativas - 1) {
+        await new Promise((r) => setTimeout(r, delays[Math.min(attempt, delays.length - 1)]));
+        continue;
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
