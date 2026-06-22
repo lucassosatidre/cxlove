@@ -15,6 +15,36 @@ function mapSaleType(id_sale_type: number): string {
   }
 }
 
+// Helper: fetch the Saipos API with exponential-backoff retries (5xx/429/network).
+async function fetchSaiposWithRetry(url: string, token: string, tentativas = 4): Promise<Response> {
+  const delays = [1500, 4000, 9000];
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < tentativas; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) return res;
+      if (res.status >= 500 || res.status === 429) {
+        const txt = await res.text().catch(() => "");
+        console.warn(`[saipos-retry] attempt ${attempt + 1}/${tentativas} status=${res.status} body=${txt.slice(0, 200)}`);
+        if (attempt < tentativas - 1) {
+          await new Promise((r) => setTimeout(r, delays[Math.min(attempt, delays.length - 1)]));
+          continue;
+        }
+        return new Response(txt, { status: res.status });
+      }
+      return res;
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[saipos-retry] attempt ${attempt + 1}/${tentativas} threw:`, err instanceof Error ? err.message : String(err));
+      if (attempt < tentativas - 1) {
+        await new Promise((r) => setTimeout(r, delays[Math.min(attempt, delays.length - 1)]));
+        continue;
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
