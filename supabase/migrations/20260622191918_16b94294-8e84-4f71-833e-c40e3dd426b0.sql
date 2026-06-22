@@ -1,0 +1,2 @@
+ALTER TABLE public.salon_orders DROP CONSTRAINT IF EXISTS salon_orders_salon_import_id_fkey;
+ALTER TABLE public.salon_orders ADD CONSTRAINT salon_orders_salon_import_id_fkey FOREIGN KEY (salon_import_id) REFERENCES public.salon_imports(id) ON DELETE CASCADE;
