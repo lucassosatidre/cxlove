@@ -36,7 +36,7 @@ import AuditImportacoesV2 from "./pages/audit-v2/AuditImportacoesV2";
 import AuditRelatoriosV2 from "./pages/audit-v2/AuditRelatoriosV2";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
-import Sofia from "./pages/Sofia";
+// import Sofia from "./pages/Sofia";
 
 const queryClient = new QueryClient();
 
