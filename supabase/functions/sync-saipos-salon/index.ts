@@ -104,13 +104,194 @@ Deno.serve(async (req) => {
       userId = callerUser.id;
     }
 
-    const { closing_date, salon_closing_id } = await req.json();
+    const body = await req.json();
+    const { closing_date, salon_closing_id } = body;
     if (!closing_date || !salon_closing_id) {
       return new Response(
         JSON.stringify({ error: "closing_date e salon_closing_id são obrigatórios" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // ====== REPLACE MODE (reimportação limpa "safe") ======
+    // Só apaga os antigos DEPOIS de inserir todos os novos com sucesso.
+    if (body.replace === true) {
+      const replaceSales: any[] = [];
+      let rOffset = 0;
+      const rLimit = 1000;
+      try {
+        while (true) {
+          const params = new URLSearchParams({
+            p_date_column_filter: "shift_date",
+            p_filter_date_start: `${closing_date}T00:00:00`,
+            p_filter_date_end: `${closing_date}T23:59:59`,
+            p_limit: String(rLimit),
+            p_offset: String(rOffset),
+          });
+          const apiRes = await fetchSaiposWithRetry(
+            `https://data.saipos.io/v1/search_sales?${params.toString()}`,
+            saiposToken!,
+          );
+          if (!apiRes.ok) {
+            const errText = await apiRes.text();
+            console.error("[replace-salon] Saipos API falhou após retries:", apiRes.status, errText);
+            return new Response(
+              JSON.stringify({ error: `Erro na API Saipos (replace): ${apiRes.status}`, details: errText, replaced: false }),
+              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const data = await apiRes.json().catch(() => null);
+          const sales = Array.isArray(data) ? data : (data?.data || data?.results || []);
+          const filtered = sales.filter(
+            (s: any) => [2, 3, 4].includes(s.id_sale_type) && s.canceled !== "Y" && (s.total_amount || 0) !== 0
+          );
+          replaceSales.push(...filtered);
+          if (sales.length < rLimit) break;
+          rOffset += rLimit;
+        }
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        console.error("[replace-salon] Erro definitivo ao buscar Saipos:", msg);
+        return new Response(
+          JSON.stringify({ error: `Saipos indisponível após retries: ${msg}`, replaced: false }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Cria novo import ANTES de inserir
+      const { data: newImport, error: newImpErr } = await supabaseAdmin
+        .from("salon_imports")
+        .insert({
+          user_id: userId,
+          file_name: `saipos-salon-api-replace-${closing_date}`,
+          total_rows: replaceSales.length,
+          new_rows: replaceSales.length,
+          duplicate_rows: 0,
+          skipped_cancelled: 0,
+          salon_closing_id,
+          status: "completed",
+        })
+        .select("id")
+        .single();
+
+      if (newImpErr || !newImport) {
+        return new Response(
+          JSON.stringify({ error: `Erro ao criar import (replace): ${newImpErr?.message}`, replaced: false }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // Insere TODOS os pedidos (sem dedup)
+      if (replaceSales.length > 0) {
+        const batchSize = 500;
+        for (let i = 0; i < replaceSales.length; i += batchSize) {
+          const slice = replaceSales.slice(i, i + batchSize);
+          const batch = slice.map((sale: any) => {
+            const payments = sale.payments || [];
+            const paymentMethodStr = payments.length > 0
+              ? payments.map((p: any) => p.desc_store_payment_type || "").join(", ")
+              : "";
+            let saleTime: string | null = null;
+            if (sale.created_at) {
+              try {
+                const dt = new Date(sale.created_at);
+                saleTime = `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+              } catch { saleTime = null; }
+            }
+            const ticket = sale.ticket || null;
+            let tableNumber: string | null = null;
+            if (sale.id_sale_type === 3 && sale.desc_sale) tableNumber = String(sale.desc_sale);
+            else if (sale.id_sale_type === 2 && sale.sale_number) tableNumber = String(sale.sale_number);
+            else if (sale.id_sale_type === 4 && ticket?.number) tableNumber = String(ticket.number);
+            return {
+              salon_import_id: newImport.id,
+              salon_closing_id,
+              order_type: mapSaleType(sale.id_sale_type),
+              sale_date: sale.shift_date || closing_date,
+              sale_time: saleTime,
+              payment_method: paymentMethodStr,
+              total_amount: sale.total_amount || 0,
+              discount_amount: sale.total_discount || 0,
+              is_confirmed: false,
+              sale_number: sale.sale_number ? String(sale.sale_number) : null,
+              saipos_sale_id: sale.id_sale ? String(sale.id_sale) : null,
+              table_number: tableNumber,
+              card_number: null,
+              ticket_number: (sale.id_sale_type === 4 && ticket?.number) ? String(ticket.number) : null,
+              customers_count: sale.table_order?.customers_on_table ?? null,
+              service_charge_amount: sale.table_order?.total_service_charge_amount || 0,
+            };
+          });
+
+          const { error: insErr } = await supabaseAdmin.from("salon_orders").insert(batch);
+          if (insErr) {
+            console.error("[replace-salon] insert error — preservando dados antigos:", insErr.message);
+            await supabaseAdmin.from("salon_imports").delete().eq("id", newImport.id);
+            return new Response(
+              JSON.stringify({ error: `Erro ao inserir (replace): ${insErr.message}`, replaced: false }),
+              { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+
+          // Breakdowns multi-pagamento
+          for (let j = 0; j < batch.length; j++) {
+            const sale = slice[j];
+            const payments = sale.payments || [];
+            if (payments.length > 1) {
+              const { data: orderData } = await supabaseAdmin
+                .from("salon_orders")
+                .select("id")
+                .eq("salon_import_id", newImport.id)
+                .eq("saipos_sale_id", batch[j].saipos_sale_id || "")
+                .maybeSingle();
+              if (orderData) {
+                const breakdowns = payments.map((p: any) => ({
+                  salon_order_id: orderData.id,
+                  payment_method: p.desc_store_payment_type || "",
+                  amount: p.payment_amount || 0,
+                }));
+                await supabaseAdmin.from("salon_order_payments").insert(breakdowns);
+              }
+            }
+          }
+        }
+      }
+
+      // Só agora remove os ANTIGOS:
+      // (a) desvincular maquininhas do salão
+      await supabaseAdmin
+        .from("salon_card_transactions")
+        .update({ matched_order_id: null, match_type: null, match_confidence: null })
+        .eq("salon_closing_id", salon_closing_id)
+        .not("matched_order_id", "is", null);
+
+      // (b) apagar imports antigos (cascade remove salon_orders após migration)
+      const { data: oldImports } = await supabaseAdmin
+        .from("salon_imports")
+        .select("id")
+        .eq("salon_closing_id", salon_closing_id)
+        .neq("id", newImport.id);
+      const deletedOld = oldImports?.length || 0;
+      if (deletedOld > 0) {
+        await supabaseAdmin
+          .from("salon_imports")
+          .delete()
+          .eq("salon_closing_id", salon_closing_id)
+          .neq("id", newImport.id);
+      }
+
+      return new Response(
+        JSON.stringify({
+          replaced: true,
+          total: replaceSales.length,
+          new_orders: replaceSales.length,
+          deleted_old_imports: deletedOld,
+          import_id: newImport.id,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    // ====== FIM REPLACE MODE ======
 
     // Fetch all pages from Saipos
     const allSales: any[] = [];
@@ -126,9 +307,9 @@ Deno.serve(async (req) => {
         p_offset: String(offset),
       });
 
-      const apiRes = await fetch(
+      const apiRes = await fetchSaiposWithRetry(
         `https://data.saipos.io/v1/search_sales?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${saiposToken}` } }
+        saiposToken!,
       );
 
       if (!apiRes.ok) {
