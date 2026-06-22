@@ -6,13 +6,15 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-// Limpa as importações do dia que acabou e re-sincroniza UMA única vez (tele + salão).
-// Resolve a divergência diária em que o sync incremental só acrescenta pedidos novos
-// e nunca corrige valor/forma de pagamento dos pedidos que mudaram no Saipos.
+// Reimportação limpa DIÁRIA do Saipos (tele + salão).
+// Roda às 06:00 BRT (09:00 UTC) sobre o dia operacional que acabou de fechar (ontem em BRT).
+// Pula fechamentos cuja conciliação já foi concluída para nunca apagar trabalho manual.
 //
-// Roda às 06:00 BRT (09:00 UTC) e age sobre o dia operacional que acabou de fechar
-// (ontem em horário de Brasília). Pula fechamentos cuja conciliação já foi concluída,
-// para nunca apagar trabalho manual (cancelamentos, migrações, agrupamentos).
+// NOVO COMPORTAMENTO (à prova de falha):
+//   - Em vez de apagar antes e sincronizar depois (que zerava o dia em caso de 504),
+//     agora apenas chama as funções de sync em MODO `replace: true`. Essas funções
+//     buscam, inserem e SÓ DEPOIS apagam os antigos — preservando o estado se a API
+//     do Saipos falhar.
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -66,7 +68,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (closing && closing.reconciliation_status === "completed") {
-        console.log("[daily-resync] Tele já concluída — pulando limpeza.");
+        console.log("[daily-resync] Tele já concluída — pulando.");
         results.push({ type: "tele", skipped: "reconciliation_completed", date: targetDate });
       } else {
         if (!closing) {
@@ -80,32 +82,20 @@ Deno.serve(async (req) => {
           closing = newClosing;
         }
 
-        // 1) Apaga as importações antigas do dia (cascade remove imported_orders)
-        const { data: oldImports } = await supabase
-          .from("imports")
-          .select("id")
-          .eq("daily_closing_id", closing.id);
-        const deletedImports = oldImports?.length || 0;
-        if (deletedImports > 0) {
-          await supabase.from("imports").delete().eq("daily_closing_id", closing.id);
-        }
-
-        // 2) Solta os vínculos das transações da maquininha (os pedidos serão recriados)
-        await supabase
-          .from("card_transactions")
-          .update({ matched_order_id: null, match_type: null, match_confidence: null })
-          .eq("daily_closing_id", closing.id)
-          .not("matched_order_id", "is", null);
-
-        // 3) Re-sincroniza UMA vez
+        // Chama sync em MODO REPLACE — a função só apaga antigos depois de inserir novos.
         const syncRes = await fetch(`${supabaseUrl}/functions/v1/sync-saipos-sales`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify({ closing_date: targetDate, daily_closing_id: closing.id }),
+          body: JSON.stringify({ closing_date: targetDate, daily_closing_id: closing.id, replace: true }),
         });
-        const syncData = await syncRes.json();
-        console.log(`[daily-resync] Tele resync:`, JSON.stringify(syncData));
-        results.push({ type: "tele", date: targetDate, deleted_imports: deletedImports, ...syncData });
+        const syncData = await syncRes.json().catch(() => ({ error: "Resposta inválida do sync" }));
+        if (!syncRes.ok || syncData?.error) {
+          console.error("[daily-resync] Tele replace falhou — dados antigos PRESERVADOS:", syncData);
+          results.push({ type: "tele", date: targetDate, error: syncData?.error || `HTTP ${syncRes.status}`, replaced: false });
+        } else {
+          console.log(`[daily-resync] Tele resync OK:`, JSON.stringify(syncData));
+          results.push({ type: "tele", date: targetDate, ...syncData });
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -122,7 +112,7 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (salonClosing && salonClosing.status === "completed") {
-        console.log("[daily-resync] Salão já concluído — pulando limpeza.");
+        console.log("[daily-resync] Salão já concluído — pulando.");
         results.push({ type: "salon", skipped: "status_completed", date: targetDate });
       } else {
         if (!salonClosing) {
@@ -136,25 +126,19 @@ Deno.serve(async (req) => {
           salonClosing = newSalon;
         }
 
-        // 1) Apaga as importações antigas do salão (cascade remove salon_orders)
-        const { data: oldImports } = await supabase
-          .from("salon_imports")
-          .select("id")
-          .eq("salon_closing_id", salonClosing.id);
-        const deletedImports = oldImports?.length || 0;
-        if (deletedImports > 0) {
-          await supabase.from("salon_imports").delete().eq("salon_closing_id", salonClosing.id);
-        }
-
-        // 2) Re-sincroniza UMA vez
         const syncRes = await fetch(`${supabaseUrl}/functions/v1/sync-saipos-salon`, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify({ closing_date: targetDate, salon_closing_id: salonClosing.id }),
+          body: JSON.stringify({ closing_date: targetDate, salon_closing_id: salonClosing.id, replace: true }),
         });
-        const syncData = await syncRes.json();
-        console.log(`[daily-resync] Salão resync:`, JSON.stringify(syncData));
-        results.push({ type: "salon", date: targetDate, deleted_imports: deletedImports, ...syncData });
+        const syncData = await syncRes.json().catch(() => ({ error: "Resposta inválida do sync" }));
+        if (!syncRes.ok || syncData?.error) {
+          console.error("[daily-resync] Salão replace falhou — dados antigos PRESERVADOS:", syncData);
+          results.push({ type: "salon", date: targetDate, error: syncData?.error || `HTTP ${syncRes.status}`, replaced: false });
+        } else {
+          console.log(`[daily-resync] Salão resync OK:`, JSON.stringify(syncData));
+          results.push({ type: "salon", date: targetDate, ...syncData });
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
