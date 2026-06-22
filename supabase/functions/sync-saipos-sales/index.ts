@@ -188,8 +188,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    }
-
     // ====== REPLACE MODE (reimportação limpa "safe") ======
     // Só apaga os antigos DEPOIS de já ter inserido os novos com sucesso.
     if (body.replace === true) {
