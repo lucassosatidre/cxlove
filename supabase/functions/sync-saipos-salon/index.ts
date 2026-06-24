@@ -527,6 +527,18 @@ Deno.serve(async (req) => {
         updates.saipos_sale_id = String(sale.id_sale);
       }
 
+      // Preenche a forma de pagamento quando o pedido foi importado antes de a mesa pagar
+      const salePaymentsBf = sale.payments || [];
+      if ((!existing.payment_method || String(existing.payment_method).trim() === "") && salePaymentsBf.length > 0) {
+        updates.payment_method = salePaymentsBf.map((p: any) => p.desc_store_payment_type || "").join(", ");
+        if (salePaymentsBf.length > 1) {
+          await supabaseAdmin.from("salon_order_payments").delete().eq("salon_order_id", existing.id);
+          await supabaseAdmin.from("salon_order_payments").insert(
+            salePaymentsBf.map((p: any) => ({ salon_order_id: existing.id, payment_method: p.desc_store_payment_type || "", amount: p.payment_amount || 0 }))
+          );
+        }
+      }
+
       if (Object.keys(updates).length > 0) {
         await supabaseAdmin.from("salon_orders").update(updates).eq("id", existing.id);
         backfillCount++;
