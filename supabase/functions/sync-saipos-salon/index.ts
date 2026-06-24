@@ -113,6 +113,99 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ====== PAYMENT BACKFILL MODE (preenche pagamento em branco, NÃO apaga/insere pedido) ======
+    // Usado pela rotina das 6h em dias JÁ CONCLUÍDOS: relê o Saipos e preenche
+    // payment_method apenas onde está vazio (mesa importada antes de a comanda ser paga).
+    // Nunca insere/apaga pedido, nunca cria import, nunca sobrescreve pagamento já preenchido.
+    if (body.payment_backfill === true) {
+      const bfSales: any[] = [];
+      let bfOffset = 0;
+      const bfLimit = 1000;
+      try {
+        while (true) {
+          const params = new URLSearchParams({
+            p_date_column_filter: "shift_date",
+            p_filter_date_start: `${closing_date}T00:00:00`,
+            p_filter_date_end: `${closing_date}T23:59:59`,
+            p_limit: String(bfLimit),
+            p_offset: String(bfOffset),
+          });
+          const apiRes = await fetchSaiposWithRetry(
+            `https://data.saipos.io/v1/search_sales?${params.toString()}`,
+            saiposToken!,
+          );
+          if (!apiRes.ok) {
+            const errText = await apiRes.text();
+            return new Response(
+              JSON.stringify({ error: `Erro na API Saipos (backfill): ${apiRes.status}`, details: errText, backfilled: 0 }),
+              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
+          const data = await apiRes.json().catch(() => null);
+          const sales = Array.isArray(data) ? data : (data?.data || data?.results || []);
+          const filtered = sales.filter(
+            (s: any) => [2, 3, 4].includes(s.id_sale_type) && s.canceled !== "Y" && (s.total_amount || 0) !== 0
+          );
+          bfSales.push(...filtered);
+          if (sales.length < bfLimit) break;
+          bfOffset += bfLimit;
+        }
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        return new Response(
+          JSON.stringify({ error: `Saipos indisponível (backfill): ${msg}`, backfilled: 0 }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const { data: existingBf } = await supabaseAdmin
+        .from("salon_orders")
+        .select("id, sale_number, saipos_sale_id, payment_method")
+        .eq("salon_closing_id", salon_closing_id);
+
+      const bfBySaiposId = new Map<string, any>();
+      const bfBySaleNumber = new Map<string, any>();
+      for (const o of (existingBf || [])) {
+        if (o.saipos_sale_id) bfBySaiposId.set(String(o.saipos_sale_id), o);
+        if (o.sale_number) bfBySaleNumber.set(String(o.sale_number), o);
+      }
+
+      let backfilled = 0;
+      for (const sale of bfSales) {
+        const payments = sale.payments || [];
+        if (payments.length === 0) continue;
+        let order: any = null;
+        if (sale.id_sale) order = bfBySaiposId.get(String(sale.id_sale)) || null;
+        if (!order && sale.sale_number) order = bfBySaleNumber.get(String(sale.sale_number)) || null;
+        if (!order) continue;
+        if (order.payment_method && String(order.payment_method).trim() !== "") continue;
+
+        const paymentMethodStr = payments.map((p: any) => p.desc_store_payment_type || "").join(", ");
+        await supabaseAdmin
+          .from("salon_orders")
+          .update({ payment_method: paymentMethodStr })
+          .eq("id", order.id);
+
+        if (payments.length > 1) {
+          await supabaseAdmin.from("salon_order_payments").delete().eq("salon_order_id", order.id);
+          await supabaseAdmin.from("salon_order_payments").insert(
+            payments.map((p: any) => ({
+              salon_order_id: order.id,
+              payment_method: p.desc_store_payment_type || "",
+              amount: p.payment_amount || 0,
+            }))
+          );
+        }
+        backfilled++;
+      }
+
+      return new Response(
+        JSON.stringify({ payment_backfill: true, total_sales: bfSales.length, backfilled }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    // ====== FIM PAYMENT BACKFILL MODE ======
+
     // ====== REPLACE MODE (reimportação limpa "safe") ======
     // Só apaga os antigos DEPOIS de inserir todos os novos com sucesso.
     if (body.replace === true) {
