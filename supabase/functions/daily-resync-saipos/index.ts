@@ -112,8 +112,22 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (salonClosing && salonClosing.status === "completed") {
-        console.log("[daily-resync] Salão já concluído — pulando.");
-        results.push({ type: "salon", skipped: "status_completed", date: targetDate });
+        // Dia já concluído: não reimporta (preserva trabalho manual), mas preenche
+        // as formas de pagamento que ficaram em branco (mesa importada antes de pagar).
+        console.log("[daily-resync] Salão concluído — rodando payment_backfill (sem apagar nada).");
+        const bfRes = await fetch(`${supabaseUrl}/functions/v1/sync-saipos-salon`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+          body: JSON.stringify({ closing_date: targetDate, salon_closing_id: salonClosing.id, payment_backfill: true }),
+        });
+        const bfData = await bfRes.json().catch(() => ({ error: "Resposta inválida do backfill" }));
+        if (!bfRes.ok || bfData?.error) {
+          console.error("[daily-resync] Salão payment_backfill falhou:", bfData);
+          results.push({ type: "salon", date: targetDate, mode: "payment_backfill", error: bfData?.error || `HTTP ${bfRes.status}` });
+        } else {
+          console.log("[daily-resync] Salão payment_backfill OK:", JSON.stringify(bfData));
+          results.push({ type: "salon", date: targetDate, mode: "payment_backfill", ...bfData });
+        }
       } else {
         if (!salonClosing) {
           if (!adminUserId) throw new Error("Nenhum admin configurado");
