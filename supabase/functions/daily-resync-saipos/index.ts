@@ -111,48 +111,32 @@ Deno.serve(async (req) => {
         .eq("closing_date", targetDate)
         .maybeSingle();
 
-      if (salonClosing && salonClosing.status === "completed") {
-        // Dia já concluído: não reimporta (preserva trabalho manual), mas preenche
-        // as formas de pagamento que ficaram em branco (mesa importada antes de pagar).
-        console.log("[daily-resync] Salão concluído — rodando payment_backfill (sem apagar nada).");
-        const bfRes = await fetch(`${supabaseUrl}/functions/v1/sync-saipos-salon`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify({ closing_date: targetDate, salon_closing_id: salonClosing.id, payment_backfill: true }),
-        });
-        const bfData = await bfRes.json().catch(() => ({ error: "Resposta inválida do backfill" }));
-        if (!bfRes.ok || bfData?.error) {
-          console.error("[daily-resync] Salão payment_backfill falhou:", bfData);
-          results.push({ type: "salon", date: targetDate, mode: "payment_backfill", error: bfData?.error || `HTTP ${bfRes.status}` });
-        } else {
-          console.log("[daily-resync] Salão payment_backfill OK:", JSON.stringify(bfData));
-          results.push({ type: "salon", date: targetDate, mode: "payment_backfill", ...bfData });
-        }
-      } else {
-        if (!salonClosing) {
-          if (!adminUserId) throw new Error("Nenhum admin configurado");
-          const { data: newSalon, error: createErr } = await supabase
-            .from("salon_closings")
-            .insert({ closing_date: targetDate, user_id: adminUserId, status: "pending" })
-            .select("id, closing_date, status")
-            .single();
-          if (createErr) throw createErr;
-          salonClosing = newSalon;
-        }
+      // SALÃO: sempre reimporta LIMPO (replace) — espelho exato do Saipos, igual ao Tele.
+      // A conciliação de maquininha do salão é feita de manhã (depois das 6h), então o replace às 6h não a apaga.
+      // replace é à prova de falha: se o Saipos cair, retorna 502/replaced:false e NÃO apaga os dados antigos.
+      if (!salonClosing) {
+        if (!adminUserId) throw new Error("Nenhum admin configurado");
+        const { data: newSalon, error: createErr } = await supabase
+          .from("salon_closings")
+          .insert({ closing_date: targetDate, user_id: adminUserId, status: "pending" })
+          .select("id, closing_date, status")
+          .single();
+        if (createErr) throw createErr;
+        salonClosing = newSalon;
+      }
 
-        const syncRes = await fetch(`${supabaseUrl}/functions/v1/sync-saipos-salon`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
-          body: JSON.stringify({ closing_date: targetDate, salon_closing_id: salonClosing.id, replace: true }),
-        });
-        const syncData = await syncRes.json().catch(() => ({ error: "Resposta inválida do sync" }));
-        if (!syncRes.ok || syncData?.error) {
-          console.error("[daily-resync] Salão replace falhou — dados antigos PRESERVADOS:", syncData);
-          results.push({ type: "salon", date: targetDate, error: syncData?.error || `HTTP ${syncRes.status}`, replaced: false });
-        } else {
-          console.log(`[daily-resync] Salão resync OK:`, JSON.stringify(syncData));
-          results.push({ type: "salon", date: targetDate, ...syncData });
-        }
+      const syncRes = await fetch(`${supabaseUrl}/functions/v1/sync-saipos-salon`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${serviceKey}` },
+        body: JSON.stringify({ closing_date: targetDate, salon_closing_id: salonClosing.id, replace: true }),
+      });
+      const syncData = await syncRes.json().catch(() => ({ error: "Resposta inválida do sync" }));
+      if (!syncRes.ok || syncData?.error) {
+        console.error("[daily-resync] Salão replace falhou — dados antigos PRESERVADOS:", syncData);
+        results.push({ type: "salon", date: targetDate, error: syncData?.error || `HTTP ${syncRes.status}`, replaced: false });
+      } else {
+        console.log(`[daily-resync] Salão resync OK:`, JSON.stringify(syncData));
+        results.push({ type: "salon", date: targetDate, ...syncData });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
