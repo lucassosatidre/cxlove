@@ -50,6 +50,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
       navItems.push({ icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' });
       navItems.push({ icon: CreditCard, label: 'Maquininhas', path: '/admin/maquininhas', permission: 'dashboard' });
       navItems.push({ icon: Calculator, label: 'Auditoria de Taxas', path: '/admin/auditoria-v2', permission: 'dashboard' });
+      navItems.push({ icon: Banknote, label: 'Fluxo de Caixa', path: '/admin/fluxo-caixa', permission: 'dashboard' });
       navItems.push({ icon: Brain, label: 'Memória da Clau', path: '/admin/clau/memoria', permission: 'dashboard' });
       // { icon: Headphones, label: 'Sofia', path: '/admin/sofia', permission: 'dashboard' },
       navItems.push({ icon: Users, label: 'Usuários', path: '/users', permission: 'users' });
