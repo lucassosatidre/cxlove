@@ -49,6 +49,7 @@ export default function SalonClosing() {
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState<SalonOrder[]>([]);
+  const [salonPayments, setSalonPayments] = useState<Record<string, { payment_method: string; amount: number }[]>>({});
   const [expandedRateios, setExpandedRateios] = useState<Set<string>>(new Set());
   const [closing, setClosing] = useState<ClosingData | null>(null);
   const [loading, setLoading] = useState(true);
