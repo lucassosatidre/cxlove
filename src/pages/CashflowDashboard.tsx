@@ -1,16 +1,11 @@
-// Fluxo de Caixa — esqueleto inicial (fundação).
-// Apenas placeholders por enquanto. Sem cálculos.
+// Fluxo de Caixa — seção "Saldo de hoje" viva; demais seções placeholder.
 
 import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, TrendingUp, PieChart, AlertTriangle } from 'lucide-react';
+import { TrendingUp, PieChart, AlertTriangle } from 'lucide-react';
+import SaldoDeHoje from '@/components/cashflow/SaldoDeHoje';
 
-const sections = [
-  {
-    icon: Wallet,
-    title: 'Saldo de hoje',
-    desc: 'Cada conta em 3 camadas: dinheiro próprio, limite usado e a pagar hoje.',
-  },
+const placeholders = [
   {
     icon: TrendingUp,
     title: 'Fluxo mensal',
@@ -39,8 +34,10 @@ export default function CashflowDashboard() {
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          {sections.map(({ icon: Icon, title, desc }) => (
+        <SaldoDeHoje />
+
+        <div className="grid gap-4 md:grid-cols-3">
+          {placeholders.map(({ icon: Icon, title, desc }) => (
             <Card key={title} className="border-border/60">
               <CardHeader className="flex flex-row items-center gap-3 space-y-0">
                 <div className="rounded-lg bg-primary/10 p-2 text-primary">
