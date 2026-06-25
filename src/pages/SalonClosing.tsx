@@ -99,6 +99,23 @@ export default function SalonClosing() {
     setMachineReadingsCount((machineData || []).length);
     setImports(importsData || []);
 
+    // Rateio REAL por forma (espelha o split do Saipos) — usado no Total Teórico
+    const orderIds = ((ordersData as SalonOrder[]) || []).map((o) => o.id);
+    if (orderIds.length > 0) {
+      const { data: paymentsData } = await supabase
+        .from('salon_order_payments')
+        .select('salon_order_id, payment_method, amount')
+        .in('salon_order_id', orderIds);
+      const byOrder: Record<string, { payment_method: string; amount: number }[]> = {};
+      (paymentsData || []).forEach((p: any) => {
+        if (!byOrder[p.salon_order_id]) byOrder[p.salon_order_id] = [];
+        byOrder[p.salon_order_id].push({ payment_method: p.payment_method, amount: Number(p.amount) });
+      });
+      setSalonPayments(byOrder);
+    } else {
+      setSalonPayments({});
+    }
+
     // Detect last Saipos sync
     const saiposImport = (importsData || []).find((imp: any) => imp.file_name?.startsWith('saipos-salon-api-'));
     if (saiposImport) {
