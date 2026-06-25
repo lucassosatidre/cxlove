@@ -34,6 +34,7 @@ import AuditBrendiV2 from "./pages/audit-v2/AuditBrendiV2";
 import AuditIfoodMarketplaceV2 from "./pages/audit-v2/AuditIfoodMarketplaceV2";
 import AuditImportacoesV2 from "./pages/audit-v2/AuditImportacoesV2";
 import AuditRelatoriosV2 from "./pages/audit-v2/AuditRelatoriosV2";
+import CashflowDashboard from "./pages/CashflowDashboard";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
 // import Sofia from "./pages/Sofia";
@@ -141,6 +142,8 @@ const App = () => (
             <Route path="/admin/auditoria-v2/ifood-marketplace" element={<ProtectedRoute><SectorGuard sector="tele"><AuditIfoodMarketplaceV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/auditoria-v2/relatorios" element={<ProtectedRoute><SectorGuard sector="tele"><AuditRelatoriosV2 /></SectorGuard></ProtectedRoute>} />
             <Route path="/admin/clau/memoria" element={<ProtectedRoute><SectorGuard sector="tele"><ClauMemory /></SectorGuard></ProtectedRoute>} />
+            {/* Fluxo de Caixa — admin */}
+            <Route path="/admin/fluxo-caixa" element={<ProtectedRoute><SectorGuard sector="tele"><CashflowDashboard /></SectorGuard></ProtectedRoute>} />
             {/* Sofia desativada (migrada para outro sistema) — redireciona para Home */}
             <Route path="/admin/sofia" element={<Navigate to="/" replace />} />
             {/* <Route path="/admin/sofia" element={<ProtectedRoute><SectorGuard sector="tele"><Sofia /></SectorGuard></ProtectedRoute>} /> */}

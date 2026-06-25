@@ -1515,6 +1515,358 @@ export type Database = {
           },
         ]
       }
+      cashflow_accounts: {
+        Row: {
+          account_number: string | null
+          active: boolean
+          bank: string | null
+          company: string
+          created_at: string
+          id: string
+          is_passthrough: boolean
+          kind: string
+          name: string
+          overdraft_limit: number
+        }
+        Insert: {
+          account_number?: string | null
+          active?: boolean
+          bank?: string | null
+          company: string
+          created_at?: string
+          id?: string
+          is_passthrough?: boolean
+          kind: string
+          name: string
+          overdraft_limit?: number
+        }
+        Update: {
+          account_number?: string | null
+          active?: boolean
+          bank?: string | null
+          company?: string
+          created_at?: string
+          id?: string
+          is_passthrough?: boolean
+          kind?: string
+          name?: string
+          overdraft_limit?: number
+        }
+        Relationships: []
+      }
+      cashflow_balances: {
+        Row: {
+          account_id: string
+          as_of: string
+          created_at: string
+          id: string
+          limit_available: number
+          note: string | null
+          own_balance: number
+          provisioned: number
+        }
+        Insert: {
+          account_id: string
+          as_of: string
+          created_at?: string
+          id?: string
+          limit_available?: number
+          note?: string | null
+          own_balance: number
+          provisioned?: number
+        }
+        Update: {
+          account_id?: string
+          as_of?: string
+          created_at?: string
+          id?: string
+          limit_available?: number
+          note?: string | null
+          own_balance?: number
+          provisioned?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashflow_balances_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "cashflow_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cashflow_imports: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          created_by: string | null
+          duplicate_rows: number | null
+          error_message: string | null
+          file_name: string | null
+          file_type: string
+          id: string
+          imported_rows: number | null
+          status: string | null
+          total_rows: number | null
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duplicate_rows?: number | null
+          error_message?: string | null
+          file_name?: string | null
+          file_type: string
+          id?: string
+          imported_rows?: number | null
+          status?: string | null
+          total_rows?: number | null
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duplicate_rows?: number | null
+          error_message?: string | null
+          file_name?: string | null
+          file_type?: string
+          id?: string
+          imported_rows?: number | null
+          status?: string | null
+          total_rows?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashflow_imports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "cashflow_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cashflow_loan_installments: {
+        Row: {
+          amount: number
+          balance_after: number | null
+          created_at: string
+          due_date: string
+          id: string
+          interest: number | null
+          loan_id: string
+          paid: boolean
+          principal: number | null
+          seq: number
+        }
+        Insert: {
+          amount: number
+          balance_after?: number | null
+          created_at?: string
+          due_date: string
+          id?: string
+          interest?: number | null
+          loan_id: string
+          paid?: boolean
+          principal?: number | null
+          seq: number
+        }
+        Update: {
+          amount?: number
+          balance_after?: number | null
+          created_at?: string
+          due_date?: string
+          id?: string
+          interest?: number | null
+          loan_id?: string
+          paid?: boolean
+          principal?: number | null
+          seq?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashflow_loan_installments_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "cashflow_loans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cashflow_loans: {
+        Row: {
+          active: boolean
+          annual_rate: number | null
+          company: string | null
+          contract: string | null
+          created_at: string
+          first_due: string | null
+          id: string
+          last_due: string | null
+          monthly_payment: number | null
+          name: string
+          outstanding_balance: number | null
+          pays_from_account_id: string | null
+          remaining_installments: number | null
+          total_installments: number | null
+        }
+        Insert: {
+          active?: boolean
+          annual_rate?: number | null
+          company?: string | null
+          contract?: string | null
+          created_at?: string
+          first_due?: string | null
+          id?: string
+          last_due?: string | null
+          monthly_payment?: number | null
+          name: string
+          outstanding_balance?: number | null
+          pays_from_account_id?: string | null
+          remaining_installments?: number | null
+          total_installments?: number | null
+        }
+        Update: {
+          active?: boolean
+          annual_rate?: number | null
+          company?: string | null
+          contract?: string | null
+          created_at?: string
+          first_due?: string | null
+          id?: string
+          last_due?: string | null
+          monthly_payment?: number | null
+          name?: string
+          outstanding_balance?: number | null
+          pays_from_account_id?: string | null
+          remaining_installments?: number | null
+          total_installments?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashflow_loans_pays_from_account_id_fkey"
+            columns: ["pays_from_account_id"]
+            isOneToOne: false
+            referencedRelation: "cashflow_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cashflow_saipos: {
+        Row: {
+          amount: number
+          category: string | null
+          company: string | null
+          created_at: string
+          descricao: string | null
+          emissao: string | null
+          fornecedor: string | null
+          id: string
+          import_id: string | null
+          pagamento: string | null
+          paid: boolean
+          payment_method: string | null
+          row_hash: string | null
+          source: string
+          vencimento: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          company?: string | null
+          created_at?: string
+          descricao?: string | null
+          emissao?: string | null
+          fornecedor?: string | null
+          id?: string
+          import_id?: string | null
+          pagamento?: string | null
+          paid?: boolean
+          payment_method?: string | null
+          row_hash?: string | null
+          source?: string
+          vencimento?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          company?: string | null
+          created_at?: string
+          descricao?: string | null
+          emissao?: string | null
+          fornecedor?: string | null
+          id?: string
+          import_id?: string | null
+          pagamento?: string | null
+          paid?: boolean
+          payment_method?: string | null
+          row_hash?: string | null
+          source?: string
+          vencimento?: string | null
+        }
+        Relationships: []
+      }
+      cashflow_transactions: {
+        Row: {
+          account_id: string
+          amount: number
+          category: string | null
+          counterparty: string | null
+          created_at: string
+          description: string | null
+          detail: string | null
+          id: string
+          import_id: string | null
+          is_future: boolean
+          is_internal_transfer: boolean
+          row_hash: string | null
+          running_balance: number | null
+          source: string
+          tx_date: string
+        }
+        Insert: {
+          account_id: string
+          amount: number
+          category?: string | null
+          counterparty?: string | null
+          created_at?: string
+          description?: string | null
+          detail?: string | null
+          id?: string
+          import_id?: string | null
+          is_future?: boolean
+          is_internal_transfer?: boolean
+          row_hash?: string | null
+          running_balance?: number | null
+          source?: string
+          tx_date: string
+        }
+        Update: {
+          account_id?: string
+          amount?: number
+          category?: string | null
+          counterparty?: string | null
+          created_at?: string
+          description?: string | null
+          detail?: string | null
+          id?: string
+          import_id?: string | null
+          is_future?: boolean
+          is_internal_transfer?: boolean
+          row_hash?: string | null
+          running_balance?: number | null
+          source?: string
+          tx_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cashflow_transactions_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "cashflow_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clau_actions_log: {
         Row: {
           action_type: string
