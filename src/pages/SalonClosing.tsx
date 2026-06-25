@@ -49,6 +49,7 @@ export default function SalonClosing() {
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState<SalonOrder[]>([]);
+  const [salonPayments, setSalonPayments] = useState<Record<string, { payment_method: string; amount: number }[]>>({});
   const [expandedRateios, setExpandedRateios] = useState<Set<string>>(new Set());
   const [closing, setClosing] = useState<ClosingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,23 @@ export default function SalonClosing() {
     setOrders((ordersData as SalonOrder[]) || []);
     setMachineReadingsCount((machineData || []).length);
     setImports(importsData || []);
+
+    // Rateio REAL por forma (espelha o split do Saipos) — usado no Total Teórico
+    const orderIds = ((ordersData as SalonOrder[]) || []).map((o) => o.id);
+    if (orderIds.length > 0) {
+      const { data: paymentsData } = await supabase
+        .from('salon_order_payments')
+        .select('salon_order_id, payment_method, amount')
+        .in('salon_order_id', orderIds);
+      const byOrder: Record<string, { payment_method: string; amount: number }[]> = {};
+      (paymentsData || []).forEach((p: any) => {
+        if (!byOrder[p.salon_order_id]) byOrder[p.salon_order_id] = [];
+        byOrder[p.salon_order_id].push({ payment_method: p.payment_method, amount: Number(p.amount) });
+      });
+      setSalonPayments(byOrder);
+    } else {
+      setSalonPayments({});
+    }
 
     // Detect last Saipos sync
     const saiposImport = (importsData || []).find((imp: any) => imp.file_name?.startsWith('saipos-salon-api-'));
@@ -290,8 +308,27 @@ export default function SalonClosing() {
   const displayRows = useMemo(() => {
     const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number; table_number: string | null; card_number: string | null; ticket_number: string | null }[] = [];
     filtered.forEach(order => {
-      const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
       const extra = { table_number: order.table_number, card_number: order.card_number, ticket_number: order.ticket_number };
+      const breakdown = salonPayments[order.id];
+
+      // CASO A: rateio REAL gravado (salon_order_payments, vindo do Saipos) que fecha com o total do pedido → usa o valor real de cada forma
+      if (breakdown && breakdown.length > 1) {
+        const bSum = breakdown.reduce((s, b) => s + b.amount, 0);
+        if (Math.abs(bSum - order.total_amount) < 0.02) {
+          breakdown.forEach((b, i) => {
+            rows.push({
+              orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
+              payment_method: b.payment_method, amount: b.amount,
+              isRateio: true, rateioIndex: i, rateioTotal: breakdown.length,
+              ...extra,
+            });
+          });
+          return;
+        }
+      }
+
+      // CASO B (sem rateio real, ou rateio inconsistente com o total): comportamento antigo — 1 forma = total inteiro; várias formas = divisão igual (estimativa)
+      const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
       if (methods.length > 1) {
         const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
         methods.forEach((method, i) => {
@@ -314,7 +351,7 @@ export default function SalonClosing() {
       }
     });
     return rows;
-  }, [filtered]);
+  }, [filtered, salonPayments]);
 
   // Payment summary from Saipos data
   const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
