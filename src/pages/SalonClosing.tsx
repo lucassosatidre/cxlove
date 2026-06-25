@@ -308,8 +308,27 @@ export default function SalonClosing() {
   const displayRows = useMemo(() => {
     const rows: { orderId: string; order_type: string; sale_time: string | null; payment_method: string; amount: number; isRateio: boolean; rateioIndex: number; rateioTotal: number; table_number: string | null; card_number: string | null; ticket_number: string | null }[] = [];
     filtered.forEach(order => {
-      const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
       const extra = { table_number: order.table_number, card_number: order.card_number, ticket_number: order.ticket_number };
+      const breakdown = salonPayments[order.id];
+
+      // CASO A: rateio REAL gravado (salon_order_payments, vindo do Saipos) que fecha com o total do pedido → usa o valor real de cada forma
+      if (breakdown && breakdown.length > 1) {
+        const bSum = breakdown.reduce((s, b) => s + b.amount, 0);
+        if (Math.abs(bSum - order.total_amount) < 0.02) {
+          breakdown.forEach((b, i) => {
+            rows.push({
+              orderId: order.id, order_type: order.order_type, sale_time: order.sale_time,
+              payment_method: b.payment_method, amount: b.amount,
+              isRateio: true, rateioIndex: i, rateioTotal: breakdown.length,
+              ...extra,
+            });
+          });
+          return;
+        }
+      }
+
+      // CASO B (sem rateio real, ou rateio inconsistente com o total): comportamento antigo — 1 forma = total inteiro; várias formas = divisão igual (estimativa)
+      const methods = order.payment_method.split(',').map(s => s.trim()).filter(Boolean);
       if (methods.length > 1) {
         const splitAmount = Math.round((order.total_amount / methods.length) * 100) / 100;
         methods.forEach((method, i) => {
@@ -332,7 +351,7 @@ export default function SalonClosing() {
       }
     });
     return rows;
-  }, [filtered]);
+  }, [filtered, salonPayments]);
 
   // Payment summary from Saipos data
   const OFFLINE_CATEGORIES = ['(COBRAR) Pix', 'Crédito', 'Débito', 'Voucher'] as const;
