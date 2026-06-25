@@ -4,6 +4,7 @@ import AppLayout from '@/components/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TrendingUp, PieChart, AlertTriangle } from 'lucide-react';
 import SaldoDeHoje from '@/components/cashflow/SaldoDeHoje';
+import ProjecaoAlertas from '@/components/cashflow/ProjecaoAlertas';
 
 const placeholders = [
   {
@@ -15,11 +16,6 @@ const placeholders = [
     icon: PieChart,
     title: 'Para onde foi o dinheiro',
     desc: 'Saídas agrupadas por categoria.',
-  },
-  {
-    icon: AlertTriangle,
-    title: 'Projeção e alertas',
-    desc: 'Próximos meses e aviso quando o saldo apertar.',
   },
 ];
 
@@ -36,7 +32,7 @@ export default function CashflowDashboard() {
 
         <SaldoDeHoje />
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2">
           {placeholders.map(({ icon: Icon, title, desc }) => (
             <Card key={title} className="border-border/60">
               <CardHeader className="flex flex-row items-center gap-3 space-y-0">
@@ -54,6 +50,8 @@ export default function CashflowDashboard() {
             </Card>
           ))}
         </div>
+
+        <ProjecaoAlertas />
       </div>
     </AppLayout>
   );
