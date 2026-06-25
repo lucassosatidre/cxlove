@@ -5,7 +5,7 @@ import { useUserRole } from '@/hooks/useUserRole';
 import { useUserPermissions } from '@/hooks/useUserPermissions';
 import { useAvatarEmoji } from '@/hooks/useAvatarEmoji';
 import { useTheme } from '@/hooks/useTheme';
-import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard, Calculator, Brain, Headphones, Sun, Moon } from 'lucide-react';
+import { Bike, LogOut, X, Users, Store, LayoutDashboard, Truck, ChevronsLeft, ChevronsRight, CreditCard, Calculator, Brain, Headphones, Sun, Moon, Banknote } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
