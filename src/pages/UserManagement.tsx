@@ -18,7 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Shield, UserCog, Settings2 } from 'lucide-react';
+import { Plus, Trash2, Shield, UserCog, Settings2, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ManagedUser {
