@@ -282,7 +282,7 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const r = rows[i];
     if (!r) continue;
-    const cells = r.map((c) => String(c ?? '').toLowerCase().trim());
+    const cells = r.map((c) => String(c ?? '').toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
     const hasData = cells.some((c) => c === 'data' || c.startsWith('data'));
     const hasValor = cells.some((c) => c.includes('valor'));
     const hasHist = cells.some((c) => c.includes('histor') || c.includes('descri'));
