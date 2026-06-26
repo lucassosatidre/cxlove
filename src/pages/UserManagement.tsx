@@ -18,7 +18,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Plus, Trash2, Shield, UserCog, Settings2 } from 'lucide-react';
+import { Plus, Trash2, Shield, UserCog, Settings2, KeyRound } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ManagedUser {
@@ -58,6 +58,12 @@ export default function UserManagement() {
   const [editingPerms, setEditingPerms] = useState<ManagedUser | null>(null);
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
   const [updatingPerms, setUpdatingPerms] = useState(false);
+
+  // Access edit (email/password)
+  const [editingAccess, setEditingAccess] = useState<ManagedUser | null>(null);
+  const [accessEmail, setAccessEmail] = useState('');
+  const [accessPassword, setAccessPassword] = useState('');
+  const [updatingAccess, setUpdatingAccess] = useState(false);
 
   useEffect(() => {
     if (!roleLoading && !isAdmin) navigate('/');
@@ -146,6 +152,38 @@ export default function UserManagement() {
       toast({ title: 'Erro ao atualizar permissões', description: err.message, variant: 'destructive' });
     } finally {
       setUpdatingPerms(false);
+    }
+  };
+
+  const handleUpdateAccess = async () => {
+    if (!editingAccess) return;
+    const currentEmail = editingAccess.email;
+    const newEmailVal = accessEmail.trim();
+    const emailChanged = newEmailVal && newEmailVal !== currentEmail;
+    const passwordSet = accessPassword.length > 0;
+
+    if (!emailChanged && !passwordSet) {
+      setEditingAccess(null);
+      return;
+    }
+
+    setUpdatingAccess(true);
+    try {
+      if (emailChanged) {
+        await callFunction({ action: 'update_email', userId: editingAccess.id, email: newEmailVal });
+      }
+      if (passwordSet) {
+        await callFunction({ action: 'update_password', userId: editingAccess.id, password: accessPassword });
+      }
+      toast({ title: 'Acesso atualizado' });
+      setEditingAccess(null);
+      setAccessEmail('');
+      setAccessPassword('');
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: 'Erro ao atualizar acesso', description: err.message, variant: 'destructive' });
+    } finally {
+      setUpdatingAccess(false);
     }
   };
 
@@ -282,6 +320,18 @@ export default function UserManagement() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => {
+                          setEditingAccess(u);
+                          setAccessEmail(u.email);
+                          setAccessPassword('');
+                        }}
+                        title="Alterar acesso (e-mail/senha)"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setDeleteUser(u)}
                         className="text-destructive hover:text-destructive"
                         title="Excluir"
@@ -390,6 +440,44 @@ export default function UserManagement() {
             <Button variant="outline" onClick={() => setEditingPerms(null)}>Cancelar</Button>
             <Button onClick={handleUpdatePermissions} disabled={updatingPerms}>
               {updatingPerms ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Access Dialog (email/password) */}
+      <Dialog open={!!editingAccess} onOpenChange={(open) => { if (!open) { setEditingAccess(null); setAccessEmail(''); setAccessPassword(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar acesso</DialogTitle>
+            <DialogDescription>E-mail atual: {editingAccess?.email}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="access-email">E-mail</Label>
+              <Input
+                id="access-email"
+                type="email"
+                value={accessEmail}
+                onChange={(e) => setAccessEmail(e.target.value)}
+                placeholder="usuario@exemplo.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="access-password">Nova senha</Label>
+              <Input
+                id="access-password"
+                type="password"
+                value={accessPassword}
+                onChange={(e) => setAccessPassword(e.target.value)}
+                placeholder="Deixe em branco para não alterar"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditingAccess(null); setAccessEmail(''); setAccessPassword(''); }}>Cancelar</Button>
+            <Button onClick={handleUpdateAccess} disabled={updatingAccess}>
+              {updatingAccess ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>
