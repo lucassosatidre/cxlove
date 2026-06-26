@@ -5,44 +5,43 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
-import { useCashflowMonthlySummary, type MonthlySummaryRow } from '@/hooks/useCashflowAnalytics';
+import { useCashflowMonthlySummary, useCashflowMonthlyConsolidated, type MonthlySummaryRow } from '@/hooks/useCashflowAnalytics';
 
+const MESES_LOWER = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const fmtMes = (a: number, m: number) => `${MESES[m - 1]}/${String(a).slice(2)}`;
+const fmtYm = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number);
+  return `${MESES_LOWER[(m || 1) - 1]}/${String(y).slice(2)}`;
+};
 const colorClass = (n: number) => (n < 0 ? 'text-destructive font-medium' : n > 0 ? 'text-emerald-700 font-medium' : 'text-muted-foreground');
 
 type MonthAgg = { ano: number; mes: number; entradas: number; saidas: number; sobrou: number };
 
 export default function FluxoMensal() {
   const { data, isLoading } = useCashflowMonthlySummary();
+  const { data: consolidated, isLoading: loadingCons } = useCashflowMonthlyConsolidated();
   const [open, setOpen] = useState(false);
 
-  const { meses, byCompany } = useMemo(() => {
-    const rows = data ?? [];
-    const map = new Map<string, MonthAgg>();
-    for (const r of rows) {
-      const k = `${r.ano}-${r.mes}`;
-      const cur = map.get(k) ?? { ano: r.ano, mes: r.mes, entradas: 0, saidas: 0, sobrou: 0 };
-      cur.entradas += r.entradas;
-      cur.saidas += r.saidas;
-      cur.sobrou = cur.entradas + cur.saidas;
-      map.set(k, cur);
-    }
-    const meses = Array.from(map.values()).sort((a, b) => a.ano - b.ano || a.mes - b.mes);
+  const consolidatedRows = useMemo(() => {
+    return (consolidated ?? []).slice().sort((a, b) => a.ym.localeCompare(b.ym));
+  }, [consolidated]);
 
-    const byCompany = new Map<string, Map<string, { row: MonthlySummaryRow[] }>>();
+  const byCompany = useMemo(() => {
+    const rows = data ?? [];
+    const map = new Map<string, Map<string, { row: MonthlySummaryRow[] }>>();
     for (const r of rows) {
       const co = r.company ?? '—';
-      if (!byCompany.has(co)) byCompany.set(co, new Map());
-      const accMap = byCompany.get(co)!;
+      if (!map.has(co)) map.set(co, new Map());
+      const accMap = map.get(co)!;
       const k = r.account_id;
       if (!accMap.has(k)) accMap.set(k, { row: [] });
       accMap.get(k)!.row.push(r);
     }
-    return { meses, byCompany };
+    return map;
   }, [data]);
 
-  if (isLoading) {
+  if (isLoading || loadingCons) {
     return (
       <Card className="border-border/60">
         <CardHeader><CardTitle className="text-base">Fluxo mensal</CardTitle></CardHeader>
@@ -51,7 +50,7 @@ export default function FluxoMensal() {
     );
   }
 
-  if (!meses.length) {
+  if (!consolidatedRows.length) {
     return (
       <Card className="border-border/60">
         <CardHeader className="flex flex-row items-center gap-3 space-y-0">
@@ -85,22 +84,30 @@ export default function FluxoMensal() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {meses.map((m) => (
-                <TableRow key={`${m.ano}-${m.mes}`}>
-                  <TableCell className="font-medium">{fmtMes(m.ano, m.mes)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', colorClass(m.entradas))}>{fmtBRL(m.entradas)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', colorClass(m.saidas))}>{fmtBRL(m.saidas)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', colorClass(m.sobrou))}>{fmtBRL(m.sobrou)}</TableCell>
-                </TableRow>
-              ))}
+              {consolidatedRows.map((m) => {
+                const sobrou = m.entradas + m.saidas;
+                return (
+                  <TableRow key={m.ym}>
+                    <TableCell className="font-medium">{fmtYm(m.ym)}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', colorClass(m.entradas))}>{fmtBRL(m.entradas)}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', colorClass(m.saidas))}>{fmtBRL(m.saidas)}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', colorClass(sobrou))}>{fmtBRL(sobrou)}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
 
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <strong>Entrou</strong> = dinheiro recebido nas contas (sem empréstimos nem transferências entre suas contas).{' '}
+          <strong>Saiu</strong> = pagamentos categorizados (Saipos). Dezembro/25 está incompleto (faltam dados de algumas contas).
+        </p>
+
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-primary hover:underline">
             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            Detalhar por conta
+            Movimento bruto por conta (inclui transferências entre contas)
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-3 space-y-5">
             {Array.from(byCompany.entries()).map(([company, accMap]) => (

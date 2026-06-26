@@ -51,3 +51,24 @@ export function useCashflowCategorySummary(start: string, end: string) {
     enabled: Boolean(start && end),
   });
 }
+
+export type MonthlyConsolidatedRow = {
+  ym: string;
+  entradas: number;
+  saidas: number;
+};
+
+export function useCashflowMonthlyConsolidated() {
+  return useQuery({
+    queryKey: ['cashflow', 'monthly-consolidated'],
+    queryFn: async (): Promise<MonthlyConsolidatedRow[]> => {
+      const { data, error } = await (supabase.rpc as any)('cashflow_monthly_consolidated');
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        ym: String(r.ym),
+        entradas: Number(r.entradas) || 0,
+        saidas: Number(r.saidas) || 0,
+      }));
+    },
+  });
+}
