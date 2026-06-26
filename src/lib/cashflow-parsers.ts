@@ -462,12 +462,12 @@ export function parseIfoodConta(
     const dt = parseDateBR(r[0]);
     if (!dt) { skipped++; continue; }
     const desc = String(r[1] ?? '').trim();
-    const amount = parseNumber(r[2]);
+    const raw = Math.abs(parseNumber(r[2]));
     const cat = String(r[3] ?? '').trim();
-    if (amount === 0) { skipped++; continue; }
-    const it = detectInternalTransfer(desc, cat);
-    const isIfoodInternal =
-      /repasse/i.test(desc) || /Pix enviado/i.test(desc) || /antecipa/i.test(desc);
+    if (raw === 0) { skipped++; continue; }
+    const isOut = /enviad|taxa/i.test(desc);
+    const amount = isOut ? -raw : raw;
+    const isInternalTransfer = /pix\s*enviad/i.test(desc);
     out.push({
       source: 'ifood',
       account_id: accountId,
@@ -477,8 +477,8 @@ export function parseIfoodConta(
       amount,
       running_balance: null,
       category: cat || null,
-      is_internal_transfer: it.is_internal_transfer || isIfoodInternal,
-      counterparty: it.counterparty ?? (isIfoodInternal ? 'IFOOD' : null),
+      is_internal_transfer: isInternalTransfer,
+      counterparty: isInternalTransfer ? 'IFOOD (varredura)' : null,
       doc_number: null,
       source_seq: i,
     });
