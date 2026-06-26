@@ -3763,6 +3763,14 @@ export type Database = {
           total: number
         }[]
       }
+      cashflow_monthly_consolidated: {
+        Args: never
+        Returns: {
+          entradas: number
+          saidas: number
+          ym: string
+        }[]
+      }
       cashflow_monthly_summary: {
         Args: never
         Returns: {
