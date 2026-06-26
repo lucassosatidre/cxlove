@@ -236,6 +236,10 @@ export default function UserManagement() {
                         <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-xs">
                           Salão
                         </Badge>
+                      ) : u.role === 'lider' ? (
+                        <Badge variant="outline" className="bg-gold-500/10 text-gold-700 border-gold-500/30 text-xs">
+                          Tele · Salão · Entregadores
+                        </Badge>
                       ) : u.permissions.length === 0 ? (
                         <span className="text-xs text-muted-foreground">Nenhuma</span>
                       ) : (
