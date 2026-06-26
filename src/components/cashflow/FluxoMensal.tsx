@@ -20,34 +20,28 @@ type MonthAgg = { ano: number; mes: number; entradas: number; saidas: number; so
 
 export default function FluxoMensal() {
   const { data, isLoading } = useCashflowMonthlySummary();
+  const { data: consolidated, isLoading: loadingCons } = useCashflowMonthlyConsolidated();
   const [open, setOpen] = useState(false);
 
-  const { meses, byCompany } = useMemo(() => {
-    const rows = data ?? [];
-    const map = new Map<string, MonthAgg>();
-    for (const r of rows) {
-      const k = `${r.ano}-${r.mes}`;
-      const cur = map.get(k) ?? { ano: r.ano, mes: r.mes, entradas: 0, saidas: 0, sobrou: 0 };
-      cur.entradas += r.entradas;
-      cur.saidas += r.saidas;
-      cur.sobrou = cur.entradas + cur.saidas;
-      map.set(k, cur);
-    }
-    const meses = Array.from(map.values()).sort((a, b) => a.ano - b.ano || a.mes - b.mes);
+  const consolidatedRows = useMemo(() => {
+    return (consolidated ?? []).slice().sort((a, b) => a.ym.localeCompare(b.ym));
+  }, [consolidated]);
 
-    const byCompany = new Map<string, Map<string, { row: MonthlySummaryRow[] }>>();
+  const byCompany = useMemo(() => {
+    const rows = data ?? [];
+    const map = new Map<string, Map<string, { row: MonthlySummaryRow[] }>>();
     for (const r of rows) {
       const co = r.company ?? '—';
-      if (!byCompany.has(co)) byCompany.set(co, new Map());
-      const accMap = byCompany.get(co)!;
+      if (!map.has(co)) map.set(co, new Map());
+      const accMap = map.get(co)!;
       const k = r.account_id;
       if (!accMap.has(k)) accMap.set(k, { row: [] });
       accMap.get(k)!.row.push(r);
     }
-    return { meses, byCompany };
+    return map;
   }, [data]);
 
-  if (isLoading) {
+  if (isLoading || loadingCons) {
     return (
       <Card className="border-border/60">
         <CardHeader><CardTitle className="text-base">Fluxo mensal</CardTitle></CardHeader>
@@ -56,7 +50,7 @@ export default function FluxoMensal() {
     );
   }
 
-  if (!meses.length) {
+  if (!consolidatedRows.length) {
     return (
       <Card className="border-border/60">
         <CardHeader className="flex flex-row items-center gap-3 space-y-0">
