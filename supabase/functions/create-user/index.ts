@@ -143,6 +143,48 @@ Deno.serve(async (req) => {
     });
   }
 
+  // UPDATE EMAIL
+  if (action === 'update_email') {
+    const { userId, email } = body;
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return new Response(JSON.stringify({ error: 'E-mail é obrigatório' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { email: email.trim(), email_confirm: true });
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // UPDATE PASSWORD
+  if (action === 'update_password') {
+    const { userId, password } = body;
+    if (!password || typeof password !== 'string' || password.length < 6) {
+      return new Response(JSON.stringify({ error: 'A senha deve ter no mínimo 6 caracteres' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+    if (error) {
+      return new Response(JSON.stringify({ error: error.message }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   // UPDATE PERMISSIONS
   if (action === 'update_permissions') {
     const { userId, permissions } = body;
