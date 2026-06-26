@@ -325,8 +325,38 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
   }
   if (headerIdx < 0) return { rows: [], skipped: rows.length };
 
+  // Procura "saldo em conta" no cabeçalho (antes da tabela)
+  let closingBalance: number | null = null;
+  for (let i = 0; i < headerIdx; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    for (let j = 0; j < r.length; j++) {
+      const cell = String(r[j] ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      if (cell.includes('saldo em conta')) {
+        // valor pode estar na próxima célula ou em qualquer cell seguinte com número
+        for (let k = j + 1; k < r.length; k++) {
+          const v = r[k];
+          if (v == null || v === '') continue;
+          const s = String(v).trim();
+          if (!/[\d]/.test(s)) continue;
+          const neg = /^-/.test(s) || /^-?\s*R\$/.test(s) && /-/.test(s);
+          const n = parseNumber(s.replace(/^-/, ''));
+          if (isFinite(n) && n !== 0) {
+            closingBalance = neg ? -n : n;
+          } else if (isFinite(n)) {
+            closingBalance = 0;
+          }
+          break;
+        }
+        break;
+      }
+    }
+    if (closingBalance != null) break;
+  }
+
   const out: CashflowTxRow[] = [];
   let skipped = 0;
+  let maxDate: string | null = null;
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r || !r.some((c) => c != null && c !== '')) { skipped++; continue; }
@@ -340,6 +370,7 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
     if (amount === 0) { skipped++; continue; }
     const docNumber = COL.doc >= 0 ? String(r[COL.doc] ?? '').trim() : '';
     const it = detectInternalTransfer(desc, detail);
+    if (!maxDate || dt > maxDate) maxDate = dt;
     out.push({
       source: 'cresol',
       account_id: accountId,
@@ -355,7 +386,7 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
 }
 
 // ---- C6 ----
