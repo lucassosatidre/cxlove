@@ -1,0 +1,1 @@
+ALTER TABLE public.cashflow_transactions ADD COLUMN IF NOT EXISTS doc_number text;

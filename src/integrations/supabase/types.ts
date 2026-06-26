@@ -1820,6 +1820,7 @@ export type Database = {
           created_at: string
           description: string | null
           detail: string | null
+          doc_number: string | null
           id: string
           import_id: string | null
           is_future: boolean
@@ -1838,6 +1839,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           detail?: string | null
+          doc_number?: string | null
           id?: string
           import_id?: string | null
           is_future?: boolean
@@ -1856,6 +1858,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           detail?: string | null
+          doc_number?: string | null
           id?: string
           import_id?: string | null
           is_future?: boolean
