@@ -859,7 +859,13 @@ export default function SalonReconciliation() {
                 <SelectItem value="matched">Conciliadas</SelectItem>
                 <SelectItem value="unmatched">Pendentes (maquininha)</SelectItem>
                 <SelectItem value="external">Fora da maquininha</SelectItem>
+                <SelectItem value="divergent">⚠️ Só com divergência</SelectItem>
+                <SelectItem value="metodo_divergente">Método divergente</SelectItem>
+                <SelectItem value="combinado_nao_declarado">Combinado não declarado</SelectItem>
+                <SelectItem value="estrutura_divergente">Estrutura divergente</SelectItem>
+                <SelectItem value="diferenca_valor">Diferença de valor</SelectItem>
               </SelectContent>
+
             </Select>
             <Select value={filterPayment} onValueChange={setFilterPayment}>
               <SelectTrigger className="w-[200px] h-9">
