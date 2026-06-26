@@ -59,6 +59,12 @@ export default function UserManagement() {
   const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
   const [updatingPerms, setUpdatingPerms] = useState(false);
 
+  // Access edit (email/password)
+  const [editingAccess, setEditingAccess] = useState<ManagedUser | null>(null);
+  const [accessEmail, setAccessEmail] = useState('');
+  const [accessPassword, setAccessPassword] = useState('');
+  const [updatingAccess, setUpdatingAccess] = useState(false);
+
   useEffect(() => {
     if (!roleLoading && !isAdmin) navigate('/');
   }, [roleLoading, isAdmin, navigate]);
