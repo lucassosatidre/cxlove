@@ -264,7 +264,7 @@ export default function UserManagement() {
                           setSelectedPerms(u.permissions || []);
                         }}
                         title="Permissões"
-                        disabled={u.role === 'admin'}
+                        disabled={u.role === 'admin' || u.role === 'lider' || u.role === 'caixa_tele' || u.role === 'caixa_salao'}
                       >
                         <Settings2 className="h-4 w-4" />
                       </Button>
