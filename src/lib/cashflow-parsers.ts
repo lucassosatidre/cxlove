@@ -435,8 +435,12 @@ export function parseC6(rows: unknown[][], accountId: string | null = null): Par
       doc_number: null,
       source_seq: i,
     });
-  }
-  return { rows: out, skipped, account_number: accountNumber };
+  const last = out[out.length - 1];
+  const closing: ClosingInfo = {
+    balance: last?.running_balance ?? null,
+    as_of: last?.tx_date ?? null,
+  };
+  return { rows: out, skipped, account_number: accountNumber, closing };
 }
 
 // ---- Sicredi ----
