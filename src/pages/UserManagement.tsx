@@ -320,6 +320,18 @@ export default function UserManagement() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => {
+                          setEditingAccess(u);
+                          setAccessEmail(u.email);
+                          setAccessPassword('');
+                        }}
+                        title="Alterar acesso (e-mail/senha)"
+                      >
+                        <KeyRound className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => setDeleteUser(u)}
                         className="text-destructive hover:text-destructive"
                         title="Excluir"
