@@ -445,6 +445,44 @@ export default function UserManagement() {
         </DialogContent>
       </Dialog>
 
+      {/* Edit Access Dialog (email/password) */}
+      <Dialog open={!!editingAccess} onOpenChange={(open) => { if (!open) { setEditingAccess(null); setAccessEmail(''); setAccessPassword(''); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Alterar acesso</DialogTitle>
+            <DialogDescription>E-mail atual: {editingAccess?.email}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="access-email">E-mail</Label>
+              <Input
+                id="access-email"
+                type="email"
+                value={accessEmail}
+                onChange={(e) => setAccessEmail(e.target.value)}
+                placeholder="usuario@exemplo.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="access-password">Nova senha</Label>
+              <Input
+                id="access-password"
+                type="password"
+                value={accessPassword}
+                onChange={(e) => setAccessPassword(e.target.value)}
+                placeholder="Deixe em branco para não alterar"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setEditingAccess(null); setAccessEmail(''); setAccessPassword(''); }}>Cancelar</Button>
+            <Button onClick={handleUpdateAccess} disabled={updatingAccess}>
+              {updatingAccess ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation */}
       <AlertDialog open={!!deleteUser} onOpenChange={(open) => !open && setDeleteUser(null)}>
         <AlertDialogContent>
