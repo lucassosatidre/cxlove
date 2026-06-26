@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, CalendarDays } from 'lucide-react';
 import { useCashflowLoans } from '@/hooks/useCashflowLoans';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
+import ProjecaoCaixa from './ProjecaoCaixa';
+import { Separator } from '@/components/ui/separator';
 
 const fmtMonth = (d: Date) =>
   `${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
