@@ -80,7 +80,7 @@ export default function UploadCashflowCard({
         }
 
         // 2. Parse
-        const { rows, account_id, warn } = await parse(input);
+        const { rows, account_id, warn, closing } = await parse(input);
         if (warn) toast.warning(warn);
         if (!rows || rows.length === 0) {
           toast.error(`${file.name}: nenhuma linha válida encontrada`);
