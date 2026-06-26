@@ -107,7 +107,7 @@ export default function FluxoMensal() {
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-primary hover:underline">
             {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            Detalhar por conta
+            Movimento bruto por conta (inclui transferências entre contas)
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-3 space-y-5">
             {Array.from(byCompany.entries()).map(([company, accMap]) => (
