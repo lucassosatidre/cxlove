@@ -56,17 +56,17 @@ Deno.serve(async (req) => {
     });
   }
 
-  // Verify admin role
+  // Verify admin or lider role
   const { data: roleData } = await supabaseAdmin
     .from('user_roles')
     .select('role')
     .eq('user_id', callerId)
-    .eq('role', 'admin')
+    .in('role', ['admin', 'lider'])
     .maybeSingle();
   console.log('[manage-drivers] role check for', callerId, ':', JSON.stringify(roleData));
 
   if (!roleData) {
-    return new Response(JSON.stringify({ error: 'Apenas administradores podem gerenciar entregadores' }), {
+    return new Response(JSON.stringify({ error: 'Apenas administradores ou líderes podem gerenciar entregadores' }), {
       status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }

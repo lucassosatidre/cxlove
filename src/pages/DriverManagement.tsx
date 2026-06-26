@@ -59,7 +59,7 @@ const statusConfig: Record<string, { label: string; variant: 'default' | 'second
 };
 
 export default function DriverManagement() {
-  const { isAdmin, loading: roleLoading } = useUserRole();
+  const { isAdmin, isLider, loading: roleLoading } = useUserRole();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -95,10 +95,12 @@ export default function DriverManagement() {
     setLoading(false);
   }, []);
 
+  const canManageDrivers = isAdmin || isLider;
+
   useEffect(() => {
-    if (!roleLoading && !isAdmin) { navigate('/'); return; }
-    if (!roleLoading && isAdmin) fetchDrivers();
-  }, [roleLoading, isAdmin, navigate, fetchDrivers]);
+    if (!roleLoading && !canManageDrivers) { navigate('/'); return; }
+    if (!roleLoading && canManageDrivers) fetchDrivers();
+  }, [roleLoading, canManageDrivers, navigate, fetchDrivers]);
 
   const invokeFunction = async (body: Record<string, unknown>) => {
     const { data, error } = await supabase.functions.invoke('manage-drivers', { body });
