@@ -321,6 +321,7 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="lider">Líder</SelectItem>
                   <SelectItem value="caixa_tele">Caixa Tele</SelectItem>
                   <SelectItem value="caixa_salao">Caixa Salão</SelectItem>
                 </SelectContent>
