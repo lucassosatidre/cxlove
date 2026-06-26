@@ -72,3 +72,26 @@ export function useCashflowMonthlyConsolidated() {
     },
   });
 }
+
+export type UpcomingBillRow = {
+  vencimento: string;
+  amount: number;
+  category: string | null;
+  fornecedor: string | null;
+};
+
+export function useCashflowUpcomingBills() {
+  return useQuery({
+    queryKey: ['cashflow', 'upcoming-bills'],
+    queryFn: async (): Promise<UpcomingBillRow[]> => {
+      const { data, error } = await (supabase.rpc as any)('cashflow_upcoming_bills');
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        vencimento: String(r.vencimento),
+        amount: Number(r.amount) || 0,
+        category: r.category ?? null,
+        fornecedor: r.fornecedor ?? null,
+      }));
+    },
+  });
+}
