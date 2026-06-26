@@ -5,10 +5,15 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
-import { useCashflowMonthlySummary, type MonthlySummaryRow } from '@/hooks/useCashflowAnalytics';
+import { useCashflowMonthlySummary, useCashflowMonthlyConsolidated, type MonthlySummaryRow } from '@/hooks/useCashflowAnalytics';
 
+const MESES_LOWER = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const fmtMes = (a: number, m: number) => `${MESES[m - 1]}/${String(a).slice(2)}`;
+const fmtYm = (ym: string) => {
+  const [y, m] = ym.split('-').map(Number);
+  return `${MESES_LOWER[(m || 1) - 1]}/${String(y).slice(2)}`;
+};
 const colorClass = (n: number) => (n < 0 ? 'text-destructive font-medium' : n > 0 ? 'text-emerald-700 font-medium' : 'text-muted-foreground');
 
 type MonthAgg = { ano: number; mes: number; entradas: number; saidas: number; sobrou: number };
