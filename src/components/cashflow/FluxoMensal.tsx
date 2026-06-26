@@ -84,17 +84,25 @@ export default function FluxoMensal() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {meses.map((m) => (
-                <TableRow key={`${m.ano}-${m.mes}`}>
-                  <TableCell className="font-medium">{fmtMes(m.ano, m.mes)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', colorClass(m.entradas))}>{fmtBRL(m.entradas)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', colorClass(m.saidas))}>{fmtBRL(m.saidas)}</TableCell>
-                  <TableCell className={cn('text-right tabular-nums', colorClass(m.sobrou))}>{fmtBRL(m.sobrou)}</TableCell>
-                </TableRow>
-              ))}
+              {consolidatedRows.map((m) => {
+                const sobrou = m.entradas + m.saidas;
+                return (
+                  <TableRow key={m.ym}>
+                    <TableCell className="font-medium">{fmtYm(m.ym)}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', colorClass(m.entradas))}>{fmtBRL(m.entradas)}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', colorClass(m.saidas))}>{fmtBRL(m.saidas)}</TableCell>
+                    <TableCell className={cn('text-right tabular-nums', colorClass(sobrou))}>{fmtBRL(sobrou)}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <strong>Entrou</strong> = dinheiro recebido nas contas (sem empréstimos nem transferências entre suas contas).{' '}
+          <strong>Saiu</strong> = pagamentos categorizados (Saipos). Dezembro/25 está incompleto (faltam dados de algumas contas).
+        </p>
 
         <Collapsible open={open} onOpenChange={setOpen}>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-primary hover:underline">
