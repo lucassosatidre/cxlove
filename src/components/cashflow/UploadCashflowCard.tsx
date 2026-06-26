@@ -11,6 +11,7 @@ export type ParseFileResult = {
   rows: Record<string, unknown>[];
   account_id: string | null;
   warn?: string;
+  closing?: { balance: number | null; as_of: string | null };
 };
 
 type Table = 'cashflow_transactions' | 'cashflow_saipos';
@@ -79,7 +80,7 @@ export default function UploadCashflowCard({
         }
 
         // 2. Parse
-        const { rows, account_id, warn } = await parse(input);
+        const { rows, account_id, warn, closing } = await parse(input);
         if (warn) toast.warning(warn);
         if (!rows || rows.length === 0) {
           toast.error(`${file.name}: nenhuma linha válida encontrada`);
@@ -130,6 +131,26 @@ export default function UploadCashflowCard({
           imported_rows: inserted,
           duplicate_rows: rows.length - inserted,
         }).eq('id', importId);
+
+        // 6. Atualizar saldo da conta a partir do extrato (quando aplicável)
+        if (closing?.balance != null && closing.as_of && account_id) {
+          const { error: balErr } = await supabase
+            .from('cashflow_balances')
+            .upsert(
+              {
+                account_id,
+                as_of: closing.as_of,
+                own_balance: closing.balance,
+                provisioned: 0,
+                limit_available: 0,
+                note: 'atualizado pelo extrato',
+              },
+              { onConflict: 'account_id,as_of' },
+            );
+          if (balErr) {
+            toast.warning(`Saldo não atualizado: ${balErr.message}`);
+          }
+        }
 
         toast.success(`${file.name}: ${inserted} novas / ${rows.length - inserted} duplicadas`);
         okCount++;

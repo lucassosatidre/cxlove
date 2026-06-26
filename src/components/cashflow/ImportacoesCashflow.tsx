@@ -108,22 +108,22 @@ export default function ImportacoesCashflow() {
   // ───── Parsers wrappers ─────
   const pBB = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('Banco do Brasil');
-    const { rows } = parseBB(i.rows ?? [], acc);
-    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc };
+    const { rows, closing } = parseBB(i.rows ?? [], acc);
+    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
   };
   const pCresol = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('Cresol');
-    const { rows } = parseCresol(i.rows ?? [], acc);
-    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc };
+    const { rows, closing } = parseCresol(i.rows ?? [], acc);
+    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
   };
   const pC6 = (i: ParseFileInput): ParseFileResult => {
-    const { rows, account_number } = parseC6(i.rows ?? [], null);
+    const { rows, account_number, closing } = parseC6(i.rows ?? [], null);
     const name = account_number ? C6_ACCOUNT_MAP[account_number] : null;
     const acc = name ? accId(name) : null;
     const warn = acc ? undefined :
       `Não identifiquei a conta C6 no arquivo${account_number ? ` (nº ${account_number})` : ''}.`;
     const enriched = rows.map((r) => ({ ...r, account_id: acc }));
-    return { rows: enriched as unknown as Record<string, unknown>[], account_id: acc, warn };
+    return { rows: enriched as unknown as Record<string, unknown>[], account_id: acc, warn, closing };
   };
   const pIfood = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('iFood Pago');
@@ -132,8 +132,8 @@ export default function ImportacoesCashflow() {
   };
   const pSicredi = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('Sicredi');
-    const { rows } = parseSicredi(i.rows ?? [], acc);
-    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc };
+    const { rows, closing } = parseSicredi(i.rows ?? [], acc);
+    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
   };
   const pSaipos = (i: ParseFileInput): ParseFileResult => {
     const { rows } = parseSaipos(i.rows ?? []);

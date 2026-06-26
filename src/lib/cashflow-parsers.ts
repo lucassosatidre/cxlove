@@ -36,7 +36,8 @@ export type CashflowSaiposRow = {
   source_seq: number;
 };
 
-export type ParseResult<T> = { rows: T[]; skipped: number };
+export type ClosingInfo = { balance: number | null; as_of: string | null };
+export type ParseResult<T> = { rows: T[]; skipped: number; closing?: ClosingInfo };
 
 // ============================================================================
 // Workbook / sheet helpers (copiado de UploadCards.tsx)
@@ -223,6 +224,8 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
 
   const out: CashflowTxRow[] = [];
   let skipped = 0;
+  let closingBalance: number | null = null;
+  let maxDate: string | null = null;
 
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
@@ -230,7 +233,28 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
     const dt = parseDateBR(r[COL.date]);
     const desc = String(r[COL.desc] ?? '').trim();
     if (!dt || !desc) { skipped++; continue; }
-    if (/saldo anterior|saldo do dia|^saldo$|S A L D O/i.test(desc)) { skipped++; continue; }
+    if (/saldo anterior|saldo do dia|^saldo$|S A L D O/i.test(desc)) {
+      // Captura a linha de SALDO de fechamento (a última vence)
+      const cdInf = COL.cd >= 0 ? String(r[COL.cd] ?? '').trim().toUpperCase() : '';
+      let raw: number | null = null;
+      if (isNew) {
+        const v = r[COL.value];
+        if (v != null && v !== '') {
+          const n = typeof v === 'number' ? v : parseNumber(v);
+          if (isFinite(n)) raw = Math.abs(n);
+        }
+      } else {
+        const parsed = parseBBValue(r[COL.value]);
+        if (parsed) raw = parsed.amount;
+      }
+      if (raw != null) {
+        const isCredit = cdInf === 'C' ? true : cdInf === 'D' ? false : true;
+        closingBalance = isCredit ? raw : -raw;
+        if (!maxDate || dt > maxDate) maxDate = dt;
+      }
+      skipped++;
+      continue;
+    }
 
     const detail = COL.detail >= 0 ? String(r[COL.detail] ?? '').trim() : '';
     const docNumber = COL.doc >= 0 ? String(r[COL.doc] ?? '').trim() : '';
@@ -248,7 +272,6 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
       parsed = parseBBValue(r[COL.value]);
       if (!parsed) { skipped++; continue; }
       if (!/entrada/i.test(tipo) && !parsed.isCredit) {
-        // legado: usa coluna tipo se houver
         parsed = { amount: parsed.amount, isCredit: parsed.isCredit };
       }
     }
@@ -256,6 +279,7 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
 
     const amount = parsed.isCredit ? parsed.amount : -parsed.amount;
     const it = detectInternalTransfer(desc, detail);
+    if (!maxDate || dt > maxDate) maxDate = dt;
     out.push({
       source: 'bb',
       account_id: accountId,
@@ -271,7 +295,7 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
 }
 
 // ---- Cresol ----
@@ -301,8 +325,38 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
   }
   if (headerIdx < 0) return { rows: [], skipped: rows.length };
 
+  // Procura "saldo em conta" no cabeçalho (antes da tabela)
+  let closingBalance: number | null = null;
+  for (let i = 0; i < headerIdx; i++) {
+    const r = rows[i];
+    if (!r) continue;
+    for (let j = 0; j < r.length; j++) {
+      const cell = String(r[j] ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+      if (cell.includes('saldo em conta')) {
+        // valor pode estar na próxima célula ou em qualquer cell seguinte com número
+        for (let k = j + 1; k < r.length; k++) {
+          const v = r[k];
+          if (v == null || v === '') continue;
+          const s = String(v).trim();
+          if (!/[\d]/.test(s)) continue;
+          const neg = /^-/.test(s) || /^-?\s*R\$/.test(s) && /-/.test(s);
+          const n = parseNumber(s.replace(/^-/, ''));
+          if (isFinite(n) && n !== 0) {
+            closingBalance = neg ? -n : n;
+          } else if (isFinite(n)) {
+            closingBalance = 0;
+          }
+          break;
+        }
+        break;
+      }
+    }
+    if (closingBalance != null) break;
+  }
+
   const out: CashflowTxRow[] = [];
   let skipped = 0;
+  let maxDate: string | null = null;
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
     if (!r || !r.some((c) => c != null && c !== '')) { skipped++; continue; }
@@ -316,6 +370,7 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
     if (amount === 0) { skipped++; continue; }
     const docNumber = COL.doc >= 0 ? String(r[COL.doc] ?? '').trim() : '';
     const it = detectInternalTransfer(desc, detail);
+    if (!maxDate || dt > maxDate) maxDate = dt;
     out.push({
       source: 'cresol',
       account_id: accountId,
@@ -331,7 +386,7 @@ export function parseCresol(rows: unknown[][], accountId: string | null = null):
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
 }
 
 // ---- C6 ----
@@ -381,7 +436,12 @@ export function parseC6(rows: unknown[][], accountId: string | null = null): Par
       source_seq: i,
     });
   }
-  return { rows: out, skipped, account_number: accountNumber };
+  const last = out[out.length - 1];
+  const closing: ClosingInfo = {
+    balance: last?.running_balance ?? null,
+    as_of: last?.tx_date ?? null,
+  };
+  return { rows: out, skipped, account_number: accountNumber, closing };
 }
 
 // ---- Sicredi ----
@@ -432,8 +492,15 @@ export function parseSicredi(rows: unknown[][], accountId: string | null = null)
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  const last = out[out.length - 1];
+  return {
+    rows: out,
+    skipped,
+    closing: { balance: last?.running_balance ?? null, as_of: last?.tx_date ?? null },
+  };
 }
+
+
 
 // ---- iFood Conta (CSV ou rows) ----
 export function parseIfoodConta(
@@ -483,7 +550,7 @@ export function parseIfoodConta(
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  return { rows: out, skipped, closing: { balance: null, as_of: null } };
 }
 
 // ---- Saipos ----

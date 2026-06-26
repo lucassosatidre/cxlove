@@ -19,8 +19,9 @@ function AccountRow({ acc }: { acc: AccountWithBalance }) {
   const own = Number(b?.own_balance ?? 0);
   const prov = Number(b?.provisioned ?? 0);
   const limit = Number(acc.overdraft_limit ?? 0);
-  const limAvail = Number(b?.limit_available ?? 0);
-  const limUsed = Math.max(0, limit - limAvail);
+  // Limite disponível calculado: limite cheio se saldo ≥ 0; reduzido pelo negativo se < 0
+  const limAvail = Math.max(0, limit + Math.min(own, 0));
+  const limUsed = limit - limAvail;
   const limPct = limit > 0 ? Math.min(100, (limUsed / limit) * 100) : 0;
 
   const realAfterProv = own - prov;
@@ -101,10 +102,12 @@ export default function SaldoDeHoje() {
   const totals = data.reduce(
     (acc, a) => {
       const b = a.balance;
-      if (!b) return acc;
-      acc.own += Number(b.own_balance ?? 0);
-      acc.prov += Number(b.provisioned ?? 0);
-      acc.limAvail += Number(b.limit_available ?? 0);
+      const own = Number(b?.own_balance ?? 0);
+      const prov = Number(b?.provisioned ?? 0);
+      const limit = Number(a.overdraft_limit ?? 0);
+      acc.own += own;
+      acc.prov += prov;
+      acc.limAvail += Math.max(0, limit + Math.min(own, 0));
       return acc;
     },
     { own: 0, prov: 0, limAvail: 0 }
