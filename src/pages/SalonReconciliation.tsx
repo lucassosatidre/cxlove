@@ -248,6 +248,76 @@ export default function SalonReconciliation() {
     };
   }, [eligibleOrders, matchedOrderIds, transactions, orderClassifications]);
 
+  type DivergenceType = 'metodo_divergente' | 'combinado_nao_declarado' | 'estrutura_divergente' | 'diferenca_valor';
+
+  const DIVERGENCE_LABELS: Record<DivergenceType, { label: string; color: string }> = {
+    metodo_divergente: { label: 'Método divergente', color: 'bg-destructive/10 text-destructive' },
+    combinado_nao_declarado: { label: 'Combinado não declarado', color: 'bg-warning/10 text-warning' },
+    estrutura_divergente: { label: 'Estrutura divergente', color: 'bg-warning/10 text-warning' },
+    diferenca_valor: { label: 'Diferença de valor', color: 'bg-destructive/10 text-destructive' },
+  };
+
+  const canonicalMethod = (m: string): string => {
+    const l = (m || '').toLowerCase();
+    if (l.includes('pix')) return 'Pix';
+    if (l.includes('créd') || l.includes('cred')) return 'Crédito';
+    if (l.includes('déb') || l.includes('deb')) return 'Débito';
+    if (l.includes('voucher') || l.includes('vale')) return 'Voucher';
+    if (l.includes('dinheiro')) return 'Dinheiro';
+    if (l.includes('online') || l.includes('ifood') || l.includes('anotaai') || l.includes('(pago)')) return 'Online';
+    return 'Outro';
+  };
+  const isCardMethod = (c: string) => c === 'Pix' || c === 'Crédito' || c === 'Débito' || c === 'Voucher';
+
+  // Detecta divergência por pedido CONCILIADO, calculada na tela (cartão × forma declarada × valor)
+  const divergenceByOrder = useMemo(() => {
+    const map = new Map<string, DivergenceType>();
+    const payByOrder = new Map<string, SalonPayment[]>();
+    payments.forEach(p => {
+      if (!payByOrder.has(p.salon_order_id)) payByOrder.set(p.salon_order_id, []);
+      payByOrder.get(p.salon_order_id)!.push(p);
+    });
+
+    for (const order of orders) {
+      const txs = matchedOrderIds.get(order.id);
+      if (!txs || txs.length === 0) continue; // só pedidos conciliados
+
+      const cardMethods = txs.map(t => canonicalMethod(t.payment_method)).sort();
+      const cardSum = txs.reduce((s, t) => s + t.gross_amount, 0);
+
+      const bk = payByOrder.get(order.id) || [];
+      let declaredCard: string[] = [];
+      let expectedCardSum: number | null = null;
+      if (bk.length > 0) {
+        const cardBk = bk.filter(p => isCardMethod(canonicalMethod(p.payment_method)));
+        declaredCard = cardBk.map(p => canonicalMethod(p.payment_method)).sort();
+        expectedCardSum = cardBk.reduce((s, p) => s + p.amount, 0);
+      } else {
+        const methods = (order.payment_method || '').split(',').map(s => s.trim()).filter(Boolean);
+        const cardDeclared = methods.map(canonicalMethod).filter(isCardMethod);
+        declaredCard = [...cardDeclared].sort();
+        expectedCardSum = (cardDeclared.length === methods.length && cardDeclared.length === 1)
+          ? order.total_amount : null; // misto com dinheiro/online sem breakdown → não checa valor
+      }
+
+      // 1) diferença de valor (só quando dá pra saber o valor esperado no cartão)
+      if (expectedCardSum != null && Math.abs(cardSum - expectedCardSum) > 0.5) {
+        map.set(order.id, 'diferenca_valor');
+        continue;
+      }
+      // 2) método / estrutura
+      if (declaredCard.length > 0) {
+        const same = declaredCard.length === cardMethods.length && declaredCard.every((m, i) => m === cardMethods[i]);
+        if (!same) {
+          if (cardMethods.length > declaredCard.length) map.set(order.id, 'combinado_nao_declarado');
+          else if (cardMethods.length < declaredCard.length) map.set(order.id, 'estrutura_divergente');
+          else map.set(order.id, 'metodo_divergente');
+        }
+      }
+    }
+    return map;
+  }, [orders, matchedOrderIds, payments]);
+
   const filtered = useMemo(() => {
     return eligibleOrders.filter(o => {
       if (search) {
@@ -258,10 +328,14 @@ export default function SalonReconciliation() {
       if (filterMatch === 'matched' && !matchedOrderIds.has(o.id)) return false;
       if (filterMatch === 'unmatched' && (matchedOrderIds.has(o.id) || cls?.isExternal)) return false;
       if (filterMatch === 'external' && !cls?.isExternal) return false;
+      const div = divergenceByOrder.get(o.id);
+      if (filterMatch === 'divergent' && !div) return false;
+      if (['metodo_divergente','combinado_nao_declarado','estrutura_divergente','diferenca_valor'].includes(filterMatch) && div !== filterMatch) return false;
       if (!orderMatchesPayment(o, filterPayment)) return false;
       return true;
     });
-  }, [eligibleOrders, search, filterMatch, filterPayment, matchedOrderIds, orderClassifications]);
+  }, [eligibleOrders, search, filterMatch, filterPayment, matchedOrderIds, orderClassifications, divergenceByOrder]);
+
 
   const filteredOrdersSummary = useMemo(() => {
     if (filterPayment === 'all') return null;
