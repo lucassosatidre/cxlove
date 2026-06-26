@@ -3754,6 +3754,27 @@ export type Database = {
           ym: string
         }[]
       }
+      cashflow_category_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: {
+          category: string
+          company: string
+          n: number
+          total: number
+        }[]
+      }
+      cashflow_monthly_summary: {
+        Args: never
+        Returns: {
+          account_id: string
+          account_name: string
+          ano: number
+          company: string
+          entradas: number
+          mes: number
+          saidas: number
+        }[]
+      }
       classify_ifood_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
