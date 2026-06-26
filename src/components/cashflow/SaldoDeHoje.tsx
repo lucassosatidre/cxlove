@@ -102,10 +102,12 @@ export default function SaldoDeHoje() {
   const totals = data.reduce(
     (acc, a) => {
       const b = a.balance;
-      if (!b) return acc;
-      acc.own += Number(b.own_balance ?? 0);
-      acc.prov += Number(b.provisioned ?? 0);
-      acc.limAvail += Number(b.limit_available ?? 0);
+      const own = Number(b?.own_balance ?? 0);
+      const prov = Number(b?.provisioned ?? 0);
+      const limit = Number(a.overdraft_limit ?? 0);
+      acc.own += own;
+      acc.prov += prov;
+      acc.limAvail += Math.max(0, limit + Math.min(own, 0));
       return acc;
     },
     { own: 0, prov: 0, limAvail: 0 }
