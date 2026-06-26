@@ -39,6 +39,12 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     navItems = [
       { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
     ];
+  } else if (isLider) {
+    navItems = [
+      { icon: Bike, label: 'Tele', path: '/tele', permission: 'dashboard' },
+      { icon: Store, label: 'Salão', path: '/salon', permission: 'salon' },
+      { icon: Truck, label: 'Entregadores', path: '/admin/entregadores', permission: 'dashboard' },
+    ];
   } else {
     const allNavItems = [
       { icon: LayoutDashboard, label: 'Painel', path: '/', permission: 'dashboard' },
