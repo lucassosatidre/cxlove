@@ -36,6 +36,7 @@ export function useUserRole() {
   const isCaixaTele = role === 'caixa_tele';
   const isCaixaSalao = role === 'caixa_salao';
   const isEntregador = role === 'entregador';
+  const isLider = role === 'lider';
 
-  return { role, isAdmin, isCaixaTele, isCaixaSalao, isEntregador, loading };
+  return { role, isAdmin, isCaixaTele, isCaixaSalao, isEntregador, isLider, loading };
 }
