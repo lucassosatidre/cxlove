@@ -157,6 +157,7 @@ export default function UserManagement() {
     if (role === 'admin') return 'Administrador';
     if (role === 'caixa_tele') return 'Caixa Tele';
     if (role === 'caixa_salao') return 'Caixa Salão';
+    if (role === 'lider') return 'Líder';
     return 'Sem papel';
   };
 
@@ -164,6 +165,7 @@ export default function UserManagement() {
     if (role === 'admin') return 'bg-primary/15 text-primary border-primary/30';
     if (role === 'caixa_tele') return 'bg-info/15 text-info border-info/30';
     if (role === 'caixa_salao') return 'bg-warning/15 text-warning border-warning/30';
+    if (role === 'lider') return 'bg-gold-500/15 text-gold-700 border-gold-500/40';
     return 'bg-muted text-muted-foreground';
   };
 
@@ -234,6 +236,10 @@ export default function UserManagement() {
                         <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-xs">
                           Salão
                         </Badge>
+                      ) : u.role === 'lider' ? (
+                        <Badge variant="outline" className="bg-gold-500/10 text-gold-700 border-gold-500/30 text-xs">
+                          Tele · Salão · Entregadores
+                        </Badge>
                       ) : u.permissions.length === 0 ? (
                         <span className="text-xs text-muted-foreground">Nenhuma</span>
                       ) : (
@@ -258,7 +264,7 @@ export default function UserManagement() {
                           setSelectedPerms(u.permissions || []);
                         }}
                         title="Permissões"
-                        disabled={u.role === 'admin'}
+                        disabled={u.role === 'admin' || u.role === 'lider' || u.role === 'caixa_tele' || u.role === 'caixa_salao'}
                       >
                         <Settings2 className="h-4 w-4" />
                       </Button>
@@ -315,6 +321,7 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="lider">Líder</SelectItem>
                   <SelectItem value="caixa_tele">Caixa Tele</SelectItem>
                   <SelectItem value="caixa_salao">Caixa Salão</SelectItem>
                 </SelectContent>
@@ -344,6 +351,7 @@ export default function UserManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="admin">Administrador</SelectItem>
+                <SelectItem value="lider">Líder</SelectItem>
                 <SelectItem value="caixa_tele">Caixa Tele</SelectItem>
                 <SelectItem value="caixa_salao">Caixa Salão</SelectItem>
               </SelectContent>

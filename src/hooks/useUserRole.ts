@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 
-export type AppRole = 'admin' | 'caixa_tele' | 'caixa_salao' | 'entregador';
+export type AppRole = 'admin' | 'caixa_tele' | 'caixa_salao' | 'entregador' | 'lider';
 
 export function useUserRole() {
   const { user } = useAuth();
@@ -36,6 +36,7 @@ export function useUserRole() {
   const isCaixaTele = role === 'caixa_tele';
   const isCaixaSalao = role === 'caixa_salao';
   const isEntregador = role === 'entregador';
+  const isLider = role === 'lider';
 
-  return { role, isAdmin, isCaixaTele, isCaixaSalao, isEntregador, loading };
+  return { role, isAdmin, isCaixaTele, isCaixaSalao, isEntregador, isLider, loading };
 }
