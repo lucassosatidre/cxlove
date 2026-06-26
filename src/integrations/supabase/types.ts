@@ -3783,6 +3783,15 @@ export type Database = {
           saidas: number
         }[]
       }
+      cashflow_upcoming_bills: {
+        Args: never
+        Returns: {
+          amount: number
+          category: string
+          fornecedor: string
+          vencimento: string
+        }[]
+      }
       classify_ifood_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
