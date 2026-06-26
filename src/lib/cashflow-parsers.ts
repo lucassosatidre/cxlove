@@ -492,8 +492,15 @@ export function parseSicredi(rows: unknown[][], accountId: string | null = null)
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  const last = out[out.length - 1];
+  return {
+    rows: out,
+    skipped,
+    closing: { balance: last?.running_balance ?? null, as_of: last?.tx_date ?? null },
+  };
 }
+
+
 
 // ---- iFood Conta (CSV ou rows) ----
 export function parseIfoodConta(
