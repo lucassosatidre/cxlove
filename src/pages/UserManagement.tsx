@@ -155,6 +155,38 @@ export default function UserManagement() {
     }
   };
 
+  const handleUpdateAccess = async () => {
+    if (!editingAccess) return;
+    const currentEmail = editingAccess.email;
+    const newEmailVal = accessEmail.trim();
+    const emailChanged = newEmailVal && newEmailVal !== currentEmail;
+    const passwordSet = accessPassword.length > 0;
+
+    if (!emailChanged && !passwordSet) {
+      setEditingAccess(null);
+      return;
+    }
+
+    setUpdatingAccess(true);
+    try {
+      if (emailChanged) {
+        await callFunction({ action: 'update_email', userId: editingAccess.id, email: newEmailVal });
+      }
+      if (passwordSet) {
+        await callFunction({ action: 'update_password', userId: editingAccess.id, password: accessPassword });
+      }
+      toast({ title: 'Acesso atualizado' });
+      setEditingAccess(null);
+      setAccessEmail('');
+      setAccessPassword('');
+      loadUsers();
+    } catch (err: any) {
+      toast({ title: 'Erro ao atualizar acesso', description: err.message, variant: 'destructive' });
+    } finally {
+      setUpdatingAccess(false);
+    }
+  };
+
   const togglePermission = (perms: string[], key: string, setter: (v: string[]) => void) => {
     setter(perms.includes(key) ? perms.filter(p => p !== key) : [...perms, key]);
   };
