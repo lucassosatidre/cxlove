@@ -157,6 +157,7 @@ export default function UserManagement() {
     if (role === 'admin') return 'Administrador';
     if (role === 'caixa_tele') return 'Caixa Tele';
     if (role === 'caixa_salao') return 'Caixa Salão';
+    if (role === 'lider') return 'Líder';
     return 'Sem papel';
   };
 
@@ -164,6 +165,7 @@ export default function UserManagement() {
     if (role === 'admin') return 'bg-primary/15 text-primary border-primary/30';
     if (role === 'caixa_tele') return 'bg-info/15 text-info border-info/30';
     if (role === 'caixa_salao') return 'bg-warning/15 text-warning border-warning/30';
+    if (role === 'lider') return 'bg-gold-500/15 text-gold-700 border-gold-500/40';
     return 'bg-muted text-muted-foreground';
   };
 
