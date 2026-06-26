@@ -20,7 +20,7 @@ interface AppSidebarProps {
 
 export default function AppSidebar({ open = true, onClose, collapsed = false, onToggleCollapse }: AppSidebarProps) {
   const { user, signOut } = useAuth();
-  const { role, isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
+  const { role, isAdmin, isCaixaTele, isCaixaSalao, isLider } = useUserRole();
   const { hasPermission } = useUserPermissions();
   const { emoji, updateEmoji, EMOJI_OPTIONS } = useAvatarEmoji();
   const { theme, toggleTheme } = useTheme();
