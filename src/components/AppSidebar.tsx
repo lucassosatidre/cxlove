@@ -85,6 +85,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     if (role === 'caixa_tele') return 'Caixa Tele';
     if (role === 'caixa_salao') return 'Caixa Salão';
     if (role === 'entregador') return 'Entregador';
+    if (role === 'lider') return 'Líder';
     return 'Usuário';
   })();
 
