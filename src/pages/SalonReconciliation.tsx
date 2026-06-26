@@ -1053,6 +1053,13 @@ export default function SalonReconciliation() {
                                 : confidence === 'medium' ? 'Match exato'
                                 : 'Baixa confiança'}
                             </Badge>
+                            {divergenceByOrder.get(order.id) && (
+                              <Badge variant="secondary" className={`text-[9px] gap-1 ${DIVERGENCE_LABELS[divergenceByOrder.get(order.id)!].color}`}>
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                {DIVERGENCE_LABELS[divergenceByOrder.get(order.id)!].label}
+                              </Badge>
+                            )}
+
                             {isCombined && matchedTxs[0]?.match_type !== 'combined_mixed' && (
                               <span className="text-[10px] text-muted-foreground">
                                 Soma: <span className="font-mono tabular-nums font-medium">{formatCurrency(totalMatchedAmount)}</span>
