@@ -550,7 +550,7 @@ export function parseIfoodConta(
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  return { rows: out, skipped, closing: { balance: null, as_of: null } };
 }
 
 // ---- Saipos ----
