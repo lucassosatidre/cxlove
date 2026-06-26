@@ -819,6 +819,14 @@ export default function SalonReconciliation() {
                 </div>
               </div>
               <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <AlertTriangle className="h-4 w-4 text-destructive" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">Divergências</p>
+                  <p className="text-sm font-semibold text-destructive font-mono-tabular">{divergenceByOrder.size}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-[10px] text-muted-foreground leading-tight">Fora Maquininha</p>
