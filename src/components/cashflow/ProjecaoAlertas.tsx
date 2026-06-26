@@ -71,6 +71,11 @@ export default function ProjecaoAlertas() {
         <CardTitle className="text-base font-semibold">Projeção e alertas</CardTitle>
       </CardHeader>
       <CardContent className="space-y-8">
+        {/* Projeção rolante (acima das dívidas) */}
+        <ProjecaoCaixa />
+
+        <Separator />
+
         {/* A) Suas dívidas hoje */}
         <section>
           <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
