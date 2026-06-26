@@ -435,6 +435,7 @@ export function parseC6(rows: unknown[][], accountId: string | null = null): Par
       doc_number: null,
       source_seq: i,
     });
+  }
   const last = out[out.length - 1];
   const closing: ClosingInfo = {
     balance: last?.running_balance ?? null,
