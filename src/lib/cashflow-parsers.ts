@@ -224,6 +224,8 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
 
   const out: CashflowTxRow[] = [];
   let skipped = 0;
+  let closingBalance: number | null = null;
+  let maxDate: string | null = null;
 
   for (let i = headerIdx + 1; i < rows.length; i++) {
     const r = rows[i];
@@ -231,7 +233,28 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
     const dt = parseDateBR(r[COL.date]);
     const desc = String(r[COL.desc] ?? '').trim();
     if (!dt || !desc) { skipped++; continue; }
-    if (/saldo anterior|saldo do dia|^saldo$|S A L D O/i.test(desc)) { skipped++; continue; }
+    if (/saldo anterior|saldo do dia|^saldo$|S A L D O/i.test(desc)) {
+      // Captura a linha de SALDO de fechamento (a última vence)
+      const cdInf = COL.cd >= 0 ? String(r[COL.cd] ?? '').trim().toUpperCase() : '';
+      let raw: number | null = null;
+      if (isNew) {
+        const v = r[COL.value];
+        if (v != null && v !== '') {
+          const n = typeof v === 'number' ? v : parseNumber(v);
+          if (isFinite(n)) raw = Math.abs(n);
+        }
+      } else {
+        const parsed = parseBBValue(r[COL.value]);
+        if (parsed) raw = parsed.amount;
+      }
+      if (raw != null) {
+        const isCredit = cdInf === 'C' ? true : cdInf === 'D' ? false : true;
+        closingBalance = isCredit ? raw : -raw;
+        if (!maxDate || dt > maxDate) maxDate = dt;
+      }
+      skipped++;
+      continue;
+    }
 
     const detail = COL.detail >= 0 ? String(r[COL.detail] ?? '').trim() : '';
     const docNumber = COL.doc >= 0 ? String(r[COL.doc] ?? '').trim() : '';
@@ -249,7 +272,6 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
       parsed = parseBBValue(r[COL.value]);
       if (!parsed) { skipped++; continue; }
       if (!/entrada/i.test(tipo) && !parsed.isCredit) {
-        // legado: usa coluna tipo se houver
         parsed = { amount: parsed.amount, isCredit: parsed.isCredit };
       }
     }
@@ -257,6 +279,7 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
 
     const amount = parsed.isCredit ? parsed.amount : -parsed.amount;
     const it = detectInternalTransfer(desc, detail);
+    if (!maxDate || dt > maxDate) maxDate = dt;
     out.push({
       source: 'bb',
       account_id: accountId,
@@ -272,7 +295,7 @@ export function parseBB(rows: unknown[][], accountId: string | null = null): Par
       source_seq: i,
     });
   }
-  return { rows: out, skipped };
+  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
 }
 
 // ---- Cresol ----
