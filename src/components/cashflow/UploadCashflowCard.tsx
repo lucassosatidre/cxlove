@@ -11,6 +11,7 @@ export type ParseFileResult = {
   rows: Record<string, unknown>[];
   account_id: string | null;
   warn?: string;
+  closing?: { balance: number | null; as_of: string | null };
 };
 
 type Table = 'cashflow_transactions' | 'cashflow_saipos';
