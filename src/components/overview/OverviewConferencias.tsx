@@ -301,7 +301,7 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
             <IndicatorCard
               accent="bg-[hsl(var(--gold-500,42_67%_49%))]"
               icon={<Receipt className="h-4 w-4" />}
-              label="Custo oculto em taxas"
+              label="Taxas sobre vendas · mês"
               value={auditLoaded
                 ? (auditTax ? fmtBRL(auditTax.tax) : '—')
                 : '…'}
