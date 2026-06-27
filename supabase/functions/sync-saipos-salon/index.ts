@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     let saiposToken = Deno.env.get("SAIPOS_API_TOKEN");
     if (saiposToken?.startsWith("Bearer ")) {
       saiposToken = saiposToken.slice(7);
