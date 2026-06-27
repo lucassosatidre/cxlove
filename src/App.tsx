@@ -119,7 +119,7 @@ const App = () => (
               <Route path="/admin/entregadores" element={<ProtectedRoute><PermissionGate><DriverManagement /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/escalas-entregadores" element={<Navigate to="/admin/entregadores?tab=escala" replace />} />
               <Route path="/etiquetas" element={<ProtectedRoute><PermissionGate><Etiquetas /></PermissionGate></ProtectedRoute>} />
-              <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+              <Route path="/users" element={<ProtectedRoute><PermissionGate><UserManagement /></PermissionGate></ProtectedRoute>} />
               <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/admin/maquininhas" element={<ProtectedRoute><PermissionGate><MachineRegistry /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/audit" element={<ProtectedRoute><PermissionGate><CheckinAudit /></PermissionGate></ProtectedRoute>} />
