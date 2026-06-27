@@ -79,7 +79,7 @@ export default function Login() {
   return (
     <div
       className="flex min-h-screen items-center justify-center px-4 py-10"
-      style={{ background: 'radial-gradient(ellipse at top, #0B2545 0%, #061A33 45%, #030914 100%)' }}
+      style={{ background: 'radial-gradient(1200px 600px at 50% -10%, hsl(var(--navy-800)) 0%, hsl(var(--navy-900)) 45%, hsl(var(--navy-950)) 100%)' }}
     >
       {/* Subtle gold corner accents */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
