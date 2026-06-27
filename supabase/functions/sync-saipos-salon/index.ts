@@ -95,7 +95,13 @@ Deno.serve(async (req) => {
       }
       userId = adminRole.user_id;
     } else {
-      const { data: { user: callerUser }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+      const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const userResult = await supabaseUser.auth.getUser();
+      const callerUser = userResult?.data?.user ?? null;
+      const userErr = userResult?.error ?? null;
       if (userErr || !callerUser) {
         return new Response(JSON.stringify({ error: "Não autorizado" }), {
           status: 401,
