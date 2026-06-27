@@ -839,7 +839,7 @@ export default function Reconciliation() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {isAdmin && (
+              {canView('op.tele.conciliacao') && (
               <Button variant="default" size="sm" onClick={() => navigate(`/delivery-reconciliation/${id}`)} className="bg-primary hover:bg-primary/90">
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Conciliação Delivery</span>
