@@ -1,0 +1,77 @@
+// FONTE ÚNICA do menu do app. A barra lateral E a lista de permissões (menu-config) saem DAQUI.
+import {
+  LayoutDashboard, Phone, Utensils, Bike, CreditCard, Search, FileSpreadsheet,
+  Receipt, Ticket, ShoppingBag, FileBarChart, Wallet, Sparkles, ShieldCheck, Settings,
+} from "lucide-react";
+
+export interface MenuItem {
+  label: string;
+  icon: React.ElementType;
+  path?: string;
+  menuKey?: string;
+  onlyView?: boolean;
+  children?: MenuItem[];
+}
+
+export const allMenuItems: MenuItem[] = [
+  {
+    label: "Operação",
+    icon: LayoutDashboard,
+    children: [
+      { label: "Painel", icon: LayoutDashboard, path: "/", menuKey: "dashboard", onlyView: true },
+      { label: "Tele", icon: Phone, path: "/tele", menuKey: "op.tele" },
+      { label: "Salão", icon: Utensils, path: "/salon", menuKey: "op.salao" },
+      { label: "Entregadores", icon: Bike, path: "/admin/entregadores", menuKey: "op.entregadores" },
+      { label: "Maquininhas", icon: CreditCard, path: "/admin/maquininhas", menuKey: "op.maquininhas" },
+    ],
+  },
+  {
+    label: "Auditoria de Taxas",
+    icon: Search,
+    children: [
+      { label: "Importações", icon: FileSpreadsheet, path: "/admin/auditoria-v2/importacoes", menuKey: "audit.importacoes" },
+      { label: "Maquinona", icon: Receipt, path: "/admin/auditoria-v2/maquinona", menuKey: "audit.maquinona" },
+      { label: "Vouchers", icon: Ticket, path: "/admin/auditoria-v2/vouchers", menuKey: "audit.vouchers" },
+      { label: "Brendi", icon: ShoppingBag, path: "/admin/auditoria-v2/brendi", menuKey: "audit.brendi" },
+      { label: "iFood", icon: Utensils, path: "/admin/auditoria-v2/ifood-marketplace", menuKey: "audit.ifood" },
+      { label: "Relatórios", icon: FileBarChart, path: "/admin/auditoria-v2/relatorios", menuKey: "audit.relatorios" },
+    ],
+  },
+  {
+    label: "Fluxo de Caixa",
+    icon: Wallet,
+    children: [
+      { label: "Visão Geral", icon: Wallet, path: "/admin/fluxo-caixa", menuKey: "fluxo_caixa" },
+    ],
+  },
+  {
+    label: "Assistente",
+    icon: Sparkles,
+    children: [
+      { label: "Memória da Clau", icon: Sparkles, path: "/admin/clau/memoria", menuKey: "clau.memoria" },
+    ],
+  },
+  {
+    label: "Configurações",
+    icon: Settings,
+    children: [
+      { label: "Usuários & Permissões", icon: ShieldCheck, path: "/users", menuKey: "config.usuarios" },
+    ],
+  },
+];
+
+// Rotas que NÃO são itens de menu (sub-páginas / dinâmicas) mas precisam de chave pra trava de rota.
+// Nomeadas como filhas de uma chave concedida (op.tele.* / op.salao.*) pra o fallback de 2 segmentos
+// do PermissionGate (op.tele / op.salao) liberar quem já tem a tela-mãe.
+export const EXTRA_ROUTES: Record<string, string> = {
+  "op.tele.import": "/import",
+  "op.tele.tele_import": "/tele/import",
+  "op.tele.pickngo": "/tele/pickngo",
+  "op.tele.recon": "/reconciliation",
+  "op.tele.recon_legacy": "/reconciliation-legacy",
+  "op.tele.delivery_recon": "/delivery-reconciliation",
+  "op.tele.etiquetas": "/etiquetas",
+  "op.salao.import": "/salon/import",
+  "op.salao.closing": "/salon/closing",
+  "op.salao.recon": "/salon/reconciliation",
+};
