@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     let saiposToken = Deno.env.get("SAIPOS_API_TOKEN");
     // Strip "Bearer " prefix if user accidentally included it
     if (saiposToken?.startsWith("Bearer ")) {
@@ -164,7 +165,11 @@ Deno.serve(async (req) => {
       }
       userId = adminRole.user_id;
     } else {
-      const userResult = await supabaseAdmin.auth.getUser(token);
+      const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const userResult = await supabaseUser.auth.getUser();
       const callerUser = userResult?.data?.user ?? null;
       const userErr = userResult?.error ?? null;
       if (userErr || !callerUser) {
