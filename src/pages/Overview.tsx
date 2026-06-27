@@ -30,6 +30,7 @@ import VaultCashCalculator, { VaultBalanceDetail } from '@/components/VaultCashC
 import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts } from '@/components/DenominationCountTable';
 import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
 import { upsertAberturaFromTrocos } from '@/lib/upsert-abertura-from-trocos';
+import OverviewConferencias from '@/components/overview/OverviewConferencias';
 
 // ── Types ──────────────────────────────────────────────
 
