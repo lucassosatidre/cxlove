@@ -109,18 +109,32 @@ function StatusDot({ closing }: { closing: ClosingRow | null }) {
 export default function OverviewConferencias({ days, loading, isAdmin }: Props) {
   const navigate = useNavigate();
   const todayStr = useMemo(() => getOperationalDate(), []);
-  const today = days.find((d) => d.date === todayStr) ?? null;
+  const prevStr = useMemo(() => {
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() - 1);
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, [todayStr]);
 
-  const todayProgress = today ? dayProgress(today) : 0;
-  const todayBoxes = (today?.tele ? 1 : 0) + (today?.salon ? 1 : 0);
-  const todayDoneBoxes =
-    (today?.tele && getProgress(today.tele) === 100 ? 1 : 0) +
-    (today?.salon && getProgress(today.salon) === 100 ? 1 : 0);
+  const target = useMemo(() => {
+    const exact = days.find((d) => d.date === prevStr);
+    if (exact) return exact;
+    return days.find((d) => d.date < todayStr) ?? null;
+  }, [days, prevStr, todayStr]);
 
-  const handleConferirHoje = () => {
-    if (!today) return;
-    if (today.tele && getProgress(today.tele) < 100) navigate(`/reconciliation/${today.tele.id}`);
-    else if (today.salon && getProgress(today.salon) < 100) navigate(`/salon/closing/${today.salon.id}`);
+  const targetProgress = target ? dayProgress(target) : 0;
+  const targetBoxes = (target?.tele ? 1 : 0) + (target?.salon ? 1 : 0);
+  const targetDoneBoxes =
+    (target?.tele && getProgress(target.tele) === 100 ? 1 : 0) +
+    (target?.salon && getProgress(target.salon) === 100 ? 1 : 0);
+
+  const handleConferirTarget = () => {
+    if (!target) return;
+    if (target.tele && getProgress(target.tele) < 100) navigate(`/reconciliation/${target.tele.id}`);
+    else if (target.salon && getProgress(target.salon) < 100) navigate(`/salon/closing/${target.salon.id}`);
     else navigate('/tele');
   };
 
