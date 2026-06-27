@@ -13,7 +13,12 @@
 import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "7"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "8"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v8 (27/06/26): robustez (auditoria). (1) RTDB 401/403 forca re-auth no proximo ciclo (antes o robo
+#   ficava CEGO ate ~58min); (2) auto-update e download do cerebro agora ATOMICOS + validados (compile)
+#   -> download truncado nao brica mais o robo; (3) se o GitHub cair, usa o cerebro LOCAL em disco em vez
+#   de travar o boot; (4) pedido que estoura no parser vira ALERTA forte no log apos 3 ciclos (antes
+#   sumia em silencio pra sempre). Sem mudanca de fluxo normal.
 # v7 (27/06/26): conserta o ACENTO do NOME do cliente (iFood/Brendi). O Firebase as vezes manda 1 byte
 #   Latin-1/cp1252 (ex.: E=0xC9) no customerFirstName num corpo senao UTF-8; o decode antigo
 #   ("replace") trocava por "�" (JOS�). Agora o decode tem fallback cp1252 SO no(s) byte(s) invalido(s)
@@ -116,6 +121,8 @@ def ler_kds():
     if not tk: return None
     c, data = _http(f"{RTDB}/stores/{STORE_HASH}.json?auth={urllib.parse.quote(tk)}", "GET")
     if c == 200 and isinstance(data, dict): return data
+    if c in (401, 403):                     # token REJEITADO (!= expirado) -> forca re-auth no proximo ciclo
+        _auth["idtoken"] = None; _auth["exp"] = 0   # senao o robo ficava CEGO ate o token "expirar" (~58min)
     log("ERRO leitura KDS:", c, str(data)[:200]); return None
 
 # ---------- CEREBRO: baixa e importa o etiqueta_saipos.py (parser maduro + IA). Fonte unica. ----------
@@ -123,12 +130,26 @@ ETQ = None
 _ETQ_VER = None
 def carrega_etiqueta():
     global ETQ, _ETQ_VER
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etiqueta_saipos.py")
     try:
-        ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
-        req = urllib.request.Request(ETIQUETA_URL, headers={"Cache-Control": "no-cache"})
-        conteudo = urllib.request.urlopen(req, timeout=25, context=ctx).read().decode("utf-8")
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etiqueta_saipos.py")
-        with open(p, "w", encoding="utf-8") as f: f.write(conteudo)
+        # baixa o cerebro do GitHub. Se o GitHub estiver fora/lixo, NAO trava: cai pro arquivo em disco.
+        try:
+            ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
+            req = urllib.request.Request(ETIQUETA_URL, headers={"Cache-Control": "no-cache"})
+            conteudo = urllib.request.urlopen(req, timeout=25, context=ctx).read().decode("utf-8")
+            if len(conteudo) <= 2000 or "def extrair_itens_kds" not in conteudo:
+                log("  cerebro baixado curto/invalido; mantenho o local em disco."); conteudo = None
+            else:
+                try: compile(conteudo, p, "exec")            # so troca se compilar (download truncado nao quebra)
+                except SyntaxError as se: log("  cerebro baixado com sintaxe ruim; mantenho o local:", se); conteudo = None
+            if conteudo:
+                tmp = p + ".new"
+                with open(tmp, "w", encoding="utf-8") as f: f.write(conteudo); f.flush(); os.fsync(f.fileno())
+                os.replace(tmp, p)                            # troca ATOMICA (ou inteiro novo, ou inteiro velho)
+        except Exception as e:
+            if not os.path.exists(p):
+                log("  ERRO baixando cerebro e SEM copia local:", e); return False
+            log("  GitHub fora; uso o cerebro LOCAL em disco:", e)
         import importlib.util
         spec = importlib.util.spec_from_file_location("etiqueta_saipos", p)
         m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
@@ -370,6 +391,7 @@ def adotar_estado_atual():
     _salva_enviados()
     log(f"  COLD START: adotei {n} pedido(s) ja na tela como enviados (NAO reenvio). So pedidos novos a partir de agora.")
 
+_falhas_montagem = {}   # id_sale -> nº de polls seguidos em que montar_comanda estourou (alerta no 3º)
 def ciclo(primeira):
     data = ler_kds()
     if data is None: return
@@ -408,8 +430,19 @@ def ciclo(primeira):
     for ids, grupos in por_sale.items():
         try:
             payload = montar_comanda(ids, grupos)
+            _falhas_montagem.pop(ids, None)   # montou: zera o contador
         except Exception as e:
-            log("  erro montando", ids, e); continue
+            nf = _falhas_montagem.get(ids, 0) + 1; _falhas_montagem[ids] = nf
+            # antes isso era silencioso e ETERNO (pulava o pedido todo poll). Agora escala o aviso pra
+            # ficar visivel no log/tela do robo apos 3 polls seguidos falhando o MESMO pedido.
+            if nf >= 3:
+                g0 = grupos[0] if grupos else {}
+                cli = _norm(g0.get("customerFirstName")) or _norm(g0.get("desc_sale")) or "?"
+                num = str(g0.get("sale_number") or str(ids)[-4:])
+                log(f"  ###### ATENCAO: pedido #{num} (id {ids}, cli={cli}) NAO MONTA ha {nf} ciclos -> CONFERIR NO SAIPOS. erro: {e}")
+            else:
+                log("  erro montando", ids, e)
+            continue
         if payload["total_caixas"]<=0: continue
         sig = assinatura(payload)
         if _enviados.get(ids)==sig: continue  # ja mandei igual
@@ -463,8 +496,15 @@ def check_update():
         if m:
             remote = int(m.group(1)); local = int(VERSION)
             if remote > local:
+                # so troca se o download veio INTEIRO e compila (download truncado nao pode brickar o robo)
+                if len(conteudo) <= 2000:
+                    log("  Update abortado: download curto/incompleto."); return
+                try: compile(conteudo, "<update>", "exec")
+                except SyntaxError as se: log("  Update abortado: sintaxe ruim no download:", se); return
                 log(f"  UPDATE: v{local} -> v{remote} (baixando e reiniciando)")
-                with open(os.path.abspath(__file__), "w", encoding="utf-8") as f: f.write(conteudo)
+                path = os.path.abspath(__file__); tmp = path + ".new"
+                with open(tmp, "w", encoding="utf-8") as f: f.write(conteudo); f.flush(); os.fsync(f.fileno())
+                os.replace(tmp, path)   # troca ATOMICA: ou o arquivo antigo inteiro, ou o novo inteiro
                 os.execv(sys.executable, [sys.executable] + sys.argv)
             else:
                 log(f"  Versao v{VERSION} (atualizada)")
