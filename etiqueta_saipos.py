@@ -4,7 +4,11 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "191"
+VERSION = "192"
+# v192 (27/06/26): SALAO combo "N X Pizza" (multiplicador X separado, ex.: "2 X Pizza Grande") nao dividia
+#   e deixava o "X" grudado no nome. O regex de topo comia o N; agora re-cola o N no "x" orfao pra
+#   contar_pizzas_no_nome dividir certo (espelha o delivery). Guardado: so dispara no "x " orfao -> item
+#   normal ("2 Pizza"/"Pizza ...") intacto. Validado na cadeia de helpers (auditoria 27/06).
 # v191 (20/06/26): ETIQUETA do DELIVERY — COMBO carro-chefe pedido Nx (Qt>1) saía 1x só. O papel do iFood
 #   lista o combo UMA vez ("2  2x Pizza Grande + Refrigerante" = 2 pizzas/combo, pedido 2x) e a Qt do item
 #   (o "2 " da frente) era IGNORADA no ramo mult>1 do extrair_itens_printrows -> só 1 combo era emitido.
@@ -987,7 +991,13 @@ def extrair_itens_salao(print_rows):
             pend_adic = None
             qt = int(mi.group(1)); nome = mi.group(2).strip(); low2 = nome.lower()
             if "pizza" in low2 and not _salao_eh_bebida(nome):
-                nome_clean = limpar_nome(nome); mult = contar_pizzas_no_nome(nome_clean)
+                nome_clean = limpar_nome(nome)
+                # combo "N X Pizza" (multiplicador separado): o regex de topo ja comeu o N -> sobra "X Pizza...".
+                # Re-cola o N pra contar_pizzas_no_nome enxergar "NX Pizza" e dividir o combo certo (so dispara
+                # quando sobra um "x " orfao no inicio; item normal "2 Pizza"/"Pizza ..." nao e afetado).
+                if re.match(r'^x\s+', nome_clean, re.IGNORECASE):
+                    nome_clean = f"{qt}{nome_clean}"; qt = 1
+                mult = contar_pizzas_no_nome(nome_clean)
                 base = re.sub(r'\s+sal[aã]o\b', '', nome_sem_combo(nome_clean), flags=re.IGNORECASE).strip()
                 doce = eh_broto_doce(nome) or ("broto doce" in low2)
                 if mult > 1:
