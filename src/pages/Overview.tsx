@@ -402,13 +402,13 @@ export default function Overview() {
             <CalendarDays className="h-4 w-4 mr-2" />
             Conferências
           </TabsTrigger>
-          {isAdmin && (
+          {canViewVault && (
             <TabsTrigger value="vault">
               <Vault className="h-4 w-4 mr-2" />
               Controle de Caixa
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {canViewAbrirCaixa && (
             <TabsTrigger value="cash-expectation" onClick={(e) => { e.preventDefault(); setShowCashExpectation(true); }}>
               <Vault className="h-4 w-4 mr-2" />
               Abrir Caixa
