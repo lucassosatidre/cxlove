@@ -967,7 +967,7 @@ export default function DeliveryReconciliation() {
   }, [loadData]);
 
   const handleFinalizeReconciliation = useCallback(async () => {
-    if (!id || !isAdmin) return;
+    if (!id || !canConciliar) return;
     const { error } = await supabase
       .from('daily_closings')
       .update({ reconciliation_status: 'completed', updated_at: new Date().toISOString() })
@@ -978,10 +978,10 @@ export default function DeliveryReconciliation() {
     } else {
       toast.error('Erro ao finalizar conciliação.');
     }
-  }, [id, isAdmin]);
+  }, [id, canConciliar]);
 
   const handleReopenReconciliation = useCallback(async () => {
-    if (!id || !isAdmin) return;
+    if (!id || !canConciliar) return;
     const { error } = await supabase
       .from('daily_closings')
       .update({ reconciliation_status: 'pending', updated_at: new Date().toISOString() })
@@ -992,7 +992,8 @@ export default function DeliveryReconciliation() {
     } else {
       toast.error('Erro ao reabrir conciliação.');
     }
-  }, [id, isAdmin]);
+  }, [id, canConciliar]);
+
 
   const formatDate = (d: string) => {
     if (!d) return '';
