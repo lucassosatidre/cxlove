@@ -5,7 +5,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { allMenuItems } from '@/lib/menu-tree';
-import { LogOut, X, ChevronsLeft, ChevronsRight, ChevronDown, Sun, Moon } from 'lucide-react';
+import { LogOut, X, PanelLeft, PanelLeftClose, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import vigiaLogo from '@/assets/vigia-logo.png';
@@ -53,11 +53,6 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
     .filter((m) => m.items.length > 0);
   const flatItems = modules.flatMap((m) => m.items);
 
-  useEffect(() => {
-    const active = modules.find((m) => m.items.some((it) => it.path && isActive(it.path)));
-    if (active) setOpenGroups((prev) => (prev[active.label] ? prev : { ...prev, [active.label]: true }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
 
   const userName =
     profile.full_name ||
@@ -118,7 +113,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
           {collapsed
             ? flatItems.map((item) => <NavButton key={item.path} item={item as any} />)
             : modules.map((m) => {
-                const isOpen = openGroups[m.label] ?? true;
+                const isOpen = openGroups[m.label] ?? false;
                 const GroupIcon = m.icon;
                 return (
                   <div key={m.label} className="mb-1">
@@ -184,7 +179,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
                     className="p-2 rounded-lg text-sidebar-foreground/70 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent row-transition"
                     aria-label={collapsed ? 'Expandir' : 'Minimizar'}
                   >
-                    {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+                    {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="text-xs">{collapsed ? 'Expandir' : 'Minimizar'}</TooltipContent>
