@@ -298,7 +298,6 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
             </div>
           </div>
         </div>
-        </div>
       </div>
 
       {/* ═══ 2. INDICADORES ═══ */}
