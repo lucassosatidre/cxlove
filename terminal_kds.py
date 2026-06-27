@@ -10,10 +10,15 @@
 #   Mande o log pro assistente conferir. Depois mude pra ENVIAR = True e rode de novo.
 # ===========================================================================
 
-import json, ssl, sys, os, time, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
+import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "6"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "7"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v7 (27/06/26): conserta o ACENTO do NOME do cliente (iFood/Brendi). O Firebase as vezes manda 1 byte
+#   Latin-1/cp1252 (ex.: E=0xC9) no customerFirstName num corpo senao UTF-8; o decode antigo
+#   ("replace") trocava por "�" (JOS�). Agora o decode tem fallback cp1252 SO no(s) byte(s) invalido(s)
+#   -> recupera o acento (JOSE com acento) sem mexer no resto do corpo UTF-8 (itens/emoji intactos).
+#   Ver _utf8_cp1252 + _http. (itens ja saiam limpos; a quebra era so no nome.)
 # v6 (09/06/26): DIAGNOSTICO temporario — anexa no payload (kds_debug) o resumo de TODAS as fichas que o
 #   robo viu no KDS no ciclo, p/ mapear ficha de broto que aparece separada (estacao diferente) e nao
 #   agrupa no pedido. Sem efeito no fluxo; servidor guarda no comanda_events p/ analise. Remover depois.
@@ -49,6 +54,14 @@ def log(*a):
     try: _LOGFILE.write(msg + "\n"); _LOGFILE.flush()
     except Exception: pass
 
+# ---------- decode robusto (recupera acento Latin-1/cp1252 em vez de virar "�") ----------
+# O Firebase as vezes traz 1 byte cp1252 solto (acento de nome iFood/Brendi) num corpo senao UTF-8.
+# Em vez de decode("utf-8","replace") (que apaga o byte -> "�"), este handler decodifica SO o(s)
+# byte(s) invalido(s) como cp1252 -> recupera o acento; o resto do corpo UTF-8 passa intacto.
+def _utf8_cp1252(err):
+    return (err.object[err.start:err.end].decode("cp1252", "replace"), err.end)
+codecs.register_error("utf8_cp1252", _utf8_cp1252)
+
 # ---------- HTTP ----------
 def _http(url, method="GET", body=None, headers=None):
     h = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -57,7 +70,7 @@ def _http(url, method="GET", body=None, headers=None):
     req = urllib.request.Request(url, data=data, headers=h, method=method)
     try:
         with urllib.request.urlopen(req, timeout=40, context=CTX) as r:
-            t = r.read().decode("utf-8", "replace")
+            t = r.read().decode("utf-8", "utf8_cp1252")  # recupera acento Latin-1 em vez de "�"
             return r.getcode(), (json.loads(t) if t.strip()[:1] in ("{", "[") else t)
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")[:300]
