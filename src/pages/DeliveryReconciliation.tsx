@@ -32,7 +32,7 @@ import {
   type NormalizedDeliveryMethod,
 } from '@/lib/delivery-method-utils';
 import { classifyPendingOrder } from '@/lib/delivery-pending-classifier';
-import { useUserRole } from '@/hooks/useUserRole';
+
 import { formatCurrency, canonicalizePaymentMethod } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import {

@@ -20,7 +20,7 @@ import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders, classifyOrder, type OrderClassification, type PendingReason } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
 import { buildWaiterMap } from '@/lib/waiter-labels';
-import { useUserRole } from '@/hooks/useUserRole';
+
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 
 interface SalonOrder {
