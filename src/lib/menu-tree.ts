@@ -66,9 +66,7 @@ export const EXTRA_ROUTES: Record<string, string> = {
   "op.tele.pickngo": "/tele/pickngo",
   "op.tele.recon": "/reconciliation",
   "op.tele.recon_legacy": "/reconciliation-legacy",
-  "op.tele.delivery_recon": "/delivery-reconciliation",
   "op.tele.etiquetas": "/etiquetas",
   "op.salao.import": "/salon/import",
   "op.salao.closing": "/salon/closing",
-  "op.salao.recon": "/salon/reconciliation",
 };
