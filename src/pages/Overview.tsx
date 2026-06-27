@@ -31,6 +31,7 @@ import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts }
 import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
 import { upsertAberturaFromTrocos } from '@/lib/upsert-abertura-from-trocos';
 import OverviewConferencias from '@/components/overview/OverviewConferencias';
+import { usePermissions } from '@/contexts/PermissionsContext';
 
 // ── Types ──────────────────────────────────────────────
 
@@ -85,6 +86,9 @@ export default function Overview() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { canView } = usePermissions();
+  const canViewVault = canView('dashboard.controle_caixa');
+  const canViewAbrirCaixa = canView('dashboard.abrir_caixa');
 
   // ─ Overview state
   const [teleClosings, setTeleClosings] = useState<ClosingRow[]>([]);
@@ -140,8 +144,8 @@ export default function Overview() {
   // ─ Data loading
   useEffect(() => {
     loadOverviewData();
-    if (isAdmin) loadVaultData();
-  }, [isAdmin]);
+    if (canViewVault) loadVaultData();
+  }, [canViewVault]);
 
   const loadOverviewData = async () => {
     const [{ data: tele }, { data: salon }] = await Promise.all([
@@ -398,13 +402,13 @@ export default function Overview() {
             <CalendarDays className="h-4 w-4 mr-2" />
             Conferências
           </TabsTrigger>
-          {isAdmin && (
+          {canViewVault && (
             <TabsTrigger value="vault">
               <Vault className="h-4 w-4 mr-2" />
               Controle de Caixa
             </TabsTrigger>
           )}
-          {isAdmin && (
+          {canViewAbrirCaixa && (
             <TabsTrigger value="cash-expectation" onClick={(e) => { e.preventDefault(); setShowCashExpectation(true); }}>
               <Vault className="h-4 w-4 mr-2" />
               Abrir Caixa
@@ -418,7 +422,7 @@ export default function Overview() {
         </TabsContent>
 
         {/* ═══ Tab: Controle de Caixa ═══ */}
-        {isAdmin && (
+        {canViewVault && (
           <TabsContent value="vault">
             {/* Saldo Atual no Cofre — single card */}
             <div className="grid grid-cols-1 gap-4 mb-6">

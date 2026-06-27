@@ -17,7 +17,10 @@ export const allMenuItems: MenuItem[] = [
     label: "Operação",
     icon: LayoutDashboard,
     children: [
-      { label: "Painel", icon: LayoutDashboard, path: "/", menuKey: "dashboard", onlyView: true },
+      { label: "Painel", icon: LayoutDashboard, path: "/", menuKey: "dashboard", onlyView: true, children: [
+        { label: "Controle de Caixa", icon: Wallet, menuKey: "dashboard.controle_caixa", onlyView: true },
+        { label: "Abrir Caixa", icon: CreditCard, menuKey: "dashboard.abrir_caixa", onlyView: true },
+      ] },
       { label: "Tele", icon: Phone, path: "/tele", menuKey: "op.tele" },
       { label: "Salão", icon: Utensils, path: "/salon", menuKey: "op.salao" },
       { label: "Entregadores", icon: Bike, path: "/admin/entregadores", menuKey: "op.entregadores" },
