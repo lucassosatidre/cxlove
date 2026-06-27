@@ -6,67 +6,66 @@
 
 @layer base {
   :root {
-    /* Brand suite "by Propósito Soluções" — VIGIA */
-    --background: 45 38% 96%;          /* marfim #F8F6F0 */
-    --foreground: 220 43% 11%;         /* #101827 */
+    /* Brand suite "by Propósito Soluções" — VIGIA (aligned with Maná) */
+    --navy-950: 217 76% 5%;
+    --navy-900: 213 79% 11%;
+    --navy-800: 213 72% 16%;
+    --gold-700: 35 73% 31%;
+    --gold-500: 41 64% 49%;
+    --gold-300: 46 87% 72%;
+    --marfim: 43 33% 96%;
+    --perola: 40 33% 93%;
+    --champagne: 42 47% 81%;
+
+    --background: 43 33% 96%;            /* marfim */
+    --foreground: 222 33% 11%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 43% 11%;
+    --card-foreground: 222 33% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 43% 11%;
+    --popover-foreground: 222 33% 11%;
 
-    --primary: 213 79% 11%;            /* navy 900 #061A33 */
-    --primary-foreground: 45 38% 96%;  /* marfim */
+    --primary: 213 79% 11%;              /* navy-900 */
+    --primary-foreground: 43 33% 96%;    /* marfim */
 
-    --secondary: 40 32% 93%;           /* perola #F3EFE6 */
+    --secondary: 40 33% 93%;             /* perola */
     --secondary-foreground: 213 79% 11%;
 
-    --muted: 40 32% 93%;
-    --muted-foreground: 220 9% 46%;    /* #6B7280 */
+    --muted: 40 33% 93%;
+    --muted-foreground: 220 9% 46%;
 
-    --accent: 40 64% 49%;              /* gold 500 #C9972E */
+    --accent: 41 64% 49%;                /* gold-500 */
     --accent-foreground: 213 79% 11%;
 
-    --destructive: 4 76% 40%;          /* #B42318 */
+    --destructive: 4 76% 40%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 149 60% 30%;            /* #1F7A4D */
+    --success: 149 60% 30%;
     --success-foreground: 0 0% 100%;
 
-    --warning: 36 91% 55%;             /* #F5A623 */
+    --warning: 36 91% 55%;
     --warning-foreground: 213 79% 11%;
 
-    --info: 225 53% 32%;               /* indigo #263B7A */
+    --info: 225 53% 32%;
     --info-foreground: 0 0% 100%;
 
-    --border: 43 47% 81%;              /* champagne */
-    --input: 43 47% 81%;
-    --ring: 40 64% 49%;                /* gold */
+    --border: 42 47% 81%;                /* champagne */
+    --input: 42 47% 81%;
+    --ring: 41 64% 49%;                  /* gold */
 
-    --radius: 1.125rem;                /* 18px */
+    --radius: 1.125rem;
 
-    /* Sidebar — navy institutional */
-    --sidebar-background: 213 79% 11%; /* navy 900 */
-    --sidebar-foreground: 45 38% 92%;
-    --sidebar-primary: 40 64% 49%;     /* gold */
+    /* Sidebar — light marfim with navy text */
+    --sidebar-background: 43 33% 96%;    /* marfim */
+    --sidebar-foreground: 222 33% 11%;
+    --sidebar-primary: 41 64% 49%;       /* gold */
     --sidebar-primary-foreground: 213 79% 11%;
-    --sidebar-accent: 214 72% 16%;     /* navy 800 */
-    --sidebar-accent-foreground: 45 38% 96%;
-    --sidebar-border: 218 76% 8%;
-    --sidebar-ring: 40 64% 49%;
-    --sidebar-muted: 45 20% 70%;
-
-    /* Brand extras */
-    --navy-950: 218 76% 5%;
-    --navy-900: 213 79% 11%;
-    --navy-800: 214 72% 16%;
-    --gold-700: 35 73% 32%;
-    --gold-500: 40 64% 49%;
-    --gold-300: 45 88% 72%;
-    --champagne: 43 47% 81%;
-    --marfim: 45 38% 96%;
-    --perola: 40 32% 93%;
+    --sidebar-accent: 40 33% 93%;        /* perola */
+    --sidebar-accent-foreground: 222 33% 11%;
+    --sidebar-border: 42 47% 81%;        /* champagne */
+    --sidebar-ring: 41 64% 49%;
+    --sidebar-muted: 222 15% 50%;
 
     /* Fonts */
     --font-brand: 'Cinzel', ui-serif, Georgia, serif;
@@ -82,25 +81,25 @@
   }
 
   .dark {
-    --background: 218 76% 5%;          /* navy 950 */
-    --foreground: 45 38% 96%;
+    --background: 217 76% 5%;            /* navy-950 */
+    --foreground: 43 33% 92%;
 
-    --card: 213 79% 11%;
-    --card-foreground: 45 38% 96%;
+    --card: 213 79% 11%;                 /* navy-900 */
+    --card-foreground: 43 33% 92%;
 
     --popover: 213 79% 11%;
-    --popover-foreground: 45 38% 96%;
+    --popover-foreground: 43 33% 92%;
 
-    --primary: 40 64% 49%;             /* invert: gold leads on navy */
+    --primary: 41 64% 49%;               /* gold */
     --primary-foreground: 213 79% 11%;
 
-    --secondary: 214 72% 16%;
-    --secondary-foreground: 45 38% 92%;
+    --secondary: 213 72% 16%;
+    --secondary-foreground: 43 33% 92%;
 
-    --muted: 214 72% 16%;
-    --muted-foreground: 45 20% 70%;
+    --muted: 213 72% 16%;
+    --muted-foreground: 43 20% 70%;
 
-    --accent: 40 64% 49%;
+    --accent: 41 64% 49%;
     --accent-foreground: 213 79% 11%;
 
     --destructive: 4 76% 50%;
@@ -115,19 +114,19 @@
     --info: 225 53% 50%;
     --info-foreground: 0 0% 100%;
 
-    --border: 214 72% 22%;
-    --input: 214 72% 22%;
-    --ring: 40 64% 49%;
+    --border: 213 50% 20%;
+    --input: 213 50% 20%;
+    --ring: 41 64% 49%;
 
-    --sidebar-background: 218 76% 5%;
-    --sidebar-foreground: 45 38% 92%;
-    --sidebar-primary: 40 64% 49%;
+    --sidebar-background: 217 76% 5%;    /* navy-950 */
+    --sidebar-foreground: 43 33% 85%;
+    --sidebar-primary: 41 64% 49%;
     --sidebar-primary-foreground: 213 79% 11%;
-    --sidebar-accent: 213 79% 11%;
-    --sidebar-accent-foreground: 45 38% 96%;
-    --sidebar-border: 218 76% 8%;
-    --sidebar-ring: 40 64% 49%;
-    --sidebar-muted: 45 20% 60%;
+    --sidebar-accent: 213 72% 16%;       /* navy-800 */
+    --sidebar-accent-foreground: 43 33% 96%;
+    --sidebar-border: 213 50% 20%;
+    --sidebar-ring: 41 64% 49%;
+    --sidebar-muted: 43 20% 60%;
 
     --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.35);
     --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.45);
