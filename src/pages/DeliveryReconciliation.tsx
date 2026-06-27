@@ -15,8 +15,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Truck, Clock, ArrowUpDown, ChevronUp, ChevronDown, GripVertical, Undo2, FileSpreadsheet,
-  Banknote, ShieldCheck, RotateCcw, Rocket, QrCode, Wallet, MoreVertical, Store, Ban, Layers
+  Banknote, ShieldCheck, RotateCcw, Rocket, QrCode, Wallet, MoreVertical, Store, Ban, Layers, ShieldX
 } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
 
@@ -97,6 +98,7 @@ export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { canView } = usePermissions();
   const { registry, getFriendlyName } = useMachineRegistry();
   
   const navigate = useNavigate();
@@ -1005,7 +1007,21 @@ export default function DeliveryReconciliation() {
     );
   }
 
+  if (!canView('op.tele.conciliacao')) {
+    return (
+      <div className="min-h-screen bg-background flex">
+        <AppSidebar />
+        <div className="ml-56 flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
+          <ShieldX className="w-14 h-14 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Acesso Negado</h2>
+          <p className="text-muted-foreground max-w-md">Você não tem permissão para a conciliação. Fale com o administrador.</p>
+        </div>
+      </div>
+    );
+  }
+
   const percent = stats.total > 0 ? Math.round((stats.matched / stats.total) * 100) : 0;
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

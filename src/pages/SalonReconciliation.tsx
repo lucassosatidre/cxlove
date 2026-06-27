@@ -10,8 +10,9 @@ import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
   ShieldCheck, RotateCcw, Banknote, DollarSign, Globe, QrCode, Wallet,
-  ChevronUp, ChevronDown,
+  ChevronUp, ChevronDown, ShieldX,
 } from 'lucide-react';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import { toast } from 'sonner';
 import AppSidebar from '@/components/AppSidebar';
@@ -75,6 +76,7 @@ export default function SalonReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { canView } = usePermissions();
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<SalonOrder[]>([]);
@@ -590,7 +592,21 @@ export default function SalonReconciliation() {
     );
   }
 
+  if (!canView('op.salao.conciliacao')) {
+    return (
+      <div className="min-h-screen bg-background flex">
+        <AppSidebar />
+        <div className="ml-56 flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
+          <ShieldX className="w-14 h-14 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Acesso Negado</h2>
+          <p className="text-muted-foreground max-w-md">Você não tem permissão para a conciliação. Fale com o administrador.</p>
+        </div>
+      </div>
+    );
+  }
+
   const percent = stats.machineTotal > 0 ? Math.round((stats.matched / stats.machineTotal) * 100) : 0;
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
