@@ -61,7 +61,8 @@ export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isCaixaTele, isCaixaSalao, isAdmin } = useUserRole();
-  const { canView } = usePermissions();
+  const { canView, canEdit } = usePermissions();
+  const canForce = canEdit('op.tele');
   
   const navigate = useNavigate();
   
@@ -490,7 +491,7 @@ export default function Reconciliation() {
 
   const handleAdminForceFinalize = useCallback(async () => {
     try {
-      if (!id || !isAdmin) return;
+      if (!id || !canForce) return;
       const confirmed = window.confirm('Deseja forçar a finalização deste fechamento mesmo com pendências?');
       if (!confirmed) return;
       setCompleting(true);
@@ -507,7 +508,7 @@ export default function Reconciliation() {
       toast.error('Erro: ' + (error instanceof Error ? error.message : 'Erro desconhecido'));
       setCompleting(false);
     }
-  }, [id, isAdmin]);
+  }, [id, canForce]);
 
   const handleReopenClosing = useCallback(async () => {
     try {
@@ -883,7 +884,7 @@ export default function Reconciliation() {
                   <span className="hidden sm:inline">Reabrir</span>
                 </Button>
               )}
-              {isAdmin && !isCompleted && (
+              {canForce && !isCompleted && (
                 <Button variant="outline" size="sm" onClick={handleAdminForceFinalize} disabled={completing} className="border-warning text-warning hover:bg-warning/10">
                   <ShieldCheck className="h-4 w-4 mr-1" />
                   <span className="hidden sm:inline">Forçar Fechamento</span>
@@ -1468,7 +1469,7 @@ export default function Reconciliation() {
                 Finalizar mesmo assim
               </Button>
             )}
-            {isAdmin && !conferenceOnlyWarnings && (
+            {canForce && !conferenceOnlyWarnings && (
               <Button variant="destructive" onClick={() => { setShowConferenceErrors(false); handleAdminForceFinalize(); }}>
                 <ShieldCheck className="h-4 w-4 mr-1" />
                 Forçar Fechamento
