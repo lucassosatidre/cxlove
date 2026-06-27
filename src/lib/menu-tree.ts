@@ -21,8 +21,12 @@ export const allMenuItems: MenuItem[] = [
         { label: "Controle de Caixa", icon: Wallet, menuKey: "dashboard.controle_caixa", onlyView: true },
         { label: "Abrir Caixa", icon: CreditCard, menuKey: "dashboard.abrir_caixa", onlyView: true },
       ] },
-      { label: "Tele", icon: Phone, path: "/tele", menuKey: "op.tele" },
-      { label: "Salão", icon: Utensils, path: "/salon", menuKey: "op.salao" },
+      { label: "Tele", icon: Phone, path: "/tele", menuKey: "op.tele", children: [
+        { label: "Conciliação Delivery", icon: Bike, menuKey: "op.tele.conciliacao", onlyView: true },
+      ] },
+      { label: "Salão", icon: Utensils, path: "/salon", menuKey: "op.salao", children: [
+        { label: "Conciliação Salão", icon: Utensils, menuKey: "op.salao.conciliacao", onlyView: true },
+      ] },
       { label: "Entregadores", icon: Bike, path: "/admin/entregadores", menuKey: "op.entregadores" },
       { label: "Maquininhas", icon: CreditCard, path: "/admin/maquininhas", menuKey: "op.maquininhas" },
     ],
