@@ -31,6 +31,7 @@ import DenominationCountTable, { DenomCounts, emptyDenomCounts, sumDenomCounts }
 import { useBlock1AutoFill } from '@/hooks/useBlock1AutoFill';
 import { upsertAberturaFromTrocos } from '@/lib/upsert-abertura-from-trocos';
 import OverviewConferencias from '@/components/overview/OverviewConferencias';
+import { usePermissions } from '@/contexts/PermissionsContext';
 
 // ── Types ──────────────────────────────────────────────
 
