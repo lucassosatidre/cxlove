@@ -422,7 +422,7 @@ export default function Overview() {
         </TabsContent>
 
         {/* ═══ Tab: Controle de Caixa ═══ */}
-        {isAdmin && (
+        {canViewVault && (
           <TabsContent value="vault">
             {/* Saldo Atual no Cofre — single card */}
             <div className="grid grid-cols-1 gap-4 mb-6">
