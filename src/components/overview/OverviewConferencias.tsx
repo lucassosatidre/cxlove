@@ -241,30 +241,30 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
         <div className="relative grid md:grid-cols-[1fr_auto] gap-6 p-6 md:p-8 text-white">
           <div className="space-y-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-[hsl(var(--gold-300,42_85%_72%))]/80">Hoje</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-[hsl(var(--gold-300,42_85%_72%))]/80">A conferir</p>
               <h2 className="font-serif text-2xl md:text-3xl mt-1 capitalize">
-                {today
-                  ? `${getWeekday(today.date)}, ${formatDate(today.date)}`
-                  : `${new Date().toLocaleDateString('pt-BR', { weekday: 'long' })}, ${formatDate(todayStr)}`}
+                {target
+                  ? `${getWeekday(target.date)}, ${formatDate(target.date)}`
+                  : `${getWeekday(prevStr)}, ${formatDate(prevStr)}`}
               </h2>
               <p className="text-sm text-white/60 mt-1">
-                {today
-                  ? (todayProgress === 100
-                      ? 'Todos os caixas conferidos. Tudo em ordem.'
-                      : 'Há conferências pendentes do dia.')
-                  : 'Os caixas de hoje ainda não foram abertos.'}
+                {!target
+                  ? 'Nenhum caixa anterior registrado.'
+                  : targetProgress === 100
+                    ? 'Caixa do dia anterior conferido.'
+                    : 'Caixa do dia anterior — pronto para conferir.'}
               </p>
             </div>
 
-            {today && (
+            {target && (
               <div className="flex flex-wrap gap-2">
-                <StatusChip label="Tele" ok={getProgress(today.tele) === 100} missing={!today.tele} />
-                <StatusChip label="Salão" ok={getProgress(today.salon) === 100} missing={!today.salon} />
+                <StatusChip label="Tele" ok={getProgress(target.tele) === 100} missing={!target.tele} />
+                <StatusChip label="Salão" ok={getProgress(target.salon) === 100} missing={!target.salon} />
                 <StatusChip
                   label="Conciliação"
                   ok={
-                    (!today.tele || today.tele.reconciliation_status === 'completed') &&
-                    (!today.salon || today.salon.reconciliation_status === 'completed')
+                    (!target.tele || target.tele.reconciliation_status === 'completed') &&
+                    (!target.salon || target.salon.reconciliation_status === 'completed')
                   }
                 />
               </div>
@@ -272,31 +272,32 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
 
             <div>
               <Button
-                onClick={today ? handleConferirHoje : () => navigate('/tele')}
+                onClick={target ? handleConferirTarget : () => navigate('/tele')}
                 className="bg-[hsl(var(--gold-500,42_67%_49%))] hover:bg-[hsl(var(--gold-700,32_72%_31%))] text-[#061A33] font-semibold gap-2"
               >
-                {today ? 'Conferir agora' : 'Abrir caixas'} <ArrowRight className="h-4 w-4" />
+                {target ? 'Conferir agora' : 'Abrir caixas'} <ArrowRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
           <div className="flex items-center gap-4 md:gap-6 md:justify-end">
             <div className="relative">
-              <ProgressRing value={todayProgress} />
+              <ProgressRing value={targetProgress} />
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-3xl font-bold tabular-nums">{todayProgress}%</span>
+                <span className="text-3xl font-bold tabular-nums">{targetProgress}%</span>
                 <span className="text-[10px] uppercase tracking-wider text-white/60 mt-0.5">Conferido</span>
               </div>
             </div>
             <div className="text-sm text-white/70 max-w-[140px]">
-              {today
+              {target
                 ? <>
-                    <span className="text-white font-medium tabular-nums">{todayDoneBoxes}</span> de{' '}
-                    <span className="text-white font-medium tabular-nums">{todayBoxes}</span> caixas do dia
+                    <span className="text-white font-medium tabular-nums">{targetDoneBoxes}</span> de{' '}
+                    <span className="text-white font-medium tabular-nums">{targetBoxes}</span> caixas do dia
                   </>
-                : 'Sem caixas registrados hoje'}
+                : 'Sem caixa anterior registrado'}
             </div>
           </div>
+        </div>
         </div>
       </div>
 
