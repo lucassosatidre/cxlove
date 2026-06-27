@@ -40,6 +40,7 @@ import AuditRelatoriosV2 from "./pages/audit-v2/AuditRelatoriosV2";
 import CashflowDashboard from "./pages/CashflowDashboard";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
+import Profile from "./pages/Profile";
 // import Sofia from "./pages/Sofia";
 
 const queryClient = new QueryClient();
@@ -119,6 +120,7 @@ const App = () => (
               <Route path="/admin/escalas-entregadores" element={<Navigate to="/admin/entregadores?tab=escala" replace />} />
               <Route path="/etiquetas" element={<ProtectedRoute><PermissionGate><Etiquetas /></PermissionGate></ProtectedRoute>} />
               <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+              <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/admin/maquininhas" element={<ProtectedRoute><PermissionGate><MachineRegistry /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/audit" element={<ProtectedRoute><PermissionGate><CheckinAudit /></PermissionGate></ProtectedRoute>} />
               {/* Auditoria v1 aposentada — redireciona tudo pra v2 */}
