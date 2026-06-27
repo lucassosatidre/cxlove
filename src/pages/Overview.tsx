@@ -144,8 +144,8 @@ export default function Overview() {
   // ─ Data loading
   useEffect(() => {
     loadOverviewData();
-    if (isAdmin) loadVaultData();
-  }, [isAdmin]);
+    if (canViewVault) loadVaultData();
+  }, [canViewVault]);
 
   const loadOverviewData = async () => {
     const [{ data: tele }, { data: salon }] = await Promise.all([
