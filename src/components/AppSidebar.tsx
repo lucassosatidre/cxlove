@@ -5,7 +5,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
 import { allMenuItems } from '@/lib/menu-tree';
-import { LogOut, X, ChevronsLeft, ChevronsRight, Sun, Moon } from 'lucide-react';
+import { LogOut, X, ChevronsLeft, ChevronsRight, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import vigiaLogo from '@/assets/vigia-logo.png';
@@ -34,6 +34,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
   const location = useLocation();
   const isMobile = useIsMobile();
   const [profile, setProfile] = useState<{ full_name: string | null; avatar_url: string | null }>({ full_name: null, avatar_url: null });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -41,16 +42,22 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
       .then(({ data }) => { if (data) setProfile({ full_name: data.full_name, avatar_url: data.avatar_url }); });
   }, [user]);
 
-  const modules = allMenuItems
-    .map((m) => ({ label: m.label, items: (m.children ?? []).filter((c) => c.menuKey && c.path && canView(c.menuKey)) }))
-    .filter((m) => m.items.length > 0);
-  const flatItems = modules.flatMap((m) => m.items);
-
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname === path || location.pathname.startsWith(path + '/');
   };
   const handleNav = (path: string) => { navigate(path); onClose?.(); };
+
+  const modules = allMenuItems
+    .map((m) => ({ label: m.label, icon: m.icon, items: (m.children ?? []).filter((c) => c.menuKey && c.path && canView(c.menuKey)) }))
+    .filter((m) => m.items.length > 0);
+  const flatItems = modules.flatMap((m) => m.items);
+
+  useEffect(() => {
+    const active = modules.find((m) => m.items.some((it) => it.path && isActive(it.path)));
+    if (active) setOpenGroups((prev) => (prev[active.label] ? prev : { ...prev, [active.label]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const userName =
     profile.full_name ||
@@ -61,12 +68,12 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
   const sidebarWidth = collapsed ? 'w-16' : 'w-56';
 
-  const NavButton = ({ item }: { item: { icon: any; label: string; path: string } }) => {
+  const NavButton = ({ item, nested }: { item: { icon: any; label: string; path: string }; nested?: boolean }) => {
     const active = isActive(item.path);
     const button = (
       <button
         onClick={() => handleNav(item.path)}
-        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} px-3 py-2.5 rounded-lg text-sm font-medium row-transition ${
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} ${nested && !collapsed ? 'pl-9 pr-3' : 'px-3'} py-2.5 rounded-lg text-sm font-medium row-transition ${
           active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
         }`}
       >
@@ -101,28 +108,39 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
           </div>
         )}
 
-        {/* Logo transparente (sem fundo branco), alinhada ao fundo do menu */}
+        {/* Logo transparente (sem fundo branco) */}
         <div className={`flex items-center justify-center border-b border-sidebar-border ${collapsed ? 'px-2 pt-5 pb-4' : 'px-4 pt-5 pb-4'}`}>
           <img src={vigiaLogo} alt="VIGIA" className={collapsed ? 'h-12 w-12 object-contain' : 'w-[150px] object-contain'} />
         </div>
 
-        {/* Navegação — agrupada por módulo, filtrada por permissão */}
-        <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-3'}`}>
+        {/* Navegação — grupos minimizáveis */}
+        <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2'}`}>
           {collapsed
             ? flatItems.map((item) => <NavButton key={item.path} item={item as any} />)
-            : modules.map((m) => (
-                <div key={m.label} className="mb-3">
-                  <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">{m.label}</p>
-                  <div className="space-y-0.5">
-                    {m.items.map((item) => <NavButton key={item.path} item={item as any} />)}
+            : modules.map((m) => {
+                const isOpen = openGroups[m.label] ?? true;
+                const GroupIcon = m.icon;
+                return (
+                  <div key={m.label} className="mb-1">
+                    <button
+                      onClick={() => setOpenGroups((p) => ({ ...p, [m.label]: !isOpen }))}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/50 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40 transition-colors"
+                    >
+                      <span className="flex items-center gap-2"><GroupIcon className="h-3.5 w-3.5" />{m.label}</span>
+                      <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                    </button>
+                    {isOpen && (
+                      <div className="mt-0.5 space-y-0.5">
+                        {m.items.map((item) => <NavButton key={item.path} item={item as any} nested />)}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
         </nav>
 
         {/* Footer */}
         <div className={`border-t border-sidebar-border ${collapsed ? 'px-1.5' : 'px-3'} py-3 space-y-2`}>
-          {/* Chip do usuário — clicável, abre Meu Perfil, com foto ou iniciais */}
           {!collapsed ? (
             <button
               onClick={() => handleNav('/perfil')}
@@ -145,7 +163,6 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
             </Tooltip>
           )}
 
-          {/* Tema + recolher */}
           <div className={`flex items-center ${collapsed ? 'flex-col gap-1' : 'gap-1 px-1'}`}>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -175,7 +192,6 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
             )}
           </div>
 
-          {/* Sair */}
           {collapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -192,7 +208,6 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
             </button>
           )}
 
-          {/* Assinatura */}
           {!collapsed && (
             <p className="font-title italic text-[10px] text-center pt-1">
               <span className="text-sidebar-foreground/50">by </span>

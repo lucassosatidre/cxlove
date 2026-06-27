@@ -1,4 +1,3 @@
-// FONTE ÚNICA do menu do app. A barra lateral E a lista de permissões (menu-config) saem DAQUI.
 import {
   LayoutDashboard, Phone, Utensils, Bike, CreditCard, Search, FileSpreadsheet,
   Receipt, Ticket, ShoppingBag, FileBarChart, Wallet, Sparkles, ShieldCheck, Settings,
@@ -45,24 +44,15 @@ export const allMenuItems: MenuItem[] = [
     ],
   },
   {
-    label: "Assistente",
-    icon: Sparkles,
-    children: [
-      { label: "Memória da Clau", icon: Sparkles, path: "/admin/clau/memoria", menuKey: "clau.memoria" },
-    ],
-  },
-  {
     label: "Configurações",
     icon: Settings,
     children: [
       { label: "Usuários & Permissões", icon: ShieldCheck, path: "/users", menuKey: "config.usuarios" },
+      { label: "Memória da Clau", icon: Sparkles, path: "/admin/clau/memoria", menuKey: "clau.memoria" },
     ],
   },
 ];
 
-// Rotas que NÃO são itens de menu (sub-páginas / dinâmicas) mas precisam de chave pra trava de rota.
-// Nomeadas como filhas de uma chave concedida (op.tele.* / op.salao.*) pra o fallback de 2 segmentos
-// do PermissionGate (op.tele / op.salao) liberar quem já tem a tela-mãe.
 export const EXTRA_ROUTES: Record<string, string> = {
   "op.tele.import": "/import",
   "op.tele.tele_import": "/tele/import",
