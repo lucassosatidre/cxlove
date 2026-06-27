@@ -10,6 +10,7 @@ import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, Che
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { formatCurrency } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
@@ -46,6 +47,7 @@ export default function SalonClosing() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { canView } = usePermissions();
   const navigate = useNavigate();
   
   const [orders, setOrders] = useState<SalonOrder[]>([]);
@@ -564,7 +566,7 @@ export default function SalonClosing() {
               )}
             </div>
           )}
-          {isAdmin && (
+          {canView('op.salao.conciliacao') && (
             <div className="relative group">
               <Button
                 variant="secondary"

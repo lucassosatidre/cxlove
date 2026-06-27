@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { usePermissions } from '@/contexts/PermissionsContext';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -60,6 +61,7 @@ export default function Reconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isCaixaTele, isCaixaSalao, isAdmin } = useUserRole();
+  const { canView } = usePermissions();
   
   const navigate = useNavigate();
   
