@@ -20,7 +20,7 @@ import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders, classifyOrder, type OrderClassification, type PendingReason } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
 import { buildWaiterMap } from '@/lib/waiter-labels';
-import { useUserRole } from '@/hooks/useUserRole';
+
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 
 interface SalonOrder {
@@ -75,8 +75,9 @@ const PENDING_REASON_LABELS: Record<string, { label: string; icon: React.ReactNo
 export default function SalonReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { isAdmin } = useUserRole();
   const { canView } = usePermissions();
+  const canConciliar = canView('op.salao.conciliacao');
+
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<SalonOrder[]>([]);
@@ -543,7 +544,7 @@ export default function SalonReconciliation() {
   }, [dragTxId, manualMatch]);
 
   const handleFinalizeReconciliation = useCallback(async () => {
-    if (!id || !isAdmin) return;
+    if (!id || !canConciliar) return;
     const { error } = await supabase
       .from('salon_closings')
       .update({ reconciliation_status: 'completed', updated_at: new Date().toISOString() })
@@ -554,10 +555,10 @@ export default function SalonReconciliation() {
     } else {
       toast.error('Erro ao finalizar conciliação.');
     }
-  }, [id, isAdmin]);
+  }, [id, canConciliar]);
 
   const handleReopenReconciliation = useCallback(async () => {
-    if (!id || !isAdmin) return;
+    if (!id || !canConciliar) return;
     const { error } = await supabase
       .from('salon_closings')
       .update({ reconciliation_status: 'pending', updated_at: new Date().toISOString() })
@@ -568,7 +569,8 @@ export default function SalonReconciliation() {
     } else {
       toast.error('Erro ao reabrir conciliação.');
     }
-  }, [id, isAdmin]);
+  }, [id, canConciliar]);
+
 
   const formatDate = (d: string) => {
     if (!d) return '';
@@ -1167,7 +1169,7 @@ export default function SalonReconciliation() {
           </div>
         </div>
       {/* Sticky footer - Admin reconciliation controls */}
-      {isAdmin && (
+      {canConciliar && (
         <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border px-6 py-3 flex items-center justify-between z-10">
           <div className="flex items-center gap-3">
             <Badge className={reconciliationStatus === 'completed' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}>
