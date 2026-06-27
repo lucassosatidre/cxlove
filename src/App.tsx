@@ -120,6 +120,7 @@ const App = () => (
               <Route path="/admin/escalas-entregadores" element={<Navigate to="/admin/entregadores?tab=escala" replace />} />
               <Route path="/etiquetas" element={<ProtectedRoute><PermissionGate><Etiquetas /></PermissionGate></ProtectedRoute>} />
               <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+              <Route path="/perfil" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
               <Route path="/admin/maquininhas" element={<ProtectedRoute><PermissionGate><MachineRegistry /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/audit" element={<ProtectedRoute><PermissionGate><CheckinAudit /></PermissionGate></ProtectedRoute>} />
               {/* Auditoria v1 aposentada — redireciona tudo pra v2 */}
