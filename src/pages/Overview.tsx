@@ -86,6 +86,9 @@ export default function Overview() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { canView } = usePermissions();
+  const canViewVault = canView('dashboard.controle_caixa');
+  const canViewAbrirCaixa = canView('dashboard.abrir_caixa');
 
   // ─ Overview state
   const [teleClosings, setTeleClosings] = useState<ClosingRow[]>([]);
