@@ -40,6 +40,7 @@ import AuditRelatoriosV2 from "./pages/audit-v2/AuditRelatoriosV2";
 import CashflowDashboard from "./pages/CashflowDashboard";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
+import Profile from "./pages/Profile";
 // import Sofia from "./pages/Sofia";
 
 const queryClient = new QueryClient();
