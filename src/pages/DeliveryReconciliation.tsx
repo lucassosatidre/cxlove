@@ -97,8 +97,9 @@ const DIVERGENCE_LABELS: Record<DivergenceKind, string> = {
 export default function DeliveryReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { isAdmin } = useUserRole();
   const { canView } = usePermissions();
+  const canConciliar = canView('op.tele.conciliacao');
+
   const { registry, getFriendlyName } = useMachineRegistry();
   
   const navigate = useNavigate();

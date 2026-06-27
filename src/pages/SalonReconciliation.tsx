@@ -75,8 +75,9 @@ const PENDING_REASON_LABELS: Record<string, { label: string; icon: React.ReactNo
 export default function SalonReconciliation() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { isAdmin } = useUserRole();
   const { canView } = usePermissions();
+  const canConciliar = canView('op.salao.conciliacao');
+
   const navigate = useNavigate();
 
   const [orders, setOrders] = useState<SalonOrder[]>([]);
