@@ -125,6 +125,45 @@ export default function UploadCashflowCard({
           inserted += ins?.length ?? 0;
         }
 
+        // 4b. SUBSTITUIR: remove linhas antigas (de imports anteriores) no mesmo intervalo de datas.
+        // Isso evita duplicatas quando o mesmo extrato/arquivo é reimportado (refresh limpo).
+        const dateField = table === 'cashflow_transactions' ? 'tx_date' : 'vencimento';
+        const dateVals = payload
+          .map((r) => r[dateField])
+          .filter((d): d is string => typeof d === 'string' && d.length >= 8)
+          .sort();
+        let periodMin: string | null = null;
+        let periodMax: string | null = null;
+        if (dateVals.length > 0) {
+          const minD = dateVals[0];
+          const maxD = dateVals[dateVals.length - 1];
+          periodMin = minD;
+          periodMax = maxD;
+          if (table === 'cashflow_transactions') {
+            if (account_id) {
+              const { error: delErr } = await supabase
+                .from('cashflow_transactions')
+                .delete()
+                .neq('import_id', importId)
+                .gte('tx_date', minD)
+                .lte('tx_date', maxD)
+                .eq('account_id', account_id);
+              if (delErr) toast.warning(`Limpeza do período: ${delErr.message}`);
+            }
+          } else {
+            // cashflow_saipos: substitui só os lançamentos vindos do Saipos,
+            // PRESERVA cargas manuais (ex.: faturas de cartão com source 'cartao_*').
+            const { error: delErr } = await supabase
+              .from('cashflow_saipos')
+              .delete()
+              .neq('import_id', importId)
+              .gte('vencimento', minD)
+              .lte('vencimento', maxD)
+              .eq('source', 'saipos');
+            if (delErr) toast.warning(`Limpeza do período: ${delErr.message}`);
+          }
+        }
+
         // 5. completar import
         await supabase.from('cashflow_imports').update({
           status: 'completed',
@@ -152,7 +191,8 @@ export default function UploadCashflowCard({
           }
         }
 
-        toast.success(`${file.name}: ${inserted} novas / ${rows.length - inserted} duplicadas`);
+        const periodMsg = periodMin && periodMax ? ` (período ${periodMin} a ${periodMax} atualizado)` : '';
+        toast.success(`${file.name}: ${inserted} lançamentos${periodMsg}`);
         okCount++;
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
