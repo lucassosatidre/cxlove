@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useScreenPerms } from '@/hooks/useScreenPerms';
 import { usePermissions } from '@/contexts/PermissionsContext';
 
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,8 @@ export default function Reconciliation() {
   const { user } = useAuth();
   const { isCaixaTele, isCaixaSalao, isAdmin } = useUserRole();
   const { canView, canEdit } = usePermissions();
-  const canForce = canEdit('op.tele');
+  const { canEdit: canManageTele, canDelete: canOverrideTele } = useScreenPerms('op.tele');
+  const canForce = canManageTele;
   
   const navigate = useNavigate();
   
@@ -874,11 +876,11 @@ export default function Reconciliation() {
                 <Truck className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Importar PickNGo</span>
               </Button>
-              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !isAdmin} className="bg-success hover:bg-success/90 text-success-foreground">
+              <Button variant="default" size="sm" onClick={handleSaveConference} disabled={isCompleted && !canOverrideTele} className="bg-success hover:bg-success/90 text-success-foreground">
                 <Save className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Salvar Conferência</span>
               </Button>
-              {isAdmin && isCompleted && (
+              {canOverrideTele && isCompleted && (
                 <Button variant="outline" size="sm" onClick={handleReopenClosing}>
                   <RotateCcw className="h-4 w-4 mr-1" />
                   <span className="hidden sm:inline">Reabrir</span>
@@ -1308,7 +1310,7 @@ export default function Reconciliation() {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {isAdmin && isCompleted && (
+              {canOverrideTele && isCompleted && (
                 <Button variant="outline" size="sm" onClick={handleReopenClosing}>
                   <RotateCcw className="h-4 w-4 mr-1" />
                   Reabrir
@@ -1316,7 +1318,7 @@ export default function Reconciliation() {
               )}
               <Button
                 onClick={handleSaveConference}
-                disabled={(isCompleted && !isAdmin) || completing}
+                disabled={(isCompleted && !canOverrideTele) || completing}
                 className="bg-success hover:bg-success/90 text-success-foreground"
               >
                 {completing ? 'Finalizando...' : 'Finalizar Fechamento'}

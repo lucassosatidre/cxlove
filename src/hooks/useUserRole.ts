@@ -6,37 +6,37 @@ export type AppRole = 'admin' | 'caixa_tele' | 'caixa_salao' | 'entregador' | 'l
 
 export function useUserRole() {
   const { user } = useAuth();
-  const [role, setRole] = useState<AppRole | null>(null);
+  const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
-      setRole(null);
+      setRoles([]);
       setLoading(false);
       return;
     }
 
-    const fetchRole = async () => {
+    const fetchRoles = async () => {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', user.id)
-        .maybeSingle();
+        .eq('user_id', user.id);
 
       if (!error && data) {
-        setRole(data.role as AppRole);
+        setRoles(data.map((r) => r.role as AppRole));
       }
       setLoading(false);
     };
 
-    fetchRole();
+    fetchRoles();
   }, [user]);
 
-  const isAdmin = role === 'admin';
-  const isCaixaTele = role === 'caixa_tele';
-  const isCaixaSalao = role === 'caixa_salao';
-  const isEntregador = role === 'entregador';
-  const isLider = role === 'lider';
+  const role: AppRole | null = roles[0] ?? null;
+  const isAdmin = roles.includes('admin');
+  const isCaixaTele = roles.includes('caixa_tele');
+  const isCaixaSalao = roles.includes('caixa_salao');
+  const isEntregador = roles.includes('entregador');
+  const isLider = roles.includes('lider');
 
-  return { role, isAdmin, isCaixaTele, isCaixaSalao, isEntregador, isLider, loading };
+  return { role, roles, isAdmin, isCaixaTele, isCaixaSalao, isEntregador, isLider, loading };
 }

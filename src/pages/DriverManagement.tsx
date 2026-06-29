@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 
 import { useUserRole } from '@/hooks/useUserRole';
+import { useScreenPerms } from '@/hooks/useScreenPerms';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,7 +96,8 @@ export default function DriverManagement() {
     setLoading(false);
   }, []);
 
-  const canManageDrivers = isAdmin || isLider;
+  const { canEdit: canEditEntregadores } = useScreenPerms('op.entregadores');
+  const canManageDrivers = isAdmin || isLider || canEditEntregadores;
 
   useEffect(() => {
     if (!roleLoading && !canManageDrivers) { navigate('/'); return; }

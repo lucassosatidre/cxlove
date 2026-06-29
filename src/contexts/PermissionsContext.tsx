@@ -62,10 +62,13 @@ export const PermissionsProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => { fetchPermissions(); }, [user]);
 
   const find = (key: string) => permissions.find((p) => p.menu_key === key);
+  const getParent = (key: string) => key.split(".").slice(0, -1).join(".");
+  const findWithParent = (key: string) =>
+    find(key) ?? (key.includes(".") ? find(getParent(key)) : undefined);
   const canView = (key: string) => find(key)?.can_view ?? false;
-  const canCreate = (key: string) => find(key)?.can_create ?? false;
-  const canEdit = (key: string) => find(key)?.can_edit ?? false;
-  const canDelete = (key: string) => find(key)?.can_delete ?? false;
+  const canCreate = (key: string) => findWithParent(key)?.can_create ?? false;
+  const canEdit = (key: string) => findWithParent(key)?.can_edit ?? false;
+  const canDelete = (key: string) => findWithParent(key)?.can_delete ?? false;
 
   return (
     <PermissionsContext.Provider value={{ permissions, loading, canView, canCreate, canEdit, canDelete, refetch: fetchPermissions }}>
