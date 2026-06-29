@@ -95,7 +95,8 @@ export default function DriverManagement() {
     setLoading(false);
   }, []);
 
-  const canManageDrivers = isAdmin || isLider;
+  const { canEdit: canEditEntregadores } = useScreenPerms('op.entregadores');
+  const canManageDrivers = isAdmin || isLider || canEditEntregadores;
 
   useEffect(() => {
     if (!roleLoading && !canManageDrivers) { navigate('/'); return; }
