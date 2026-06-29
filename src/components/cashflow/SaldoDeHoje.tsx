@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Wallet, AlertTriangle } from 'lucide-react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
@@ -8,12 +7,6 @@ const fmtDate = (iso?: string | null) => {
   if (!iso) return '—';
   const [y, m, d] = iso.split('-');
   return `${d}/${m}/${y}`;
-};
-
-const fmtDDMM = (iso?: string | null) => {
-  if (!iso) return '—';
-  const [, m, d] = iso.split('-');
-  return `${d}/${m}`;
 };
 
 function daysSince(iso?: string | null): number | null {
@@ -25,70 +18,66 @@ function daysSince(iso?: string | null): number | null {
   return Math.floor((t.getTime() - past.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+// Mapa de logos — vazio por enquanto, fácil de preencher depois com import de assets.
+const BANK_LOGOS: Record<string, string> = {};
+
+const BANK_STYLES: Record<string, { bg: string; fg: string; label: string; textSize: string }> = {
+  BB:      { bg: '#FCEE21', fg: '#0033A0', label: 'BB',     textSize: 'text-sm' },
+  Cresol:  { bg: '#00995D', fg: '#FFFFFF', label: 'Cresol', textSize: 'text-[10px]' },
+  C6:      { bg: '#1A1A1A', fg: '#FFFFFF', label: 'C6',     textSize: 'text-sm' },
+  iFood:   { bg: '#EA1D2C', fg: '#FFFFFF', label: 'iF',     textSize: 'text-sm' },
+  Sicredi: { bg: '#3DAE2B', fg: '#FFFFFF', label: 'Si',     textSize: 'text-sm' },
+};
+
+function BankLogo({ bank, name }: { bank: string | null | undefined; name: string }) {
+  const key = bank ?? '';
+  const src = BANK_LOGOS[key];
+  if (src) {
+    return <img src={src} alt={name} className="h-10 w-10 object-contain" />;
+  }
+  const style = BANK_STYLES[key];
+  if (style) {
+    return (
+      <div
+        className={cn('h-10 w-10 rounded-xl flex items-center justify-center font-bold shrink-0', style.textSize)}
+        style={{ backgroundColor: style.bg, color: style.fg }}
+        aria-label={name}
+      >
+        {style.label}
+      </div>
+    );
+  }
+  // Fallback genérico
+  const initials = (name || '?').slice(0, 2).toUpperCase();
+  return (
+    <div className="h-10 w-10 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm bg-muted text-muted-foreground">
+      {initials}
+    </div>
+  );
+}
+
 function AccountRow({ acc }: { acc: AccountWithBalance }) {
   const b = acc.balance;
   const own = Number(b?.own_balance ?? 0);
-  const limit = Number(acc.overdraft_limit ?? 0);
-  const limUsed = own < 0 ? Math.min(-own, limit) : 0;
-  const limPct = limit > 0 ? (limUsed / limit) * 100 : 0;
-
-  let dot = 'bg-emerald-500';
-  let phrase = 'Dentro do limite';
-  if (limit > 0) {
-    if (own < -limit) {
-      dot = 'bg-destructive';
-      phrase = 'Limite estourado';
-    } else if (limPct >= 80 && own < 0) {
-      dot = 'bg-amber-500';
-      phrase = 'Limite quase no fim';
-    }
-  } else if (own < 0) {
-    dot = 'bg-destructive';
-    phrase = 'Conta negativa';
-  }
-
-  const stale = daysSince(b?.as_of);
-  const isStale = stale !== null && stale > 3;
 
   return (
-    <div className="rounded-lg border border-border/60 bg-card p-4 space-y-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h4 className="font-semibold text-sm">{acc.name}</h4>
-            {acc.bank && <Badge variant="outline" className="text-[10px]">{acc.bank}</Badge>}
-            {acc.is_passthrough && (
-              <Badge variant="secondary" className="text-[10px]">
-                Conta de passagem — não entra no caixa
-              </Badge>
-            )}
-          </div>
-          {b?.note && <p className="text-[11px] text-muted-foreground mt-1 italic">{b.note}</p>}
-        </div>
+    <div className="rounded-lg border border-border/60 bg-card p-3 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <BankLogo bank={acc.bank} name={acc.name} />
+        <h4 className="font-medium text-sm truncate">{acc.name}</h4>
+      </div>
+      <div className="text-right shrink-0">
         <div
           className={cn(
-            'text-right font-mono text-lg font-semibold tabular-nums',
-            own < 0 ? 'text-destructive' : 'text-foreground',
+            'font-mono text-lg font-semibold tabular-nums',
+            own < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
           )}
         >
           {fmtBRL(own)}
         </div>
-      </div>
-
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          <span className={cn('inline-block h-2 w-2 rounded-full', dot)} />
-          {phrase}
-          {limit > 0 && (
-            <span className="font-mono text-muted-foreground">
-              · {fmtBRL(limUsed)} de {fmtBRL(limit)}
-            </span>
-          )}
-        </span>
-        <span className={cn(isStale ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
-          Saldo de {fmtDDMM(b?.as_of)}
-          {isStale && ` · desatualizado há ${stale} dias — reimporte o extrato`}
-        </span>
+        {acc.is_passthrough && (
+          <div className="text-[10px] text-muted-foreground mt-0.5">conta de passagem</div>
+        )}
       </div>
     </div>
   );
