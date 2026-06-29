@@ -137,13 +137,21 @@ export default function SaldoDeHoje() {
     | undefined;
 
   // Group by company
+  // Normaliza nome da empresa: "estrela" → "Estrela", "proposito" → "Propósito", "prover" → "Prover"
+  const companyLabel = (raw: string | null | undefined): string => {
+    const k = (raw || '').toLowerCase().trim();
+    if (k === 'estrela') return 'Estrela';
+    if (k === 'proposito' || k === 'propósito') return 'Propósito';
+    if (k === 'prover') return 'Prover';
+    return raw || 'Outros';
+  };
   const groups = new Map<string, AccountWithBalance[]>();
   for (const a of data) {
-    const key = a.company || 'Outros';
+    const key = companyLabel(a.company);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(a);
   }
-  const companyOrder = ['Estrela', 'Propósito', 'Proposito', 'Prover'];
+  const companyOrder = ['Estrela', 'Propósito', 'Prover'];
   const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
     const ia = companyOrder.indexOf(a[0]);
     const ib = companyOrder.indexOf(b[0]);

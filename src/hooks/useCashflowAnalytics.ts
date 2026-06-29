@@ -122,3 +122,20 @@ export function useCashflowUpcomingBillsDaily(start: string, days: number) {
     enabled: Boolean(start),
   });
 }
+
+export type StatementCoverageRow = { account_id: string; account_name: string; company: string; min_tx: string | null; max_tx: string | null; n: number; saldo_final: number | null };
+export function useCashflowStatementCoverage() {
+  return useQuery({ queryKey: ['cashflow','statement-coverage'], queryFn: async (): Promise<StatementCoverageRow[]> => {
+    const { data, error } = await (supabase.rpc as any)('cashflow_statement_coverage');
+    if (error) throw error;
+    return (data ?? []).map((r:any)=>({ account_id:String(r.account_id), account_name:r.account_name, company:r.company, min_tx:r.min_tx?String(r.min_tx):null, max_tx:r.max_tx?String(r.max_tx):null, n:Number(r.n)||0, saldo_final:r.saldo_final==null?null:Number(r.saldo_final) }));
+  }});
+}
+export type ReconRow = { tipo:'casado'|'saipos_sem_banco'|'banco_sem_saipos'; account_name:string|null; valor:number; vencimento:string|null; fornecedor:string|null; categoria:string|null; tx_date:string|null; descricao_banco:string|null; confianca:'ALTA'|'MEDIA'|null };
+export function useReconcileSaidas(ini: string, fim: string) {
+  return useQuery({ queryKey:['cashflow','reconcile',ini,fim], enabled: Boolean(ini&&fim), queryFn: async (): Promise<ReconRow[]> => {
+    const { data, error } = await (supabase.rpc as any)('reconcile_saidas', { p_ini: ini, p_fim: fim });
+    if (error) throw error;
+    return (data ?? []).map((r:any)=>({ tipo:r.tipo, account_name:r.account_name, valor:Number(r.valor)||0, vencimento:r.vencimento?String(r.vencimento):null, fornecedor:r.fornecedor, categoria:r.categoria, tx_date:r.tx_date?String(r.tx_date):null, descricao_banco:r.descricao_banco, confianca:r.confianca }));
+  }});
+}
