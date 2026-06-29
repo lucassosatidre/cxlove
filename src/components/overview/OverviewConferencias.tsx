@@ -136,7 +136,7 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
 
   // ── Pendências ──
   const pending = days
-    .filter((d) => dayProgress(d) < 100)
+    .filter((d) => d.date < todayStr && dayProgress(d) < 100)
     .slice(0, 5)
     .map((d) => {
       const ageDays = Math.floor((Date.now() - new Date(d.date + 'T00:00:00').getTime()) / 86400000);
