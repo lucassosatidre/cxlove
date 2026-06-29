@@ -3849,6 +3849,18 @@ export type Database = {
           saidas: number
         }[]
       }
+      cashflow_statement_coverage: {
+        Args: never
+        Returns: {
+          account_id: string
+          account_name: string
+          company: string
+          max_tx: string
+          min_tx: string
+          n: number
+          saldo_final: number
+        }[]
+      }
       cashflow_upcoming_bills: {
         Args: never
         Returns: {
@@ -4006,6 +4018,20 @@ export type Database = {
           p_shift_id: string
         }
         Returns: Json
+      }
+      reconcile_saidas: {
+        Args: { p_fim: string; p_ini: string }
+        Returns: {
+          account_name: string
+          categoria: string
+          confianca: string
+          descricao_banco: string
+          fornecedor: string
+          tipo: string
+          tx_date: string
+          valor: number
+          vencimento: string
+        }[]
       }
       sofia_next_numero: { Args: never; Returns: number }
     }
