@@ -322,7 +322,7 @@ export default function Dashboard() {
                 ) : (
                   <span className="text-xs text-muted-foreground">Sem pedidos</span>
                 )}
-                {isAdmin && closing.reconciliation_status && (
+                {canManage && closing.reconciliation_status && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                     Conciliação: {closing.reconciliation_status === 'completed' ? '✅' : 'pendente'}
                   </Badge>
@@ -330,12 +330,12 @@ export default function Dashboard() {
               </div>
               {/* Operator & meta */}
               <div className="flex items-center gap-2 mt-0.5">
-                {isAdmin && (
+                {canManage && (
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <User className="h-3 w-3" /> {operatorName || 'aguardando'}
                   </span>
                 )}
-                {isAdmin && (
+                {canManage && (
                   <span className="text-xs text-muted-foreground">
                     {closingImports.length} importação(ões)
                   </span>
@@ -344,7 +344,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {isAdmin && (
+            {canRemove && (
               <Button
                 size="icon"
                 variant="ghost"
@@ -369,7 +369,7 @@ export default function Dashboard() {
         </button>
 
         {/* Import history (admin only) */}
-        {isAdmin && closingImports.length > 0 && (
+        {canManage && closingImports.length > 0 && (
           <div className="border-t border-border/50">
             <button
               onClick={(e) => { e.stopPropagation(); setExpandedClosingId(isExpanded ? null : closing.id); }}
@@ -407,7 +407,7 @@ export default function Dashboard() {
       title="Tele"
       subtitle={`📅 ${todayLabel} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        isAdmin ? (
+        canOpen ? (
           <Popover open={abrirCaixaOpen} onOpenChange={setAbrirCaixaOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline">
@@ -460,7 +460,7 @@ export default function Dashboard() {
           </div>
 
           {/* Past closings - admin only */}
-          {isAdmin && pastClosings.length > 0 && (
+          {canManage && pastClosings.length > 0 && (
             <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-base font-semibold text-foreground">Histórico de Fechamentos</h2>
@@ -472,7 +472,7 @@ export default function Dashboard() {
           )}
 
           {/* Legacy imports - admin only */}
-          {isAdmin && legacyImports.length > 0 && (
+          {canManage && legacyImports.length > 0 && (
             <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden mt-6">
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-base font-semibold text-foreground">Importações Legadas</h2>
