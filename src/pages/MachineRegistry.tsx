@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useScreenPerms } from '@/hooks/useScreenPerms';
 import { Navigate } from 'react-router-dom';
 import AppLayout from '@/components/AppLayout';
 import { Button } from '@/components/ui/button';
