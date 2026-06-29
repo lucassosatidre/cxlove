@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   CalendarDays, Bike, Store, ChevronRight, CheckCircle2,
-  AlertTriangle, ArrowRight, Wallet, TrendingDown, Receipt, Activity,
+  AlertTriangle, ArrowRight, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 import { getOperationalDate } from '@/lib/operational-date';
 
 interface ClosingRow {
@@ -23,9 +22,6 @@ interface Props {
   loading: boolean;
   isAdmin: boolean;
 }
-
-const fmtBRL = (n: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n ?? 0);
 
 const formatDate = (s: string) => { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
 const getWeekday = (s: string) => {
@@ -138,70 +134,6 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
     else navigate('/tele');
   };
 
-  // ── Indicators ──
-  const now = new Date();
-  const curY = now.getFullYear();
-  const curM = now.getMonth() + 1;
-  const monthPrefix = `${curY}-${String(curM).padStart(2, '0')}`;
-  const monthDays = days.filter((d) => d.date.startsWith(monthPrefix));
-  const monthDone = monthDays.filter((d) => dayProgress(d) === 100).length;
-  const monthPct = monthDays.length ? Math.round((monthDone / monthDays.length) * 100) : 0;
-  const monthPending = monthDays.length - monthDone;
-
-  // ── Audit (admin only) ──
-  const [auditTax, setAuditTax] = useState<{ tax: number; bruto: number } | null>(null);
-  const [auditLoaded, setAuditLoaded] = useState(false);
-  // ── Cashflow (admin only) ──
-  const [vaultTotal, setVaultTotal] = useState<number | null>(null);
-  const [upcoming7, setUpcoming7] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    let alive = true;
-    (async () => {
-      // audit
-      const { data: period } = await supabase
-        .from('audit_periods').select('id').eq('year', curY).eq('month', curM).maybeSingle();
-      if (period?.id) {
-        const { data } = await supabase.rpc('get_audit_period_totals', { p_period_id: period.id });
-        const t = (data as any[])?.[0];
-        if (alive && t) {
-          const bruto = Number(t.total_bruto ?? 0);
-          const liq = Number(t.total_liquido_declarado ?? 0);
-          setAuditTax({ tax: Math.max(0, bruto - liq), bruto });
-        }
-      }
-      if (alive) setAuditLoaded(true);
-
-      // cashflow balances (latest per account)
-      const { data: balances } = await supabase
-        .from('cashflow_balances').select('account_id,own_balance,as_of')
-        .order('as_of', { ascending: false });
-      if (alive && balances) {
-        const seen = new Set<string>();
-        let sum = 0;
-        for (const b of balances as any[]) {
-          if (seen.has(b.account_id)) continue;
-          seen.add(b.account_id);
-          sum += Number(b.own_balance ?? 0);
-        }
-        setVaultTotal(sum);
-      }
-
-      // upcoming bills next 7 days
-      const { data: bills } = await supabase.rpc('cashflow_upcoming_bills');
-      if (alive && bills) {
-        const limit = new Date(); limit.setDate(limit.getDate() + 7);
-        const limitStr = limit.toISOString().slice(0, 10);
-        const sum = (bills as any[])
-          .filter((b) => b.vencimento <= limitStr)
-          .reduce((acc, b) => acc + Number(b.amount ?? 0), 0);
-        setUpcoming7(sum);
-      }
-    })();
-    return () => { alive = false; };
-  }, [isAdmin, curY, curM]);
-
   // ── Pendências ──
   const pending = days
     .filter((d) => dayProgress(d) < 100)
@@ -300,65 +232,7 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
         </div>
       </div>
 
-      {/* ═══ 2. INDICADORES ═══ */}
-      <div className={cn('grid gap-4', isAdmin ? 'md:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3')}>
-        <IndicatorCard
-          accent="bg-emerald-500"
-          icon={<Activity className="h-4 w-4" />}
-          label="Conferência do mês"
-          value={`${monthPct}%`}
-          footer={`${monthPending} pendente${monthPending === 1 ? '' : 's'} de ${monthDays.length} dia${monthDays.length === 1 ? '' : 's'}`}
-        />
-
-        {isAdmin ? (
-          <>
-            <IndicatorCard
-              accent="bg-[hsl(var(--gold-500,42_67%_49%))]"
-              icon={<Receipt className="h-4 w-4" />}
-              label="Taxas sobre vendas · mês"
-              value={auditLoaded
-                ? (auditTax ? fmtBRL(auditTax.tax) : '—')
-                : '…'}
-              footer={auditTax && auditTax.bruto > 0
-                ? `${((auditTax.tax / auditTax.bruto) * 100).toFixed(2)}% sobre vendas do mês`
-                : 'ver Auditoria'}
-            />
-            <IndicatorCard
-              accent="bg-sky-500"
-              icon={<Wallet className="h-4 w-4" />}
-              label="Saldo em caixa hoje"
-              value={vaultTotal === null ? '…' : fmtBRL(vaultTotal)}
-              footer="Saldo próprio consolidado das contas"
-            />
-            <IndicatorCard
-              accent="bg-rose-500"
-              icon={<TrendingDown className="h-4 w-4" />}
-              label="Próximas contas (7 dias)"
-              value={upcoming7 === null ? '…' : `− ${fmtBRL(upcoming7)}`}
-              footer="Previsto a pagar"
-            />
-          </>
-        ) : (
-          <>
-            <IndicatorCard
-              accent="bg-sky-500"
-              icon={<CalendarDays className="h-4 w-4" />}
-              label="Dias registrados"
-              value={String(days.length)}
-              footer="Total no histórico"
-            />
-            <IndicatorCard
-              accent="bg-amber-500"
-              icon={<AlertTriangle className="h-4 w-4" />}
-              label="Pendentes"
-              value={String(days.filter((d) => dayProgress(d) < 100).length)}
-              footer="Aguardando conferência"
-            />
-          </>
-        )}
-      </div>
-
-      {/* ═══ 3 + 4. Ação + Mini-gráfico ═══ */}
+      {/* ═══ 2 + 3. Ação + Mini-gráfico ═══ */}
       <div className="grid lg:grid-cols-2 gap-4">
         {/* Precisa de ação */}
         <div className="rounded-2xl border border-border bg-card shadow-sm">
@@ -537,25 +411,6 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
             })}
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Indicator card ────────────────────────────────────
-function IndicatorCard({
-  accent, icon, label, value, footer,
-}: { accent: string; icon: React.ReactNode; label: string; value: string; footer: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className={cn('h-1 w-full', accent)} />
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-          <span className="text-muted-foreground">{icon}</span>
-        </div>
-        <p className="font-serif text-3xl text-foreground tabular-nums leading-none">{value}</p>
-        <p className="text-xs text-muted-foreground mt-3">{footer}</p>
       </div>
     </div>
   );
