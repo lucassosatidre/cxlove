@@ -47,6 +47,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
+  const { canCreate: canOpen, canEdit: canManage, canDelete: canRemove } = useScreenPerms('op.tele');
   const reconciliationPrefix = '/reconciliation';
   const [closings, setClosings] = useState<DailyClosing[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
