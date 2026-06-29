@@ -3858,6 +3858,15 @@ export type Database = {
           vencimento: string
         }[]
       }
+      cashflow_upcoming_bills_daily: {
+        Args: { p_days?: number; p_start?: string }
+        Returns: {
+          date: string
+          items: Json
+          n: number
+          total: number
+        }[]
+      }
       classify_ifood_deposits: {
         Args: { p_period_id: string }
         Returns: undefined
