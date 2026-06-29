@@ -23,9 +23,6 @@ interface Props {
   isAdmin: boolean;
 }
 
-const fmtBRL = (n: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(n ?? 0);
-
 const formatDate = (s: string) => { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
 const getWeekday = (s: string) => {
   const [y, m, d] = s.split('-');
