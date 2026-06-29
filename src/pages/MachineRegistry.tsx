@@ -45,10 +45,10 @@ export default function MachineRegistry() {
     setLoading(false);
   };
 
-  useEffect(() => { if (isAdmin) load(); }, [isAdmin]);
+  useEffect(() => { if (canSee) load(); }, [canSee]);
 
   if (roleLoading) return <div className="flex min-h-screen items-center justify-center bg-background"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
-  if (!isAdmin) return <Navigate to="/" replace />;
+  if (!canSee) return <Navigate to="/" replace />;
 
   const openCreate = () => {
     setEditing(null);
