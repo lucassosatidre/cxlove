@@ -139,23 +139,27 @@ export default function UploadCashflowCard({
           const maxD = dateVals[dateVals.length - 1];
           periodMin = minD;
           periodMax = maxD;
-          let del = supabase
-            .from(table)
-            .delete()
-            .neq('import_id', importId)
-            .gte(dateField, minD)
-            .lte(dateField, maxD);
           if (table === 'cashflow_transactions') {
             if (account_id) {
-              del = del.eq('account_id', account_id);
-              const { error: delErr } = await del;
+              const { error: delErr } = await supabase
+                .from('cashflow_transactions')
+                .delete()
+                .neq('import_id', importId)
+                .gte('tx_date', minD)
+                .lte('tx_date', maxD)
+                .eq('account_id', account_id);
               if (delErr) toast.warning(`Limpeza do período: ${delErr.message}`);
             }
           } else {
             // cashflow_saipos: substitui só os lançamentos vindos do Saipos,
             // PRESERVA cargas manuais (ex.: faturas de cartão com source 'cartao_*').
-            del = del.eq('source', 'saipos');
-            const { error: delErr } = await del;
+            const { error: delErr } = await supabase
+              .from('cashflow_saipos')
+              .delete()
+              .neq('import_id', importId)
+              .gte('vencimento', minD)
+              .lte('vencimento', maxD)
+              .eq('source', 'saipos');
             if (delErr) toast.warning(`Limpeza do período: ${delErr.message}`);
           }
         }
