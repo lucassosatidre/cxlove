@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   CalendarDays, Bike, Store, ChevronRight, CheckCircle2,
-  AlertTriangle, ArrowRight, Wallet, TrendingDown, Receipt, Activity,
+  AlertTriangle, ArrowRight, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 import { getOperationalDate } from '@/lib/operational-date';
 
 interface ClosingRow {
