@@ -235,65 +235,7 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
         </div>
       </div>
 
-      {/* ═══ 2. INDICADORES ═══ */}
-      <div className={cn('grid gap-4', isAdmin ? 'md:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3')}>
-        <IndicatorCard
-          accent="bg-emerald-500"
-          icon={<Activity className="h-4 w-4" />}
-          label="Conferência do mês"
-          value={`${monthPct}%`}
-          footer={`${monthPending} pendente${monthPending === 1 ? '' : 's'} de ${monthDays.length} dia${monthDays.length === 1 ? '' : 's'}`}
-        />
-
-        {isAdmin ? (
-          <>
-            <IndicatorCard
-              accent="bg-[hsl(var(--gold-500,42_67%_49%))]"
-              icon={<Receipt className="h-4 w-4" />}
-              label="Taxas sobre vendas · mês"
-              value={auditLoaded
-                ? (auditTax ? fmtBRL(auditTax.tax) : '—')
-                : '…'}
-              footer={auditTax && auditTax.bruto > 0
-                ? `${((auditTax.tax / auditTax.bruto) * 100).toFixed(2)}% sobre vendas do mês`
-                : 'ver Auditoria'}
-            />
-            <IndicatorCard
-              accent="bg-sky-500"
-              icon={<Wallet className="h-4 w-4" />}
-              label="Saldo em caixa hoje"
-              value={vaultTotal === null ? '…' : fmtBRL(vaultTotal)}
-              footer="Saldo próprio consolidado das contas"
-            />
-            <IndicatorCard
-              accent="bg-rose-500"
-              icon={<TrendingDown className="h-4 w-4" />}
-              label="Próximas contas (7 dias)"
-              value={upcoming7 === null ? '…' : `− ${fmtBRL(upcoming7)}`}
-              footer="Previsto a pagar"
-            />
-          </>
-        ) : (
-          <>
-            <IndicatorCard
-              accent="bg-sky-500"
-              icon={<CalendarDays className="h-4 w-4" />}
-              label="Dias registrados"
-              value={String(days.length)}
-              footer="Total no histórico"
-            />
-            <IndicatorCard
-              accent="bg-amber-500"
-              icon={<AlertTriangle className="h-4 w-4" />}
-              label="Pendentes"
-              value={String(days.filter((d) => dayProgress(d) < 100).length)}
-              footer="Aguardando conferência"
-            />
-          </>
-        )}
-      </div>
-
-      {/* ═══ 3 + 4. Ação + Mini-gráfico ═══ */}
+      {/* ═══ 2 + 3. Ação + Mini-gráfico ═══ */}
       <div className="grid lg:grid-cols-2 gap-4">
         {/* Precisa de ação */}
         <div className="rounded-2xl border border-border bg-card shadow-sm">
