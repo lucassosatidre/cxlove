@@ -26,6 +26,7 @@ interface Machine {
 export default function MachineRegistry() {
   const { user } = useAuth();
   const { isAdmin, loading: roleLoading } = useUserRole();
+  const { canSee, canEdit } = useScreenPerms('op.maquininhas');
   const [machines, setMachines] = useState<Machine[]>([]);
   const [loading, setLoading] = useState(true);
 
