@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useScreenPerms } from '@/hooks/useScreenPerms';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -48,6 +49,7 @@ export default function SalonDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isAdmin, isCaixaTele, isCaixaSalao } = useUserRole();
+  const { canCreate: canOpen, canEdit: canManage, canDelete: canRemove } = useScreenPerms('op.salao');
   const [closings, setClosings] = useState<SalonClosing[]>([]);
   const [imports, setImports] = useState<SalonImportRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -291,26 +293,26 @@ export default function SalonDashboard() {
                 ) : (
                   <span className="text-xs text-muted-foreground">Sem pedidos</span>
                 )}
-                {isAdmin && closing.reconciliation_status && (
+                {canManage && closing.reconciliation_status && (
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                     Conciliação: {closing.reconciliation_status === 'completed' ? '✅' : 'pendente'}
                   </Badge>
                 )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                {isAdmin && (
+                {canManage && (
                   <span className="text-xs text-muted-foreground flex items-center gap-1">
                     <User className="h-3 w-3" /> {operatorName || 'aguardando'}
                   </span>
                 )}
-                {isAdmin && (
+                {canManage && (
                   <span className="text-xs text-muted-foreground">{closingImports.length} importação(ões)</span>
                 )}
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            {isAdmin && (
+            {canRemove && (
               <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive"
                 onClick={(e) => { e.stopPropagation(); setDeleteClosingDialog({ id: closing.id, date: closing.closing_date }); setDeleteConfirmDate(''); }}>
                 <Trash2 className="h-4 w-4" />
@@ -323,7 +325,7 @@ export default function SalonDashboard() {
           </div>
         </button>
 
-        {isAdmin && closingImports.length > 0 && (
+        {canManage && closingImports.length > 0 && (
           <div className="border-t border-border/50">
             <button onClick={(e) => { e.stopPropagation(); setExpandedClosingId(isExpanded ? null : closing.id); }}
               className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:bg-muted/20 row-transition">
@@ -360,7 +362,7 @@ export default function SalonDashboard() {
       title="Salão"
       subtitle={`📅 ${todayLabel} · ${weekday.charAt(0).toUpperCase() + weekday.slice(1)}`}
       headerActions={
-        isAdmin ? (
+        canOpen ? (
           <Popover open={abrirCaixaOpen} onOpenChange={setAbrirCaixaOpen}>
             <PopoverTrigger asChild>
               <Button variant="outline"><DoorOpen className="h-4 w-4 mr-2" />Abrir Caixa</Button>
@@ -398,7 +400,7 @@ export default function SalonDashboard() {
             )}
           </div>
 
-          {isAdmin && pastClosings.length > 0 && (
+          {canManage && pastClosings.length > 0 && (
             <div className="bg-card rounded-xl shadow-card border border-border overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-base font-semibold text-foreground">Histórico de Fechamentos</h2>
