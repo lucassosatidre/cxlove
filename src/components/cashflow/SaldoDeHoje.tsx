@@ -2,6 +2,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet, AlertTriangle } from 'lucide-react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
+import logoBb from '@/assets/logo-bb.png';
+import logoCresol from '@/assets/logo-cresol.webp';
+import logoIfood from '@/assets/logo-ifood.png';
+import logoSicredi from '@/assets/logo-sicredi.jpeg';
 
 const fmtDate = (iso?: string | null) => {
   if (!iso) return '—';
@@ -19,7 +23,12 @@ function daysSince(iso?: string | null): number | null {
 }
 
 // Mapa de logos — vazio por enquanto, fácil de preencher depois com import de assets.
-const BANK_LOGOS: Record<string, string> = {};
+const BANK_LOGOS: Record<string, string> = {
+  BB: logoBb,
+  Cresol: logoCresol,
+  iFood: logoIfood,
+  Sicredi: logoSicredi,
+};
 
 const BANK_STYLES: Record<string, { bg: string; fg: string; label: string; textSize: string }> = {
   BB:      { bg: '#FCEE21', fg: '#0033A0', label: 'BB',     textSize: 'text-sm' },
@@ -38,7 +47,11 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   const key = bank ?? '';
   const src = BANK_LOGOS[key];
   if (src) {
-    return <img src={src} alt={name} className="h-10 w-10 object-contain" />;
+    return (
+      <div className="h-10 w-10 rounded-xl bg-white overflow-hidden flex items-center justify-center shrink-0">
+        <img src={src} alt={name} className="h-full w-full object-contain p-1" />
+      </div>
+    );
   }
   const style = BANK_STYLES[key];
   if (style) {
