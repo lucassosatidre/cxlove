@@ -29,6 +29,11 @@ const BANK_STYLES: Record<string, { bg: string; fg: string; label: string; textS
   Sicredi: { bg: '#3DAE2B', fg: '#FFFFFF', label: 'Si',     textSize: 'text-sm' },
 };
 
+const DISPLAY_NAME: Record<string, string> = {
+  'C6 Propósito': 'Propósito Soluções',
+  'C6 Prover': 'Prover Participações',
+};
+
 function BankLogo({ bank, name }: { bank: string | null | undefined; name: string }) {
   const key = bank ?? '';
   const src = BANK_LOGOS[key];
@@ -59,12 +64,16 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
 function AccountRow({ acc }: { acc: AccountWithBalance }) {
   const b = acc.balance;
   const own = Number(b?.own_balance ?? 0);
+  const isGrupo = acc.company === 'proposito' || acc.company === 'prover';
+  const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
 
   return (
     <div className="rounded-lg border border-border/60 bg-card p-3 flex items-center justify-between gap-3">
       <div className="flex items-center gap-3 min-w-0">
         <BankLogo bank={acc.bank} name={acc.name} />
-        <h4 className="font-medium text-sm truncate">{acc.name}</h4>
+        {isGrupo && (
+          <h4 className="font-medium text-sm truncate">{displayName}</h4>
+        )}
       </div>
       <div className="text-right shrink-0">
         <div
@@ -126,12 +135,11 @@ export default function SaldoDeHoje() {
     | undefined;
 
   // Group by company
-  // Normaliza nome da empresa: "estrela" → "Estrela", "proposito" → "Propósito", "prover" → "Prover"
+  // Normaliza nome da empresa: "estrela" → "Estrela"; proposito/prover → "Grupo"
   const companyLabel = (raw: string | null | undefined): string => {
     const k = (raw || '').toLowerCase().trim();
     if (k === 'estrela') return 'Estrela';
-    if (k === 'proposito' || k === 'propósito') return 'Propósito';
-    if (k === 'prover') return 'Prover';
+    if (k === 'proposito' || k === 'propósito' || k === 'prover') return 'Grupo';
     return raw || 'Outros';
   };
   const groups = new Map<string, AccountWithBalance[]>();
@@ -140,7 +148,7 @@ export default function SaldoDeHoje() {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(a);
   }
-  const companyOrder = ['Estrela', 'Propósito', 'Prover'];
+  const companyOrder = ['Estrela', 'Grupo'];
   const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
     const ia = companyOrder.indexOf(a[0]);
     const ib = companyOrder.indexOf(b[0]);
