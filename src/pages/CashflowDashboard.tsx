@@ -7,6 +7,7 @@ import ProjecaoAlertas from '@/components/cashflow/ProjecaoAlertas';
 import ImportacoesCashflow from '@/components/cashflow/ImportacoesCashflow';
 import FluxoMensal from '@/components/cashflow/FluxoMensal';
 import ParaOndeFoi from '@/components/cashflow/ParaOndeFoi';
+import ProximosPagamentos from '@/components/cashflow/ProximosPagamentos';
 
 export default function CashflowDashboard() {
   return (
