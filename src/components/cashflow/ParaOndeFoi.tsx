@@ -64,7 +64,9 @@ export default function ParaOndeFoi() {
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">{label} · {rows.length} categorias</span>
-              <span className="font-semibold tabular-nums text-destructive">{fmtBRL(total)}</span>
+              <span className="font-semibold tabular-nums text-muted-foreground">
+                {fmtBRL(Math.abs(total))} <span className="text-xs font-normal">total gasto no período</span>
+              </span>
             </div>
             <ul className="space-y-2">
               {rows.map((r, i) => {
@@ -77,7 +79,7 @@ export default function ParaOndeFoi() {
                         {r.company && <Badge variant="outline" className="text-[10px]">{r.company}</Badge>}
                         <span className="text-xs text-muted-foreground shrink-0">({r.n})</span>
                       </div>
-                      <span className="font-semibold tabular-nums text-destructive shrink-0">{fmtBRL(r.total)}</span>
+                      <span className="font-semibold tabular-nums text-foreground shrink-0">{fmtBRL(Math.abs(r.total))}</span>
                     </div>
                     <div className="h-2 rounded-full bg-muted overflow-hidden">
                       <div

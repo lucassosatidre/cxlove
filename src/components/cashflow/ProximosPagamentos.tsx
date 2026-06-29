@@ -1,8 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { CalendarDays, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Collapsible,
   CollapsibleContent,
@@ -16,36 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import {
   useCashflowUpcomingBills,
-  useCashflowUpcomingBillsDaily,
   type UpcomingBillRow,
-  type UpcomingBillDayRow,
 } from '@/hooks/useCashflowAnalytics';
+import { cn } from '@/lib/utils';
 
-type ViewMode = 'dia' | 'semana' | 'mes';
-
-const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
-const DIAS_SEM = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-// === Helpers (mesma matemática local de ProjecaoCaixa.tsx) ===
-function startOfWeek(d: Date): Date {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const dow = x.getDay();
-  const diff = (dow + 6) % 7;
-  x.setDate(x.getDate() - diff);
-  return x;
-}
-function addDays(d: Date, n: number): Date {
-  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  x.setDate(x.getDate() + n);
-  return x;
-}
-function weekKey(d: Date): string {
-  const m = startOfWeek(d);
-  return `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, '0')}-${String(m.getDate()).padStart(2, '0')}`;
-}
 function parseISODateLocal(iso: string): Date {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(y, (m || 1) - 1, d || 1);
@@ -53,306 +29,327 @@ function parseISODateLocal(iso: string): Date {
 function toISOLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
-function fmtDDMM(d: Date): string {
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+function diffDays(target: Date, base: Date): number {
+  const t = new Date(target.getFullYear(), target.getMonth(), target.getDate()).getTime();
+  const b = new Date(base.getFullYear(), base.getMonth(), base.getDate()).getTime();
+  return Math.round((t - b) / (1000 * 60 * 60 * 24));
+}
+function fmtDDMM(iso: string): string {
+  const [, m, d] = iso.split('-');
+  return `${d}/${m}`;
 }
 
-type Bucket = {
+type Faixa = {
   key: string;
   label: string;
+  rangeLabel: string;
   total: number;
   n: number;
-  saldoApos: number;
-  items: { categoria: string; fornecedor: string | null; valor: number }[];
+  items: UpcomingBillRow[];
 };
 
+type OverdueAggr = { count: number; total: number; items: UpcomingBillRow[] };
+
 export default function ProximosPagamentos() {
-  const [view, setView] = useState<ViewMode>('dia');
-
+  const today = useMemo(() => new Date(), []);
   const balances = useCashflowBalances();
-  const today = new Date();
-  const hojeISO = toISOLocal(today);
-
-  const daily = useCashflowUpcomingBillsDaily(hojeISO, 14);
   const bills = useCashflowUpcomingBills();
 
-  const { saldoAtual, limiteTotal } = useMemo(() => {
-    const accs = balances.data ?? [];
-    let s = 0;
-    let l = 0;
+  const [openFaixa, setOpenFaixa] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [overdueOpen, setOverdueOpen] = useState(false);
+
+  const [overdue, setOverdue] = useState<OverdueAggr>({ count: 0, total: 0, items: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const hojeISO = toISOLocal(today);
+      const { data, error } = await supabase
+        .from('cashflow_saipos')
+        .select('vencimento, amount, category, fornecedor, is_frente_caixa, paid')
+        .eq('paid', false)
+        .lt('amount', 0)
+        .lt('vencimento', hojeISO)
+        .order('vencimento', { ascending: false })
+        .limit(500);
+      if (error || cancelled) return;
+      const rows = (data ?? []).filter((r: any) => !r.is_frente_caixa);
+      const total = rows.reduce((s: number, r: any) => s + Math.abs(Number(r.amount) || 0), 0);
+      setOverdue({
+        count: rows.length,
+        total,
+        items: rows.map((r: any) => ({
+          vencimento: String(r.vencimento),
+          amount: Number(r.amount) || 0,
+          category: r.category ?? null,
+          fornecedor: r.fornecedor ?? null,
+        })),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [today]);
+
+  const folego = useMemo(() => {
+    const accs = (balances.data ?? []).filter((a) => !a.is_passthrough);
+    let own = 0;
+    let lim = 0;
     for (const a of accs) {
-      s += Number(a.balance?.own_balance ?? 0);
-      l += Number(a.overdraft_limit ?? 0);
+      own += Number(a.balance?.own_balance ?? 0);
+      lim += Number(a.overdraft_limit ?? 0);
     }
-    return { saldoAtual: s, limiteTotal: l };
+    return own + lim;
   }, [balances.data]);
 
-  const folgaInicial = saldoAtual + limiteTotal;
-
-  const buckets: Bucket[] = useMemo(() => {
-    let running = folgaInicial;
-
-    if (view === 'dia') {
-      const rows = daily.data ?? [];
-      const amanha = toISOLocal(addDays(today, 1));
-      return rows.map((r: UpcomingBillDayRow) => {
-        const d = parseISODateLocal(r.date);
-        let label: string;
-        if (r.date === hojeISO) label = 'Hoje';
-        else if (r.date === amanha) label = 'Amanhã';
-        else label = `${DIAS_SEM[d.getDay()]} ${fmtDDMM(d)}`;
-        const saldoApos = running - r.total;
-        running = saldoApos;
-        return {
-          key: r.date,
-          label,
-          total: r.total,
-          n: r.n,
-          saldoApos,
-          items: r.items.map((it) => ({
-            categoria: it.categoria,
-            fornecedor: it.fornecedor,
-            valor: it.valor,
-          })),
-        };
-      });
-    }
-
-    if (view === 'semana') {
-      const start = startOfWeek(today);
-      const slots: { key: string; start: Date; end: Date; items: UpcomingBillRow[] }[] = [];
-      for (let i = 0; i < 8; i++) {
-        const s = addDays(start, i * 7);
-        slots.push({ key: weekKey(s), start: s, end: addDays(s, 6), items: [] });
+  const { faixas, depois30 } = useMemo(() => {
+    const rows = bills.data ?? [];
+    const f: Record<string, Faixa> = {
+      a: { key: 'a', label: 'Vence em até 7 dias', rangeLabel: 'hoje até +7', total: 0, n: 0, items: [] },
+      b: { key: 'b', label: 'Em 8 a 14 dias', rangeLabel: '+8 a +14', total: 0, n: 0, items: [] },
+      c: { key: 'c', label: 'Em 15 a 30 dias', rangeLabel: '+15 a +30', total: 0, n: 0, items: [] },
+    };
+    const depois: UpcomingBillRow[] = [];
+    for (const r of rows) {
+      const d = diffDays(parseISODateLocal(r.vencimento), today);
+      const val = Math.abs(Number(r.amount) || 0);
+      if (d < 0) continue; // overdue tratado à parte
+      if (d <= 7) {
+        f.a.total += val;
+        f.a.n += 1;
+        f.a.items.push(r);
+      } else if (d <= 14) {
+        f.b.total += val;
+        f.b.n += 1;
+        f.b.items.push(r);
+      } else if (d <= 30) {
+        f.c.total += val;
+        f.c.n += 1;
+        f.c.items.push(r);
+      } else {
+        depois.push(r);
       }
-      const map = new Map(slots.map((b) => [b.key, b]));
-      for (const bill of bills.data ?? []) {
-        const d = parseISODateLocal(bill.vencimento);
-        const k = weekKey(d);
-        const b = map.get(k);
-        if (!b) continue;
-        b.items.push(bill);
-      }
-      return slots.map((b) => {
-        const sorted = [...b.items].sort((x, y) => Math.abs(y.amount) - Math.abs(x.amount));
-        const total = sorted.reduce((s, it) => s + Math.abs(it.amount), 0);
-        const saldoApos = running - total;
-        running = saldoApos;
-        return {
-          key: b.key,
-          label: `Semana de ${fmtDDMM(b.start)}`,
-          total,
-          n: sorted.length,
-          saldoApos,
-          items: sorted.map((it) => ({
-            categoria: it.category || 'Sem categoria',
-            fornecedor: it.fornecedor,
-            valor: Math.abs(it.amount),
-          })),
-        };
-      });
     }
+    return { faixas: [f.a, f.b, f.c], depois30: depois };
+  }, [bills.data, today]);
 
-    // mes
-    const byMonth = new Map<string, UpcomingBillRow[]>();
-    for (const bill of bills.data ?? []) {
-      const k = bill.vencimento.slice(0, 7);
-      if (!byMonth.has(k)) byMonth.set(k, []);
-      byMonth.get(k)!.push(bill);
-    }
-    const keys = Array.from(byMonth.keys()).sort();
-    return keys.map((k) => {
-      const items = (byMonth.get(k) ?? []).sort(
-        (x, y) => Math.abs(y.amount) - Math.abs(x.amount),
-      );
-      const total = items.reduce((s, it) => s + Math.abs(it.amount), 0);
-      const [y, m] = k.split('-').map(Number);
-      const label = `${MESES[(m || 1) - 1]}/${String(y).slice(-2)}`;
-      const saldoApos = running - total;
-      running = saldoApos;
-      return {
-        key: k,
-        label,
-        total,
-        n: items.length,
-        saldoApos,
-        items: items.map((it) => ({
-          categoria: it.category || 'Sem categoria',
-          fornecedor: it.fornecedor,
-          valor: Math.abs(it.amount),
-        })),
-      };
-    });
-  }, [view, daily.data, bills.data, folgaInicial, hojeISO]);
-
-  const totalPeriodo = buckets.reduce((s, b) => s + b.total, 0);
-  const isLoading = view === 'dia' ? daily.isLoading : bills.isLoading;
-
-  const periodoLabel =
-    view === 'dia' ? 'próximos 14 dias' : view === 'semana' ? 'próximas 8 semanas' : 'próximos meses';
+  const total7 = faixas[0].total;
+  const falta = Math.max(0, total7 - folego);
+  const folegoCobre = folego >= total7;
 
   return (
     <Card className="border-border/60">
-      <CardHeader className="space-y-3">
-        <div className="flex flex-row items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary/10 p-2 text-primary">
-              <CalendarDays className="h-5 w-5" />
-            </div>
-            <div>
-              <CardTitle className="text-base font-semibold">Próximos pagamentos</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Mostra só as <strong>saídas já agendadas no Saipos</strong>. O saldo projetado é
-                caixa próprio + limite menos as contas que vencem — ainda <strong>não</strong>{' '}
-                inclui o que vai entrar (recebíveis).
-              </p>
-            </div>
+      <CardHeader>
+        <div className="flex items-center gap-3">
+          <div className="rounded-lg bg-primary/10 p-2 text-primary">
+            <CalendarDays className="h-5 w-5" />
           </div>
-          <div className="flex gap-1 shrink-0">
-            {(['dia', 'semana', 'mes'] as ViewMode[]).map((v) => (
-              <Button
-                key={v}
-                variant={view === v ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setView(v)}
-              >
-                {v === 'dia' ? 'Dia' : v === 'semana' ? 'Semana' : 'Mês'}
-              </Button>
-            ))}
+          <div>
+            <CardTitle className="text-base font-semibold">Próximos pagamentos</CardTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Mostra só as saídas já agendadas no Saipos; não inclui o que vai entrar (recebíveis).
+            </p>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              A pagar nos {periodoLabel}
-            </div>
-            <div className="mt-1 font-mono text-xl font-semibold text-destructive">
-              −{fmtBRL(totalPeriodo)}
-            </div>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-3">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Saldo + limite hoje
-            </div>
-            <div className="mt-1 font-mono text-xl font-semibold text-foreground">
-              {fmtBRL(folgaInicial)}
-            </div>
-          </div>
+      <CardContent className="space-y-5">
+        {/* Linha-resumo (única que pode ficar vermelha) */}
+        <div
+          className={cn(
+            'rounded-lg border px-4 py-3 text-sm',
+            folegoCobre
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+              : 'border-destructive/40 bg-destructive/10 text-destructive',
+          )}
+        >
+          Pra cobrir os próximos 7 dias (<strong>{fmtBRL(total7)}</strong>) você tem{' '}
+          <strong>{fmtBRL(folego)}</strong> de fôlego (caixa + limite).{' '}
+          {folegoCobre ? (
+            <span>E o fôlego cobre.</span>
+          ) : (
+            <span>
+              Faltam <strong>{fmtBRL(falta)}</strong>.
+            </span>
+          )}
         </div>
 
-        {isLoading ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">Carregando…</div>
-        ) : buckets.length === 0 || (view !== 'dia' && totalPeriodo === 0) ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">
-            Nenhuma conta agendada no Saipos para este período.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {buckets.map((b) => {
-              const empty = b.total <= 0;
-              const negativo = b.saldoApos < 0;
-              const trigger = (
-                <Button
-                  variant="ghost"
-                  className="flex h-auto w-full items-center justify-between px-4 py-3 text-left hover:bg-muted/40"
-                  disabled={empty}
+        {/* 3 caixas neutras */}
+        <div className="grid gap-3 md:grid-cols-3">
+          {faixas.map((f) => {
+            const isOpen = openFaixa === f.key;
+            return (
+              <div key={f.key} className="rounded-lg border border-border/60 bg-card">
+                <button
+                  type="button"
+                  onClick={() => setOpenFaixa(isOpen ? null : f.key)}
+                  className="w-full text-left p-4 hover:bg-muted/40 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    {!empty && (
-                      <ChevronDown className="h-4 w-4 transition-transform [&[data-state=open]]:rotate-180" />
-                    )}
-                    {empty && <span className="inline-block w-4" />}
-                    <span className={`text-sm font-medium ${empty ? 'text-muted-foreground' : ''}`}>
-                      {b.label}
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {f.label}
+                  </div>
+                  <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
+                    {fmtBRL(f.total)}
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>
+                      {f.n} {f.n === 1 ? 'conta' : 'contas'}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {empty
-                        ? 'sem contas'
-                        : `(${b.n} ${b.n === 1 ? 'conta' : 'contas'})`}
+                    <span className="flex items-center gap-1">
+                      ver detalhes
+                      <ChevronDown
+                        className={cn('h-3 w-3 transition-transform', isOpen && 'rotate-180')}
+                      />
                     </span>
                   </div>
-                  <div className="flex flex-col items-end gap-0.5">
-                    <span
-                      className={`font-mono text-sm font-semibold ${
-                        empty ? 'text-muted-foreground' : 'text-destructive'
-                      }`}
-                    >
-                      {empty ? '—' : `−${fmtBRL(b.total)}`}
-                    </span>
-                    {!empty && (
-                      <span
-                        className={`flex items-center gap-1 text-[11px] font-mono ${
-                          negativo
-                            ? 'text-destructive'
-                            : 'text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        sobra projetada: {fmtBRL(b.saldoApos)}
-                        {negativo && (
-                          <Badge variant="destructive" className="text-[10px]">
-                            🚨
-                          </Badge>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </Button>
-              );
-
-              return (
-                <Collapsible key={b.key}>
-                  <div
-                    className={`rounded-lg border bg-card ${
-                      empty ? 'border-border/40 opacity-70' : 'border-border/60'
-                    }`}
-                  >
-                    {empty ? (
-                      trigger
+                </button>
+                {isOpen && (
+                  <div className="border-t border-border/60 px-4 py-3">
+                    {f.items.length === 0 ? (
+                      <p className="text-xs text-muted-foreground py-2">
+                        Nenhuma conta nesta faixa.
+                      </p>
                     ) : (
-                      <>
-                        <CollapsibleTrigger asChild>{trigger}</CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <div className="border-t border-border/60 px-4 py-3">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="h-8">Categoria</TableHead>
-                                  <TableHead className="h-8">Fornecedor</TableHead>
-                                  <TableHead className="h-8 text-right">Valor</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {b.items.slice(0, 15).map((it, i) => (
-                                  <TableRow key={i}>
-                                    <TableCell className="py-2 text-xs">
-                                      {it.categoria}
-                                    </TableCell>
-                                    <TableCell className="py-2 text-xs">
-                                      {it.fornecedor || '—'}
-                                    </TableCell>
-                                    <TableCell className="py-2 text-right font-mono text-xs text-destructive">
-                                      −{fmtBRL(it.valor)}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                            {b.items.length > 15 && (
-                              <div className="mt-2 text-xs text-muted-foreground">
-                                + {b.items.length - 15} contas menores
-                              </div>
-                            )}
-                          </div>
-                        </CollapsibleContent>
-                      </>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="h-8">Vencimento</TableHead>
+                            <TableHead className="h-8">Fornecedor</TableHead>
+                            <TableHead className="h-8">Categoria</TableHead>
+                            <TableHead className="h-8 text-right">Valor</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {[...f.items]
+                            .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+                            .slice(0, 30)
+                            .map((it, i) => (
+                              <TableRow key={i}>
+                                <TableCell className="py-2 text-xs">
+                                  {fmtDDMM(it.vencimento)}
+                                </TableCell>
+                                <TableCell className="py-2 text-xs">
+                                  {it.fornecedor || '—'}
+                                </TableCell>
+                                <TableCell className="py-2 text-xs">
+                                  {it.category || 'Sem categoria'}
+                                </TableCell>
+                                <TableCell className="py-2 text-right font-mono text-xs">
+                                  {fmtBRL(Math.abs(it.amount))}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
                     )}
                   </div>
-                </Collapsible>
-              );
-            })}
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Vencidas em card neutro */}
+        {overdue.count > 0 && (
+          <div className="rounded-lg border border-border/60 bg-muted/30">
+            <button
+              type="button"
+              onClick={() => setOverdueOpen((v) => !v)}
+              className="w-full text-left p-4 hover:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-foreground">
+                    Contas vencidas ainda não pagas: {overdue.count} contas ·{' '}
+                    <span className="font-mono">{fmtBRL(overdue.total)}</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Provavelmente lançamentos antigos sem baixa no Saipos — confira.
+                  </p>
+                </div>
+                <ChevronDown
+                  className={cn(
+                    'h-4 w-4 text-muted-foreground transition-transform',
+                    overdueOpen && 'rotate-180',
+                  )}
+                />
+              </div>
+            </button>
+            {overdueOpen && (
+              <div className="border-t border-border/60 px-4 py-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-8">Vencimento</TableHead>
+                      <TableHead className="h-8">Fornecedor</TableHead>
+                      <TableHead className="h-8">Categoria</TableHead>
+                      <TableHead className="h-8 text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[...overdue.items]
+                      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+                      .slice(0, 50)
+                      .map((it, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
+                          <TableCell className="py-2 text-xs">{it.fornecedor || '—'}</TableCell>
+                          <TableCell className="py-2 text-xs">
+                            {it.category || 'Sem categoria'}
+                          </TableCell>
+                          <TableCell className="py-2 text-right font-mono text-xs">
+                            {fmtBRL(Math.abs(it.amount))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </div>
+        )}
+
+        {/* Tudo o que está lançado depois de 30 dias */}
+        {depois30.length > 0 && (
+          <Collapsible open={showAll} onOpenChange={setShowAll}>
+            <CollapsibleTrigger className="text-xs text-muted-foreground underline-offset-2 hover:underline">
+              ver tudo o que está lançado ({depois30.length} contas depois de 30 dias)
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3">
+              <div className="rounded-lg border border-border/60 bg-card px-4 py-3">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-8">Vencimento</TableHead>
+                      <TableHead className="h-8">Fornecedor</TableHead>
+                      <TableHead className="h-8">Categoria</TableHead>
+                      <TableHead className="h-8 text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {[...depois30]
+                      .sort(
+                        (a, b) =>
+                          parseISODateLocal(a.vencimento).getTime() -
+                          parseISODateLocal(b.vencimento).getTime(),
+                      )
+                      .map((it, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
+                          <TableCell className="py-2 text-xs">{it.fornecedor || '—'}</TableCell>
+                          <TableCell className="py-2 text-xs">
+                            {it.category || 'Sem categoria'}
+                          </TableCell>
+                          <TableCell className="py-2 text-right font-mono text-xs">
+                            {fmtBRL(Math.abs(it.amount))}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </CardContent>
     </Card>
