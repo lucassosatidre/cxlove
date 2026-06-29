@@ -415,22 +415,3 @@ export default function OverviewConferencias({ days, loading, isAdmin }: Props) 
     </div>
   );
 }
-
-// ─── Indicator card ────────────────────────────────────
-function IndicatorCard({
-  accent, icon, label, value, footer,
-}: { accent: string; icon: React.ReactNode; label: string; value: string; footer: string }) {
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className={cn('h-1 w-full', accent)} />
-      <div className="p-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-          <span className="text-muted-foreground">{icon}</span>
-        </div>
-        <p className="font-serif text-3xl text-foreground tabular-nums leading-none">{value}</p>
-        <p className="text-xs text-muted-foreground mt-3">{footer}</p>
-      </div>
-    </div>
-  );
-}
