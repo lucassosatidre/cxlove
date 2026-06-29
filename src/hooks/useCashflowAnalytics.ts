@@ -95,3 +95,30 @@ export function useCashflowUpcomingBills() {
     },
   });
 }
+
+export type DailyBillItem = { categoria: string; fornecedor: string | null; valor: number };
+export type UpcomingBillDayRow = { date: string; total: number; n: number; items: DailyBillItem[] };
+
+export function useCashflowUpcomingBillsDaily(start: string, days: number) {
+  return useQuery({
+    queryKey: ['cashflow', 'upcoming-bills-daily', start, days],
+    queryFn: async (): Promise<UpcomingBillDayRow[]> => {
+      const { data, error } = await (supabase.rpc as any)('cashflow_upcoming_bills_daily', {
+        p_start: start,
+        p_days: days,
+      });
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        date: String(r.date),
+        total: Number(r.total) || 0,
+        n: Number(r.n) || 0,
+        items: (r.items ?? []).map((it: any) => ({
+          categoria: it.categoria ?? 'Sem categoria',
+          fornecedor: it.fornecedor ?? null,
+          valor: Number(it.valor) || 0,
+        })),
+      }));
+    },
+    enabled: Boolean(start),
+  });
+}

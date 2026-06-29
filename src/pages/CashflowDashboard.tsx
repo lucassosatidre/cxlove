@@ -7,6 +7,7 @@ import ProjecaoAlertas from '@/components/cashflow/ProjecaoAlertas';
 import ImportacoesCashflow from '@/components/cashflow/ImportacoesCashflow';
 import FluxoMensal from '@/components/cashflow/FluxoMensal';
 import ParaOndeFoi from '@/components/cashflow/ParaOndeFoi';
+import ProximosPagamentos from '@/components/cashflow/ProximosPagamentos';
 
 export default function CashflowDashboard() {
   return (
@@ -27,6 +28,7 @@ export default function CashflowDashboard() {
 
           <TabsContent value="visao" className="space-y-6">
             <SaldoDeHoje />
+            <ProximosPagamentos />
             <div className="grid gap-4 lg:grid-cols-2">
               <FluxoMensal />
               <ParaOndeFoi />
