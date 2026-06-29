@@ -10,6 +10,7 @@ import { ArrowLeft, Search, AlertCircle, CheckCircle2, Banknote, Calculator, Che
 import { toast } from 'sonner';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUserRole } from '@/hooks/useUserRole';
+import { useScreenPerms } from '@/hooks/useScreenPerms';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { formatCurrency } from '@/lib/payment-utils';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
@@ -47,6 +48,7 @@ export default function SalonClosing() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const { isAdmin } = useUserRole();
+  const { canDelete: canOverrideSalao } = useScreenPerms('op.salao');
   const { canView } = usePermissions();
   const navigate = useNavigate();
   
@@ -538,7 +540,7 @@ export default function SalonClosing() {
       headerActions={
         <div className="flex items-center gap-2">
           {isCompleted ? (
-            isAdmin && (
+            canOverrideSalao && (
               <Button variant="outline" onClick={handleReopen} disabled={finalizing}>
                 <Unlock className="h-4 w-4 mr-1" />
                 {finalizing ? 'Reabrindo...' : 'Reabrir Fechamento'}
@@ -549,12 +551,12 @@ export default function SalonClosing() {
               <Button
                 variant="default"
                 onClick={handleFinalize}
-                disabled={(!canFinalize && !isAdmin) || finalizing}
+                disabled={(!canFinalize && !canOverrideSalao) || finalizing}
               >
                 <Lock className="h-4 w-4 mr-1" />
                 {finalizing ? 'Finalizando...' : 'Finalizar Fechamento'}
               </Button>
-              {!canFinalize && !isAdmin && (
+              {!canFinalize && !canOverrideSalao && (
                 <div className="absolute right-0 top-full mt-1 z-50 hidden group-hover:block bg-destructive/10 border border-destructive/30 rounded-lg p-2 min-w-[250px]">
                   {validationAlerts.map((alert, i) => (
                     <div key={i} className="flex items-center gap-1.5 text-xs text-destructive py-0.5">
