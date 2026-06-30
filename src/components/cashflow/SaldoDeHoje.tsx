@@ -216,18 +216,16 @@ export default function SaldoDeHoje() {
           <div className="overflow-hidden">
             <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Fôlego com o limite
+                LIMITE
               </div>
               <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-foreground">
                 {fmtBRL(folego)}
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                {folegoNeg
-                  ? `Mesmo somando o cheque especial dos bancos (${fmtBRL(limitSum)}), ainda falta ${fmtBRL(Math.abs(folego))} pra zerar`
-                  : `Com o cheque especial (${fmtBRL(limitSum)}), há ${fmtBRL(folego)} disponíveis`}
+                {"\n"}
               </p>
               <p className="mt-2 text-[11px] text-muted-foreground/80">
-                O limite é dívida, não é dinheiro seu.
+                {"\n"}
               </p>
             </div>
           </div>
