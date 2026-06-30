@@ -14,14 +14,6 @@ const fmtDate = (iso?: string | null) => {
   return `${d}/${m}/${y}`;
 };
 
-function daysSince(iso?: string | null): number | null {
-  if (!iso) return null;
-  const [y, m, d] = iso.split('-').map(Number);
-  const past = new Date(y, (m || 1) - 1, d || 1);
-  const today = new Date();
-  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  return Math.floor((t.getTime() - past.getTime()) / (1000 * 60 * 60 * 24));
-}
 
 const BANK_LOGOS: Record<string, string> = {
   BB: logoBb,
