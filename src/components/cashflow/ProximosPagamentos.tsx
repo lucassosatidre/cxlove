@@ -184,7 +184,7 @@ export default function ProximosPagamentos() {
 
         {/* Já paguei este mês */}
         <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-3">
-          <span className="text-sm text-muted-foreground">Já paguei este mês (por vencimento)</span>
+          <span className="text-sm text-muted-foreground">Valor pago durante esse mês</span>
           <span className="font-mono text-base font-semibold tabular-nums text-foreground">{fmtBRL(totalPagoMes)}</span>
         </div>
 
