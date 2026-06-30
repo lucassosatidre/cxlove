@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, ChevronDown, ChevronUp } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
@@ -166,13 +166,13 @@ export default function SaldoDeHoje() {
 
           {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
           <div className="flex flex-col gap-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => setLimiteOpen((v) => !v)}
-              className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0 text-left hover:bg-primary/10 transition-colors"
-            >
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Saldo de hoje
+            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+              <div
+                className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-2xl"
+                aria-label="Saldo de hoje"
+                title="Saldo de hoje"
+              >
+                💰
               </div>
               <div
                 className={cn(
@@ -182,18 +182,16 @@ export default function SaldoDeHoje() {
               >
                 {fmtBRL(ownSum)}
               </div>
-              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                {limiteOpen ? (
-                  <>
-                    Ocultar limite <ChevronUp className="h-3 w-3" />
-                  </>
-                ) : (
-                  <>
-                    Ver limite <ChevronDown className="h-3 w-3" />
-                  </>
-                )}
-              </div>
-            </button>
+              <button
+                type="button"
+                onClick={() => setLimiteOpen((v) => !v)}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                aria-label={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
+                title={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
+              >
+                {limiteOpen ? '▲' : '▼'}
+              </button>
+            </div>
             {limiteOpen && (
               <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
