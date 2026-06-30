@@ -50,7 +50,7 @@ export default function ParaOndeFoi() {
         </div>
         <p className="text-xs text-muted-foreground flex items-start gap-1.5">
           <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-          Não inclui transferências internas nem o "Frente de Caixa" (que é o fechamento das vendas, não um gasto).
+          Por data de vencimento. Não inclui transferências internas, "Frente de Caixa" (fechamento de vendas) nem o que é descontado na fonte (iFood/cartão/Brendi).
         </p>
       </CardHeader>
       <CardContent>

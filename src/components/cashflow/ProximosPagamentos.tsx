@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import {
   useCashflowUpcomingBills,
+  useCashflowCategorySummary,
   type UpcomingBillRow,
 } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
@@ -54,6 +55,13 @@ export default function ProximosPagamentos() {
   const today = useMemo(() => new Date(), []);
   const balances = useCashflowBalances();
   const bills = useCashflowUpcomingBills();
+  const inicioMesISO = useMemo(() => toISOLocal(new Date(today.getFullYear(), today.getMonth(), 1)), [today]);
+  const hojeISO = useMemo(() => toISOLocal(today), [today]);
+  const pagoMes = useCashflowCategorySummary(inicioMesISO, hojeISO);
+  const totalPagoMes = useMemo(
+    () => (pagoMes.data ?? []).reduce((s, r) => s + Math.abs(Number(r.total) || 0), 0),
+    [pagoMes.data],
+  );
 
   const [openFaixa, setOpenFaixa] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -172,6 +180,12 @@ export default function ProximosPagamentos() {
               Faltam <strong>{fmtBRL(falta)}</strong>.
             </span>
           )}
+        </div>
+
+        {/* Já paguei este mês */}
+        <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground">Já paguei este mês (por vencimento)</span>
+          <span className="font-mono text-base font-semibold tabular-nums text-foreground">{fmtBRL(totalPagoMes)}</span>
         </div>
 
         {/* 3 caixas neutras */}
