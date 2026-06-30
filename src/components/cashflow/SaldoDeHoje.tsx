@@ -92,9 +92,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
       >
         {fmtBRL(own)}
       </div>
-      {acc.is_passthrough && (
-        <div className="text-[10px] text-muted-foreground -mt-1">conta de passagem</div>
-      )}
+      {acc.is_passthrough && null}
     </div>
   );
 }
