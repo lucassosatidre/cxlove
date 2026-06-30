@@ -101,6 +101,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
 
 export default function SaldoDeHoje() {
   const { data, isLoading, error } = useCashflowBalances();
+  const [limiteOpen, setLimiteOpen] = useState(false);
 
   if (isLoading) {
     return (
