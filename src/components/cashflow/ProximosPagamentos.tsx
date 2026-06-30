@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarDays, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -14,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
 import {
   useCashflowUpcomingBills,
@@ -49,8 +48,6 @@ type Faixa = {
   items: UpcomingBillRow[];
 };
 
-type OverdueAggr = { count: number; total: number; items: UpcomingBillRow[] };
-
 export default function ProximosPagamentos() {
   const today = useMemo(() => new Date(), []);
   const bills = useCashflowUpcomingBills();
@@ -64,40 +61,6 @@ export default function ProximosPagamentos() {
 
   const [openFaixa, setOpenFaixa] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [overdueOpen, setOverdueOpen] = useState(false);
-
-  const [overdue, setOverdue] = useState<OverdueAggr>({ count: 0, total: 0, items: [] });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const hojeISO = toISOLocal(today);
-      const { data, error } = await supabase
-        .from('cashflow_saipos')
-        .select('vencimento, amount, category, fornecedor, is_frente_caixa, paid')
-        .eq('paid', false)
-        .lt('amount', 0)
-        .lt('vencimento', hojeISO)
-        .order('vencimento', { ascending: false })
-        .limit(500);
-      if (error || cancelled) return;
-      const rows = (data ?? []).filter((r: any) => !r.is_frente_caixa);
-      const total = rows.reduce((s: number, r: any) => s + Math.abs(Number(r.amount) || 0), 0);
-      setOverdue({
-        count: rows.length,
-        total,
-        items: rows.map((r: any) => ({
-          vencimento: String(r.vencimento),
-          amount: Number(r.amount) || 0,
-          category: r.category ?? null,
-          fornecedor: r.fornecedor ?? null,
-        })),
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [today]);
 
   const { faixas, depois30 } = useMemo(() => {
     const rows = bills.data ?? [];
@@ -231,66 +194,6 @@ export default function ProximosPagamentos() {
             );
           })}
         </div>
-
-        {/* Vencidas em card neutro */}
-        {overdue.count > 0 && (
-          <div className="rounded-lg border border-border/60 bg-muted/30">
-            <button
-              type="button"
-              onClick={() => setOverdueOpen((v) => !v)}
-              className="w-full text-left p-4 hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium text-foreground">
-                    Contas vencidas ainda não pagas: {overdue.count} contas ·{' '}
-                    <span className="font-mono">{fmtBRL(overdue.total)}</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Provavelmente lançamentos antigos sem baixa no Saipos — confira.
-                  </p>
-                </div>
-                <ChevronDown
-                  className={cn(
-                    'h-4 w-4 text-muted-foreground transition-transform',
-                    overdueOpen && 'rotate-180',
-                  )}
-                />
-              </div>
-            </button>
-            {overdueOpen && (
-              <div className="border-t border-border/60 px-4 py-3">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="h-8">Vencimento</TableHead>
-                      <TableHead className="h-8">Fornecedor</TableHead>
-                      <TableHead className="h-8">Categoria</TableHead>
-                      <TableHead className="h-8 text-right">Valor</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[...overdue.items]
-                      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-                      .slice(0, 50)
-                      .map((it, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
-                          <TableCell className="py-2 text-xs">{it.fornecedor || '—'}</TableCell>
-                          <TableCell className="py-2 text-xs">
-                            {it.category || 'Sem categoria'}
-                          </TableCell>
-                          <TableCell className="py-2 text-right font-mono text-xs">
-                            {fmtBRL(Math.abs(it.amount))}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Tudo o que está lançado depois de 30 dias */}
         {depois30.length > 0 && (
