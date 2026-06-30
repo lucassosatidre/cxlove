@@ -195,66 +195,6 @@ export default function ProximosPagamentos() {
           })}
         </div>
 
-        {/* Vencidas em card neutro */}
-        {overdue.count > 0 && (
-          <div className="rounded-lg border border-border/60 bg-muted/30">
-            <button
-              type="button"
-              onClick={() => setOverdueOpen((v) => !v)}
-              className="w-full text-left p-4 hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium text-foreground">
-                    Contas vencidas ainda não pagas: {overdue.count} contas ·{' '}
-                    <span className="font-mono">{fmtBRL(overdue.total)}</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Provavelmente lançamentos antigos sem baixa no Saipos — confira.
-                  </p>
-                </div>
-                <ChevronDown
-                  className={cn(
-                    'h-4 w-4 text-muted-foreground transition-transform',
-                    overdueOpen && 'rotate-180',
-                  )}
-                />
-              </div>
-            </button>
-            {overdueOpen && (
-              <div className="border-t border-border/60 px-4 py-3">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="h-8">Vencimento</TableHead>
-                      <TableHead className="h-8">Fornecedor</TableHead>
-                      <TableHead className="h-8">Categoria</TableHead>
-                      <TableHead className="h-8 text-right">Valor</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[...overdue.items]
-                      .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
-                      .slice(0, 50)
-                      .map((it, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
-                          <TableCell className="py-2 text-xs">{it.fornecedor || '—'}</TableCell>
-                          <TableCell className="py-2 text-xs">
-                            {it.category || 'Sem categoria'}
-                          </TableCell>
-                          <TableCell className="py-2 text-right font-mono text-xs">
-                            {fmtBRL(Math.abs(it.amount))}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Tudo o que está lançado depois de 30 dias */}
         {depois30.length > 0 && (
           <Collapsible open={showAll} onOpenChange={setShowAll}>
