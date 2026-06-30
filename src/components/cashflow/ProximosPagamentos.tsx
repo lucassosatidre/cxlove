@@ -97,6 +97,8 @@ export default function ProximosPagamentos() {
     return () => {
       cancelled = true;
     };
+  }, [today]);
+
   const { faixas, depois30 } = useMemo(() => {
     const rows = bills.data ?? [];
     const f: Record<string, Faixa> = {
