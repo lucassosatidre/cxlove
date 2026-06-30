@@ -39,8 +39,8 @@ const BANK_STYLES: Record<string, { bg: string; fg: string; label: string; textS
 };
 
 const DISPLAY_NAME: Record<string, string> = {
-  'C6 Propósito': 'Propósito Soluções',
-  'C6 Prover': 'Prover Participações',
+  'C6 Propósito': 'Propósito',
+  'C6 Prover': 'Prover\u00a0',
 };
 
 function BankLogo({ bank, name }: { bank: string | null | undefined; name: string }) {
