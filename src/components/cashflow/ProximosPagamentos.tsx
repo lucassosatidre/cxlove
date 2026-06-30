@@ -15,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
-import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
+import { fmtBRL } from '@/hooks/useCashflowBalances';
 import {
   useCashflowUpcomingBills,
   useCashflowCategorySummary,
