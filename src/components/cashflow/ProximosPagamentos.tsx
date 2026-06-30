@@ -53,7 +53,6 @@ type OverdueAggr = { count: number; total: number; items: UpcomingBillRow[] };
 
 export default function ProximosPagamentos() {
   const today = useMemo(() => new Date(), []);
-  const balances = useCashflowBalances();
   const bills = useCashflowUpcomingBills();
   const inicioMesISO = useMemo(() => toISOLocal(new Date(today.getFullYear(), today.getMonth(), 1)), [today]);
   const hojeISO = useMemo(() => toISOLocal(today), [today]);
