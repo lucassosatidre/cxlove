@@ -122,8 +122,8 @@ export default function ProximosPagamentos() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* 4 caixas: info (pago no mês) + 3 faixas */}
-        <div className="grid gap-3 md:grid-cols-4">
+        {/* 4 caixas: info (pago no mês) + 4 faixas semanais */}
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
           <div className="rounded-lg border border-border/60 bg-muted/20 p-4 flex flex-col justify-between">
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Valor pago durante esse mês
