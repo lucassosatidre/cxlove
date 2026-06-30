@@ -55,6 +55,13 @@ export default function ProximosPagamentos() {
   const today = useMemo(() => new Date(), []);
   const balances = useCashflowBalances();
   const bills = useCashflowUpcomingBills();
+  const inicioMesISO = useMemo(() => toISOLocal(new Date(today.getFullYear(), today.getMonth(), 1)), [today]);
+  const hojeISO = useMemo(() => toISOLocal(today), [today]);
+  const pagoMes = useCashflowCategorySummary(inicioMesISO, hojeISO);
+  const totalPagoMes = useMemo(
+    () => (pagoMes.data ?? []).reduce((s, r) => s + Math.abs(Number(r.total) || 0), 0),
+    [pagoMes.data],
+  );
 
   const [openFaixa, setOpenFaixa] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
