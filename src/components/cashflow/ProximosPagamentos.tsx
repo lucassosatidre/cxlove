@@ -62,35 +62,47 @@ export default function ProximosPagamentos() {
   const [openFaixa, setOpenFaixa] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  const { faixas, depois30 } = useMemo(() => {
+  const { faixas, depois28 } = useMemo(() => {
     const rows = bills.data ?? [];
-    const f: Record<string, Faixa> = {
-      a: { key: 'a', label: 'Vence em até 7 dias', rangeLabel: 'hoje até +7', total: 0, n: 0, items: [] },
-      b: { key: 'b', label: 'Em 8 a 14 dias', rangeLabel: '+8 a +14', total: 0, n: 0, items: [] },
-      c: { key: 'c', label: 'Em 15 a 30 dias', rangeLabel: '+15 a +30', total: 0, n: 0, items: [] },
-    };
+    const faixaDefs = [
+      { key: 'w1', label: 'Vence em até 7 dias', weekIdx: 1 },
+      { key: 'w2', label: 'Em 8 a 14 dias', weekIdx: 2 },
+      { key: 'w3', label: 'Em 15 a 21 dias', weekIdx: 3 },
+      { key: 'w4', label: 'Em 22 a 28 dias', weekIdx: 4 },
+    ];
+
+    function addDays(base: Date, days: number): Date {
+      const d = new Date(base);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
+
+    const ranges = faixaDefs.map(({ weekIdx }) => {
+      const start = addDays(today, (weekIdx - 1) * 7 + 1);
+      const end = addDays(today, weekIdx * 7);
+      return `${fmtDDMM(toISOLocal(start))} a ${fmtDDMM(toISOLocal(end))}`;
+    });
+
+    const f: Record<string, Faixa> = {};
+    faixaDefs.forEach(({ key, label }, i) => {
+      f[key] = { key, label, rangeLabel: ranges[i], total: 0, n: 0, items: [] };
+    });
     const depois: UpcomingBillRow[] = [];
     for (const r of rows) {
       const d = diffDays(parseISODateLocal(r.vencimento), today);
       const val = Math.abs(Number(r.amount) || 0);
-      if (d < 0) continue; // overdue tratado à parte
-      if (d <= 7) {
-        f.a.total += val;
-        f.a.n += 1;
-        f.a.items.push(r);
-      } else if (d <= 14) {
-        f.b.total += val;
-        f.b.n += 1;
-        f.b.items.push(r);
-      } else if (d <= 30) {
-        f.c.total += val;
-        f.c.n += 1;
-        f.c.items.push(r);
+      if (d < 1) continue; // hoje ou passado não entra na timeline futura
+      const weekIdx = Math.ceil(d / 7);
+      if (weekIdx >= 1 && weekIdx <= 4) {
+        const key = faixaDefs[weekIdx - 1].key;
+        f[key].total += val;
+        f[key].n += 1;
+        f[key].items.push(r);
       } else {
         depois.push(r);
       }
     }
-    return { faixas: [f.a, f.b, f.c], depois30: depois };
+    return { faixas: [f.w1, f.w2, f.w3, f.w4], depois28: depois };
   }, [bills.data, today]);
 
 
