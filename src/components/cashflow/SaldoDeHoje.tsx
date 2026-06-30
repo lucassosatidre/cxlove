@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, AlertTriangle } from 'lucide-react';
+import { Wallet, AlertTriangle, ChevronDown } from 'lucide-react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
 import logoBb from '@/assets/logo-bb.png';
@@ -22,7 +23,6 @@ function daysSince(iso?: string | null): number | null {
   return Math.floor((t.getTime() - past.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-// Mapa de logos — vazio por enquanto, fácil de preencher depois com import de assets.
 const BANK_LOGOS: Record<string, string> = {
   BB: logoBb,
   Cresol: logoCresol,
@@ -65,7 +65,6 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
       </div>
     );
   }
-  // Fallback genérico
   const initials = (name || '?').slice(0, 2).toUpperCase();
   return (
     <div className="h-10 w-10 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm bg-muted text-muted-foreground">
@@ -74,39 +73,35 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   );
 }
 
-function AccountRow({ acc }: { acc: AccountWithBalance }) {
-  const b = acc.balance;
-  const own = Number(b?.own_balance ?? 0);
-  const isGrupo = acc.company === 'proposito' || acc.company === 'prover';
+function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: boolean }) {
+  const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
-
   return (
-    <div className="rounded-lg border border-border/60 bg-card p-3 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3 min-w-0">
-        <BankLogo bank={acc.bank} name={acc.name} />
-        {isGrupo && (
-          <h4 className="font-medium text-sm truncate">{displayName}</h4>
-        )}
-      </div>
-      <div className="text-right shrink-0">
-        <div
-          className={cn(
-            'font-mono text-lg font-semibold tabular-nums',
-            own < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
-          )}
-        >
-          {fmtBRL(own)}
+    <div className="rounded-lg border border-border/60 bg-card p-3 flex flex-col items-center gap-2 min-w-[150px] shrink-0">
+      <BankLogo bank={acc.bank} name={acc.name} />
+      {showName && (
+        <div className="text-xs font-medium text-center truncate max-w-full" title={displayName}>
+          {displayName}
         </div>
-        {acc.is_passthrough && (
-          <div className="text-[10px] text-muted-foreground mt-0.5">conta de passagem</div>
+      )}
+      <div
+        className={cn(
+          'font-mono text-base font-semibold tabular-nums',
+          own < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
         )}
+      >
+        {fmtBRL(own)}
       </div>
+      {acc.is_passthrough && (
+        <div className="text-[10px] text-muted-foreground -mt-1">conta de passagem</div>
+      )}
     </div>
   );
 }
 
 export default function SaldoDeHoje() {
   const { data, isLoading, error } = useCashflowBalances();
+  const [folegoOpen, setFolegoOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -127,13 +122,11 @@ export default function SaldoDeHoje() {
     );
   }
 
-  // Apenas contas que NÃO são de passagem entram no caixa próprio
   const ownAccs = data.filter((a) => !a.is_passthrough);
   const ownSum = ownAccs.reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
   const limitSum = ownAccs.reduce((s, a) => s + Number(a.overdraft_limit ?? 0), 0);
   const folego = ownSum + limitSum;
 
-  // contas com saldo defasado (>3 dias) que entram na soma
   const staleOwn = ownAccs.filter((a) => {
     const d = daysSince(a.balance?.as_of);
     return d !== null && d > 3;
@@ -147,26 +140,14 @@ export default function SaldoDeHoje() {
     | string
     | undefined;
 
-  // Group by company
-  // Normaliza nome da empresa: "estrela" → "Estrela"; proposito/prover → "Grupo"
-  const companyLabel = (raw: string | null | undefined): string => {
+  const isEstrela = (raw: string | null | undefined) => (raw || '').toLowerCase().trim() === 'estrela';
+  const isGrupo = (raw: string | null | undefined) => {
     const k = (raw || '').toLowerCase().trim();
-    if (k === 'estrela') return 'Estrela';
-    if (k === 'proposito' || k === 'propósito' || k === 'prover') return 'Grupo';
-    return raw || 'Outros';
+    return k === 'proposito' || k === 'propósito' || k === 'prover';
   };
-  const groups = new Map<string, AccountWithBalance[]>();
-  for (const a of data) {
-    const key = companyLabel(a.company);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(a);
-  }
-  const companyOrder = ['Estrela', 'Grupo'];
-  const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
-    const ia = companyOrder.indexOf(a[0]);
-    const ib = companyOrder.indexOf(b[0]);
-    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-  });
+  const estrelaAccs = data.filter((a) => isEstrela(a.company));
+  const grupoAccs = data.filter((a) => isGrupo(a.company));
+  const outrosAccs = data.filter((a) => !isEstrela(a.company) && !isGrupo(a.company));
 
   const negativo = ownSum < 0;
   const folegoNeg = folego < 0;
@@ -186,51 +167,73 @@ export default function SaldoDeHoje() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* 2 grandes números */}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-5">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Dinheiro próprio hoje
+      <CardContent className="space-y-4">
+        {/* Linha única de balões */}
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {estrelaAccs.map((a) => (
+            <AccountBubble key={a.id} acc={a} showName={false} />
+          ))}
+          {grupoAccs.map((a) => (
+            <AccountBubble key={a.id} acc={a} showName />
+          ))}
+          {outrosAccs.map((a) => (
+            <AccountBubble key={a.id} acc={a} showName />
+          ))}
+
+          {/* Balão final: SALDO DE HOJE */}
+          <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Saldo de hoje
             </div>
             <div
               className={cn(
-                'mt-2 font-mono text-3xl font-bold tabular-nums',
+                'font-mono text-xl font-bold tabular-nums',
                 negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
               )}
             >
               {fmtBRL(ownSum)}
             </div>
-            <p
-              className={cn(
-                'mt-1 text-xs',
-                negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
-              )}
+            <button
+              type="button"
+              onClick={() => setFolegoOpen((v) => !v)}
+              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              {negativo
-                ? `A empresa está NEGATIVA em ${fmtBRL(Math.abs(ownSum))} (usando cheque especial)`
-                : `A empresa tem ${fmtBRL(ownSum)} em caixa`}
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-muted/30 p-5">
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Fôlego com o limite
-            </div>
-            <div className="mt-2 font-mono text-3xl font-bold tabular-nums text-foreground">
-              {fmtBRL(folego)}
-            </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {folegoNeg
-                ? `Mesmo somando o cheque especial dos bancos (${fmtBRL(limitSum)}), ainda falta ${fmtBRL(Math.abs(folego))} pra zerar`
-                : `Com o cheque especial, há ${fmtBRL(folego)} disponíveis`}
-            </p>
-            <p className="mt-2 text-[11px] text-muted-foreground/80">
-              O limite é dívida, não é dinheiro seu.
-            </p>
+              ver fôlego
+              <ChevronDown
+                className={cn('h-3 w-3 transition-transform', folegoOpen && 'rotate-180')}
+              />
+            </button>
           </div>
         </div>
 
-        {/* Aviso CALMO (amarelo) sobre defasagem */}
+        {/* Painel fôlego expansível */}
+        <div
+          className={cn(
+            'grid transition-all duration-200',
+            folegoOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+          )}
+        >
+          <div className="overflow-hidden">
+            <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Fôlego com o limite
+              </div>
+              <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-foreground">
+                {fmtBRL(folego)}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {folegoNeg
+                  ? `Mesmo somando o cheque especial dos bancos (${fmtBRL(limitSum)}), ainda falta ${fmtBRL(Math.abs(folego))} pra zerar`
+                  : `Com o cheque especial (${fmtBRL(limitSum)}), há ${fmtBRL(folego)} disponíveis`}
+              </p>
+              <p className="mt-2 text-[11px] text-muted-foreground/80">
+                O limite é dívida, não é dinheiro seu.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Aviso defasagem */}
         {staleOwn.length > 0 && (
           <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -240,22 +243,6 @@ export default function SaldoDeHoje() {
             </span>
           </div>
         )}
-
-        {/* Contas agrupadas por empresa */}
-        <div className="space-y-5">
-          {sortedGroups.map(([company, accs]) => (
-            <div key={company} className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                {company}
-              </h3>
-              <div className="grid gap-3 md:grid-cols-2">
-                {accs.map((a) => (
-                  <AccountRow key={a.id} acc={a} />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
       </CardContent>
     </Card>
   );
