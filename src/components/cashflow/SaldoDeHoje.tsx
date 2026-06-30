@@ -119,14 +119,6 @@ export default function SaldoDeHoje() {
   const limitSum = ownAccs.reduce((s, a) => s + Number(a.overdraft_limit ?? 0), 0);
   const folego = ownSum + limitSum;
 
-  const staleOwn = ownAccs.filter((a) => {
-    const d = daysSince(a.balance?.as_of);
-    return d !== null && d > 3;
-  });
-  const maxStaleDays = staleOwn.reduce((m, a) => {
-    const d = daysSince(a.balance?.as_of) ?? 0;
-    return d > m ? d : m;
-  }, 0);
 
   const asOf = data.map((d) => d.balance?.as_of).filter(Boolean).sort().pop() as
     | string
@@ -219,17 +211,6 @@ export default function SaldoDeHoje() {
             )}
           </div>
         </div>
-
-        {/* Aviso defasagem */}
-        {staleOwn.length > 0 && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-            <span>
-              Atenção: {staleOwn.length} conta(s) com saldo de há {maxStaleDays} dias — o caixa
-              pode estar incompleto. ({staleOwn.map((a) => a.name).join(', ')})
-            </span>
-          </div>
-        )}
       </CardContent>
     </Card>
   );
