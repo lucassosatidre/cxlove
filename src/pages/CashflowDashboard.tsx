@@ -78,7 +78,8 @@ export default function CashflowDashboard() {
           <TabsContent value="visao" className="space-y-6">
             <SaldoDeHoje />
             <ProximosPagamentos />
-            <DescontadoNaFonte />
+            {/* DescontadoNaFonte desativado por solicitacao (2026-06-30) */}
+            {/* <DescontadoNaFonte /> */}
           </TabsContent>
 
           <TabsContent value="extratos">
