@@ -180,9 +180,13 @@ export default function SaldoDeHoje() {
             <AccountBubble key={a.id} acc={a} showName />
           ))}
 
-          {/* Coluna final: SALDO DE HOJE + LIMITE */}
+          {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
           <div className="flex flex-col gap-3 shrink-0">
-            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+            <button
+              type="button"
+              onClick={() => setLimiteOpen((v) => !v)}
+              className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0 text-left hover:bg-primary/10 transition-colors"
+            >
               <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Saldo de hoje
               </div>
@@ -194,20 +198,33 @@ export default function SaldoDeHoje() {
               >
                 {fmtBRL(ownSum)}
               </div>
-            </div>
-            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                LIMITE
-              </div>
-              <div
-                className={cn(
-                  'font-mono text-xl font-bold tabular-nums',
-                  folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+              <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                {limiteOpen ? (
+                  <>
+                    Ocultar limite <ChevronUp className="h-3 w-3" />
+                  </>
+                ) : (
+                  <>
+                    Ver limite <ChevronDown className="h-3 w-3" />
+                  </>
                 )}
-              >
-                {fmtBRL(folego)}
               </div>
-            </div>
+            </button>
+            {limiteOpen && (
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  LIMITE
+                </div>
+                <div
+                  className={cn(
+                    'font-mono text-xl font-bold tabular-nums',
+                    folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                  )}
+                >
+                  {fmtBRL(folego)}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
