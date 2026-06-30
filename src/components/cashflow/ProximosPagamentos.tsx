@@ -97,19 +97,6 @@ export default function ProximosPagamentos() {
     return () => {
       cancelled = true;
     };
-  }, [today]);
-
-  const folego = useMemo(() => {
-    const accs = (balances.data ?? []).filter((a) => !a.is_passthrough);
-    let own = 0;
-    let lim = 0;
-    for (const a of accs) {
-      own += Number(a.balance?.own_balance ?? 0);
-      lim += Number(a.overdraft_limit ?? 0);
-    }
-    return own + lim;
-  }, [balances.data]);
-
   const { faixas, depois30 } = useMemo(() => {
     const rows = bills.data ?? [];
     const f: Record<string, Faixa> = {
