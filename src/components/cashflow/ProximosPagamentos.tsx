@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import {
   useCashflowUpcomingBills,
+  useCashflowCategorySummary,
   type UpcomingBillRow,
 } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
