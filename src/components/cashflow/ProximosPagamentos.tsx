@@ -128,9 +128,6 @@ export default function ProximosPagamentos() {
     return { faixas: [f.a, f.b, f.c], depois30: depois };
   }, [bills.data, today]);
 
-  const total7 = faixas[0].total;
-  const falta = Math.max(0, total7 - folego);
-  const folegoCobre = folego >= total7;
 
   return (
     <Card className="border-border/60">
