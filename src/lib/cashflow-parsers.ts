@@ -33,6 +33,8 @@ export type CashflowSaiposRow = {
   descricao: string | null;
   paid: boolean;
   is_frente_caixa: boolean;
+  conta: string | null;
+  is_retido: boolean;
   source_seq: number;
 };
 
@@ -564,6 +566,13 @@ export function parseSaipos(rows: unknown[][]): ParseResult<CashflowSaiposRow> {
     const vencimento = parseDateBR(r[0]);
     const emissao = parseDateBR(r[1]);
     const pagamento = parseDateBR(r[2]);
+    const contaRaw = String(r[3] ?? '').trim();
+    const conta: string | null =
+      contaRaw === '' ? null :
+      contaRaw === 'Banco' ? 'banco' :
+      contaRaw === 'Dinheiro' ? 'dinheiro' :
+      contaRaw === '-' ? '-' :
+      contaRaw;
     const payment_method = String(r[4] ?? '').trim();
     const category = String(r[5] ?? '').trim();
     const amount = parseNumber(r[6]);
@@ -573,6 +582,12 @@ export function parseSaipos(rows: unknown[][]): ParseResult<CashflowSaiposRow> {
     if (!vencimento && !emissao && !pagamento && amount === 0) { skipped++; continue; }
 
     const company: 'estrela' | 'proposito' = /c6/i.test(payment_method) ? 'proposito' : 'estrela';
+    const is_frente_caixa = category === 'Frente de Caixa';
+    const FEE_CATS = ['Comissão do Ifood','Ifood Ads','Taxa de Antecipação - Ifood','Taxas de Cartão - Crédito, Débito e Pix','Taxas de Cartão - Vouchers','Taxas Brendi'];
+    const is_retido = amount < 0 && !is_frente_caixa && (
+      FEE_CATS.includes(category) ||
+      (category === 'Motoboy' && /ifood|frete|frota|retenç|sob demanda|serviço/i.test(descricao))
+    );
 
     out.push({
       source: 'saipos',
@@ -586,7 +601,9 @@ export function parseSaipos(rows: unknown[][]): ParseResult<CashflowSaiposRow> {
       fornecedor: fornecedor || null,
       descricao: descricao || null,
       paid,
-      is_frente_caixa: category === 'Frente de Caixa',
+      is_frente_caixa,
+      conta,
+      is_retido,
       source_seq: i,
     });
   }
