@@ -1,6 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
+export type RetidoRow = { category: string; total: number; n: number };
+export function useCashflowRetidoSummary(start: string, end: string) {
+  return useQuery({
+    queryKey: ['cashflow', 'retido', start, end],
+    enabled: Boolean(start && end),
+    queryFn: async (): Promise<RetidoRow[]> => {
+      const { data, error } = await (supabase.rpc as any)('cashflow_retido_summary', { p_start: start, p_end: end });
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({ category: r.category ?? 'Sem categoria', total: Number(r.total) || 0, n: Number(r.n) || 0 }));
+    },
+  });
+}
+
 export type MonthlySummaryRow = {
   ano: number;
   mes: number;
