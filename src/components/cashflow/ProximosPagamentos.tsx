@@ -147,15 +147,18 @@ export default function ProximosPagamentos() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* 4 caixas: info (pago no mês) + 3 faixas */}
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-lg border border-border/60 bg-muted/20 p-4 flex flex-col justify-between">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Valor pago durante esse mês
+            </div>
+            <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
+              {fmtBRL(totalPagoMes)}
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">até hoje</div>
+          </div>
 
-        {/* Já paguei este mês */}
-        <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-3">
-          <span className="text-sm text-muted-foreground">Valor pago durante esse mês</span>
-          <span className="font-mono text-base font-semibold tabular-nums text-foreground">{fmtBRL(totalPagoMes)}</span>
-        </div>
-
-        {/* 3 caixas neutras */}
-        <div className="grid gap-3 md:grid-cols-3">
           {faixas.map((f) => {
             const isOpen = openFaixa === f.key;
             return (
