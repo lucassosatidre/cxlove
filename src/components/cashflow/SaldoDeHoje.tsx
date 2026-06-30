@@ -1,6 +1,5 @@
-import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Wallet, AlertTriangle } from 'lucide-react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
 import logoBb from '@/assets/logo-bb.png';
@@ -101,7 +100,6 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
 
 export default function SaldoDeHoje() {
   const { data, isLoading, error } = useCashflowBalances();
-  const [folegoOpen, setFolegoOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -180,57 +178,32 @@ export default function SaldoDeHoje() {
             <AccountBubble key={a.id} acc={a} showName />
           ))}
 
-          {/* Balão final: SALDO DE HOJE */}
-          <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Saldo de hoje
+          {/* Coluna final: SALDO DE HOJE + LIMITE */}
+          <div className="flex flex-col gap-3 shrink-0">
+            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Saldo de hoje
+              </div>
+              <div
+                className={cn(
+                  'font-mono text-xl font-bold tabular-nums',
+                  negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                )}
+              >
+                {fmtBRL(ownSum)}
+              </div>
             </div>
-            <div
-              className={cn(
-                'font-mono text-xl font-bold tabular-nums',
-                negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
-              )}
-            >
-              {fmtBRL(ownSum)}
-            </div>
-            <button
-              type="button"
-              onClick={() => setFolegoOpen((v) => !v)}
-              className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ver fôlego
-              <ChevronDown
-                className={cn('h-3 w-3 transition-transform', folegoOpen && 'rotate-180')}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Painel fôlego expansível */}
-        <div
-          className={cn(
-            'grid transition-all duration-200',
-            folegoOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
-          )}
-        >
-          <div className="overflow-hidden">
-            <div className="flex gap-3 pb-2">
-              {/* Balão LIMITE */}
-              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  LIMITE
-                </div>
-                <div
-                  className={cn(
-                    'font-mono text-xl font-bold tabular-nums',
-                    folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
-                  )}
-                >
-                  {fmtBRL(folego)}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {"\n"}
-                </p>
+            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                LIMITE
+              </div>
+              <div
+                className={cn(
+                  'font-mono text-xl font-bold tabular-nums',
+                  folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                )}
+              >
+                {fmtBRL(folego)}
               </div>
             </div>
           </div>
