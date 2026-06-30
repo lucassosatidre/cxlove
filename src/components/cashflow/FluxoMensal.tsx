@@ -101,7 +101,7 @@ export default function FluxoMensal() {
 
         <p className="text-xs text-muted-foreground leading-relaxed">
           <strong>Entrou</strong> = dinheiro recebido nas contas (sem empréstimos nem transferências entre suas contas).{' '}
-          <strong>Saiu</strong> = pagamentos categorizados (Saipos). Dezembro/25 está incompleto (faltam dados de algumas contas).
+          <strong>Saiu</strong> = pagamentos categorizados (Saipos), <strong>por data de vencimento</strong>, e não inclui o que é descontado na fonte (iFood/cartão/Brendi). Dezembro/25 está incompleto (faltam dados de algumas contas).
         </p>
 
         <Collapsible open={open} onOpenChange={setOpen}>
