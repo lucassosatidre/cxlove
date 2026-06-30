@@ -214,19 +214,24 @@ export default function SaldoDeHoje() {
           )}
         >
           <div className="overflow-hidden">
-            <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                LIMITE
+            <div className="flex gap-3 pb-2">
+              {/* Balão LIMITE */}
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  LIMITE
+                </div>
+                <div
+                  className={cn(
+                    'font-mono text-xl font-bold tabular-nums',
+                    folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                  )}
+                >
+                  {fmtBRL(folego)}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  cheque especial {fmtBRL(limitSum)}
+                </p>
               </div>
-              <div className="mt-1 font-mono text-2xl font-bold tabular-nums text-foreground">
-                {fmtBRL(folego)}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {"\n"}
-              </p>
-              <p className="mt-2 text-[11px] text-muted-foreground/80">
-                {"\n"}
-              </p>
             </div>
           </div>
         </div>
