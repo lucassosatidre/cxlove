@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, AlertTriangle } from 'lucide-react';
+import { Wallet, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState } from 'react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
 import logoBb from '@/assets/logo-bb.png';
