@@ -15,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
-import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
+import { fmtBRL } from '@/hooks/useCashflowBalances';
 import {
   useCashflowUpcomingBills,
   useCashflowCategorySummary,
@@ -53,7 +53,6 @@ type OverdueAggr = { count: number; total: number; items: UpcomingBillRow[] };
 
 export default function ProximosPagamentos() {
   const today = useMemo(() => new Date(), []);
-  const balances = useCashflowBalances();
   const bills = useCashflowUpcomingBills();
   const inicioMesISO = useMemo(() => toISOLocal(new Date(today.getFullYear(), today.getMonth(), 1)), [today]);
   const hojeISO = useMemo(() => toISOLocal(today), [today]);
@@ -100,17 +99,6 @@ export default function ProximosPagamentos() {
     };
   }, [today]);
 
-  const folego = useMemo(() => {
-    const accs = (balances.data ?? []).filter((a) => !a.is_passthrough);
-    let own = 0;
-    let lim = 0;
-    for (const a of accs) {
-      own += Number(a.balance?.own_balance ?? 0);
-      lim += Number(a.overdraft_limit ?? 0);
-    }
-    return own + lim;
-  }, [balances.data]);
-
   const { faixas, depois30 } = useMemo(() => {
     const rows = bills.data ?? [];
     const f: Record<string, Faixa> = {
@@ -142,9 +130,6 @@ export default function ProximosPagamentos() {
     return { faixas: [f.a, f.b, f.c], depois30: depois };
   }, [bills.data, today]);
 
-  const total7 = faixas[0].total;
-  const falta = Math.max(0, total7 - folego);
-  const folegoCobre = folego >= total7;
 
   return (
     <Card className="border-border/60">
@@ -162,25 +147,6 @@ export default function ProximosPagamentos() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Linha-resumo (única que pode ficar vermelha) */}
-        <div
-          className={cn(
-            'rounded-lg border px-4 py-3 text-sm',
-            folegoCobre
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-              : 'border-destructive/40 bg-destructive/10 text-destructive',
-          )}
-        >
-          Pra cobrir os próximos 7 dias (<strong>{fmtBRL(total7)}</strong>) você tem{' '}
-          <strong>{fmtBRL(folego)}</strong> de fôlego (caixa + limite).{' '}
-          {folegoCobre ? (
-            <span>E o fôlego cobre.</span>
-          ) : (
-            <span>
-              Faltam <strong>{fmtBRL(falta)}</strong>.
-            </span>
-          )}
-        </div>
 
         {/* Já paguei este mês */}
         <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-3">
