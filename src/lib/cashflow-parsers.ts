@@ -33,6 +33,8 @@ export type CashflowSaiposRow = {
   descricao: string | null;
   paid: boolean;
   is_frente_caixa: boolean;
+  conta: string | null;
+  is_retido: boolean;
   source_seq: number;
 };
 
