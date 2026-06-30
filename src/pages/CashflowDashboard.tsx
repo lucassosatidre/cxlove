@@ -9,6 +9,7 @@ import ImportacoesCashflow from '@/components/cashflow/ImportacoesCashflow';
 import FluxoMensal from '@/components/cashflow/FluxoMensal';
 import ParaOndeFoi from '@/components/cashflow/ParaOndeFoi';
 import ProximosPagamentos from '@/components/cashflow/ProximosPagamentos';
+import DescontadoNaFonte from '@/components/cashflow/DescontadoNaFonte';
 import ExtratosPorConta from '@/components/cashflow/ExtratosPorConta';
 import ConferenciaSaiposBanco from '@/components/cashflow/ConferenciaSaiposBanco';
 import { supabase } from '@/integrations/supabase/client';
