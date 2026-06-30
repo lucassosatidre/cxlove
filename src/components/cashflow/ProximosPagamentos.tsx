@@ -145,25 +145,6 @@ export default function ProximosPagamentos() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Linha-resumo (única que pode ficar vermelha) */}
-        <div
-          className={cn(
-            'rounded-lg border px-4 py-3 text-sm',
-            folegoCobre
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-              : 'border-destructive/40 bg-destructive/10 text-destructive',
-          )}
-        >
-          Pra cobrir os próximos 7 dias (<strong>{fmtBRL(total7)}</strong>) você tem{' '}
-          <strong>{fmtBRL(folego)}</strong> de fôlego (caixa + limite).{' '}
-          {folegoCobre ? (
-            <span>E o fôlego cobre.</span>
-          ) : (
-            <span>
-              Faltam <strong>{fmtBRL(falta)}</strong>.
-            </span>
-          )}
-        </div>
 
         {/* Já paguei este mês */}
         <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3 flex items-center justify-between gap-3">
