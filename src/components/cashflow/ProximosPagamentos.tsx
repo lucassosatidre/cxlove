@@ -156,7 +156,7 @@ export default function ProximosPagamentos() {
           <div>
             <CardTitle className="text-base font-semibold">Próximos pagamentos</CardTitle>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Mostra só as saídas já agendadas no Saipos; não inclui o que vai entrar (recebíveis).
+              {" "}
             </p>
           </div>
         </div>
