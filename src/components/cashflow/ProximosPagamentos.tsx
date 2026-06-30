@@ -48,8 +48,6 @@ type Faixa = {
   items: UpcomingBillRow[];
 };
 
-type OverdueAggr = { count: number; total: number; items: UpcomingBillRow[] };
-
 export default function ProximosPagamentos() {
   const today = useMemo(() => new Date(), []);
   const bills = useCashflowUpcomingBills();
@@ -63,40 +61,6 @@ export default function ProximosPagamentos() {
 
   const [openFaixa, setOpenFaixa] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [overdueOpen, setOverdueOpen] = useState(false);
-
-  const [overdue, setOverdue] = useState<OverdueAggr>({ count: 0, total: 0, items: [] });
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const hojeISO = toISOLocal(today);
-      const { data, error } = await supabase
-        .from('cashflow_saipos')
-        .select('vencimento, amount, category, fornecedor, is_frente_caixa, paid')
-        .eq('paid', false)
-        .lt('amount', 0)
-        .lt('vencimento', hojeISO)
-        .order('vencimento', { ascending: false })
-        .limit(500);
-      if (error || cancelled) return;
-      const rows = (data ?? []).filter((r: any) => !r.is_frente_caixa);
-      const total = rows.reduce((s: number, r: any) => s + Math.abs(Number(r.amount) || 0), 0);
-      setOverdue({
-        count: rows.length,
-        total,
-        items: rows.map((r: any) => ({
-          vencimento: String(r.vencimento),
-          amount: Number(r.amount) || 0,
-          category: r.category ?? null,
-          fornecedor: r.fornecedor ?? null,
-        })),
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [today]);
 
   const { faixas, depois30 } = useMemo(() => {
     const rows = bills.data ?? [];
