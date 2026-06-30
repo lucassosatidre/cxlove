@@ -213,11 +213,11 @@ export default function ProximosPagamentos() {
           })}
         </div>
 
-        {/* Tudo o que está lançado depois de 30 dias */}
-        {depois30.length > 0 && (
+        {/* Tudo o que está lançado depois de 28 dias */}
+        {depois28.length > 0 && (
           <Collapsible open={showAll} onOpenChange={setShowAll}>
             <CollapsibleTrigger className="text-xs text-muted-foreground underline-offset-2 hover:underline">
-              ver tudo o que está lançado ({depois30.length} contas depois de 30 dias)
+              ver tudo o que está lançado ({depois28.length} contas depois de 28 dias)
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3">
               <div className="rounded-lg border border-border/60 bg-card px-4 py-3">
@@ -231,7 +231,7 @@ export default function ProximosPagamentos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[...depois30]
+                    {[...depois28]
                       .sort(
                         (a, b) =>
                           parseISODateLocal(a.vencimento).getTime() -
