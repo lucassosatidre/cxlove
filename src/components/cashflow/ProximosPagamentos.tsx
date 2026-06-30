@@ -122,8 +122,8 @@ export default function ProximosPagamentos() {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* 4 caixas: info (pago no mês) + 4 faixas semanais */}
-        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+        {/* Card valor pago no mês (topo) */}
+        <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded-lg border border-border/60 bg-muted/20 p-4 flex flex-col justify-between">
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Valor pago durante esse mês
@@ -133,7 +133,10 @@ export default function ProximosPagamentos() {
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">até hoje</div>
           </div>
+        </div>
 
+        {/* Timeline de 4 semanas futuras */}
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           {faixas.map((f) => {
             const isOpen = openFaixa === f.key;
             return (
@@ -145,6 +148,9 @@ export default function ProximosPagamentos() {
                 >
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     {f.label}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">
+                    {f.rangeLabel}
                   </div>
                   <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
                     {fmtBRL(f.total)}
