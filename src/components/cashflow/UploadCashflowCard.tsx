@@ -34,7 +34,7 @@ const TX_COLS = [
 
 const SAIPOS_COLS = [
   'company', 'vencimento', 'emissao', 'pagamento', 'amount', 'payment_method',
-  'category', 'fornecedor', 'descricao', 'paid', 'is_frente_caixa', 'source',
+  'category', 'fornecedor', 'descricao', 'paid', 'is_frente_caixa', 'conta', 'is_retido', 'source',
   'source_seq', 'import_id',
 ] as const;
 
