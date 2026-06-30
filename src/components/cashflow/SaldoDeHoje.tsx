@@ -229,7 +229,7 @@ export default function SaldoDeHoje() {
                   {fmtBRL(folego)}
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  cheque especial {fmtBRL(limitSum)}
+                  {"\n"}
                 </p>
               </div>
             </div>
