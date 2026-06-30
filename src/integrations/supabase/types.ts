@@ -1756,6 +1756,7 @@ export type Database = {
           amount: number
           category: string | null
           company: string | null
+          conta: string | null
           created_at: string
           descricao: string | null
           emissao: string | null
@@ -1763,6 +1764,7 @@ export type Database = {
           id: string
           import_id: string | null
           is_frente_caixa: boolean
+          is_retido: boolean
           pagamento: string | null
           paid: boolean
           payment_method: string | null
@@ -1775,6 +1777,7 @@ export type Database = {
           amount: number
           category?: string | null
           company?: string | null
+          conta?: string | null
           created_at?: string
           descricao?: string | null
           emissao?: string | null
@@ -1782,6 +1785,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           is_frente_caixa?: boolean
+          is_retido?: boolean
           pagamento?: string | null
           paid?: boolean
           payment_method?: string | null
@@ -1794,6 +1798,7 @@ export type Database = {
           amount?: number
           category?: string | null
           company?: string | null
+          conta?: string | null
           created_at?: string
           descricao?: string | null
           emissao?: string | null
@@ -1801,6 +1806,7 @@ export type Database = {
           id?: string
           import_id?: string | null
           is_frente_caixa?: boolean
+          is_retido?: boolean
           pagamento?: string | null
           paid?: boolean
           payment_method?: string | null
@@ -3847,6 +3853,14 @@ export type Database = {
           entradas: number
           mes: number
           saidas: number
+        }[]
+      }
+      cashflow_retido_summary: {
+        Args: { p_end: string; p_start: string }
+        Returns: {
+          category: string
+          n: number
+          total: number
         }[]
       }
       cashflow_statement_coverage: {
