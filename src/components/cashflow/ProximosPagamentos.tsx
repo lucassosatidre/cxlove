@@ -132,75 +132,83 @@ export default function ProximosPagamentos() {
           {faixas.map((f) => {
             const isOpen = openFaixa === f.key;
             return (
-              <div key={f.key} className="rounded-lg border border-border/60 bg-card">
-                <button
-                  type="button"
-                  onClick={() => setOpenFaixa(isOpen ? null : f.key)}
-                  className="w-full text-left p-4 hover:bg-muted/40 transition-colors"
-                >
-                  <div className="text-sm font-bold text-foreground tracking-wide">
-                    {f.rangeLabel}
-                  </div>
-                  <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
-                    {fmtBRL(f.total)}
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>
-                      {f.n} {f.n === 1 ? 'conta' : 'contas'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      ver detalhes
-                      <ChevronDown
-                        className={cn('h-3 w-3 transition-transform', isOpen && 'rotate-180')}
-                      />
-                    </span>
-                  </div>
-                </button>
-                {isOpen && (
-                  <div className="border-t border-border/60 px-4 py-3">
-                    {f.items.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-2">
-                        Nenhuma conta nesta faixa.
-                      </p>
-                    ) : (
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="h-8 w-20">Vencimento</TableHead>
-                            <TableHead className="h-8">Fornecedor</TableHead>
-                            <TableHead className="h-8">Categoria</TableHead>
-                            <TableHead className="h-8 w-28 text-right">Valor</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {[...f.items]
-                            .sort((a, b) => parseISODateLocal(a.vencimento).getTime() - parseISODateLocal(b.vencimento).getTime())
-                            .slice(0, 30)
-                            .map((it, i) => (
-                              <TableRow key={i}>
-                                <TableCell className="py-2 text-xs">
-                                  {fmtDDMM(it.vencimento)}
-                                </TableCell>
-                                <TableCell className="py-2 text-xs max-w-[140px] truncate" title={it.fornecedor || '—'}>
-                                  {it.fornecedor || '—'}
-                                </TableCell>
-                                <TableCell className="py-2 text-xs max-w-[120px] truncate" title={it.category || 'Sem categoria'}>
-                                  {it.category || 'Sem categoria'}
-                                </TableCell>
-                                <TableCell className="py-2 text-right font-mono text-xs whitespace-nowrap">
-                                  {fmtBRL(Math.abs(it.amount))}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    )}
-                  </div>
+              <button
+                key={f.key}
+                type="button"
+                onClick={() => setOpenFaixa(isOpen ? null : f.key)}
+                className={cn(
+                  'rounded-lg border bg-card text-left p-4 hover:bg-muted/40 transition-colors',
+                  isOpen ? 'border-primary' : 'border-border/60',
                 )}
-              </div>
+              >
+                <div className="text-sm font-bold text-foreground tracking-wide">
+                  {f.rangeLabel}
+                </div>
+                <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
+                  {fmtBRL(f.total)}
+                </div>
+                <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    {f.n} {f.n === 1 ? 'conta' : 'contas'}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    ver detalhes
+                    <ChevronDown
+                      className={cn('h-3 w-3 transition-transform', isOpen && 'rotate-180')}
+                    />
+                  </span>
+                </div>
+              </button>
             );
           })}
         </div>
+
+        {/* Painel de detalhes ocupa a linha inteira abaixo da timeline */}
+        {openFaixa && (() => {
+          const f = faixas.find((x) => x.key === openFaixa);
+          if (!f) return null;
+          const sorted = [...f.items].sort(
+            (a, b) => parseISODateLocal(a.vencimento).getTime() - parseISODateLocal(b.vencimento).getTime(),
+          );
+          return (
+            <div className="rounded-lg border border-border/60 bg-card p-4">
+              <div className="mb-3 text-sm font-semibold text-foreground">
+                {f.rangeLabel} · {f.n} {f.n === 1 ? 'conta' : 'contas'} · {fmtBRL(f.total)}
+              </div>
+              {sorted.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">Nenhuma conta nesta faixa.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-8 w-24">Vencimento</TableHead>
+                      <TableHead className="h-8">Fornecedor</TableHead>
+                      <TableHead className="h-8">Categoria</TableHead>
+                      <TableHead className="h-8 w-32 text-right">Valor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sorted.map((it, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
+                        <TableCell className="py-2 text-xs" title={it.fornecedor || '—'}>
+                          {it.fornecedor || '—'}
+                        </TableCell>
+                        <TableCell className="py-2 text-xs" title={it.category || 'Sem categoria'}>
+                          {it.category || 'Sem categoria'}
+                        </TableCell>
+                        <TableCell className="py-2 text-right font-mono text-xs whitespace-nowrap">
+                          {fmtBRL(Math.abs(it.amount))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          );
+        })()}
+
 
       </CardContent>
     </Card>
