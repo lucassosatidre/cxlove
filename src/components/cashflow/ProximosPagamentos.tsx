@@ -166,28 +166,28 @@ export default function ProximosPagamentos() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="h-8">Vencimento</TableHead>
+                            <TableHead className="h-8 w-20">Vencimento</TableHead>
                             <TableHead className="h-8">Fornecedor</TableHead>
                             <TableHead className="h-8">Categoria</TableHead>
-                            <TableHead className="h-8 text-right">Valor</TableHead>
+                            <TableHead className="h-8 w-28 text-right">Valor</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {[...f.items]
-                            .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount))
+                            .sort((a, b) => parseISODateLocal(a.vencimento).getTime() - parseISODateLocal(b.vencimento).getTime())
                             .slice(0, 30)
                             .map((it, i) => (
                               <TableRow key={i}>
                                 <TableCell className="py-2 text-xs">
                                   {fmtDDMM(it.vencimento)}
                                 </TableCell>
-                                <TableCell className="py-2 text-xs">
+                                <TableCell className="py-2 text-xs max-w-[140px] truncate" title={it.fornecedor || '—'}>
                                   {it.fornecedor || '—'}
                                 </TableCell>
-                                <TableCell className="py-2 text-xs">
+                                <TableCell className="py-2 text-xs max-w-[120px] truncate" title={it.category || 'Sem categoria'}>
                                   {it.category || 'Sem categoria'}
                                 </TableCell>
-                                <TableCell className="py-2 text-right font-mono text-xs">
+                                <TableCell className="py-2 text-right font-mono text-xs whitespace-nowrap">
                                   {fmtBRL(Math.abs(it.amount))}
                                 </TableCell>
                               </TableRow>
