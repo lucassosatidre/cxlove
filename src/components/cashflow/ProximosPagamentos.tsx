@@ -211,48 +211,6 @@ export default function ProximosPagamentos() {
           })}
         </div>
 
-        {/* Tudo o que está lançado depois de 28 dias */}
-        {depois28.length > 0 && (
-          <Collapsible open={showAll} onOpenChange={setShowAll}>
-            <CollapsibleTrigger className="text-xs text-muted-foreground underline-offset-2 hover:underline">
-              ver tudo o que está lançado ({depois28.length} contas depois de 28 dias)
-            </CollapsibleTrigger>
-            <CollapsibleContent className="mt-3">
-              <div className="rounded-lg border border-border/60 bg-card px-4 py-3">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="h-8">Vencimento</TableHead>
-                      <TableHead className="h-8">Fornecedor</TableHead>
-                      <TableHead className="h-8">Categoria</TableHead>
-                      <TableHead className="h-8 text-right">Valor</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[...depois28]
-                      .sort(
-                        (a, b) =>
-                          parseISODateLocal(a.vencimento).getTime() -
-                          parseISODateLocal(b.vencimento).getTime(),
-                      )
-                      .map((it, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
-                          <TableCell className="py-2 text-xs">{it.fornecedor || '—'}</TableCell>
-                          <TableCell className="py-2 text-xs">
-                            {it.category || 'Sem categoria'}
-                          </TableCell>
-                          <TableCell className="py-2 text-right font-mono text-xs">
-                            {fmtBRL(Math.abs(it.amount))}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
-        )}
       </CardContent>
     </Card>
   );
