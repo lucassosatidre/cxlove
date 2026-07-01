@@ -246,7 +246,7 @@ function SaiposSemBancoTable({ rows }: { rows: ReconRow[] }) {
             .map((r, i) => (
               <TableRow key={i}>
                 <TableCell className="text-xs">{fmtDDMM(r.vencimento)}</TableCell>
-                <TableCell className="text-xs">{r.fornecedor || '—'}</TableCell>
+                <TableCell className="text-xs">{r.descricao || r.fornecedor || '—'}</TableCell>
                 <TableCell className="text-xs">{r.categoria || 'Sem categoria'}</TableCell>
                 <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
               </TableRow>
