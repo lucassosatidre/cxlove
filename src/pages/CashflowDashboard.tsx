@@ -8,6 +8,7 @@ import ImportacoesCashflow from '@/components/cashflow/ImportacoesCashflow';
 import FluxoMensal from '@/components/cashflow/FluxoMensal';
 import ParaOndeFoi from '@/components/cashflow/ParaOndeFoi';
 import ProximosPagamentos from '@/components/cashflow/ProximosPagamentos';
+import PagamentosDeHoje from '@/components/cashflow/PagamentosDeHoje';
 import DescontadoNaFonte from '@/components/cashflow/DescontadoNaFonte';
 import ExtratosPorConta from '@/components/cashflow/ExtratosPorConta';
 import ConferenciaSaiposBanco from '@/components/cashflow/ConferenciaSaiposBanco';
@@ -31,6 +32,7 @@ export default function CashflowDashboard() {
 
           <TabsContent value="visao" className="space-y-6">
             <SaldoDeHoje />
+            <PagamentosDeHoje />
             <ProximosPagamentos />
             {/* DescontadoNaFonte desativado por solicitacao (2026-06-30) */}
             {/* <DescontadoNaFonte /> */}
