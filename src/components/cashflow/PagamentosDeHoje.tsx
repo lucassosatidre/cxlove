@@ -28,7 +28,7 @@ export default function PagamentosDeHoje() {
 
   const { total, n, items } = useMemo(() => {
     const row = (daily.data ?? [])[0];
-    if (!row) return { total: 0, n: 0, items: [] as Array<{ categoria: string; fornecedor: string | null; valor: number }> };
+    if (!row) return { total: 0, n: 0, items: [] as Array<{ categoria: string; fornecedor: string | null; descricao: string | null; valor: number }> };
     return { total: Number(row.total) || 0, n: Number(row.n) || 0, items: row.items ?? [] };
   }, [daily.data]);
 
