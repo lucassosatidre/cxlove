@@ -4,7 +4,15 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "192"
+VERSION = "193"
+# v193 (01/07/26): COMANDA/KDS — combo "1 pizza + bebida" (ex.: "Pizza Gigante + Refri 1,5l", SEM "N X
+#   Pizza" no nome -> mult==1) pedido Nx: a pizza saía qty=N (certo) mas a BEBIDA/refs saíam 1x só (Coca de
+#   combo pedido 2x vinha qty=1) e total_caixas contava 1 item em vez de N. Causa: o ramo `else` de
+#   extrair_itens_kds punha qty na caixa mas classificava as escolhas 1x só. Pedido real #11 (30/06): 2
+#   Gigantes iguais + Refri -> KDS mostrava 1 Coca e total_caixas=2. Agora o `else` REPLICA a pizza+escolhas
+#   qty vezes (qty=1 cada), igual ao ramo mult>1 -> N pizzas + N bebidas + total_caixas certo. So o caminho
+#   do KDS/comanda (etiqueta fisica usa extrair_itens_printrows, intacta). Harness: #11 (2 Gig+Coca 2x) +
+#   pizza simples 1x/2x + combo doce + obs sem regressao.
 # v192 (27/06/26): SALAO combo "N X Pizza" (multiplicador X separado, ex.: "2 X Pizza Grande") nao dividia
 #   e deixava o "X" grudado no nome. O regex de topo comia o N; agora re-cola o N no "x" orfao pra
 #   contar_pizzas_no_nome dividir certo (espelha o delivery). Guardado: so dispara no "x " orfao -> item
@@ -1246,13 +1254,18 @@ def extrair_itens_kds(grupos):
                     for _ in range(max(1, qty)):
                         _kds_combo(display, base, doce, chs, mult, notes)
                 else:
-                    cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": qty, "_fl": [], "_adic": []}
-                    display.append(cur)
-                    for ch in chs:
-                        _kds_classifica(display, cur, doce, ch["txt"], (ch.get("notes") or "").strip())   # nota COLADA no item (sabor/borda/adic/broto/bebida)
-                if notes and mult == 1:
-                    if doce: cur["_obs"] = notes   # broto doce: obs do item fica no broto (nao vira "Obs:" solto que iria pra salgada)
-                    else: display.append({"tipo": "outro", "nome": f"Obs: {notes}", "qty": 1, "_fl": [], "_adic": []})
+                    # v193: pizza simples OU combo "1 pizza + bebida" (mult==1). Se pedido Nx (quantity>1),
+                    # emite N pizzas iguais (qty=1 cada) + as escolhas (bebida etc.) N vezes — IGUAL ao ramo
+                    # mult>1. Antes a pizza levava qty=N mas a BEBIDA/refs saiam 1x so (Coca de combo pedido
+                    # 2x vinha qty=1) e total_caixas contava 1 item em vez de N. Ver pedido #11 (2 Gigantes+Refri).
+                    for _ in range(qty):
+                        cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": 1, "_fl": [], "_adic": []}
+                        display.append(cur)
+                        for ch in chs:
+                            _kds_classifica(display, cur, doce, ch["txt"], (ch.get("notes") or "").strip())   # nota COLADA no item (sabor/borda/adic/broto/bebida)
+                        if notes:
+                            if doce: cur["_obs"] = notes   # broto doce: obs do item fica no broto (nao vira "Obs:" solto que iria pra salgada)
+                            else: display.append({"tipo": "outro", "nome": f"Obs: {notes}", "qty": 1, "_fl": [], "_adic": []})
                 # mult>1 (combo): a obs geral do pedido ja foi colada em CADA pizza dentro de _kds_combo
             elif _salao_eh_bebida(desc):
                 display.append({"tipo": "bebida", "nome": desc, "qty": qty, "_fl": [], "_adic": []})
