@@ -3880,6 +3880,7 @@ export type Database = {
         Returns: {
           amount: number
           category: string
+          descricao: string
           fornecedor: string
           vencimento: string
         }[]
@@ -4039,6 +4040,7 @@ export type Database = {
           account_name: string
           categoria: string
           confianca: string
+          descricao: string
           descricao_banco: string
           fornecedor: string
           tipo: string
