@@ -2,11 +2,6 @@ import { useMemo, useState } from 'react';
 import { CalendarDays, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import {
   Table,
   TableBody,
   TableCell,
@@ -60,9 +55,8 @@ export default function ProximosPagamentos() {
   );
 
   const [openFaixa, setOpenFaixa] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
 
-  const { faixas, depois28 } = useMemo(() => {
+  const faixas = useMemo(() => {
     const rows = bills.data ?? [];
     const faixaDefs = [
       { key: 'w1', label: 'Vence em até 7 dias', weekIdx: 1 },
@@ -87,7 +81,6 @@ export default function ProximosPagamentos() {
     faixaDefs.forEach(({ key, label }, i) => {
       f[key] = { key, label, rangeLabel: ranges[i], total: 0, n: 0, items: [] };
     });
-    const depois: UpcomingBillRow[] = [];
     for (const r of rows) {
       const d = diffDays(parseISODateLocal(r.vencimento), today);
       const val = Math.abs(Number(r.amount) || 0);
@@ -98,11 +91,9 @@ export default function ProximosPagamentos() {
         f[key].total += val;
         f[key].n += 1;
         f[key].items.push(r);
-      } else {
-        depois.push(r);
       }
     }
-    return { faixas: [f.w1, f.w2, f.w3, f.w4], depois28: depois };
+    return [f.w1, f.w2, f.w3, f.w4];
   }, [bills.data, today]);
 
 
