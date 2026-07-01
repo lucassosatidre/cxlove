@@ -148,9 +148,6 @@ export default function ProximosPagamentos() {
                   className="w-full text-left p-4 hover:bg-muted/40 transition-colors"
                 >
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    {f.label}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
                     {f.rangeLabel}
                   </div>
                   <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
