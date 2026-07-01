@@ -147,7 +147,7 @@ export default function ProximosPagamentos() {
                   onClick={() => setOpenFaixa(isOpen ? null : f.key)}
                   className="w-full text-left p-4 hover:bg-muted/40 transition-colors"
                 >
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <div className="text-sm font-bold text-foreground tracking-wide">
                     {f.rangeLabel}
                   </div>
                   <div className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">
