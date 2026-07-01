@@ -24,6 +24,7 @@ function fmtDDMM(iso: string): string {
 export default function PagamentosDeHoje() {
   const hojeISO = useMemo(() => toISOLocal(new Date()), []);
   const daily = useCashflowUpcomingBillsDaily(hojeISO, 1);
+  const balances = useCashflowBalances();
   const [open, setOpen] = useState(false);
 
   const { total, n, items } = useMemo(() => {
@@ -31,6 +32,15 @@ export default function PagamentosDeHoje() {
     if (!row) return { total: 0, n: 0, items: [] as Array<{ categoria: string; fornecedor: string | null; descricao: string | null; valor: number }> };
     return { total: Number(row.total) || 0, n: Number(row.n) || 0, items: row.items ?? [] };
   }, [daily.data]);
+
+  const ownSum = useMemo(() => {
+    if (!balances.data) return null;
+    return balances.data
+      .filter((a) => !a.is_passthrough)
+      .reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
+  }, [balances.data]);
+
+  const projectedSaldo = ownSum === null ? null : ownSum - total;
 
   const sorted = useMemo(
     () => [...items].sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor)),
