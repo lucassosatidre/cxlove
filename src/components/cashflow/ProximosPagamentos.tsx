@@ -182,7 +182,7 @@ export default function ProximosPagamentos() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="h-8 w-24">Vencimento</TableHead>
-                      <TableHead className="h-8">Fornecedor</TableHead>
+                      <TableHead className="h-8">Descrição</TableHead>
                       <TableHead className="h-8">Categoria</TableHead>
                       <TableHead className="h-8 w-32 text-right">Valor</TableHead>
                     </TableRow>
@@ -191,8 +191,8 @@ export default function ProximosPagamentos() {
                     {sorted.map((it, i) => (
                       <TableRow key={i}>
                         <TableCell className="py-2 text-xs">{fmtDDMM(it.vencimento)}</TableCell>
-                        <TableCell className="py-2 text-xs" title={it.fornecedor || '—'}>
-                          {it.fornecedor || '—'}
+                        <TableCell className="py-2 text-xs" title={it.descricao || it.fornecedor || '—'}>
+                          {it.descricao || it.fornecedor || '—'}
                         </TableCell>
                         <TableCell className="py-2 text-xs" title={it.category || 'Sem categoria'}>
                           {it.category || 'Sem categoria'}
