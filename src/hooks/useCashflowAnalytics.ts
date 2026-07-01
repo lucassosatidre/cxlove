@@ -91,6 +91,7 @@ export type UpcomingBillRow = {
   amount: number;
   category: string | null;
   fornecedor: string | null;
+  descricao: string | null;
 };
 
 export function useCashflowUpcomingBills() {
@@ -104,6 +105,7 @@ export function useCashflowUpcomingBills() {
         amount: Number(r.amount) || 0,
         category: r.category ?? null,
         fornecedor: r.fornecedor ?? null,
+        descricao: r.descricao ?? r.fornecedor ?? null,
       }));
     },
   });
