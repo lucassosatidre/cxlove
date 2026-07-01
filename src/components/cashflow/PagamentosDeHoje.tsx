@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { fmtBRL } from '@/hooks/useCashflowBalances';
+import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import { useCashflowUpcomingBillsDaily } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
 
