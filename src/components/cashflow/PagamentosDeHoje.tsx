@@ -93,6 +93,7 @@ export default function PagamentosDeHoje() {
             {sorted.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2">Nenhuma conta vencendo hoje.</p>
             ) : (
+            <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -136,7 +137,7 @@ export default function PagamentosDeHoje() {
                   </span>
                 )}
               </div>
-            )}
+            </>
           </div>
         )}
       </CardContent>
