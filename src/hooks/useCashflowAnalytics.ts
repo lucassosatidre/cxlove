@@ -111,7 +111,7 @@ export function useCashflowUpcomingBills() {
   });
 }
 
-export type DailyBillItem = { categoria: string; fornecedor: string | null; valor: number };
+export type DailyBillItem = { categoria: string; fornecedor: string | null; descricao: string | null; valor: number };
 export type UpcomingBillDayRow = { date: string; total: number; n: number; items: DailyBillItem[] };
 
 export function useCashflowUpcomingBillsDaily(start: string, days: number) {
@@ -130,6 +130,7 @@ export function useCashflowUpcomingBillsDaily(start: string, days: number) {
         items: (r.items ?? []).map((it: any) => ({
           categoria: it.categoria ?? 'Sem categoria',
           fornecedor: it.fornecedor ?? null,
+          descricao: it.descricao ?? it.fornecedor ?? null,
           valor: Number(it.valor) || 0,
         })),
       }));
