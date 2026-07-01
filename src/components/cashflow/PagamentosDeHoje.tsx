@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { fmtBRL } from '@/hooks/useCashflowBalances';
+import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import { useCashflowUpcomingBillsDaily } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +24,7 @@ function fmtDDMM(iso: string): string {
 export default function PagamentosDeHoje() {
   const hojeISO = useMemo(() => toISOLocal(new Date()), []);
   const daily = useCashflowUpcomingBillsDaily(hojeISO, 1);
+  const balances = useCashflowBalances();
   const [open, setOpen] = useState(false);
 
   const { total, n, items } = useMemo(() => {
@@ -31,6 +32,15 @@ export default function PagamentosDeHoje() {
     if (!row) return { total: 0, n: 0, items: [] as Array<{ categoria: string; fornecedor: string | null; descricao: string | null; valor: number }> };
     return { total: Number(row.total) || 0, n: Number(row.n) || 0, items: row.items ?? [] };
   }, [daily.data]);
+
+  const ownSum = useMemo(() => {
+    if (!balances.data) return null;
+    return balances.data
+      .filter((a) => !a.is_passthrough)
+      .reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
+  }, [balances.data]);
+
+  const projectedSaldo = ownSum === null ? null : ownSum - total;
 
   const sorted = useMemo(
     () => [...items].sort((a, b) => Math.abs(b.valor) - Math.abs(a.valor)),
@@ -83,6 +93,7 @@ export default function PagamentosDeHoje() {
             {sorted.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2">Nenhuma conta vencendo hoje.</p>
             ) : (
+            <>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -109,6 +120,24 @@ export default function PagamentosDeHoje() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-4 border-t border-border/60 pt-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Previsão de saldo ao fim do dia:
+                </span>
+                {projectedSaldo === null ? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ) : (
+                  <span
+                    className={cn(
+                      'font-mono text-sm font-semibold tabular-nums',
+                      projectedSaldo < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                    )}
+                  >
+                    {fmtBRL(projectedSaldo)}
+                  </span>
+                )}
+              </div>
+            </>
             )}
           </div>
         )}
