@@ -87,7 +87,7 @@ export default function PagamentosDeHoje() {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="h-8 w-24">Vencimento</TableHead>
-                    <TableHead className="h-8">Fornecedor</TableHead>
+                    <TableHead className="h-8">Descrição</TableHead>
                     <TableHead className="h-8">Categoria</TableHead>
                     <TableHead className="h-8 w-32 text-right">Valor</TableHead>
                   </TableRow>
@@ -96,8 +96,8 @@ export default function PagamentosDeHoje() {
                   {sorted.map((it, i) => (
                     <TableRow key={i}>
                       <TableCell className="py-2 text-xs">{fmtDDMM(hojeISO)}</TableCell>
-                      <TableCell className="py-2 text-xs" title={it.fornecedor || '—'}>
-                        {it.fornecedor || '—'}
+                      <TableCell className="py-2 text-xs" title={it.descricao || it.fornecedor || '—'}>
+                        {it.descricao || it.fornecedor || '—'}
                       </TableCell>
                       <TableCell className="py-2 text-xs" title={it.categoria || 'Sem categoria'}>
                         {it.categoria || 'Sem categoria'}
