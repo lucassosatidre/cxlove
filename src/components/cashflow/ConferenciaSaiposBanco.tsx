@@ -187,7 +187,7 @@ function CasadoTable({ rows }: { rows: ReconRow[] }) {
         <TableHeader>
           <TableRow>
             <TableHead>Vencimento</TableHead>
-            <TableHead>Fornecedor</TableHead>
+            <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
             <TableHead className="text-right">Valor</TableHead>
             <TableHead>Data no banco</TableHead>
@@ -201,7 +201,7 @@ function CasadoTable({ rows }: { rows: ReconRow[] }) {
             .map((r, i) => (
               <TableRow key={i}>
                 <TableCell className="text-xs">{fmtDDMM(r.vencimento)}</TableCell>
-                <TableCell className="text-xs">{r.fornecedor || '—'}</TableCell>
+                <TableCell className="text-xs">{r.descricao || r.fornecedor || '—'}</TableCell>
                 <TableCell className="text-xs">{r.categoria || 'Sem categoria'}</TableCell>
                 <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
                 <TableCell className="text-xs">{fmtDDMM(r.tx_date)}</TableCell>
@@ -234,7 +234,7 @@ function SaiposSemBancoTable({ rows }: { rows: ReconRow[] }) {
         <TableHeader>
           <TableRow>
             <TableHead>Vencimento</TableHead>
-            <TableHead>Fornecedor</TableHead>
+            <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
             <TableHead className="text-right">Valor</TableHead>
           </TableRow>
@@ -246,7 +246,7 @@ function SaiposSemBancoTable({ rows }: { rows: ReconRow[] }) {
             .map((r, i) => (
               <TableRow key={i}>
                 <TableCell className="text-xs">{fmtDDMM(r.vencimento)}</TableCell>
-                <TableCell className="text-xs">{r.fornecedor || '—'}</TableCell>
+                <TableCell className="text-xs">{r.descricao || r.fornecedor || '—'}</TableCell>
                 <TableCell className="text-xs">{r.categoria || 'Sem categoria'}</TableCell>
                 <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
               </TableRow>
