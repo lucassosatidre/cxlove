@@ -119,6 +119,23 @@ export default function PagamentosDeHoje() {
                   ))}
                 </TableBody>
               </Table>
+              <div className="mt-4 border-t border-border/60 pt-3 flex items-center justify-between gap-3">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Previsão de saldo ao fim do dia:
+                </span>
+                {projectedSaldo === null ? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ) : (
+                  <span
+                    className={cn(
+                      'font-mono text-sm font-semibold tabular-nums',
+                      projectedSaldo < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                    )}
+                  >
+                    {fmtBRL(projectedSaldo)}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         )}
