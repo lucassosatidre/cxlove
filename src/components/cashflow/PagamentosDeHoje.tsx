@@ -138,6 +138,7 @@ export default function PagamentosDeHoje() {
                 )}
               </div>
             </>
+            )}
           </div>
         )}
       </CardContent>
