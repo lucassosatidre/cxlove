@@ -234,7 +234,7 @@ function SaiposSemBancoTable({ rows }: { rows: ReconRow[] }) {
         <TableHeader>
           <TableRow>
             <TableHead>Vencimento</TableHead>
-            <TableHead>Fornecedor</TableHead>
+            <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
             <TableHead className="text-right">Valor</TableHead>
           </TableRow>
