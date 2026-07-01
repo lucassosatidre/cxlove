@@ -335,7 +335,7 @@ export default function ProjecaoCaixa() {
                           <TableRow>
                             <TableHead className="h-8">Venc.</TableHead>
                             <TableHead className="h-8">Categoria</TableHead>
-                            <TableHead className="h-8">Fornecedor</TableHead>
+                            <TableHead className="h-8">Descrição</TableHead>
                             <TableHead className="h-8 text-right">Valor</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -349,7 +349,7 @@ export default function ProjecaoCaixa() {
                                 {it.category || '—'}
                               </TableCell>
                               <TableCell className="py-2 text-xs">
-                                {it.fornecedor || '—'}
+                                {it.descricao || it.fornecedor || '—'}
                               </TableCell>
                               <TableCell className="py-2 text-right font-mono text-xs text-destructive">
                                 −{fmtBRL(Math.abs(it.amount))}
