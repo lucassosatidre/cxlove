@@ -153,7 +153,7 @@ export default function SaldoDeHoje() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Linha única de balões */}
-        <div className="flex gap-3 overflow-x-auto pb-2">
+        <div className="flex gap-3 pb-2">
           {estrelaAccs.map((a) => (
             <AccountBubble key={a.id} acc={a} showName={false} />
           ))}
@@ -165,8 +165,8 @@ export default function SaldoDeHoje() {
           ))}
 
           {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
-          <div className="flex flex-col gap-3 shrink-0">
-            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 min-w-[190px] shrink-0">
+          <div className="flex flex-col gap-3 flex-1 min-w-0">
+            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 flex-1 min-w-0">
               <div
                 className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-2xl"
                 aria-label="Saldo de hoje"
