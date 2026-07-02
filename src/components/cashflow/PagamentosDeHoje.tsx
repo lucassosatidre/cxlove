@@ -56,7 +56,6 @@ export default function PagamentosDeHoje() {
           </div>
           <div>
             <CardTitle className="text-base font-semibold">Pagamentos de hoje</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Vencendo em {fmtDDMM(hojeISO)}</p>
           </div>
         </div>
       </CardHeader>
