@@ -41,13 +41,12 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   const isCresol = key === 'Cresol';
   if (src) {
     return (
-      <div
-        className={cn(
-          'rounded-xl bg-white overflow-hidden flex items-center justify-center shrink-0',
-          isCresol ? 'h-14 w-14' : 'h-10 w-10',
-        )}
-      >
-        <img src={src} alt={name} className={cn('h-full w-full object-contain', isCresol ? 'p-0' : 'p-1')} />
+      <div className="h-10 w-10 rounded-xl bg-white overflow-hidden flex items-center justify-center shrink-0">
+        <img
+          src={src}
+          alt={name}
+          className={cn('h-full w-full object-contain', isCresol ? 'p-0' : 'p-1')}
+        />
       </div>
     );
   }
