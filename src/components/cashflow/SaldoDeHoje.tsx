@@ -80,7 +80,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
       </div>
       <div
         className={cn(
-          'font-mono text-base font-semibold tabular-nums',
+          'font-mono text-sm font-semibold tabular-nums whitespace-nowrap',
           own < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
         )}
       >
@@ -168,7 +168,7 @@ export default function SaldoDeHoje() {
           <div className="flex flex-col gap-3 flex-1 min-w-0">
             <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 flex-1 min-w-0">
               <div
-                className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-2xl"
+                className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl"
                 aria-label="Saldo de hoje"
                 title="Saldo de hoje"
               >
@@ -176,7 +176,7 @@ export default function SaldoDeHoje() {
               </div>
               <div
                 className={cn(
-                  'font-mono text-xl font-bold tabular-nums',
+                  'font-mono text-base font-bold tabular-nums whitespace-nowrap',
                   negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
                 )}
               >
@@ -199,7 +199,7 @@ export default function SaldoDeHoje() {
                 </div>
                 <div
                   className={cn(
-                    'font-mono text-xl font-bold tabular-nums',
+                    'font-mono text-base font-bold tabular-nums whitespace-nowrap',
                     folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
                   )}
                 >
