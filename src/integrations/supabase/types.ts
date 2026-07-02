@@ -1827,6 +1827,7 @@ export type Database = {
           description: string | null
           detail: string | null
           doc_number: string | null
+          external_id: string | null
           id: string
           import_id: string | null
           is_future: boolean
@@ -1846,6 +1847,7 @@ export type Database = {
           description?: string | null
           detail?: string | null
           doc_number?: string | null
+          external_id?: string | null
           id?: string
           import_id?: string | null
           is_future?: boolean
@@ -1865,6 +1867,7 @@ export type Database = {
           description?: string | null
           detail?: string | null
           doc_number?: string | null
+          external_id?: string | null
           id?: string
           import_id?: string | null
           is_future?: boolean
@@ -2814,6 +2817,62 @@ export type Database = {
           received_at?: string
         }
         Relationships: []
+      }
+      pluggy_accounts: {
+        Row: {
+          balance: number | null
+          cashflow_account_id: string | null
+          created_at: string
+          currency: string | null
+          id: string
+          item_id: string
+          last_synced_at: string | null
+          name: string | null
+          number: string | null
+          pluggy_account_id: string
+          subtype: string | null
+          type: string | null
+          updated_at: string
+        }
+        Insert: {
+          balance?: number | null
+          cashflow_account_id?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          item_id: string
+          last_synced_at?: string | null
+          name?: string | null
+          number?: string | null
+          pluggy_account_id: string
+          subtype?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Update: {
+          balance?: number | null
+          cashflow_account_id?: string | null
+          created_at?: string
+          currency?: string | null
+          id?: string
+          item_id?: string
+          last_synced_at?: string | null
+          name?: string | null
+          number?: string | null
+          pluggy_account_id?: string
+          subtype?: string | null
+          type?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pluggy_accounts_cashflow_account_id_fkey"
+            columns: ["cashflow_account_id"]
+            isOneToOne: false
+            referencedRelation: "cashflow_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pluggy_events: {
         Row: {
