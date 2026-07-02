@@ -2815,6 +2815,33 @@ export type Database = {
         }
         Relationships: []
       }
+      pluggy_events: {
+        Row: {
+          created_at: string
+          event: string | null
+          id: string
+          item_id: string | null
+          payload: Json | null
+          processed: boolean
+        }
+        Insert: {
+          created_at?: string
+          event?: string | null
+          id?: string
+          item_id?: string | null
+          payload?: Json | null
+          processed?: boolean
+        }
+        Update: {
+          created_at?: string
+          event?: string | null
+          id?: string
+          item_id?: string | null
+          payload?: Json | null
+          processed?: boolean
+        }
+        Relationships: []
+      }
       pluggy_items: {
         Row: {
           company: string | null
