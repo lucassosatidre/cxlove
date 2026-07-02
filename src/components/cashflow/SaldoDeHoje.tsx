@@ -69,7 +69,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
   const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
   return (
-    <div className="rounded-lg border border-border/60 bg-card p-3 flex flex-col items-center gap-2 flex-1 min-w-0">
+    <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
       <div className="flex items-center gap-2">
         <BankLogo bank={acc.bank} name={acc.name} />
         {showName && (
@@ -166,7 +166,7 @@ export default function SaldoDeHoje() {
 
           {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
           <div className="flex flex-col gap-3 flex-1 min-w-0">
-            <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 flex-1 min-w-0">
+            <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
               <div
                 className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl"
                 aria-label="Saldo de hoje"
@@ -176,7 +176,7 @@ export default function SaldoDeHoje() {
               </div>
               <div
                 className={cn(
-                  'font-mono text-base font-bold tabular-nums whitespace-nowrap',
+                  'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
                   negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
                 )}
               >
@@ -193,13 +193,13 @@ export default function SaldoDeHoje() {
               </button>
             </div>
             {limiteOpen && (
-              <div className="rounded-lg border border-primary/40 bg-primary/5 p-3 flex flex-col items-center gap-2 flex-1 min-w-0">
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   LIMITE
                 </div>
                 <div
                   className={cn(
-                    'font-mono text-base font-bold tabular-nums whitespace-nowrap',
+                    'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
                     folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
                   )}
                 >
