@@ -26,3 +26,6 @@ verify_jwt = true
 
 [functions.pluggy-connect-token]
 verify_jwt = true
+
+[functions.pluggy-webhook]
+verify_jwt = false
