@@ -144,7 +144,7 @@ export default function ConectarBancoOpenFinance() {
         {accessToken && (
           <PluggyConnect
             connectToken={accessToken}
-            includeSandbox={true}
+            includeSandbox={false}
             onSuccess={handleSuccess}
             onError={handleError}
             onClose={handleClose}
