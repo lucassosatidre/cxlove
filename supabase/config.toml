@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.migrate-order-to-salon]
 verify_jwt = true
+
+[functions.pluggy-connect-token]
+verify_jwt = true
