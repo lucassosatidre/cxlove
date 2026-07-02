@@ -14,6 +14,7 @@ import { Landmark, CreditCard, FileSpreadsheet, Trash2, Loader2 } from 'lucide-r
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from './UploadCashflowCard';
+import ConectarBancoOpenFinance from './ConectarBancoOpenFinance';
 import {
   parseBB, parseCresol, parseC6, parseSicredi, parseIfoodConta, parseSaipos,
 } from '@/lib/cashflow-parsers';
@@ -142,6 +143,8 @@ export default function ImportacoesCashflow() {
 
   return (
     <div className="space-y-6">
+      <ConectarBancoOpenFinance />
+
       <Card className="border-border/60">
         <CardHeader>
           <CardTitle className="text-lg font-semibold">Importar extratos e lançamentos</CardTitle>

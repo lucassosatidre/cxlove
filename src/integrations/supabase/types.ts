@@ -2815,6 +2815,39 @@ export type Database = {
         }
         Relationships: []
       }
+      pluggy_items: {
+        Row: {
+          company: string | null
+          connector_id: number | null
+          connector_name: string | null
+          created_at: string
+          id: string
+          item_id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          company?: string | null
+          connector_id?: number | null
+          connector_name?: string | null
+          created_at?: string
+          id?: string
+          item_id: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company?: string | null
+          connector_id?: number | null
+          connector_name?: string | null
+          created_at?: string
+          id?: string
+          item_id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
