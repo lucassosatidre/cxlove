@@ -31,8 +31,10 @@ export default function CashflowDashboard() {
           </TabsList>
 
           <TabsContent value="visao" className="space-y-6">
-            <SaldoDeHoje />
-            <PagamentosDeHoje />
+            <div className="grid gap-6 lg:grid-cols-2">
+              <SaldoDeHoje />
+              <PagamentosDeHoje />
+            </div>
             <ProximosPagamentos />
             {/* DescontadoNaFonte desativado por solicitacao (2026-06-30) */}
             {/* <DescontadoNaFonte /> */}
