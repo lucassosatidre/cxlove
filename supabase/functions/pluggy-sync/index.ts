@@ -142,8 +142,9 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // saldo do dia — ANTES das transações, para atualizar mesmo que /transactions falhe
-        if (typeof pa.balance === 'number') {
+        // saldo do dia — SEM âncora: usa balance da Pluggy (antes das tx, resiliente a falhas)
+        // COM âncora: será calculado DEPOIS das transações (rollforward)
+        if (!hasAnchor && typeof pa.balance === 'number') {
           try {
             await supa.from('cashflow_balances').upsert({
               account_id: cfAccountId,
