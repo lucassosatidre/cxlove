@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
         try {
           // primeira página
           let path: string | null =
-            `/v2/transactions?accountId=${pa.id}&dateFrom=${fromStr}&dateTo=${toStr}&pageSize=500`;
+            `/v2/transactions?accountId=${pa.id}&dateFrom=${fromStr}&dateTo=${toStr}`;
           const seen = new Set<string>();
           while (path) {
             if (seen.has(path)) break; // defensivo: evita loop
