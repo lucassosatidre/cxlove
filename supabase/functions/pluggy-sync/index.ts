@@ -242,7 +242,7 @@ Deno.serve(async (req) => {
           pluggy_account_id: pa.id,
           name: pa.name,
           linked: true,
-          balance: pa.balance,
+          balance: hasAnchor ? anchoredBalance : pa.balance,
           transactions_upserted: inserted,
           ...(accountError ? { error: accountError } : {}),
         });
