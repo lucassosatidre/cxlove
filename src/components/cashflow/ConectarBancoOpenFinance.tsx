@@ -163,7 +163,7 @@ export default function ConectarBancoOpenFinance() {
           Conexões automáticas (Open Finance)
         </CardTitle>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={handleSync} disabled={syncing || accounts.length === 0}>
+          <Button variant="outline" onClick={handleSync} disabled={syncing || items.length === 0}>
             {syncing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
             Sincronizar agora
           </Button>
