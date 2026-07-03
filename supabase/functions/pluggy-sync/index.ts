@@ -143,17 +143,20 @@ Deno.serve(async (req) => {
           }
         }
 
-        // transações paginadas — isoladas por conta; erro NÃO derruba o sync
+        // transações via /v2/transactions com cursor — isolado por conta; erro NÃO derruba o sync
         let inserted = 0;
         let accountError: string | null = null;
         try {
-          let page = 1;
-          let totalPages = 1;
-          while (page <= totalPages) {
-            const tResp = await pgetJson(apiKey,
-              `/transactions?accountId=${pa.id}&from=${fromStr}&to=${toStr}&page=${page}&pageSize=500`);
+          // primeira página
+          let path: string | null =
+            `/v2/transactions?accountId=${pa.id}&dateFrom=${fromStr}&dateTo=${toStr}&pageSize=500`;
+          const seen = new Set<string>();
+          while (path) {
+            if (seen.has(path)) break; // defensivo: evita loop
+            seen.add(path);
+
+            const tResp = await pgetJson(apiKey, path);
             const results: any[] = tResp?.results ?? [];
-            totalPages = tResp?.totalPages ?? 1;
 
             if (results.length) {
               const rows = results.map((tx) => {
@@ -162,7 +165,10 @@ Deno.serve(async (req) => {
                   ? tx.descriptionRaw
                   : (tx.category ?? null);
                 const it2 = detectInternalTransfer(desc, detail);
-                const dateStr = (typeof tx.date === 'string' ? tx.date : new Date(tx.date).toISOString()).slice(0, 10);
+                const rawDate = tx.date ?? tx.createdAt ?? null;
+                const dateStr = rawDate
+                  ? (typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString()).slice(0, 10)
+                  : toStr;
                 return {
                   source: 'pluggy',
                   account_id: cfAccountId,
@@ -185,12 +191,16 @@ Deno.serve(async (req) => {
               if (upErr) throw new Error(`Erro ao gravar transações: ${upErr.message}`);
               inserted += rows.length;
             }
-            page++;
+
+            // próxima página: campo `next` vem como querystring "?accountId=...&after=..."
+            const next = typeof tResp?.next === 'string' ? tResp.next.trim() : '';
+            path = next ? `/v2/transactions${next.startsWith('?') ? next : `?${next}`}` : null;
           }
         } catch (e) {
           accountError = e instanceof Error ? e.message : String(e);
           console.error(`conta ${pa.id} (${pa.name}) falhou:`, accountError);
         }
+
 
         itemSummary.accounts.push({
           pluggy_account_id: pa.id,
