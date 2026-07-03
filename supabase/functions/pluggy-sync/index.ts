@@ -214,6 +214,29 @@ Deno.serve(async (req) => {
           console.error(`conta ${pa.id} (${pa.name}) falhou:`, accountError);
         }
 
+        // COM âncora: calcula saldo = anchor + sum(amount das tx pluggy > anchor_date)
+        let anchoredBalance: number | null = null;
+        if (hasAnchor) {
+          try {
+            const { data: txSum, error: sumErr } = await supa
+              .from('cashflow_transactions')
+              .select('amount')
+              .eq('account_id', cfAccountId)
+              .eq('source', 'pluggy')
+              .gt('tx_date', balanceAnchorDate!);
+            if (sumErr) throw new Error(sumErr.message);
+            const soma = (txSum ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+            anchoredBalance = Number(balanceAnchor) + soma;
+            await supa.from('cashflow_balances').upsert({
+              account_id: cfAccountId,
+              as_of: toStr,
+              own_balance: anchoredBalance,
+            }, { onConflict: 'account_id,as_of' });
+          } catch (e) {
+            console.warn('anchored balance falhou', e);
+          }
+        }
+
 
         itemSummary.accounts.push({
           pluggy_account_id: pa.id,
