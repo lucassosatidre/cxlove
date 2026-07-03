@@ -110,6 +110,18 @@ Deno.serve(async (req) => {
           .eq('pluggy_account_id', pa.id).maybeSingle();
         const cfAccountId = existing?.cashflow_account_id ?? null;
 
+        // Se vinculada, carrega âncora de saldo da cashflow_accounts
+        let balanceAnchor: number | null = null;
+        let balanceAnchorDate: string | null = null;
+        if (cfAccountId) {
+          const { data: cfAcc } = await supa.from('cashflow_accounts')
+            .select('balance_anchor, balance_anchor_date')
+            .eq('id', cfAccountId).maybeSingle();
+          balanceAnchor = cfAcc?.balance_anchor ?? null;
+          balanceAnchorDate = cfAcc?.balance_anchor_date ?? null;
+        }
+        const hasAnchor = balanceAnchor !== null && balanceAnchorDate !== null;
+
         const upsertRow = {
           pluggy_account_id: String(pa.id),
           item_id: it.item_id,
@@ -130,8 +142,9 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // saldo do dia — ANTES das transações, para atualizar mesmo que /transactions falhe
-        if (typeof pa.balance === 'number') {
+        // saldo do dia — SEM âncora: usa balance da Pluggy (antes das tx, resiliente a falhas)
+        // COM âncora: será calculado DEPOIS das transações (rollforward)
+        if (!hasAnchor && typeof pa.balance === 'number') {
           try {
             await supa.from('cashflow_balances').upsert({
               account_id: cfAccountId,
@@ -201,12 +214,35 @@ Deno.serve(async (req) => {
           console.error(`conta ${pa.id} (${pa.name}) falhou:`, accountError);
         }
 
+        // COM âncora: calcula saldo = anchor + sum(amount das tx pluggy > anchor_date)
+        let anchoredBalance: number | null = null;
+        if (hasAnchor) {
+          try {
+            const { data: txSum, error: sumErr } = await supa
+              .from('cashflow_transactions')
+              .select('amount')
+              .eq('account_id', cfAccountId)
+              .eq('source', 'pluggy')
+              .gt('tx_date', balanceAnchorDate!);
+            if (sumErr) throw new Error(sumErr.message);
+            const soma = (txSum ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+            anchoredBalance = Number(balanceAnchor) + soma;
+            await supa.from('cashflow_balances').upsert({
+              account_id: cfAccountId,
+              as_of: toStr,
+              own_balance: anchoredBalance,
+            }, { onConflict: 'account_id,as_of' });
+          } catch (e) {
+            console.warn('anchored balance falhou', e);
+          }
+        }
+
 
         itemSummary.accounts.push({
           pluggy_account_id: pa.id,
           name: pa.name,
           linked: true,
-          balance: pa.balance,
+          balance: hasAnchor ? anchoredBalance : pa.balance,
           transactions_upserted: inserted,
           ...(accountError ? { error: accountError } : {}),
         });

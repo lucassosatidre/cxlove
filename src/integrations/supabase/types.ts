@@ -1519,6 +1519,8 @@ export type Database = {
         Row: {
           account_number: string | null
           active: boolean
+          balance_anchor: number | null
+          balance_anchor_date: string | null
           bank: string | null
           company: string
           created_at: string
@@ -1531,6 +1533,8 @@ export type Database = {
         Insert: {
           account_number?: string | null
           active?: boolean
+          balance_anchor?: number | null
+          balance_anchor_date?: string | null
           bank?: string | null
           company: string
           created_at?: string
@@ -1543,6 +1547,8 @@ export type Database = {
         Update: {
           account_number?: string | null
           active?: boolean
+          balance_anchor?: number | null
+          balance_anchor_date?: string | null
           bank?: string | null
           company?: string
           created_at?: string
