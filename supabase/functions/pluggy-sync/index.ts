@@ -110,6 +110,18 @@ Deno.serve(async (req) => {
           .eq('pluggy_account_id', pa.id).maybeSingle();
         const cfAccountId = existing?.cashflow_account_id ?? null;
 
+        // Se vinculada, carrega âncora de saldo da cashflow_accounts
+        let balanceAnchor: number | null = null;
+        let balanceAnchorDate: string | null = null;
+        if (cfAccountId) {
+          const { data: cfAcc } = await supa.from('cashflow_accounts')
+            .select('balance_anchor, balance_anchor_date')
+            .eq('id', cfAccountId).maybeSingle();
+          balanceAnchor = cfAcc?.balance_anchor ?? null;
+          balanceAnchorDate = cfAcc?.balance_anchor_date ?? null;
+        }
+        const hasAnchor = balanceAnchor !== null && balanceAnchorDate !== null;
+
         const upsertRow = {
           pluggy_account_id: String(pa.id),
           item_id: it.item_id,
