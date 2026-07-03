@@ -130,59 +130,66 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // transações paginadas
-        let page = 1;
-        let inserted = 0;
-        let totalPages = 1;
-        while (page <= totalPages) {
-          const tResp = await pgetJson(apiKey,
-            `/transactions?accountId=${pa.id}&from=${fromStr}&to=${toStr}&page=${page}&pageSize=500`);
-          const results: any[] = tResp?.results ?? [];
-          totalPages = tResp?.totalPages ?? 1;
-
-          if (results.length) {
-            const rows = results.map((tx) => {
-              const desc = tx.description ?? tx.descriptionRaw ?? null;
-              const detail = tx.descriptionRaw && tx.descriptionRaw !== desc
-                ? tx.descriptionRaw
-                : (tx.category ?? null);
-              const it2 = detectInternalTransfer(desc, detail);
-              const dateStr = (typeof tx.date === 'string' ? tx.date : new Date(tx.date).toISOString()).slice(0, 10);
-              return {
-                source: 'pluggy',
-                account_id: cfAccountId,
-                tx_date: dateStr,
-                description: desc,
-                detail,
-                amount: typeof tx.amount === 'number' ? tx.amount : Number(tx.amount ?? 0),
-                running_balance: typeof tx.balance === 'number' ? tx.balance : null,
-                category: tx.category ?? null,
-                is_internal_transfer: it2.is_internal_transfer,
-                counterparty: it2.counterparty,
-                external_id: String(tx.id),
-                source_seq: 0,
-              };
-            });
-
-            const { error: upErr } = await supa
-              .from('cashflow_transactions')
-              .upsert(rows, { onConflict: 'account_id,external_id', ignoreDuplicates: false });
-            if (upErr) {
-              console.error('upsert cashflow_transactions:', upErr.message);
-              throw new Error(`Erro ao gravar transações: ${upErr.message}`);
-            }
-            inserted += rows.length;
+        // saldo do dia — ANTES das transações, para atualizar mesmo que /transactions falhe
+        if (typeof pa.balance === 'number') {
+          try {
+            await supa.from('cashflow_balances').upsert({
+              account_id: cfAccountId,
+              as_of: toStr,
+              own_balance: pa.balance,
+            }, { onConflict: 'account_id,as_of' });
+          } catch (e) {
+            console.warn('upsert cashflow_balances falhou', e);
           }
-          page++;
         }
 
-        // saldo do dia
-        if (typeof pa.balance === 'number') {
-          await supa.from('cashflow_balances').upsert({
-            account_id: cfAccountId,
-            as_of: toStr,
-            own_balance: pa.balance,
-          }, { onConflict: 'account_id,as_of' });
+        // transações paginadas — isoladas por conta; erro NÃO derruba o sync
+        let inserted = 0;
+        let accountError: string | null = null;
+        try {
+          let page = 1;
+          let totalPages = 1;
+          while (page <= totalPages) {
+            const tResp = await pgetJson(apiKey,
+              `/transactions?accountId=${pa.id}&from=${fromStr}&to=${toStr}&page=${page}&pageSize=500`);
+            const results: any[] = tResp?.results ?? [];
+            totalPages = tResp?.totalPages ?? 1;
+
+            if (results.length) {
+              const rows = results.map((tx) => {
+                const desc = tx.description ?? tx.descriptionRaw ?? null;
+                const detail = tx.descriptionRaw && tx.descriptionRaw !== desc
+                  ? tx.descriptionRaw
+                  : (tx.category ?? null);
+                const it2 = detectInternalTransfer(desc, detail);
+                const dateStr = (typeof tx.date === 'string' ? tx.date : new Date(tx.date).toISOString()).slice(0, 10);
+                return {
+                  source: 'pluggy',
+                  account_id: cfAccountId,
+                  tx_date: dateStr,
+                  description: desc,
+                  detail,
+                  amount: typeof tx.amount === 'number' ? tx.amount : Number(tx.amount ?? 0),
+                  running_balance: typeof tx.balance === 'number' ? tx.balance : null,
+                  category: tx.category ?? null,
+                  is_internal_transfer: it2.is_internal_transfer,
+                  counterparty: it2.counterparty,
+                  external_id: String(tx.id),
+                  source_seq: 0,
+                };
+              });
+
+              const { error: upErr } = await supa
+                .from('cashflow_transactions')
+                .upsert(rows, { onConflict: 'account_id,external_id', ignoreDuplicates: false });
+              if (upErr) throw new Error(`Erro ao gravar transações: ${upErr.message}`);
+              inserted += rows.length;
+            }
+            page++;
+          }
+        } catch (e) {
+          accountError = e instanceof Error ? e.message : String(e);
+          console.error(`conta ${pa.id} (${pa.name}) falhou:`, accountError);
         }
 
         itemSummary.accounts.push({
@@ -191,6 +198,7 @@ Deno.serve(async (req) => {
           linked: true,
           balance: pa.balance,
           transactions_upserted: inserted,
+          ...(accountError ? { error: accountError } : {}),
         });
       }
 

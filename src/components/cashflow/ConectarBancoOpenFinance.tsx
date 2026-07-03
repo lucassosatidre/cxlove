@@ -142,10 +142,13 @@ export default function ConectarBancoOpenFinance() {
       const { data, error } = await supabase.functions.invoke('pluggy-sync', { body: {} });
       if (error) throw new Error(error.message);
       const d = data as any;
-      const totalTx = (d?.items ?? []).reduce((s: number, it: any) =>
-        s + (it.accounts ?? []).reduce((ss: number, a: any) => ss + (a.transactions_upserted ?? 0), 0), 0);
+      const allAccounts = (d?.items ?? []).flatMap((it: any) => it.accounts ?? []);
+      const totalTx = allAccounts.reduce((s: number, a: any) => s + (a.transactions_upserted ?? 0), 0);
+      const withError = allAccounts.filter((a: any) => a.error).length;
       const unlinked = d?.unlinked_accounts?.length ?? 0;
-      toast.success(`Sync ok: ${totalTx} transações, ${unlinked} contas não vinculadas.`);
+      const parts = [`${totalTx} transações`, `${unlinked} não vinculadas`];
+      if (withError > 0) parts.push(`${withError} com erro`);
+      toast.success(`Sync ok: ${parts.join(', ')}.`);
       await loadAll();
     } catch (e) {
       console.error(e);
