@@ -38,6 +38,22 @@ function daysSince(iso?: string | null): number | null {
   const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
   return Math.floor((today.getTime() - past.getTime()) / (1000 * 60 * 60 * 24));
 }
+function hoursSince(iso?: string | null): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / (1000 * 60 * 60));
+}
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${dd}/${mm} ${hh}:${mi}`;
+}
 
 type TxRow = {
   id: string;

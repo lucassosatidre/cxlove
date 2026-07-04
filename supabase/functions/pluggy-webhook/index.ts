@@ -44,6 +44,30 @@ Deno.serve(async (req) => {
       console.error('pluggy-webhook: exceção ao salvar evento', e);
     }
 
+    // Dispara sync se for evento relevante — fire-and-forget
+    const SYNC_EVENTS = new Set([
+      'transactions/created',
+      'transactions/updated',
+      'transactions/deleted',
+      'item/updated',
+    ]);
+    if (event && itemId && SYNC_EVENTS.has(event)) {
+      try {
+        const syncUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/pluggy-sync`;
+        // fire-and-forget: não aguarda resposta
+        fetch(syncUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          },
+          body: JSON.stringify({ itemId }),
+        }).catch((e) => console.error('pluggy-webhook: falha ao disparar pluggy-sync', e));
+      } catch (e) {
+        console.error('pluggy-webhook: exceção ao disparar pluggy-sync', e);
+      }
+    }
+
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
