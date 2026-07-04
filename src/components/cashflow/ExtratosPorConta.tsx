@@ -184,18 +184,64 @@ export default function ExtratosPorConta() {
                 </TableHeader>
                 <TableBody>
                   {(cov.data ?? []).map((r) => {
-                    const age = daysSince(r.max_tx);
+                    const ofSync = ofSyncById.get(r.account_id);
+                    const isOF = Boolean(ofSync);
+
+                    // Frescor: OF usa last_synced_at (horas); Manual usa max_tx (dias)
                     let dot = 'bg-emerald-500';
                     let rowTint = '';
-                    if (age === null) {
-                      dot = 'bg-muted-foreground/40';
-                    } else if (age > 7) {
-                      dot = 'bg-destructive';
-                      rowTint = 'bg-destructive/5';
-                    } else if (age > 3) {
-                      dot = 'bg-amber-500';
-                      rowTint = 'bg-amber-500/5';
+                    let freshnessNode: React.ReactNode = null;
+
+                    if (isOF) {
+                      const hrs = hoursSince(ofSync);
+                      if (hrs === null) {
+                        dot = 'bg-muted-foreground/40';
+                      } else if (hrs > 48) {
+                        dot = 'bg-destructive';
+                        rowTint = 'bg-destructive/5';
+                      } else if (hrs > 24) {
+                        dot = 'bg-amber-500';
+                      }
+                      freshnessNode = (
+                        <div className="flex flex-col gap-0.5">
+                          <span className="flex items-center gap-2 text-sm">
+                            <span className={cn('inline-block h-2 w-2 rounded-full', dot)} />
+                            {fmtDate(r.max_tx)}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground pl-4">
+                            Sincronizado automaticamente • {fmtDateTime(ofSync)}
+                          </span>
+                        </div>
+                      );
+                    } else {
+                      const age = daysSince(r.max_tx);
+                      if (age === null) {
+                        dot = 'bg-muted-foreground/40';
+                      } else if (age > 7) {
+                        dot = 'bg-destructive';
+                        rowTint = 'bg-destructive/5';
+                      } else if (age > 3) {
+                        dot = 'bg-amber-500';
+                        rowTint = 'bg-amber-500/5';
+                      }
+                      freshnessNode = (
+                        <span className="flex items-center gap-2 text-sm">
+                          <span className={cn('inline-block h-2 w-2 rounded-full', dot)} />
+                          {fmtDate(r.max_tx)}
+                          {age !== null && age > 3 && (
+                            <span
+                              className={cn(
+                                'text-[11px]',
+                                age > 7 ? 'text-destructive' : 'text-amber-600 dark:text-amber-400',
+                              )}
+                            >
+                              ({age} dias atrás)
+                            </span>
+                          )}
+                        </span>
+                      );
                     }
+
                     const saldo =
                       balanceById.get(r.account_id) ??
                       (r.saldo_final != null ? r.saldo_final : null);
@@ -217,26 +263,16 @@ export default function ExtratosPorConta() {
                               {r.company}
                             </Badge>
                           )}
+                          {isOF && (
+                            <Badge variant="outline" className="ml-2 text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                              Open Finance
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {r.min_tx ? `${fmtDate(r.min_tx)} → ${fmtDate(r.max_tx)}` : '—'}
                         </TableCell>
-                        <TableCell>
-                          <span className="flex items-center gap-2 text-sm">
-                            <span className={cn('inline-block h-2 w-2 rounded-full', dot)} />
-                            {fmtDate(r.max_tx)}
-                            {age !== null && age > 3 && (
-                              <span
-                                className={cn(
-                                  'text-[11px]',
-                                  age > 7 ? 'text-destructive' : 'text-amber-600 dark:text-amber-400',
-                                )}
-                              >
-                                ({age} dias atrás)
-                              </span>
-                            )}
-                          </span>
-                        </TableCell>
+                        <TableCell>{freshnessNode}</TableCell>
                         <TableCell className="text-right font-mono text-sm">{r.n}</TableCell>
                         <TableCell className="text-right font-mono text-sm">
                           {saldo == null ? '—' : fmtBRL(saldo)}
