@@ -10,7 +10,7 @@ import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
   ShieldCheck, RotateCcw, Banknote, DollarSign, Globe, QrCode, Wallet,
-  ChevronUp, ChevronDown, ShieldX,
+  ChevronUp, ChevronDown, ShieldX, Copy,
 } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
@@ -388,6 +388,68 @@ export default function SalonReconciliation() {
     return totals;
   }, [orders, payments]);
 
+  const machineRealByMethod = useMemo(() => {
+    const s: Record<'Pix' | 'Crédito' | 'Débito' | 'Voucher', { total: number; count: number }> = {
+      'Pix': { total: 0, count: 0 },
+      'Crédito': { total: 0, count: 0 },
+      'Débito': { total: 0, count: 0 },
+      'Voucher': { total: 0, count: 0 },
+    };
+    transactions.forEach(tx => {
+      const method = tx.payment_method?.toLowerCase() || '';
+      let label: 'Pix' | 'Crédito' | 'Débito' | 'Voucher' | null = null;
+      if (method.includes('pix')) label = 'Pix';
+      else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
+      else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
+      else if (method.includes('voucher')) label = 'Voucher';
+      if (label) {
+        s[label].total += tx.gross_amount;
+        s[label].count += 1;
+      }
+    });
+    return s;
+  }, [transactions]);
+
+  // Diagnóstico: dados consolidados por forma + itens que explicam a diferença
+  const diagnosticData = useMemo(() => {
+    const rows = [
+      { key: 'Pix', saipos: offlineMethodTotals['(COBRAR) Pix'] || 0, real: machineRealByMethod['Pix'].total },
+      { key: 'Crédito', saipos: offlineMethodTotals['Crédito'] || 0, real: machineRealByMethod['Crédito'].total },
+      { key: 'Débito', saipos: offlineMethodTotals['Débito'] || 0, real: machineRealByMethod['Débito'].total },
+      { key: 'Voucher', saipos: offlineMethodTotals['Voucher'] || 0, real: machineRealByMethod['Voucher'].total },
+    ].map(r => ({ ...r, diff: r.real - r.saipos }));
+    const totals = rows.reduce(
+      (acc, r) => ({ saipos: acc.saipos + r.saipos, real: acc.real + r.real, diff: acc.diff + r.diff }),
+      { saipos: 0, real: 0, diff: 0 },
+    );
+
+    const trocaForma: SalonOrder[] = [];
+    const difValor: SalonOrder[] = [];
+    for (const order of orders) {
+      const div = divergenceByOrder.get(order.id);
+      if (!div) continue;
+      if (div === 'diferenca_valor') difValor.push(order);
+      else trocaForma.push(order);
+    }
+
+    const semTx = orders.filter(o => {
+      if (matchedOrderIds.has(o.id)) return false;
+      const cls = orderClassifications.get(o.id);
+      return !cls?.isExternal;
+    });
+
+    const sobras = transactions.filter(tx => !tx.matched_order_id);
+
+    const hasDiff =
+      rows.some(r => Math.abs(r.diff) >= 0.01) ||
+      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0;
+
+    return { rows, totals, trocaForma, difValor, semTx, sobras, hasDiff };
+  }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions]);
+
+  const [diagnosticOpenState, setDiagnosticOpenState] = useState<boolean | null>(null);
+  const diagnosticOpen = diagnosticOpenState ?? diagnosticData.hasDiff;
+
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
@@ -730,23 +792,7 @@ export default function SalonReconciliation() {
 
         {/* 4. Total Recebido via Maquininhas - Real */}
         {(() => {
-          const methodSummary: Record<string, { total: number; count: number }> = {
-            'Pix': { total: 0, count: 0 },
-            'Crédito': { total: 0, count: 0 },
-            'Débito': { total: 0, count: 0 },
-            'Voucher': { total: 0, count: 0 },
-          };
-          transactions.forEach(tx => {
-            const method = tx.payment_method?.toLowerCase() || 'outro';
-            let label = 'Outro';
-            if (method.includes('pix')) label = 'Pix';
-            else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
-            else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
-            else if (method.includes('voucher')) label = 'Voucher';
-            if (!methodSummary[label]) methodSummary[label] = { total: 0, count: 0 };
-            methodSummary[label].total += tx.gross_amount;
-            methodSummary[label].count += 1;
-          });
+          const methodSummary = machineRealByMethod;
           const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher'];
           const iconMap: Record<string, React.ReactNode> = {
             'Pix': <QrCode className="h-4 w-4 text-primary" />,
@@ -870,6 +916,257 @@ export default function SalonReconciliation() {
             </div>
           </div>
         </div>
+
+        {/* Diagnóstico — Por que não fechou */}
+        {(() => {
+          const d = diagnosticData;
+          const diffColor = (n: number) => {
+            if (Math.abs(n) < 0.01) return 'text-success';
+            if (n < 0) return 'text-destructive';
+            return 'text-warning';
+          };
+          const diffPrefix = (n: number) => {
+            if (Math.abs(n) < 0.01) return '✓ ';
+            return n > 0 ? '+' : '';
+          };
+          const handleCopy = () => {
+            const lines: string[] = [];
+            lines.push(`Diagnóstico do fechamento — ${formatDate(closingDate)}`);
+            lines.push('');
+            lines.push('📊 Conferência por forma de pagamento');
+            lines.push('Forma | Saipos | Maquininha | Diferença');
+            d.rows.forEach(r => {
+              lines.push(`${r.key}: ${formatCurrency(r.saipos)} / ${formatCurrency(r.real)} / ${diffPrefix(r.diff)}${formatCurrency(r.diff)}`);
+            });
+            lines.push(`TOTAL: ${formatCurrency(d.totals.saipos)} / ${formatCurrency(d.totals.real)} / ${diffPrefix(d.totals.diff)}${formatCurrency(d.totals.diff)}`);
+            lines.push('');
+            if (d.trocaForma.length) {
+              lines.push(`🔴 Forma de pagamento trocada (${d.trocaForma.length})`);
+              d.trocaForma.forEach(o => {
+                const txs = matchedOrderIds.get(o.id) || [];
+                const real = txs.map(t => t.payment_method).join(' + ');
+                lines.push(`  • ${o.sale_time || ''} — ${formatCurrency(o.total_amount)} — Saipos: ${o.payment_method} → Maquininha: ${real}`);
+              });
+              lines.push('');
+            }
+            if (d.difValor.length) {
+              lines.push(`🔴 Diferença de valor (${d.difValor.length})`);
+              d.difValor.forEach(o => {
+                const txs = matchedOrderIds.get(o.id) || [];
+                const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
+                lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(soma - o.total_amount)}${formatCurrency(soma - o.total_amount)})`);
+              });
+              lines.push('');
+            }
+            if (d.semTx.length) {
+              lines.push(`🟠 Pagamento sem transação na maquininha (${d.semTx.length})`);
+              d.semTx.forEach(o => {
+                lines.push(`  • ${o.sale_time || ''} — ${o.payment_method} — ${formatCurrency(o.total_amount)}`);
+              });
+              lines.push('');
+            }
+            if (d.sobras.length) {
+              lines.push(`🔵 Transação na maquininha sem comanda (${d.sobras.length})`);
+              d.sobras.forEach(tx => {
+                const gar = tx.machine_serial ? (waiterMap.get(tx.machine_serial) || '—') : '—';
+                lines.push(`  • ${tx.sale_time || ''} — ${tx.payment_method} — ${formatCurrency(tx.gross_amount)} — ${gar}`);
+              });
+              lines.push('');
+            }
+            navigator.clipboard.writeText(lines.join('\n')).then(() => {
+              toast.success('Resumo copiado!');
+            }).catch(() => {
+              toast.error('Não foi possível copiar');
+            });
+          };
+
+          return (
+            <div className="border-b border-border bg-card">
+              <div className="px-6 py-3">
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDiagnosticOpenState(!diagnosticOpen)}
+                    className="flex items-center gap-2 flex-1 text-left"
+                  >
+                    {d.hasDiff ? (
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4 text-success" />
+                    )}
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        Diagnóstico — Por que não fechou
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {d.hasDiff
+                          ? 'Diferenças entre o que o Saipos lançou e o que a maquininha registrou'
+                          : 'Tudo conciliado — nada divergente'}
+                      </p>
+                    </div>
+                    {diagnosticOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                  {diagnosticOpen && (
+                    <Button variant="outline" size="sm" onClick={handleCopy} className="h-8 gap-1.5">
+                      <Copy className="h-3.5 w-3.5" />
+                      <span className="text-xs">Copiar resumo</span>
+                    </Button>
+                  )}
+                </div>
+
+                {diagnosticOpen && (
+                  <div className="mt-4 space-y-4">
+                    {/* Bloco A */}
+                    <div className="rounded-md border border-border overflow-x-auto">
+                      <table className="w-full text-xs font-mono tabular-nums">
+                        <thead className="bg-muted/60">
+                          <tr className="text-muted-foreground">
+                            <th className="text-left px-3 py-2 font-medium">Forma</th>
+                            <th className="text-right px-3 py-2 font-medium">Saipos (teórico)</th>
+                            <th className="text-right px-3 py-2 font-medium">Maquininha (real)</th>
+                            <th className="text-right px-3 py-2 font-medium">Diferença</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {d.rows.map(r => (
+                            <tr key={r.key} className="border-t border-border">
+                              <td className="px-3 py-1.5 font-sans">{r.key}</td>
+                              <td className="text-right px-3 py-1.5">{formatCurrency(r.saipos)}</td>
+                              <td className="text-right px-3 py-1.5">{formatCurrency(r.real)}</td>
+                              <td className={`text-right px-3 py-1.5 font-semibold ${diffColor(r.diff)}`}>
+                                {diffPrefix(r.diff)}{formatCurrency(r.diff)}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="border-t border-border bg-muted/40 font-bold">
+                            <td className="px-3 py-2 font-sans">TOTAL</td>
+                            <td className="text-right px-3 py-2">{formatCurrency(d.totals.saipos)}</td>
+                            <td className="text-right px-3 py-2">{formatCurrency(d.totals.real)}</td>
+                            <td className={`text-right px-3 py-2 ${diffColor(d.totals.diff)}`}>
+                              {diffPrefix(d.totals.diff)}{formatCurrency(d.totals.diff)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Bloco B */}
+                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.semTx.length > 0 || d.sobras.length > 0) && (
+                      <>
+                        <p className="text-xs text-muted-foreground">Os itens abaixo explicam as diferenças acima.</p>
+
+                        {d.trocaForma.length > 0 && (
+                          <div className="rounded-md border border-destructive/30 bg-destructive/5">
+                            <div className="px-3 py-2 border-b border-destructive/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-destructive">🔴 Forma de pagamento trocada</span>
+                              <Badge variant="secondary" className="bg-destructive/10 text-destructive text-[10px]">{d.trocaForma.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.trocaForma.map(o => {
+                                const txs = matchedOrderIds.get(o.id) || [];
+                                const real = txs.map(t => t.payment_method).join(' + ');
+                                const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
+                                return (
+                                  <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{o.sale_time || ''}</span>
+                                    <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
+                                    <span className="font-mono tabular-nums font-semibold">{formatCurrency(o.total_amount)}</span>
+                                    <span className="text-muted-foreground">Saipos: <span className="text-foreground">{o.payment_method}</span> → Maquininha: <span className="text-foreground">{real || '—'}</span></span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-destructive/20">
+                              O cliente pagou numa forma diferente da que foi lançada no Saipos. O valor total bate; muda só a forma.
+                            </p>
+                          </div>
+                        )}
+
+                        {d.difValor.length > 0 && (
+                          <div className="rounded-md border border-destructive/30 bg-destructive/5">
+                            <div className="px-3 py-2 border-b border-destructive/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-destructive">🔴 Diferença de valor</span>
+                              <Badge variant="secondary" className="bg-destructive/10 text-destructive text-[10px]">{d.difValor.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.difValor.map(o => {
+                                const txs = matchedOrderIds.get(o.id) || [];
+                                const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
+                                const diff = soma - o.total_amount;
+                                const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
+                                return (
+                                  <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{o.sale_time || ''}</span>
+                                    <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
+                                    <span className="text-muted-foreground">Saipos: <span className="font-mono tabular-nums text-foreground">{formatCurrency(o.total_amount)}</span> / Maquininha: <span className="font-mono tabular-nums text-foreground">{formatCurrency(soma)}</span></span>
+                                    <span className={`font-mono tabular-nums font-semibold ${diffColor(diff)}`}>{diffPrefix(diff)}{formatCurrency(diff)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-destructive/20">
+                              O valor registrado na maquininha é diferente do total lançado no Saipos.
+                            </p>
+                          </div>
+                        )}
+
+                        {d.semTx.length > 0 && (
+                          <div className="rounded-md border border-warning/30 bg-warning/5">
+                            <div className="px-3 py-2 border-b border-warning/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-warning">🟠 Pagamento sem transação na maquininha</span>
+                              <Badge variant="secondary" className="bg-warning/10 text-warning text-[10px]">{d.semTx.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.semTx.map(o => {
+                                const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
+                                return (
+                                  <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{o.sale_time || ''}</span>
+                                    <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
+                                    <span className="text-foreground">{o.payment_method}</span>
+                                    <span className="font-mono tabular-nums font-semibold">{formatCurrency(o.total_amount)}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-warning/20">
+                              O Saipos lançou este pagamento no cartão, mas nenhuma transação da maquininha corresponde. Pode ser lançamento errado, pagamento não capturado, ou na verdade pago em dinheiro.
+                            </p>
+                          </div>
+                        )}
+
+                        {d.sobras.length > 0 && (
+                          <div className="rounded-md border border-primary/30 bg-primary/5">
+                            <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-primary">🔵 Transação na maquininha sem comanda</span>
+                              <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px]">{d.sobras.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.sobras.map(tx => {
+                                const gar = tx.machine_serial ? (waiterMap.get(tx.machine_serial) || '—') : '—';
+                                return (
+                                  <div key={tx.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{tx.sale_time || ''}</span>
+                                    <span className="text-foreground">{tx.payment_method}</span>
+                                    <span className="font-mono tabular-nums font-semibold">{formatCurrency(tx.gross_amount)}</span>
+                                    <span className="text-muted-foreground">{gar}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-primary/20">
+                              A maquininha recebeu este valor, mas não há comanda no Saipos correspondente.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Filters */}
         <div className="border-b border-border bg-card">
