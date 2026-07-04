@@ -89,6 +89,27 @@ export default function ExtratosPorConta() {
     return m;
   }, [bal.data]);
 
+  // última sincronização Open Finance por cashflow_account_id
+  const [ofSyncById, setOfSyncById] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('pluggy_accounts')
+        .select('cashflow_account_id, last_synced_at')
+        .not('cashflow_account_id', 'is', null);
+      if (cancel || error || !data) return;
+      const m = new Map<string, string>();
+      for (const row of data as Array<{ cashflow_account_id: string | null; last_synced_at: string | null }>) {
+        if (!row.cashflow_account_id || !row.last_synced_at) continue;
+        const prev = m.get(row.cashflow_account_id);
+        if (!prev || row.last_synced_at > prev) m.set(row.cashflow_account_id, row.last_synced_at);
+      }
+      setOfSyncById(m);
+    })();
+    return () => { cancel = true; };
+  }, []);
+
   // auto-seleciona primeira conta com lançamentos
   useEffect(() => {
     if (selectedId || !cov.data?.length) return;
