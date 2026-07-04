@@ -32,3 +32,6 @@ verify_jwt = false
 
 [functions.pluggy-sync]
 verify_jwt = true
+
+[functions.nfse-ingest]
+verify_jwt = false
