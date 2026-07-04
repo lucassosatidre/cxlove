@@ -357,8 +357,8 @@ export default function SalonReconciliation() {
       if (filterMatch === 'unmatched' && (matchedOrderIds.has(o.id) || cls?.isExternal)) return false;
       if (filterMatch === 'external' && !cls?.isExternal) return false;
       const div = divergenceByOrder.get(o.id);
-      if (filterMatch === 'divergent' && !div) return false;
-      if (['metodo_divergente','combinado_nao_declarado','estrutura_divergente','diferenca_valor'].includes(filterMatch) && div !== filterMatch) return false;
+      if (filterMatch === 'divergent' && (!div || div === 'desconto_cashback')) return false;
+      if (['metodo_divergente','combinado_nao_declarado','estrutura_divergente','diferenca_valor','desconto_cashback'].includes(filterMatch) && div !== filterMatch) return false;
       if (!orderMatchesPayment(o, filterPayment)) return false;
       return true;
     });
