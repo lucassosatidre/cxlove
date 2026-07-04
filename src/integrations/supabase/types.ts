@@ -2732,6 +2732,75 @@ export type Database = {
         }
         Relationships: []
       }
+      nfse_documents: {
+        Row: {
+          chave_acesso: string | null
+          codigo_verificacao: string | null
+          consulta: string | null
+          created_at: string
+          data_emissao: string | null
+          descricao: string | null
+          has_pdf: boolean
+          has_xml: boolean
+          id: string
+          justificativa: string | null
+          municipio: string | null
+          numero_nfse: string | null
+          prestador_cnpj: string | null
+          prestador_nome: string | null
+          situacao: string | null
+          source: string
+          tomador_cnpj: string | null
+          tomador_nome: string | null
+          updated_at: string
+          valor_servico: number | null
+        }
+        Insert: {
+          chave_acesso?: string | null
+          codigo_verificacao?: string | null
+          consulta?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          descricao?: string | null
+          has_pdf?: boolean
+          has_xml?: boolean
+          id?: string
+          justificativa?: string | null
+          municipio?: string | null
+          numero_nfse?: string | null
+          prestador_cnpj?: string | null
+          prestador_nome?: string | null
+          situacao?: string | null
+          source?: string
+          tomador_cnpj?: string | null
+          tomador_nome?: string | null
+          updated_at?: string
+          valor_servico?: number | null
+        }
+        Update: {
+          chave_acesso?: string | null
+          codigo_verificacao?: string | null
+          consulta?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          descricao?: string | null
+          has_pdf?: boolean
+          has_xml?: boolean
+          id?: string
+          justificativa?: string | null
+          municipio?: string | null
+          numero_nfse?: string | null
+          prestador_cnpj?: string | null
+          prestador_nome?: string | null
+          situacao?: string | null
+          source?: string
+          tomador_cnpj?: string | null
+          tomador_nome?: string | null
+          updated_at?: string
+          valor_servico?: number | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
