@@ -450,10 +450,12 @@ export default function SalonReconciliation() {
 
     const trocaForma: SalonOrder[] = [];
     const difValor: SalonOrder[] = [];
+    const descontoCashback: SalonOrder[] = [];
     for (const order of orders) {
       const div = divergenceByOrder.get(order.id);
       if (!div) continue;
       if (div === 'diferenca_valor') difValor.push(order);
+      else if (div === 'desconto_cashback') descontoCashback.push(order);
       else trocaForma.push(order);
     }
 
