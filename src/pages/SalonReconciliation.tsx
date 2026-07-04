@@ -270,13 +270,14 @@ export default function SalonReconciliation() {
     };
   }, [eligibleOrders, matchedOrderIds, transactions, orderClassifications]);
 
-  type DivergenceType = 'metodo_divergente' | 'combinado_nao_declarado' | 'estrutura_divergente' | 'diferenca_valor';
+  type DivergenceType = 'metodo_divergente' | 'combinado_nao_declarado' | 'estrutura_divergente' | 'diferenca_valor' | 'desconto_cashback';
 
   const DIVERGENCE_LABELS: Record<DivergenceType, { label: string; color: string }> = {
     metodo_divergente: { label: 'Método divergente', color: 'bg-destructive/10 text-destructive' },
     combinado_nao_declarado: { label: 'Combinado não declarado', color: 'bg-warning/10 text-warning' },
     estrutura_divergente: { label: 'Estrutura divergente', color: 'bg-warning/10 text-warning' },
     diferenca_valor: { label: 'Diferença de valor', color: 'bg-destructive/10 text-destructive' },
+    desconto_cashback: { label: 'Desconto/Cashback', color: 'bg-success/10 text-success' },
   };
 
   const canonicalMethod = (m: string): string => {
@@ -322,10 +323,15 @@ export default function SalonReconciliation() {
           ? order.total_amount : null; // misto com dinheiro/online sem breakdown → não checa valor
       }
 
-      // 1) diferença de valor (só quando dá pra saber o valor esperado no cartão)
-      if (expectedCardSum != null && Math.abs(cardSum - expectedCardSum) > 0.5) {
-        map.set(order.id, 'diferenca_valor');
-        continue;
+      // 1) diferença de valor (ciente de desconto/cashback)
+      if (expectedCardSum != null) {
+        const matchesTotal = Math.abs(cardSum - expectedCardSum) <= 0.5;
+        const disc = order.discount_amount || 0;
+        const matchesWithDiscount = disc > 0.01 && Math.abs(cardSum - (expectedCardSum + disc)) <= 0.5;
+        if (!matchesTotal) {
+          map.set(order.id, matchesWithDiscount ? 'desconto_cashback' : 'diferenca_valor');
+          continue;
+        }
       }
       // 2) método / estrutura
       if (declaredCard.length > 0) {
@@ -351,8 +357,8 @@ export default function SalonReconciliation() {
       if (filterMatch === 'unmatched' && (matchedOrderIds.has(o.id) || cls?.isExternal)) return false;
       if (filterMatch === 'external' && !cls?.isExternal) return false;
       const div = divergenceByOrder.get(o.id);
-      if (filterMatch === 'divergent' && !div) return false;
-      if (['metodo_divergente','combinado_nao_declarado','estrutura_divergente','diferenca_valor'].includes(filterMatch) && div !== filterMatch) return false;
+      if (filterMatch === 'divergent' && (!div || div === 'desconto_cashback')) return false;
+      if (['metodo_divergente','combinado_nao_declarado','estrutura_divergente','diferenca_valor','desconto_cashback'].includes(filterMatch) && div !== filterMatch) return false;
       if (!orderMatchesPayment(o, filterPayment)) return false;
       return true;
     });
@@ -444,10 +450,12 @@ export default function SalonReconciliation() {
 
     const trocaForma: SalonOrder[] = [];
     const difValor: SalonOrder[] = [];
+    const descontoCashback: SalonOrder[] = [];
     for (const order of orders) {
       const div = divergenceByOrder.get(order.id);
       if (!div) continue;
       if (div === 'diferenca_valor') difValor.push(order);
+      else if (div === 'desconto_cashback') descontoCashback.push(order);
       else trocaForma.push(order);
     }
 
@@ -461,9 +469,9 @@ export default function SalonReconciliation() {
 
     const hasDiff =
       rows.some(r => Math.abs(r.diff) >= 0.01) ||
-      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0;
+      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0 || descontoCashback.length > 0;
 
-    return { rows, totals, trocaForma, difValor, semTx, sobras, hasDiff };
+    return { rows, totals, trocaForma, difValor, descontoCashback, semTx, sobras, hasDiff };
   }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions]);
 
   const [diagnosticOpenState, setDiagnosticOpenState] = useState<boolean | null>(null);
@@ -905,7 +913,7 @@ export default function SalonReconciliation() {
                 <AlertTriangle className="h-4 w-4 text-destructive" />
                 <div>
                   <p className="text-[10px] text-muted-foreground leading-tight">Divergências</p>
-                  <p className="text-sm font-semibold text-destructive font-mono-tabular">{divergenceByOrder.size}</p>
+                  <p className="text-sm font-semibold text-destructive font-mono-tabular">{[...divergenceByOrder.values()].filter(t => t !== 'desconto_cashback').length}</p>
                 </div>
               </div>
 
@@ -976,6 +984,17 @@ export default function SalonReconciliation() {
                 const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
                 const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
                 lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(soma - o.total_amount)}${formatCurrency(soma - o.total_amount)}) — ${gar}`);
+              });
+              lines.push('');
+            }
+            if (d.descontoCashback.length) {
+              lines.push(`🟢 Desconto/Cashback aplicado (${d.descontoCashback.length})`);
+              d.descontoCashback.forEach(o => {
+                const txs = matchedOrderIds.get(o.id) || [];
+                const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
+                const diff = soma - o.total_amount;
+                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
+                lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(diff)}${formatCurrency(diff)}) — ${gar}`);
               });
               lines.push('');
             }
@@ -1072,7 +1091,7 @@ export default function SalonReconciliation() {
                     </div>
 
                     {/* Bloco B */}
-                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.semTx.length > 0 || d.sobras.length > 0) && (
+                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.descontoCashback.length > 0 || d.semTx.length > 0 || d.sobras.length > 0) && (
                       <>
                         <p className="text-xs text-muted-foreground">Os itens abaixo explicam as diferenças acima.</p>
 
@@ -1134,6 +1153,37 @@ export default function SalonReconciliation() {
                             </p>
                           </div>
                         )}
+
+                        {d.descontoCashback.length > 0 && (
+                          <div className="rounded-md border border-success/30 bg-success/5">
+                            <div className="px-3 py-2 border-b border-success/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-success">🟢 Desconto/Cashback aplicado</span>
+                              <Badge variant="secondary" className="bg-success/10 text-success text-[10px]">{d.descontoCashback.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.descontoCashback.map(o => {
+                                const txs = matchedOrderIds.get(o.id) || [];
+                                const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
+                                const diff = soma - o.total_amount;
+                                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
+                                const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
+                                return (
+                                  <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{o.sale_time || ''}</span>
+                                    <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
+                                    <span className="text-muted-foreground">Saipos: <span className="font-mono tabular-nums text-foreground">{formatCurrency(o.total_amount)}</span> / Maquininha: <span className="font-mono tabular-nums text-foreground">{formatCurrency(soma)}</span></span>
+                                    <span className={`font-mono tabular-nums font-semibold ${diffColor(diff)}`}>{diffPrefix(diff)}{formatCurrency(diff)}</span>
+                                    <span className="text-muted-foreground">{gar}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-success/20">
+                              A maquininha cobrou o valor cheio; o Saipos registrou o total já com o desconto/cashback abatido. A diferença é o próprio desconto — não é erro.
+                            </p>
+                          </div>
+                        )}
+
 
                         {d.semTx.length > 0 && (
                           <div className="rounded-md border border-warning/30 bg-warning/5">
@@ -1212,6 +1262,7 @@ export default function SalonReconciliation() {
                 <SelectItem value="combinado_nao_declarado">Combinado não declarado</SelectItem>
                 <SelectItem value="estrutura_divergente">Estrutura divergente</SelectItem>
                 <SelectItem value="diferenca_valor">Diferença de valor</SelectItem>
+                <SelectItem value="desconto_cashback">Desconto/Cashback</SelectItem>
               </SelectContent>
 
             </Select>
