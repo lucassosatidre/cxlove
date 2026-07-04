@@ -22,6 +22,7 @@ import { formatCurrency } from '@/lib/payment-utils';
 
 
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
+import { SaiposCancellationsPanel } from '@/components/SaiposCancellationsPanel';
 
 interface SalonOrder {
   id: string;
@@ -1242,6 +1243,8 @@ export default function SalonReconciliation() {
             </div>
           );
         })()}
+
+        <SaiposCancellationsPanel closingDate={closingDate} scope="salon" />
 
         {/* Filters */}
         <div className="border-b border-border bg-card">

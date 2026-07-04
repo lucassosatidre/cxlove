@@ -43,6 +43,7 @@ import {
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
 import { useMachineRegistry } from '@/hooks/useMachineRegistry';
+import { SaiposCancellationsPanel } from '@/components/SaiposCancellationsPanel';
 
 interface Order {
   id: string;
@@ -1374,6 +1375,8 @@ export default function DeliveryReconciliation() {
           </div>
         </div>
       )}
+
+      <SaiposCancellationsPanel closingDate={closingDate} scope="tele" />
 
       {/* 6. Resumo de Pedidos */}
       <div className="border-b border-border bg-card">
