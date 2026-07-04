@@ -1243,6 +1243,8 @@ export default function SalonReconciliation() {
           );
         })()}
 
+        <SaiposCancellationsPanel closingDate={closingDate} scope="salon" />
+
         {/* Filters */}
         <div className="border-b border-border bg-card">
           <div className="px-6 py-3 flex flex-wrap gap-2">
