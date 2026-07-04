@@ -105,11 +105,13 @@ export default function SalonReconciliation() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: closing }, { data: ordData }, { data: txData }] = await Promise.all([
+    const [{ data: closing }, { data: ordData }, { data: txData }, { data: mrData }] = await Promise.all([
       supabase.from('salon_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('salon_orders').select('id, order_type, sale_time, total_amount, payment_method, discount_amount').eq('salon_closing_id', id!),
       supabase.from('salon_card_transactions').select('*').eq('salon_closing_id', id!),
+      supabase.from('machine_readings').select('machine_serial, delivery_person').eq('salon_closing_id', id!),
     ]);
+    setMachineReadings((mrData || []) as { machine_serial: string; delivery_person: string }[]);
 
     setClosingDate(closing?.closing_date || '');
     setReconciliationStatus(closing?.reconciliation_status || 'pending');
