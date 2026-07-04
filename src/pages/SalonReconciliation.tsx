@@ -410,6 +410,45 @@ export default function SalonReconciliation() {
     return s;
   }, [transactions]);
 
+  // Diagnóstico: dados consolidados por forma + itens que explicam a diferença
+  const diagnosticData = useMemo(() => {
+    const rows = [
+      { key: 'Pix', saipos: offlineMethodTotals['(COBRAR) Pix'] || 0, real: machineRealByMethod['Pix'].total },
+      { key: 'Crédito', saipos: offlineMethodTotals['Crédito'] || 0, real: machineRealByMethod['Crédito'].total },
+      { key: 'Débito', saipos: offlineMethodTotals['Débito'] || 0, real: machineRealByMethod['Débito'].total },
+      { key: 'Voucher', saipos: offlineMethodTotals['Voucher'] || 0, real: machineRealByMethod['Voucher'].total },
+    ].map(r => ({ ...r, diff: r.real - r.saipos }));
+    const totals = rows.reduce(
+      (acc, r) => ({ saipos: acc.saipos + r.saipos, real: acc.real + r.real, diff: acc.diff + r.diff }),
+      { saipos: 0, real: 0, diff: 0 },
+    );
+
+    const trocaForma: SalonOrder[] = [];
+    const difValor: SalonOrder[] = [];
+    for (const order of orders) {
+      const div = divergenceByOrder.get(order.id);
+      if (!div) continue;
+      if (div === 'diferenca_valor') difValor.push(order);
+      else trocaForma.push(order);
+    }
+
+    const semTx = orders.filter(o => {
+      if (matchedOrderIds.has(o.id)) return false;
+      const cls = orderClassifications.get(o.id);
+      return !cls?.isExternal;
+    });
+
+    const sobras = transactions.filter(tx => !tx.matched_order_id);
+
+    const hasDiff =
+      rows.some(r => Math.abs(r.diff) >= 0.01) ||
+      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0;
+
+    return { rows, totals, trocaForma, difValor, semTx, sobras, hasDiff };
+  }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions]);
+
+  const [diagnosticOpenState, setDiagnosticOpenState] = useState<boolean | null>(null);
+  const diagnosticOpen = diagnosticOpenState ?? diagnosticData.hasDiff;
 
 
   const handleImport = useCallback(async (file: File) => {
