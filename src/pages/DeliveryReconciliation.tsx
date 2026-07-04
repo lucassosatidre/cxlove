@@ -43,6 +43,7 @@ import {
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 import { useConfirmedDrivers } from '@/hooks/useConfirmedDrivers';
 import { useMachineRegistry } from '@/hooks/useMachineRegistry';
+import { SaiposCancellationsPanel } from '@/components/SaiposCancellationsPanel';
 
 interface Order {
   id: string;
