@@ -95,6 +95,7 @@ export default function SalonReconciliation() {
   const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
   const [cashSnapshotFechamento, setCashSnapshotFechamento] = useState<{ total: number; updated_at: string } | null>(null);
   const [orderClassifications, setOrderClassifications] = useState<Map<string, OrderClassification>>(new Map());
+  const [machineReadings, setMachineReadings] = useState<{ machine_serial: string; delivery_person: string }[]>([]);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
 
