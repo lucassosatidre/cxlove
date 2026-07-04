@@ -44,7 +44,7 @@ export const allMenuItems: MenuItem[] = [
     ],
   },
   {
-    label: "Fluxo de Caixa",
+    label: "Financeiro",
     icon: Wallet,
     children: [
       { label: "Visão Geral", icon: Wallet, path: "/admin/fluxo-caixa", menuKey: "fluxo_caixa" },
