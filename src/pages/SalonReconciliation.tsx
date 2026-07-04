@@ -987,6 +987,16 @@ export default function SalonReconciliation() {
               });
               lines.push('');
             }
+            if (d.descontoCashback.length) {
+              lines.push(`🟢 Desconto/Cashback aplicado (${d.descontoCashback.length})`);
+              d.descontoCashback.forEach(o => {
+                const txs = matchedOrderIds.get(o.id) || [];
+                const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
+                const diff = soma - o.total_amount;
+                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
+                lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(diff)}${formatCurrency(diff)}) — ${gar}`);
+              });
+              lines.push('');
             if (d.semTx.length) {
               lines.push(`🟠 Pagamento sem transação na maquininha (${d.semTx.length})`);
               d.semTx.forEach(o => {
