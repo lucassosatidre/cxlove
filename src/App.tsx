@@ -38,6 +38,7 @@ import AuditIfoodMarketplaceV2 from "./pages/audit-v2/AuditIfoodMarketplaceV2";
 import AuditImportacoesV2 from "./pages/audit-v2/AuditImportacoesV2";
 import AuditRelatoriosV2 from "./pages/audit-v2/AuditRelatoriosV2";
 import CashflowDashboard from "./pages/CashflowDashboard";
+import NfseDocuments from "./pages/NfseDocuments";
 import ClauMemory from "./pages/ClauMemory";
 import ClauChat from "@/components/clau/ClauChat";
 import Profile from "./pages/Profile";
@@ -148,6 +149,8 @@ const App = () => (
               <Route path="/admin/clau/memoria" element={<ProtectedRoute><PermissionGate><ClauMemory /></PermissionGate></ProtectedRoute>} />
               {/* Fluxo de Caixa — admin */}
               <Route path="/admin/fluxo-caixa" element={<ProtectedRoute><PermissionGate><CashflowDashboard /></PermissionGate></ProtectedRoute>} />
+              <Route path="/admin/notas-servicos" element={<ProtectedRoute><PermissionGate><NfseDocuments /></PermissionGate></ProtectedRoute>} />
+
               {/* Sofia desativada (migrada para outro sistema) — redireciona para Home */}
               <Route path="/admin/sofia" element={<Navigate to="/" replace />} />
               {/* <Route path="/admin/sofia" element={<ProtectedRoute><SectorGuard sector="tele"><Sofia /></SectorGuard></ProtectedRoute>} /> */}
