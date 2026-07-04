@@ -270,13 +270,14 @@ export default function SalonReconciliation() {
     };
   }, [eligibleOrders, matchedOrderIds, transactions, orderClassifications]);
 
-  type DivergenceType = 'metodo_divergente' | 'combinado_nao_declarado' | 'estrutura_divergente' | 'diferenca_valor';
+  type DivergenceType = 'metodo_divergente' | 'combinado_nao_declarado' | 'estrutura_divergente' | 'diferenca_valor' | 'desconto_cashback';
 
   const DIVERGENCE_LABELS: Record<DivergenceType, { label: string; color: string }> = {
     metodo_divergente: { label: 'Método divergente', color: 'bg-destructive/10 text-destructive' },
     combinado_nao_declarado: { label: 'Combinado não declarado', color: 'bg-warning/10 text-warning' },
     estrutura_divergente: { label: 'Estrutura divergente', color: 'bg-warning/10 text-warning' },
     diferenca_valor: { label: 'Diferença de valor', color: 'bg-destructive/10 text-destructive' },
+    desconto_cashback: { label: 'Desconto/Cashback', color: 'bg-success/10 text-success' },
   };
 
   const canonicalMethod = (m: string): string => {
