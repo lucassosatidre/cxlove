@@ -964,7 +964,8 @@ export default function SalonReconciliation() {
               d.trocaForma.forEach(o => {
                 const txs = matchedOrderIds.get(o.id) || [];
                 const real = txs.map(t => t.payment_method).join(' + ');
-                lines.push(`  • ${o.sale_time || ''} — ${formatCurrency(o.total_amount)} — Saipos: ${o.payment_method} → Maquininha: ${real}`);
+                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
+                lines.push(`  • ${o.sale_time || ''} — ${formatCurrency(o.total_amount)} — Saipos: ${o.payment_method} → Maquininha: ${real} — ${gar}`);
               });
               lines.push('');
             }
@@ -973,7 +974,8 @@ export default function SalonReconciliation() {
               d.difValor.forEach(o => {
                 const txs = matchedOrderIds.get(o.id) || [];
                 const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
-                lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(soma - o.total_amount)}${formatCurrency(soma - o.total_amount)})`);
+                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
+                lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(soma - o.total_amount)}${formatCurrency(soma - o.total_amount)}) — ${gar}`);
               });
               lines.push('');
             }
@@ -1084,6 +1086,7 @@ export default function SalonReconciliation() {
                               {d.trocaForma.map(o => {
                                 const txs = matchedOrderIds.get(o.id) || [];
                                 const real = txs.map(t => t.payment_method).join(' + ');
+                                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
                                 const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
                                 return (
                                   <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
@@ -1091,6 +1094,7 @@ export default function SalonReconciliation() {
                                     <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
                                     <span className="font-mono tabular-nums font-semibold">{formatCurrency(o.total_amount)}</span>
                                     <span className="text-muted-foreground">Saipos: <span className="text-foreground">{o.payment_method}</span> → Maquininha: <span className="text-foreground">{real || '—'}</span></span>
+                                    <span className="text-muted-foreground">{gar}</span>
                                   </div>
                                 );
                               })}
@@ -1112,6 +1116,7 @@ export default function SalonReconciliation() {
                                 const txs = matchedOrderIds.get(o.id) || [];
                                 const soma = txs.reduce((s, t) => s + t.gross_amount, 0);
                                 const diff = soma - o.total_amount;
+                                const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
                                 const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
                                 return (
                                   <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
@@ -1119,6 +1124,7 @@ export default function SalonReconciliation() {
                                     <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
                                     <span className="text-muted-foreground">Saipos: <span className="font-mono tabular-nums text-foreground">{formatCurrency(o.total_amount)}</span> / Maquininha: <span className="font-mono tabular-nums text-foreground">{formatCurrency(soma)}</span></span>
                                     <span className={`font-mono tabular-nums font-semibold ${diffColor(diff)}`}>{diffPrefix(diff)}{formatCurrency(diff)}</span>
+                                    <span className="text-muted-foreground">{gar}</span>
                                   </div>
                                 );
                               })}
