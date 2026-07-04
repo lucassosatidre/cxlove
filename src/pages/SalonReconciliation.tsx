@@ -22,6 +22,7 @@ import { formatCurrency } from '@/lib/payment-utils';
 
 
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
+import { SaiposCancellationsPanel } from '@/components/SaiposCancellationsPanel';
 
 interface SalonOrder {
   id: string;
