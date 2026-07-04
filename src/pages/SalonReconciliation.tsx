@@ -913,7 +913,7 @@ export default function SalonReconciliation() {
                 <AlertTriangle className="h-4 w-4 text-destructive" />
                 <div>
                   <p className="text-[10px] text-muted-foreground leading-tight">Divergências</p>
-                  <p className="text-sm font-semibold text-destructive font-mono-tabular">{divergenceByOrder.size}</p>
+                  <p className="text-sm font-semibold text-destructive font-mono-tabular">{[...divergenceByOrder.values()].filter(t => t !== 'desconto_cashback').length}</p>
                 </div>
               </div>
 
