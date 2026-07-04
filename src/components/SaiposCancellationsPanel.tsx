@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Ban, ChevronDown, ChevronUp, RefreshCw, Copy, AlertTriangle, Loader2 } from 'lucide-react';
+import { Ban, ChevronDown, ChevronUp, RefreshCw, Copy, AlertTriangle, Loader2, ArrowRightLeft } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatCurrency } from '@/lib/payment-utils';
@@ -14,15 +14,41 @@ interface CanceledSale {
   total_amount: number;
   desc_sale: string | null;
   customer_name: string | null;
-  canceled_items_count?: number;
+  reason: string | null;
+  done_by: string | null;
+  authorized_by: string | null;
+}
+
+interface CanceledItem {
+  id_sale: number;
+  sale_number: string;
+  order_type: string;
+  sale_time: string | null;
+  desc_sale: string | null;
+  customer_name: string | null;
+  desc_sale_item: string;
+  removed_by: string | null;
+  authorized_by: string | null;
+  waiter_id: number | null;
+}
+
+interface TransferredItem {
+  desc_sale_item: string;
+  from_sale: number;
+  from_ref: string;
+  to_sale: number;
+  to_ref: string;
+  sale_time: string | null;
+  waiter_id: number | null;
 }
 
 interface ApiResponse {
   closing_date: string;
   scope: 'salon' | 'tele';
   canceled_sales: CanceledSale[];
-  canceled_item_sales: CanceledSale[];
-  counts: { canceled_sales: number; canceled_item_sales: number };
+  canceled_items: CanceledItem[];
+  transferred_items: TransferredItem[];
+  counts: { canceled_sales: number; canceled_items: number; transferred_items: number };
 }
 
 interface Props {
@@ -30,7 +56,7 @@ interface Props {
   scope: 'salon' | 'tele';
 }
 
-function refLabel(s: CanceledSale, scope: 'salon' | 'tele'): string {
+function saleRef(s: CanceledSale | CanceledItem, scope: 'salon' | 'tele'): string {
   if (scope === 'tele') {
     const parts: string[] = [`#${s.sale_number}`];
     if (s.customer_name) parts.push(s.customer_name);
@@ -81,9 +107,7 @@ export function SaiposCancellationsPanel({ closingDate, scope }: Props) {
   const handleToggle = () => {
     const next = !open;
     setOpen(next);
-    if (next && !loaded && !loading && closingDate) {
-      fetchData();
-    }
+    if (next && !loaded && !loading && closingDate) fetchData();
   };
 
   const handleCopy = () => {
@@ -92,27 +116,37 @@ export function SaiposCancellationsPanel({ closingDate, scope }: Props) {
     lines.push(`Cancelamentos ${scope === 'salon' ? 'Salão' : 'Tele'} — ${closingDate}`);
     lines.push('');
     lines.push(`🔴 Vendas canceladas (${data.canceled_sales.length})`);
-    if (data.canceled_sales.length === 0) {
-      lines.push('  Nenhuma');
-    } else {
-      data.canceled_sales.forEach(s => {
-        lines.push(`  • ${s.sale_time || ''} — ${s.order_type} — ${formatCurrency(s.total_amount)} — ${refLabel(s, scope)}`);
-      });
-    }
+    if (data.canceled_sales.length === 0) lines.push('  Nenhuma');
+    else data.canceled_sales.forEach(s => {
+      lines.push(`  • ${s.sale_time || ''} — ${s.order_type} — ${formatCurrency(s.total_amount)} — ${saleRef(s, scope)}`);
+      const extras: string[] = [];
+      if (s.reason) extras.push(`Motivo: ${s.reason}`);
+      if (s.authorized_by) extras.push(`Autorizado por: ${s.authorized_by}`);
+      if (s.done_by && s.done_by !== s.authorized_by) extras.push(`feito no login: ${s.done_by}`);
+      if (extras.length) lines.push(`      ${extras.join(' · ')}`);
+    });
     lines.push('');
-    lines.push(`🟠 Vendas com item cancelado (${data.canceled_item_sales.length})`);
-    if (data.canceled_item_sales.length === 0) {
-      lines.push('  Nenhuma');
-    } else {
-      data.canceled_item_sales.forEach(s => {
-        lines.push(`  • ${s.sale_time || ''} — ${s.order_type} — ${formatCurrency(s.total_amount)} — ${refLabel(s, scope)} — ${s.canceled_items_count} item(ns) cancelado(s)`);
-      });
-    }
+    lines.push(`🟠 Itens cancelados (${data.canceled_items.length})`);
+    if (data.canceled_items.length === 0) lines.push('  Nenhum');
+    else data.canceled_items.forEach(it => {
+      lines.push(`  • ${it.sale_time || ''} — ${saleRef(it, scope)} — ${it.desc_sale_item}`);
+      const extras: string[] = [];
+      if (it.authorized_by) extras.push(`Autorizado por: ${it.authorized_by}`);
+      if (it.removed_by) extras.push(`Removido por: ${it.removed_by}`);
+      if (it.waiter_id) extras.push(`garçom cód. ${it.waiter_id}`);
+      if (extras.length) lines.push(`      ${extras.join(' · ')}`);
+    });
+    lines.push('');
+    lines.push(`🔵 Itens transferidos (${data.transferred_items.length})`);
+    if (data.transferred_items.length === 0) lines.push('  Nenhum');
+    else data.transferred_items.forEach(t => {
+      lines.push(`  • ${t.sale_time || ''} — ${t.desc_sale_item} — ${t.from_ref} → ${t.to_ref}`);
+    });
     navigator.clipboard.writeText(lines.join('\n'));
     toast.success('Resumo copiado!');
   };
 
-  const totalCount = data ? data.counts.canceled_sales + data.counts.canceled_item_sales : 0;
+  const totalCount = data ? data.counts.canceled_sales + data.counts.canceled_items + data.counts.transferred_items : 0;
 
   return (
     <div className="border-b border-border bg-card">
@@ -160,6 +194,7 @@ export function SaiposCancellationsPanel({ closingDate, scope }: Props) {
                   </Button>
                 </div>
 
+                {/* Vendas canceladas */}
                 <div className="rounded-md border border-destructive/30 bg-destructive/5">
                   <div className="px-3 py-2 border-b border-destructive/20 flex items-center justify-between">
                     <span className="text-xs font-semibold text-destructive">🔴 Vendas canceladas</span>
@@ -172,37 +207,82 @@ export function SaiposCancellationsPanel({ closingDate, scope }: Props) {
                   ) : (
                     <div className="divide-y divide-border">
                       {data.canceled_sales.map(s => (
-                        <div key={s.id_sale} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
-                          <span className="font-mono tabular-nums text-muted-foreground">{s.sale_time || ''}</span>
-                          <Badge className={`text-[9px] ${typeBadgeCls(s.order_type)}`}>{s.order_type}</Badge>
-                          <span className="font-mono tabular-nums font-semibold">{formatCurrency(s.total_amount)}</span>
-                          <span className="text-muted-foreground">{refLabel(s, scope)}</span>
+                        <div key={`cs-${s.id_sale}`} className="px-3 py-2 text-xs space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono tabular-nums text-muted-foreground">{s.sale_time || ''}</span>
+                            <Badge className={`text-[9px] ${typeBadgeCls(s.order_type)}`}>{s.order_type}</Badge>
+                            <span className="font-mono tabular-nums font-semibold">{formatCurrency(s.total_amount)}</span>
+                            <span className="text-muted-foreground">{saleRef(s, scope)}</span>
+                          </div>
+                          {(s.reason || s.authorized_by || s.done_by) && (
+                            <div className="text-[10px] text-muted-foreground pl-1">
+                              {s.reason && <span>Motivo: <span className="text-foreground">{s.reason}</span></span>}
+                              {s.reason && (s.authorized_by || s.done_by) && <span> · </span>}
+                              {s.authorized_by && <span>Autorizado por: <span className="text-foreground">{s.authorized_by}</span></span>}
+                              {s.done_by && s.done_by !== s.authorized_by && (
+                                <span> · feito no login: <span className="text-foreground">{s.done_by}</span></span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
 
+                {/* Itens cancelados */}
                 <div className="rounded-md border border-warning/30 bg-warning/5">
                   <div className="px-3 py-2 border-b border-warning/20 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-warning">🟠 Vendas com item cancelado</span>
+                    <span className="text-xs font-semibold text-warning">🟠 Itens cancelados</span>
                     <Badge variant="secondary" className="bg-warning/10 text-warning text-[10px]">
-                      {data.canceled_item_sales.length}
+                      {data.canceled_items.length}
                     </Badge>
                   </div>
-                  {data.canceled_item_sales.length === 0 ? (
-                    <p className="px-3 py-2 text-[11px] text-muted-foreground">Nenhuma venda com item cancelado.</p>
+                  {data.canceled_items.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground">Nenhum item cancelado.</p>
                   ) : (
                     <div className="divide-y divide-border">
-                      {data.canceled_item_sales.map(s => (
-                        <div key={s.id_sale} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
-                          <span className="font-mono tabular-nums text-muted-foreground">{s.sale_time || ''}</span>
-                          <Badge className={`text-[9px] ${typeBadgeCls(s.order_type)}`}>{s.order_type}</Badge>
-                          <span className="font-mono tabular-nums font-semibold">{formatCurrency(s.total_amount)}</span>
-                          <span className="text-muted-foreground">{refLabel(s, scope)}</span>
-                          <Badge variant="secondary" className="bg-warning/10 text-warning text-[10px]">
-                            {s.canceled_items_count} item(ns) cancelado(s)
-                          </Badge>
+                      {data.canceled_items.map((it, i) => (
+                        <div key={`ci-${it.id_sale}-${i}`} className="px-3 py-2 text-xs space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono tabular-nums text-muted-foreground">{it.sale_time || ''}</span>
+                            <Badge className={`text-[9px] ${typeBadgeCls(it.order_type)}`}>{it.order_type}</Badge>
+                            <span className="text-muted-foreground">{saleRef(it, scope)}</span>
+                            <span className="font-semibold text-foreground">{it.desc_sale_item}</span>
+                          </div>
+                          {(it.authorized_by || it.removed_by || it.waiter_id) && (
+                            <div className="text-[10px] text-muted-foreground pl-1">
+                              {it.authorized_by && <span>Autorizado por: <span className="text-foreground">{it.authorized_by}</span></span>}
+                              {it.authorized_by && it.removed_by && <span> · </span>}
+                              {it.removed_by && <span>Removido por: <span className="text-foreground">{it.removed_by}</span></span>}
+                              {it.waiter_id && <span> · garçom cód. {it.waiter_id}</span>}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Itens transferidos */}
+                <div className="rounded-md border border-primary/30 bg-primary/5">
+                  <div className="px-3 py-2 border-b border-primary/20 flex items-center justify-between">
+                    <span className="text-xs font-semibold text-primary flex items-center gap-1">
+                      <ArrowRightLeft className="h-3 w-3" /> 🔵 Itens transferidos entre mesas/comandas
+                    </span>
+                    <Badge variant="secondary" className="bg-primary/10 text-primary text-[10px]">
+                      {data.transferred_items.length}
+                    </Badge>
+                  </div>
+                  {data.transferred_items.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground">Nenhum item transferido.</p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {data.transferred_items.map((t, i) => (
+                        <div key={`tr-${t.from_sale}-${t.to_sale}-${i}`} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                          <span className="font-mono tabular-nums text-muted-foreground">{t.sale_time || ''}</span>
+                          <span className="font-semibold text-foreground">{t.desc_sale_item}</span>
+                          <span className="text-muted-foreground">{t.from_ref} → {t.to_ref}</span>
                         </div>
                       ))}
                     </div>
@@ -212,7 +292,7 @@ export function SaiposCancellationsPanel({ closingDate, scope }: Props) {
                 <div className="flex items-start gap-2 px-2 py-1.5 text-[10px] text-muted-foreground">
                   <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
                   <span>
-                    ⚠️ A API do Saipos informa QUE houve cancelamento e QUANTOS itens, mas NÃO informa qual item foi modificado ou transferido, nem QUEM (garçom/atendente) fez. Para ver o responsável, use o "Relatório de vendas canceladas" no painel do Saipos.
+                    ✅ Agora mostramos quem AUTORIZOU/removeu (pelo nome) e o motivo. ⚠️ Único limite: o garçom específico do item às vezes vem só como código interno (a API não fornece o nome do garçom por item).
                   </span>
                 </div>
               </>
