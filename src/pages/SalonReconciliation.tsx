@@ -997,6 +997,7 @@ export default function SalonReconciliation() {
                 lines.push(`  • ${o.sale_time || ''} — Saipos: ${formatCurrency(o.total_amount)} / Maquininha: ${formatCurrency(soma)} (${diffPrefix(diff)}${formatCurrency(diff)}) — ${gar}`);
               });
               lines.push('');
+            }
             if (d.semTx.length) {
               lines.push(`🟠 Pagamento sem transação na maquininha (${d.semTx.length})`);
               d.semTx.forEach(o => {
