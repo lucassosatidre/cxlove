@@ -388,6 +388,29 @@ export default function SalonReconciliation() {
     return totals;
   }, [orders, payments]);
 
+  const machineRealByMethod = useMemo(() => {
+    const s: Record<'Pix' | 'Crédito' | 'Débito' | 'Voucher', { total: number; count: number }> = {
+      'Pix': { total: 0, count: 0 },
+      'Crédito': { total: 0, count: 0 },
+      'Débito': { total: 0, count: 0 },
+      'Voucher': { total: 0, count: 0 },
+    };
+    transactions.forEach(tx => {
+      const method = tx.payment_method?.toLowerCase() || '';
+      let label: 'Pix' | 'Crédito' | 'Débito' | 'Voucher' | null = null;
+      if (method.includes('pix')) label = 'Pix';
+      else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
+      else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
+      else if (method.includes('voucher')) label = 'Voucher';
+      if (label) {
+        s[label].total += tx.gross_amount;
+        s[label].count += 1;
+      }
+    });
+    return s;
+  }, [transactions]);
+
+
 
   const handleImport = useCallback(async (file: File) => {
     if (!user || !id) return;
