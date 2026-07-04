@@ -230,8 +230,24 @@ export default function SalonReconciliation() {
     transactions.filter(tx => !tx.matched_order_id && txMatchesPayment(tx, filterPayment)),
     [transactions, filterPayment]);
 
-  const waiterMap = useMemo(() =>
-    buildWaiterMap(transactions.map(tx => tx.machine_serial)), [transactions]);
+  const waiterMap = useMemo(() => {
+    const nameByStripped = new Map<string, string>();
+    machineReadings.forEach(r => {
+      const name = (r.delivery_person || '').trim();
+      const serial = (r.machine_serial || '').replace(/^S1F2-000/, '').trim();
+      if (serial && name) nameByStripped.set(serial, name);
+    });
+    const map = new Map<string, string>();
+    for (const tx of transactions) {
+      const full = tx.machine_serial;
+      if (!full) continue;
+      if (map.has(full)) continue;
+      const stripped = full.replace(/^S1F2-000/, '');
+      const real = nameByStripped.get(stripped);
+      map.set(full, real || `Maq. …${stripped.slice(-4)}`);
+    }
+    return map;
+  }, [transactions, machineReadings]);
 
   const stats = useMemo(() => {
     const machineOrders = eligibleOrders.filter(o => {
