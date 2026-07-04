@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
 
     const [sales, items] = await Promise.all([
       fetchAllPaged("search_sales", day, saiposToken, deadline),
-      fetchAllPaged("search_items_of_sale", day, saiposToken, deadline),
+      fetchAllPaged("sales_items", day, saiposToken, deadline),
     ]);
 
     // Filtra cancelados
