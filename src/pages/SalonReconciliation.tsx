@@ -19,7 +19,7 @@ import AppSidebar from '@/components/AppSidebar';
 import { parseSalonCardTransactionFile } from '@/lib/card-transaction-parser';
 import { matchSalonTransactionsToOrders, classifyOrder, type OrderClassification, type PendingReason } from '@/lib/salon-matching';
 import { formatCurrency } from '@/lib/payment-utils';
-import { buildWaiterMap } from '@/lib/waiter-labels';
+
 
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 
@@ -95,6 +95,7 @@ export default function SalonReconciliation() {
   const [cashSnapshotAbertura, setCashSnapshotAbertura] = useState<{ total: number; updated_at: string } | null>(null);
   const [cashSnapshotFechamento, setCashSnapshotFechamento] = useState<{ total: number; updated_at: string } | null>(null);
   const [orderClassifications, setOrderClassifications] = useState<Map<string, OrderClassification>>(new Map());
+  const [machineReadings, setMachineReadings] = useState<{ machine_serial: string; delivery_person: string }[]>([]);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
 
@@ -104,11 +105,13 @@ export default function SalonReconciliation() {
   }, [id]);
 
   const loadData = async () => {
-    const [{ data: closing }, { data: ordData }, { data: txData }] = await Promise.all([
+    const [{ data: closing }, { data: ordData }, { data: txData }, { data: mrData }] = await Promise.all([
       supabase.from('salon_closings').select('closing_date, reconciliation_status').eq('id', id!).single(),
       supabase.from('salon_orders').select('id, order_type, sale_time, total_amount, payment_method, discount_amount').eq('salon_closing_id', id!),
       supabase.from('salon_card_transactions').select('*').eq('salon_closing_id', id!),
+      supabase.from('machine_readings').select('machine_serial, delivery_person').eq('salon_closing_id', id!),
     ]);
+    setMachineReadings((mrData || []) as { machine_serial: string; delivery_person: string }[]);
 
     setClosingDate(closing?.closing_date || '');
     setReconciliationStatus(closing?.reconciliation_status || 'pending');
@@ -227,8 +230,24 @@ export default function SalonReconciliation() {
     transactions.filter(tx => !tx.matched_order_id && txMatchesPayment(tx, filterPayment)),
     [transactions, filterPayment]);
 
-  const waiterMap = useMemo(() =>
-    buildWaiterMap(transactions.map(tx => tx.machine_serial)), [transactions]);
+  const waiterMap = useMemo(() => {
+    const nameByStripped = new Map<string, string>();
+    machineReadings.forEach(r => {
+      const name = (r.delivery_person || '').trim();
+      const serial = (r.machine_serial || '').replace(/^S1F2-000/, '').trim();
+      if (serial && name) nameByStripped.set(serial, name);
+    });
+    const map = new Map<string, string>();
+    for (const tx of transactions) {
+      const full = tx.machine_serial;
+      if (!full) continue;
+      if (map.has(full)) continue;
+      const stripped = full.replace(/^S1F2-000/, '');
+      const real = nameByStripped.get(stripped);
+      map.set(full, real || `Maq. …${stripped.slice(-4)}`);
+    }
+    return map;
+  }, [transactions, machineReadings]);
 
   const stats = useMemo(() => {
     const machineOrders = eligibleOrders.filter(o => {
