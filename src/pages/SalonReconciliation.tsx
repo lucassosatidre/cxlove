@@ -753,23 +753,7 @@ export default function SalonReconciliation() {
 
         {/* 4. Total Recebido via Maquininhas - Real */}
         {(() => {
-          const methodSummary: Record<string, { total: number; count: number }> = {
-            'Pix': { total: 0, count: 0 },
-            'Crédito': { total: 0, count: 0 },
-            'Débito': { total: 0, count: 0 },
-            'Voucher': { total: 0, count: 0 },
-          };
-          transactions.forEach(tx => {
-            const method = tx.payment_method?.toLowerCase() || 'outro';
-            let label = 'Outro';
-            if (method.includes('pix')) label = 'Pix';
-            else if (method.includes('crédit') || method.includes('credit')) label = 'Crédito';
-            else if (method.includes('débit') || method.includes('debit')) label = 'Débito';
-            else if (method.includes('voucher')) label = 'Voucher';
-            if (!methodSummary[label]) methodSummary[label] = { total: 0, count: 0 };
-            methodSummary[label].total += tx.gross_amount;
-            methodSummary[label].count += 1;
-          });
+          const methodSummary = machineRealByMethod;
           const fixedOrder = ['Pix', 'Crédito', 'Débito', 'Voucher'];
           const iconMap: Record<string, React.ReactNode> = {
             'Pix': <QrCode className="h-4 w-4 text-primary" />,
