@@ -323,10 +323,15 @@ export default function SalonReconciliation() {
           ? order.total_amount : null; // misto com dinheiro/online sem breakdown → não checa valor
       }
 
-      // 1) diferença de valor (só quando dá pra saber o valor esperado no cartão)
-      if (expectedCardSum != null && Math.abs(cardSum - expectedCardSum) > 0.5) {
-        map.set(order.id, 'diferenca_valor');
-        continue;
+      // 1) diferença de valor (ciente de desconto/cashback)
+      if (expectedCardSum != null) {
+        const matchesTotal = Math.abs(cardSum - expectedCardSum) <= 0.5;
+        const disc = order.discount_amount || 0;
+        const matchesWithDiscount = disc > 0.01 && Math.abs(cardSum - (expectedCardSum + disc)) <= 0.5;
+        if (!matchesTotal) {
+          map.set(order.id, matchesWithDiscount ? 'desconto_cashback' : 'diferenca_valor');
+          continue;
+        }
       }
       // 2) método / estrutura
       if (declaredCard.length > 0) {
