@@ -1220,6 +1220,7 @@ export default function SalonReconciliation() {
                 <SelectItem value="combinado_nao_declarado">Combinado não declarado</SelectItem>
                 <SelectItem value="estrutura_divergente">Estrutura divergente</SelectItem>
                 <SelectItem value="diferenca_valor">Diferença de valor</SelectItem>
+                <SelectItem value="desconto_cashback">Desconto/Cashback</SelectItem>
               </SelectContent>
 
             </Select>
