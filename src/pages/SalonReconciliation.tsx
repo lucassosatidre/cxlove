@@ -469,9 +469,9 @@ export default function SalonReconciliation() {
 
     const hasDiff =
       rows.some(r => Math.abs(r.diff) >= 0.01) ||
-      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0;
+      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0 || descontoCashback.length > 0;
 
-    return { rows, totals, trocaForma, difValor, semTx, sobras, hasDiff };
+    return { rows, totals, trocaForma, difValor, descontoCashback, semTx, sobras, hasDiff };
   }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions]);
 
   const [diagnosticOpenState, setDiagnosticOpenState] = useState<boolean | null>(null);
