@@ -10,7 +10,7 @@ import {
   ArrowLeft, Upload, Search, CheckCircle2, AlertTriangle, Link2, Unlink,
   CreditCard, Clock, GripVertical, Undo2, FileSpreadsheet, Store,
   ShieldCheck, RotateCcw, Banknote, DollarSign, Globe, QrCode, Wallet,
-  ChevronUp, ChevronDown, ShieldX,
+  ChevronUp, ChevronDown, ShieldX, Copy,
 } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import MachineReadingsSection from '@/components/MachineReadingsSection';
