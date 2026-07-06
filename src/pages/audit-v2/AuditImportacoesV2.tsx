@@ -678,15 +678,17 @@ export default function AuditImportacoesV2() {
                               </div>
 
                               {/* Detalhe expandido: lista de imports daquele file_type */}
-                              {isExpanded && intakeRow && (
+                              {isExpanded && (intakeRow || docImports.length > 0) && (
                                 <div className="border-t border-border/50 px-2 py-2 space-y-1 text-xs bg-muted/30">
-                                  <div className="text-muted-foreground">
-                                    Período: <span className="text-foreground">{fmtDate(intakeRow.data_min)} → {fmtDate(intakeRow.data_max)}</span>
-                                    {' · '}
-                                    <span className="text-foreground">{fmtInt(intakeRow.linhas)}</span> linhas
-                                    {' · '}
-                                    Total: <span className="text-foreground">{fmtMoney(intakeRow.valor)}</span>
-                                  </div>
+                                  {intakeRow && (
+                                    <div className="text-muted-foreground">
+                                      Período: <span className="text-foreground">{fmtDate(intakeRow.data_min)} → {fmtDate(intakeRow.data_max)}</span>
+                                      {' · '}
+                                      <span className="text-foreground">{fmtInt(intakeRow.linhas)}</span> linhas
+                                      {' · '}
+                                      Total: <span className="text-foreground">{fmtMoney(intakeRow.valor)}</span>
+                                    </div>
+                                  )}
                                   <div className="pt-1 text-[11px] uppercase text-muted-foreground">Arquivos importados ({doc.fileTypes.join(', ')})</div>
                                   {docImports.length === 0 ? (
                                     <div className="text-muted-foreground italic">Nenhum registro em audit_imports.</div>
