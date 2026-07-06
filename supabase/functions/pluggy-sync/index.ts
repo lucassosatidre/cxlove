@@ -145,9 +145,6 @@ Deno.serve(async (req) => {
         // transações via /v2/transactions com cursor — isolado por conta; erro NÃO derruba o sync
         let inserted = 0;
         let accountError: string | null = null;
-        // Rastreia a tx com maior (date, order) que tenha `balance` numérico não-nulo
-        let latestRunningBalance: number | null = null;
-        let latestRunningKey: { date: string; order: number } | null = null;
         try {
           // primeira página
           let path: string | null =
@@ -161,27 +158,6 @@ Deno.serve(async (req) => {
             const results: any[] = tResp?.results ?? [];
 
             if (results.length) {
-              // rastreia latestRunningBalance (balance pode vir number ou string)
-              for (const tx of results) {
-                const rawBal = tx.balance;
-                if (rawBal === null || rawBal === undefined || rawBal === '') continue;
-                const balNum = Number(rawBal);
-                if (!Number.isFinite(balNum)) continue;
-                const rawDate = tx.date ?? tx.createdAt ?? null;
-                const dateStr = rawDate
-                  ? (typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString())
-                  : '';
-                const orderNum = Number(tx.order ?? 0) || 0;
-                if (
-                  !latestRunningKey ||
-                  dateStr > latestRunningKey.date ||
-                  (dateStr === latestRunningKey.date && orderNum > latestRunningKey.order)
-                ) {
-                  latestRunningKey = { date: dateStr, order: orderNum };
-                  latestRunningBalance = balNum;
-                }
-              }
-
               const rows = results.map((tx) => {
                 const desc = tx.description ?? tx.descriptionRaw ?? null;
                 const detail = tx.descriptionRaw && tx.descriptionRaw !== desc
@@ -229,16 +205,14 @@ Deno.serve(async (req) => {
         }
 
         // Prioridade de own_balance:
-        // 1) running_balance da última tx com balance não-nulo
-        // 2) âncora + rollforward
-        // 3) balance da conta vindo de /accounts
+        // 1) âncora + rollforward (se a conta tem balance_anchor + balance_anchor_date)
+        // 2) balance da conta vindo de /accounts (fallback)
+        // Obs: running_balance por-tx é gravado, mas NÃO é usado pra decidir saldo
+        // (BB entrega todas as tx do dia com mesma date e `order` não-cronológico).
         let chosenBalance: number | null = null;
-        let balanceSource: 'running_balance' | 'anchor' | 'account_balance' | 'none' = 'none';
+        let balanceSource: 'anchor' | 'account_balance' | 'none' = 'none';
 
-        if (latestRunningBalance !== null) {
-          chosenBalance = latestRunningBalance;
-          balanceSource = 'running_balance';
-        } else if (hasAnchor) {
+        if (hasAnchor) {
           try {
             const { data: txSum, error: sumErr } = await supa
               .from('cashflow_transactions')
