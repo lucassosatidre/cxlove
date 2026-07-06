@@ -34,6 +34,7 @@ import AuditEntryV2 from "./pages/audit-v2/AuditEntryV2";
 import AuditDashboardV2 from "./pages/audit-v2/AuditDashboardV2";
 import AuditVouchersV2 from "./pages/audit-v2/AuditVouchersV2";
 import AuditBrendiV2 from "./pages/audit-v2/AuditBrendiV2";
+import AuditIfoodV2 from "./pages/audit-v2/AuditIfoodV2";
 import AuditIfoodMarketplaceV2 from "./pages/audit-v2/AuditIfoodMarketplaceV2";
 import AuditImportacoesV2 from "./pages/audit-v2/AuditImportacoesV2";
 import AuditRelatoriosV2 from "./pages/audit-v2/AuditRelatoriosV2";
@@ -141,6 +142,7 @@ const App = () => (
               <Route path="/admin/auditoria-v2" element={<ProtectedRoute><PermissionGate><AuditEntryV2 /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/auditoria-v2/importacoes" element={<ProtectedRoute><PermissionGate><AuditImportacoesV2 /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/auditoria-v2/maquinona" element={<ProtectedRoute><PermissionGate><AuditDashboardV2 /></PermissionGate></ProtectedRoute>} />
+              <Route path="/admin/auditoria-v2/ifood" element={<ProtectedRoute><PermissionGate><AuditIfoodV2 /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/auditoria-v2/conciliacao" element={<Navigate to="/admin/auditoria-v2/importacoes" replace />} />
               <Route path="/admin/auditoria-v2/vouchers" element={<ProtectedRoute><PermissionGate><AuditVouchersV2 /></PermissionGate></ProtectedRoute>} />
               <Route path="/admin/auditoria-v2/brendi" element={<ProtectedRoute><PermissionGate><AuditBrendiV2 /></PermissionGate></ProtectedRoute>} />
