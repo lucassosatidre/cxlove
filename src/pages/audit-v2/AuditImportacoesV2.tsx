@@ -396,7 +396,7 @@ export default function AuditImportacoesV2() {
       docId: 'pluxee_pagamentos', label: '07 PLUXEE — Extrato de Pagamentos',
       hint: 'Portal Pluxee, pagamentos: mês + mês seguinte',
       format: '.xlsx',
-      slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['pluxee_pagamentos'],
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['pluxee_pagamentos'],
       group: 'vouchers', Component: UploadPluxeePagamentosCard,
       postReason: 'pagamento pode cair no mês seguinte',
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
