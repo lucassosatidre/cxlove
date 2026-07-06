@@ -112,6 +112,11 @@ export default function ExtratosPorConta() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
 
+  const queryClient = useQueryClient();
+  const [reconfirmAccountId, setReconfirmAccountId] = useState<string | null>(null);
+  const [reconfirmValue, setReconfirmValue] = useState<string>('');
+  const [reconfirmSubmitting, setReconfirmSubmitting] = useState(false);
+
   // saldo da conta (de balances) por account_id
   const balanceById = useMemo(() => {
     const m = new Map<string, number | null>();
