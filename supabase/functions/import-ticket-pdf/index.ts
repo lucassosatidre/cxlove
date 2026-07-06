@@ -629,7 +629,7 @@ Deno.serve(async (req) => {
 
     // Sanity: subtotal_vendas == soma items, e (subtotal - total_descontos) == valor_liquido.
     const integrityErrors: string[] = [];
-    for (const l of lots) {
+    for (const l of lotsKept) {
       const sumItems = l.items.reduce((s, i) => s + i.valor, 0);
       if (Math.abs(sumItems - l.subtotal_vendas) > 0.05) {
         integrityErrors.push(`Lote ${l.numero_reembolso}: soma items R$${sumItems.toFixed(2)} ≠ subtotal R$${l.subtotal_vendas.toFixed(2)}`);
@@ -694,8 +694,7 @@ Deno.serve(async (req) => {
         // em abril: lotes com vendas em março → period março; vendas em abril
         // → period abril; vendas em maio → period maio. Auditoria por
         // competência da venda, independente do crédito.
-        const lotPeriodKey = lotCompYM(l) ?? '';
-        const lotTargetPeriodId = targetPeriodIdByYM[lotPeriodKey] ?? audit_period_id;
+        const lotTargetPeriodId = audit_period_id;
 
         // Checagem GLOBAL pelo numero_reembolso: se o lote já existe em
         // audit_period DIFERENTE do destino calculado, atualiza no lugar
