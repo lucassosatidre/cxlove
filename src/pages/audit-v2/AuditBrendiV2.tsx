@@ -18,6 +18,7 @@ import {
   type AuditPeriodLite,
 } from '@/components/audit/UploadCards';
 import AuditNavTabsV2 from '@/components/audit-v2/AuditNavTabsV2';
+import { fetchAllPaginated } from '@/lib/supabase-pagination';
 
 type DailyRow = {
   id: string;
@@ -90,9 +91,10 @@ export default function AuditBrendiV2() {
   const [loading, setLoading] = useState(true);
 
   const [daily, setDaily] = useState<DailyRow[]>([]);
-  // O match não roda mais por aqui — é disparado pelo botão "Executar Auditoria"
-  // na aba Importações. O cross-check ao vivo fica null até a próxima execução lá.
-  const [crosscheck] = useState<CrosscheckResult | null>(null);
+  // Cross-check Saipos × Brendi computado ao vivo aqui, a partir dos pedidos
+  // já importados (espelha a lógica de match-brendi). O daily/match continua
+  // sendo gerado pelo botão "Executar Auditoria" na aba Importações.
+  const [crosscheck, setCrosscheck] = useState<CrosscheckResult | null>(null);
   const [imports, setImports] = useState<Array<{ file_type: string; status: string; created_at: string; imported_rows: number }>>([]);
   const [brendiOrdersCount, setBrendiOrdersCount] = useState(0);
   const [brendiCashbackTotal, setBrendiCashbackTotal] = useState(0);
@@ -162,6 +164,58 @@ export default function AuditBrendiV2() {
     const orders = (ordersMes ?? []) as Array<{ total: number }>;
     setTotalBrutoMes(orders.reduce((s, o) => s + Number(o.total || 0), 0));
     setPedidosMes(orders.length);
+
+    // ── Cross-check Saipos × Brendi (competência do mês) — espelha match-brendi ──
+    const [saiposCC, brendiCC] = await Promise.all([
+      fetchAllPaginated<any>(
+        supabase.from('audit_saipos_orders')
+          .select('order_id_parceiro, pagamento, total, data_venda')
+          .eq('audit_period_id', periodId)
+          .eq('canal_venda', 'Brendi')
+          .eq('cancelado', false)
+          .gte('sale_date', monthStart).lt('sale_date', nextMonthStart)
+          .or('pagamento.ilike.%Pix Online Brendi%,pagamento.ilike.%Pago Online - Cartão de crédito%'),
+      ),
+      fetchAllPaginated<any>(
+        supabase.from('audit_brendi_orders')
+          .select('order_id, forma_pagamento, total, cashback_usado, status_remote, created_at_remote')
+          .eq('audit_period_id', periodId)
+          .ilike('status_remote', 'entregue')
+          .gte('sale_date', monthStart).lt('sale_date', nextMonthStart)
+          .in('forma_pagamento', ['Pix Online', 'Crédito Online']),
+      ),
+    ]);
+    const CC_TOL = 2.00;
+    const sMap = new Map<string, { pagamento: string; total: number; data_venda: string }>();
+    for (const s of (saiposCC ?? [])) sMap.set(s.order_id_parceiro, { pagamento: s.pagamento, total: Number(s.total), data_venda: s.data_venda });
+    const bMap = new Map<string, { forma: string; total: number; cashback: number; created_at_remote: string }>();
+    for (const b of (brendiCC ?? [])) bMap.set(b.order_id, { forma: b.forma_pagamento, total: Number(b.total), cashback: Number(b.cashback_usado ?? 0), created_at_remote: b.created_at_remote });
+    const cc: CrosscheckResult = {
+      ok: 0,
+      missing_in_brendi: [], missing_in_brendi_count: 0,
+      missing_in_saipos: [], missing_in_saipos_count: 0,
+      value_mismatch: [], value_mismatch_count: 0,
+    };
+    const allCcIds = new Set<string>([...sMap.keys(), ...bMap.keys()]);
+    for (const oid of allCcIds) {
+      const s = sMap.get(oid); const b = bMap.get(oid);
+      if (s && !b) {
+        cc.missing_in_brendi.push({ order_id: oid, saipos_total: s.total, pagamento: s.pagamento, data_venda: s.data_venda });
+      } else if (!s && b) {
+        cc.missing_in_saipos.push({ order_id: oid, brendi_total: b.total, forma: b.forma, created_at_remote: b.created_at_remote });
+      } else if (s && b) {
+        const isMixed = (s.pagamento || '').includes(',');
+        const diff = s.total - b.total;
+        const cashbackExplains = b.cashback > 0 && Math.abs(diff - b.cashback) <= CC_TOL;
+        const isOk = isMixed ? diff >= -CC_TOL : cashbackExplains ? true : Math.abs(diff) <= CC_TOL;
+        if (!isOk) cc.value_mismatch.push({ order_id: oid, saipos_total: s.total, brendi_total: b.total, diff: Math.abs(diff), data: s.data_venda ?? b.created_at_remote });
+        else cc.ok++;
+      }
+    }
+    cc.missing_in_brendi_count = cc.missing_in_brendi.length;
+    cc.missing_in_saipos_count = cc.missing_in_saipos.length;
+    cc.value_mismatch_count = cc.value_mismatch.length;
+    setCrosscheck(cc);
   };
 
 
@@ -179,7 +233,7 @@ export default function AuditBrendiV2() {
       else {
         setDaily([]); setImports([]); setBrendiOrdersCount(0); setSaiposOrdersCount(0);
         setBrendiCashbackTotal(0); setBrendiCashbackOrdersCount(0);
-        setTotalBrutoMes(0); setPedidosMes(0);
+        setTotalBrutoMes(0); setPedidosMes(0); setCrosscheck(null);
       }
       setLoading(false);
     })();
