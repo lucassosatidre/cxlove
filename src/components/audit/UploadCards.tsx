@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import {
-  FileSpreadsheet, FileText, Landmark, Loader2, UploadCloud, CreditCard, Store, ShoppingBag, UtensilsCrossed,
+  FileSpreadsheet, FileText, Landmark, Loader2, RefreshCw, UploadCloud, CreditCard, Store, ShoppingBag, UtensilsCrossed,
 } from 'lucide-react';
 import { extractPdfText } from '@/lib/pdf-text-extract';
 
