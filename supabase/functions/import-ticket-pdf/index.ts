@@ -570,15 +570,9 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Cada lote vai pro audit_period do MÊS DAS VENDAS (data_transacao dos
-    // items), NÃO da data_credito. A auditoria é por competência da venda:
-    // o que vendi em abril deve estar visível em abril, mesmo que o crédito
-    // caia em maio. Pra cobrir o crédito atravessado, o user importa 2 meses
-    // de extrato BB (X + X+1) no mesmo period.
-    //
-    // Critério: mês com MAIOR VALOR de items (não count). Lote misto (vendas
-    // em 2 meses) recebe o mês predominante e marca a porção do outro mês
-    // via overrides na UI. Sem items (raro): cai em data_credito.
+    // Competência do lote = MÊS DA VENDA (data_transacao predominante em valor),
+    // não o mês do crédito no banco. Igual Alelo/Pluxee. Lote sem items (raro)
+    // cai em data_credito.
     function lotCompYM(l: any): string | null {
       if (!l.items || l.items.length === 0) return l.data_credito?.slice(0, 7) ?? null;
       const byMonth: Record<string, number> = {};
@@ -591,10 +585,11 @@ Deno.serve(async (req) => {
       return sorted[0]?.[0] ?? l.data_credito?.slice(0, 7) ?? null;
     }
 
-    // Validação de competência: aceita PDFs que cobrem mês alvo + ±3 meses
-    // adjacentes. Bloqueia 100% mismatch (ex: PDF janeiro importado em setembro).
+    // Validação: garante que o arquivo tem linhas nos meses ao redor do período
+    // (guarda contra arquivo do mês totalmente errado). O filtro abaixo é quem
+    // restringe de fato ao mês da auditoria.
     const periodCheck = validatePeriodMatch(
-      lots.map((l: any) => lotCompYM(l) ? `${lotCompYM(l)}-01` : null),
+      lots.map((l: any) => { const ym = lotCompYM(l); return ym ? `${ym}-01` : null; }),
       { month: period.month, year: period.year },
       'Ticket',
       [-2, -1, 0, 1, 2, 3],
@@ -606,54 +601,31 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Resolve target audit_period_id pra cada lote pelo mês de competência
-    // das vendas. Cria audit_period sob demanda. Bloqueia se o destino tá
-    // 'fechado'.
-    const targetPeriodIdByYM: Record<string, string> = {};
-    const closedPeriodsBlocked: string[] = [];
-    for (const l of lots) {
-      const key = lotCompYM(l);
-      if (!key) continue;
-      if (targetPeriodIdByYM[key]) continue;
-      const [yStr, mStr] = key.split('-');
-      const lotMonth = Number(mStr);
-      const lotYear = Number(yStr);
-      if (lotMonth === period.month && lotYear === period.year) {
-        targetPeriodIdByYM[key] = audit_period_id;
-        continue;
-      }
-      const { data: existing } = await supabase
-        .from('audit_periods').select('id,status').eq('month', lotMonth).eq('year', lotYear).maybeSingle();
-      if (existing) {
-        if (existing.status === 'fechado') {
-          closedPeriodsBlocked.push(key);
-          continue;
-        }
-        targetPeriodIdByYM[key] = existing.id;
-      } else {
-        const { data: created, error: createErr } = await supabase
-          .from('audit_periods')
-          .insert({ month: lotMonth, year: lotYear, status: 'aberto' })
-          .select('id').single();
-        if (createErr || !created) {
-          return new Response(JSON.stringify({
-            error: `Erro ao criar audit_period ${key}: ${createErr?.message ?? 'sem dado'}`,
-          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        targetPeriodIdByYM[key] = created.id;
-      }
-    }
-    if (closedPeriodsBlocked.length > 0) {
+    // Mantém APENAS lotes cuja competência (mês da venda) é a do período da
+    // auditoria; DESCARTA os demais (ex.: vendas de maio que só caíram no banco
+    // em junho). Espelha o import-alelo-xlsx: nada é gravado em outros períodos
+    // e nunca bloqueia por período fechado.
+    const periodFilter = filterToPeriod(
+      lots,
+      (l: any) => { const ym = lotCompYM(l); return ym ? `${ym}-01` : null; },
+      { month: period.month, year: period.year },
+      [0],
+    );
+    const lotsKept = periodFilter.kept;
+
+    if (lotsKept.length === 0) {
       return new Response(JSON.stringify({
-        error: `O PDF contém lotes com competência em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        success: true,
+        total_lots: lots.length,
+        kept_in_period: 0,
+        inserted_lots: 0,
+        updated_lots: 0,
+        skipped_outside_period: periodFilter.skipped,
+        skipped_outside_period_by_month: periodFilter.skippedByMonth,
+        message: `Nenhum lote com competência de ${String(period.month).padStart(2, '0')}/${period.year} neste arquivo. ${periodFilter.skipped} lote(s) de outros meses foram desconsiderados.`,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-    const lotsKept = lots;
-    const lotsByTargetPeriod: Record<string, number> = {};
-    for (const l of lots) {
-      const ym = lotCompYM(l) ?? '';
-      lotsByTargetPeriod[ym] = (lotsByTargetPeriod[ym] ?? 0) + 1;
-    }
+
 
     // Sanity: subtotal_vendas == soma items, e (subtotal - total_descontos) == valor_liquido.
     const integrityErrors: string[] = [];
