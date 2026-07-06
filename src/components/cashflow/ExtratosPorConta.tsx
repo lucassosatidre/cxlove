@@ -13,10 +13,42 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RefreshCw, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import { useCashflowStatementCoverage } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
+
+function parseBRLInput(s: string): number | null {
+  const t = (s || '').trim();
+  if (!t) return null;
+  // Detect decimal separator: if both . and , present, the last one is decimal
+  const lastComma = t.lastIndexOf(',');
+  const lastDot = t.lastIndexOf('.');
+  let normalized = t;
+  if (lastComma > -1 && lastComma > lastDot) {
+    // vírgula é decimal, ponto é milhar
+    normalized = t.replace(/\./g, '').replace(',', '.');
+  } else if (lastDot > -1 && lastComma > -1) {
+    // ponto é decimal, vírgula é milhar
+    normalized = t.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    normalized = t.replace(',', '.');
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
 
 const PAGE = 50;
 
