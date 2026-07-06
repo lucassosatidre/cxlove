@@ -142,23 +142,12 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // saldo do dia — SEM âncora: usa balance da Pluggy (antes das tx, resiliente a falhas)
-        // COM âncora: será calculado DEPOIS das transações (rollforward)
-        if (!hasAnchor && typeof pa.balance === 'number') {
-          try {
-            await supa.from('cashflow_balances').upsert({
-              account_id: cfAccountId,
-              as_of: toStr,
-              own_balance: pa.balance,
-            }, { onConflict: 'account_id,as_of' });
-          } catch (e) {
-            console.warn('upsert cashflow_balances falhou', e);
-          }
-        }
-
         // transações via /v2/transactions com cursor — isolado por conta; erro NÃO derruba o sync
         let inserted = 0;
         let accountError: string | null = null;
+        // Rastreia a tx com maior (date, order) que tenha `balance` numérico não-nulo
+        let latestRunningBalance: number | null = null;
+        let latestRunningKey: { date: string; order: number } | null = null;
         try {
           // primeira página
           let path: string | null =
@@ -172,6 +161,27 @@ Deno.serve(async (req) => {
             const results: any[] = tResp?.results ?? [];
 
             if (results.length) {
+              // rastreia latestRunningBalance (balance pode vir number ou string)
+              for (const tx of results) {
+                const rawBal = tx.balance;
+                if (rawBal === null || rawBal === undefined || rawBal === '') continue;
+                const balNum = Number(rawBal);
+                if (!Number.isFinite(balNum)) continue;
+                const rawDate = tx.date ?? tx.createdAt ?? null;
+                const dateStr = rawDate
+                  ? (typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString())
+                  : '';
+                const orderNum = Number(tx.order ?? 0) || 0;
+                if (
+                  !latestRunningKey ||
+                  dateStr > latestRunningKey.date ||
+                  (dateStr === latestRunningKey.date && orderNum > latestRunningKey.order)
+                ) {
+                  latestRunningKey = { date: dateStr, order: orderNum };
+                  latestRunningBalance = balNum;
+                }
+              }
+
               const rows = results.map((tx) => {
                 const desc = tx.description ?? tx.descriptionRaw ?? null;
                 const detail = tx.descriptionRaw && tx.descriptionRaw !== desc
@@ -182,6 +192,10 @@ Deno.serve(async (req) => {
                 const dateStr = rawDate
                   ? (typeof rawDate === 'string' ? rawDate : new Date(rawDate).toISOString()).slice(0, 10)
                   : toStr;
+                const rawBal = tx.balance;
+                const runBal = rawBal === null || rawBal === undefined || rawBal === ''
+                  ? null
+                  : (Number.isFinite(Number(rawBal)) ? Number(rawBal) : null);
                 return {
                   source: 'pluggy',
                   account_id: cfAccountId,
@@ -189,7 +203,7 @@ Deno.serve(async (req) => {
                   description: desc,
                   detail,
                   amount: typeof tx.amount === 'number' ? tx.amount : Number(tx.amount ?? 0),
-                  running_balance: typeof tx.balance === 'number' ? tx.balance : null,
+                  running_balance: runBal,
                   category: tx.category ?? null,
                   is_internal_transfer: it2.is_internal_transfer,
                   counterparty: it2.counterparty,
@@ -214,9 +228,17 @@ Deno.serve(async (req) => {
           console.error(`conta ${pa.id} (${pa.name}) falhou:`, accountError);
         }
 
-        // COM âncora: calcula saldo = anchor + sum(amount das tx pluggy > anchor_date)
-        let anchoredBalance: number | null = null;
-        if (hasAnchor) {
+        // Prioridade de own_balance:
+        // 1) running_balance da última tx com balance não-nulo
+        // 2) âncora + rollforward
+        // 3) balance da conta vindo de /accounts
+        let chosenBalance: number | null = null;
+        let balanceSource: 'running_balance' | 'anchor' | 'account_balance' | 'none' = 'none';
+
+        if (latestRunningBalance !== null) {
+          chosenBalance = latestRunningBalance;
+          balanceSource = 'running_balance';
+        } else if (hasAnchor) {
           try {
             const { data: txSum, error: sumErr } = await supa
               .from('cashflow_transactions')
@@ -226,23 +248,36 @@ Deno.serve(async (req) => {
               .gt('tx_date', balanceAnchorDate!);
             if (sumErr) throw new Error(sumErr.message);
             const soma = (txSum ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
-            anchoredBalance = Number(balanceAnchor) + soma;
-            await supa.from('cashflow_balances').upsert({
-              account_id: cfAccountId,
-              as_of: toStr,
-              own_balance: anchoredBalance,
-            }, { onConflict: 'account_id,as_of' });
+            chosenBalance = Number(balanceAnchor) + soma;
+            balanceSource = 'anchor';
           } catch (e) {
             console.warn('anchored balance falhou', e);
           }
         }
 
+        if (chosenBalance === null && typeof pa.balance === 'number') {
+          chosenBalance = pa.balance;
+          balanceSource = 'account_balance';
+        }
+
+        if (chosenBalance !== null) {
+          try {
+            await supa.from('cashflow_balances').upsert({
+              account_id: cfAccountId,
+              as_of: toStr,
+              own_balance: chosenBalance,
+            }, { onConflict: 'account_id,as_of' });
+          } catch (e) {
+            console.warn('upsert cashflow_balances falhou', e);
+          }
+        }
 
         itemSummary.accounts.push({
           pluggy_account_id: pa.id,
           name: pa.name,
           linked: true,
-          balance: hasAnchor ? anchoredBalance : pa.balance,
+          balance: chosenBalance,
+          balance_source: balanceSource,
           transactions_upserted: inserted,
           ...(accountError ? { error: accountError } : {}),
         });
