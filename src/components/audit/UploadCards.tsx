@@ -303,6 +303,44 @@ export function UploadBBCard({ period, ensurePeriod, onAfter }: UploadCardProps)
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [pullingOF, setPullingOF] = useState(false);
+
+  const handlePullOF = async () => {
+    setPullingOF(true);
+    try {
+      const p = await ensurePeriod();
+      if (!p) return;
+      const { data, error } = await supabase.functions.invoke('import-bb-openfinance', {
+        body: { audit_period_id: p.id, bank: 'bb' },
+      });
+      if (error) {
+        let detail = error.message ?? 'erro';
+        try {
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === 'function') {
+            const bj = await ctx.json();
+            if (bj?.error) detail = bj.error;
+          }
+        } catch { /* noop */ }
+        throw new Error(detail);
+      }
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const imported = Number((data as any)?.imported_rows ?? 0);
+      const dups = Number((data as any)?.duplicate_rows ?? 0);
+      const breakdown = Object.entries((data as any)?.breakdown_by_category ?? {})
+        .filter(([, n]) => Number(n) > 0)
+        .map(([k, n]) => `${k}=${n}`).join(', ') || '—';
+      toast.success(`${imported} créditos importados do Open Finance`, {
+        description: `${dups} duplicados ignorados. Categorias: ${breakdown}`,
+      });
+      await onAfter();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao puxar Open Finance');
+    } finally {
+      setPullingOF(false);
+    }
+  };
+
 
   const handleFiles = async (files: File[]) => {
     const xlsx = files.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
