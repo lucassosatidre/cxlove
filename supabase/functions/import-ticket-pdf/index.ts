@@ -6,7 +6,7 @@
 // os matches por posição pra reconstruir a sequência lógica.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
