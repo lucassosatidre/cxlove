@@ -16,7 +16,7 @@
 //   - Filtra status que comecem com "Pago" (Pago Antecipado, Pago, etc).
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0';
-import { validatePeriodMatch } from '../_shared/period-validator.ts';
+import { validatePeriodMatch, filterToPeriod } from '../_shared/period-validator.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -226,51 +226,31 @@ Deno.serve(async (req) => {
       }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Resolve target audit_period_id pra cada lote.
-    const targetPeriodIdByYM: Record<string, string> = {};
-    const closedPeriodsBlocked: string[] = [];
-    for (const l of lots) {
-      const key = lotCompYM(l);
-      if (!key) continue;
-      if (targetPeriodIdByYM[key]) continue;
-      const [yStr, mStr] = key.split('-');
-      const lotMonth = Number(mStr);
-      const lotYear = Number(yStr);
-      if (lotMonth === period.month && lotYear === period.year) {
-        targetPeriodIdByYM[key] = audit_period_id;
-        continue;
-      }
-      const { data: existing } = await supabase
-        .from('audit_periods').select('id,status').eq('month', lotMonth).eq('year', lotYear).maybeSingle();
-      if (existing) {
-        if (existing.status === 'fechado') {
-          closedPeriodsBlocked.push(key);
-          continue;
-        }
-        targetPeriodIdByYM[key] = existing.id;
-      } else {
-        const { data: created, error: createErr } = await supabase
-          .from('audit_periods')
-          .insert({ month: lotMonth, year: lotYear, status: 'aberto' })
-          .select('id').single();
-        if (createErr || !created) {
-          return new Response(JSON.stringify({
-            error: `Erro ao criar audit_period ${key}: ${createErr?.message ?? 'sem dado'}`,
-          }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-        }
-        targetPeriodIdByYM[key] = created.id;
-      }
-    }
-    if (closedPeriodsBlocked.length > 0) {
+    // Mantém APENAS as guias cuja competência (mês do corte) é a do período da
+    // auditoria; DESCARTA as demais (ex.: guias com corte no fim de maio que só
+    // creditam em junho). Espelha o import-alelo-xlsx / import-ticket-pdf: nada
+    // é gravado em outros períodos e nunca bloqueia por período fechado.
+    const periodFilter = filterToPeriod(
+      lots,
+      (l: any) => { const ym = lotCompYM(l); return ym ? `${ym}-01` : null; },
+      { month: period.month, year: period.year },
+      [0],
+    );
+    const lotsKept = periodFilter.kept;
+
+    if (lotsKept.length === 0) {
       return new Response(JSON.stringify({
-        error: `O extrato contém lotes com competência em mês(es) fechado(s): ${closedPeriodsBlocked.join(', ')}. Reabra o(s) período(s) antes de importar.`,
-      }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
-    const lotsKept = lots;
-    const lotsByTargetPeriod: Record<string, number> = {};
-    for (const l of lots) {
-      const ym = lotCompYM(l) ?? '';
-      lotsByTargetPeriod[ym] = (lotsByTargetPeriod[ym] ?? 0) + 1;
+        success: true,
+        total_lots: lots.length,
+        inserted_lots: 0,
+        updated_lots: 0,
+        inserted_items: 0,
+        skipped_non_pago: skippedNonPago,
+        skipped_invalid: skippedInvalid,
+        skipped_outside_period: periodFilter.skipped,
+        skipped_outside_period_by_month: periodFilter.skippedByMonth,
+        message: `Nenhuma guia com competência de ${String(period.month).padStart(2, '0')}/${period.year} neste arquivo. ${periodFilter.skipped} guia(s) de outros meses foram desconsideradas.`,
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { data: importRec, error: importErr } = await supabase
@@ -289,9 +269,7 @@ Deno.serve(async (req) => {
 
     for (const lot of lotsKept) {
       const totalDesc = Math.round((lot.bruto - lot.liquido) * 100) / 100;
-      // Cada lote vai pro audit_period do MÊS DAS VENDAS (via data_corte).
-      const lotPeriodKey = lotCompYM(lot) ?? '';
-      const lotTargetPeriodId = targetPeriodIdByYM[lotPeriodKey] ?? audit_period_id;
+      const lotTargetPeriodId = audit_period_id;
 
       // Checagem GLOBAL pelo numero_reembolso: cada guia vive em UM período
       // (o da data_pagamento). Se já existe em qualquer period, atualiza
@@ -367,10 +345,6 @@ Deno.serve(async (req) => {
         .eq('id', audit_period_id);
     }
 
-    const periodsTouched = Object.entries(lotsByTargetPeriod)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([ym, n]) => `${ym}: ${n} lote(s)`).join(' / ');
-
     return new Response(JSON.stringify({
       success: true,
       total_lots: lots.length,
@@ -379,8 +353,9 @@ Deno.serve(async (req) => {
       inserted_items: 0,
       skipped_non_pago: skippedNonPago,
       skipped_invalid: skippedInvalid,
-      lots_by_target_period: lotsByTargetPeriod,
-      message: `${insertedLots} lotes novos + ${updatedLots} atualizados — distribuído em ${periodsTouched}`,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
+      message: `${insertedLots} lotes novos + ${updatedLots} atualizados${periodFilter.skipped > 0 ? ` — ${periodFilter.skipped} guia(s) de outros meses desconsideradas` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-vr-xls error', e);
