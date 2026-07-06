@@ -417,6 +417,9 @@ export function UploadBBCard({ period, ensurePeriod, onAfter }: UploadCardProps)
           por descrição (alelo / ticket / pluxee / vr / brendi / outros).
           Para cobrir defasagem, importe <strong>2 meses</strong> (mês competência + posterior).
         </p>
+        <p className="text-xs text-muted-foreground">
+          Ou puxe automaticamente os créditos do BB já sincronizados no Fluxo de Caixa (Open Finance) — sem baixar/subir planilha.
+        </p>
         <input
           ref={inputRef}
           type="file"
@@ -428,12 +431,18 @@ export function UploadBBCard({ period, ensurePeriod, onAfter }: UploadCardProps)
             if (files.length > 0) handleFiles(files);
           }}
         />
-        <Button variant="default" className="gap-2" disabled={uploading} onClick={() => inputRef.current?.click()}>
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-          {uploading
-            ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
-            : 'Selecionar XLSX (1 ou mais)'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="default" className="gap-2" disabled={uploading || pullingOF} onClick={() => inputRef.current?.click()}>
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            {uploading
+              ? (progress ? `Importando ${progress.current}/${progress.total}…` : 'Importando…')
+              : 'Selecionar XLSX (1 ou mais)'}
+          </Button>
+          <Button variant="secondary" className="gap-2" disabled={uploading || pullingOF} onClick={handlePullOF}>
+            {pullingOF ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {pullingOF ? 'Puxando…' : 'Puxar do Open Finance'}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
