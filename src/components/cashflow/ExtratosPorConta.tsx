@@ -13,10 +13,42 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { RefreshCw, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import { useCashflowStatementCoverage } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
+
+function parseBRLInput(s: string): number | null {
+  const t = (s || '').trim();
+  if (!t) return null;
+  // Detect decimal separator: if both . and , present, the last one is decimal
+  const lastComma = t.lastIndexOf(',');
+  const lastDot = t.lastIndexOf('.');
+  let normalized = t;
+  if (lastComma > -1 && lastComma > lastDot) {
+    // vírgula é decimal, ponto é milhar
+    normalized = t.replace(/\./g, '').replace(',', '.');
+  } else if (lastDot > -1 && lastComma > -1) {
+    // ponto é decimal, vírgula é milhar
+    normalized = t.replace(/,/g, '');
+  } else if (lastComma > -1) {
+    normalized = t.replace(',', '.');
+  }
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
 
 const PAGE = 50;
 
@@ -79,6 +111,11 @@ export default function ExtratosPorConta() {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset] = useState(0);
+
+  const queryClient = useQueryClient();
+  const [reconfirmAccountId, setReconfirmAccountId] = useState<string | null>(null);
+  const [reconfirmValue, setReconfirmValue] = useState<string>('');
+  const [reconfirmSubmitting, setReconfirmSubmitting] = useState(false);
 
   // saldo da conta (de balances) por account_id
   const balanceById = useMemo(() => {
@@ -275,7 +312,40 @@ export default function ExtratosPorConta() {
                         <TableCell>{freshnessNode}</TableCell>
                         <TableCell className="text-right font-mono text-sm">{r.n}</TableCell>
                         <TableCell className="text-right font-mono text-sm">
-                          {saldo == null ? '—' : fmtBRL(saldo)}
+                          <div className="flex items-center justify-end gap-2">
+                            <span>{saldo == null ? '—' : fmtBRL(saldo)}</span>
+                            {isOF && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setReconfirmAccountId(r.account_id);
+                                        setReconfirmValue(
+                                          saldo == null
+                                            ? ''
+                                            : saldo.toLocaleString('pt-BR', {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              }),
+                                        );
+                                      }}
+                                    >
+                                      <RefreshCw className="h-3 w-3 mr-1" />
+                                      Reconfirmar
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Use quando o saldo estiver diferente do app do banco
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -286,6 +356,97 @@ export default function ExtratosPorConta() {
           )}
         </CardContent>
       </Card>
+
+      {(() => {
+        const acc = cov.data?.find((r) => r.account_id === reconfirmAccountId);
+        const currentSaldo = reconfirmAccountId ? balanceById.get(reconfirmAccountId) ?? null : null;
+        const parsed = parseBRLInput(reconfirmValue);
+        return (
+          <Dialog
+            open={reconfirmAccountId !== null}
+            onOpenChange={(open) => {
+              if (!open && !reconfirmSubmitting) {
+                setReconfirmAccountId(null);
+                setReconfirmValue('');
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  Reconfirmar saldo{acc ? ` — ${acc.account_name}` : ''}
+                </DialogTitle>
+                <DialogDescription>
+                  Saldo atual no Vigia:{' '}
+                  <span className="font-mono">
+                    {currentSaldo == null ? '—' : fmtBRL(currentSaldo)}
+                  </span>
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <Label htmlFor="reconfirm-balance" className="text-xs">
+                  Saldo real (do app do banco)
+                </Label>
+                <Input
+                  id="reconfirm-balance"
+                  autoFocus
+                  value={reconfirmValue}
+                  onChange={(e) => setReconfirmValue(e.target.value)}
+                  placeholder="Ex.: 12.345,67 ou -28899,99"
+                  disabled={reconfirmSubmitting}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Use valor negativo se a conta estiver no vermelho / usando cheque especial. Ex.: -28899,99
+                </p>
+                {reconfirmValue && parsed == null && (
+                  <p className="text-[11px] text-destructive">Valor inválido.</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setReconfirmAccountId(null);
+                    setReconfirmValue('');
+                  }}
+                  disabled={reconfirmSubmitting}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={reconfirmSubmitting || parsed == null || !reconfirmAccountId}
+                  onClick={async () => {
+                    if (!reconfirmAccountId || parsed == null) return;
+                    setReconfirmSubmitting(true);
+                    try {
+                      const { data, error } = await supabase.functions.invoke('reconfirmar-saldo', {
+                        body: { account_id: reconfirmAccountId, balance: parsed },
+                      });
+                      if (error) throw error;
+                      if (data?.error) throw new Error(data.error);
+                      toast.success('Saldo reconfirmado!');
+                      setReconfirmAccountId(null);
+                      setReconfirmValue('');
+                      await Promise.all([
+                        queryClient.invalidateQueries({ queryKey: ['cashflow', 'balances', 'latest'] }),
+                        queryClient.invalidateQueries({ queryKey: ['cashflow', 'statement-coverage'] }),
+                      ]);
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : String(e);
+                      toast.error(`Erro ao reconfirmar saldo: ${msg}`);
+                    } finally {
+                      setReconfirmSubmitting(false);
+                    }
+                  }}
+                >
+                  {reconfirmSubmitting && <Loader2 className="h-3 w-3 mr-2 animate-spin" />}
+                  Confirmar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       <Card className="border-border/60">
         <CardHeader>
