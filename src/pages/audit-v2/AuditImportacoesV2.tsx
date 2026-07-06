@@ -653,6 +653,20 @@ export default function AuditImportacoesV2() {
                                       ver
                                     </Button>
                                   </>
+                                ) : slotFilled ? (
+                                  <>
+                                    <span className="text-muted-foreground italic">
+                                      importado{importsCount > 0 ? ` · ${importsCount} arquivo(s)` : ''}
+                                    </span>
+                                    <Button
+                                      variant="ghost" size="sm"
+                                      className="h-6 px-2 text-xs ml-auto"
+                                      onClick={() => setExpanded(s => ({ ...s, [expandKey]: !s[expandKey] }))}
+                                    >
+                                      {isExpanded ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                                      ver
+                                    </Button>
+                                  </>
                                 ) : (
                                   <span className="text-muted-foreground italic">Falta importar</span>
                                 )}
