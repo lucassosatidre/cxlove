@@ -793,24 +793,21 @@ Deno.serve(async (req) => {
         .eq('id', audit_period_id);
     }
 
-    const periodsTouched = Object.entries(lotsByTargetPeriod)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([ym, n]) => `${ym}: ${n} lote(s)`).join(' / ');
-
     return new Response(JSON.stringify({
       success: true,
       total_lots: lots.length,
       kept_in_period: lotsKept.length,
-      lots_by_target_period: lotsByTargetPeriod,
       inserted_lots: insertedLots,
       updated_lots: updatedLots,
       total_items: totalItems,
       inserted_items: insertedItems,
+      skipped_outside_period: periodFilter.skipped,
+      skipped_outside_period_by_month: periodFilter.skippedByMonth,
       integrity_errors: integrityErrors,
       lot_errors: lotErrors.slice(0, 10),
       lot_errors_count: lotErrors.length,
       warnings: warnings.slice(0, 20),
-      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas) — distribuído em ${periodsTouched}${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}`,
+      message: `${insertedLots} novos + ${updatedLots} atualizados (${insertedItems} vendas)${periodFilter.skipped > 0 ? ` — ${periodFilter.skipped} lote(s) de outros meses desconsiderados` : ''}${lotErrors.length > 0 ? ` — ${lotErrors.length} lote(s) com erro` : ''}`,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
     console.error('import-ticket-pdf error', e);
