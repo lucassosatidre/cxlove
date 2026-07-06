@@ -396,7 +396,7 @@ export default function AuditImportacoesV2() {
       docId: 'pluxee_pagamentos', label: '07 PLUXEE — Extrato de Pagamentos',
       hint: 'Portal Pluxee, pagamentos: mês + mês seguinte',
       format: '.xlsx',
-      slots: ['comp', 'post'], filesPerSlot: 1, fileTypes: ['pluxee_pagamentos'],
+      slots: ['comp'], filesPerSlot: 1, fileTypes: ['pluxee_pagamentos'],
       group: 'vouchers', Component: UploadPluxeePagamentosCard,
       postReason: 'pagamento pode cair no mês seguinte',
       postUpload: async (pid) => { await dispatchAutoMatchVouchers(pid, ['pluxee']); },
@@ -653,6 +653,20 @@ export default function AuditImportacoesV2() {
                                       ver
                                     </Button>
                                   </>
+                                ) : slotFilled ? (
+                                  <>
+                                    <span className="text-muted-foreground italic">
+                                      importado{importsCount > 0 ? ` · ${importsCount} arquivo(s)` : ''}
+                                    </span>
+                                    <Button
+                                      variant="ghost" size="sm"
+                                      className="h-6 px-2 text-xs ml-auto"
+                                      onClick={() => setExpanded(s => ({ ...s, [expandKey]: !s[expandKey] }))}
+                                    >
+                                      {isExpanded ? <ChevronDown className="h-3 w-3 mr-1" /> : <ChevronRight className="h-3 w-3 mr-1" />}
+                                      ver
+                                    </Button>
+                                  </>
                                 ) : (
                                   <span className="text-muted-foreground italic">Falta importar</span>
                                 )}
@@ -664,15 +678,17 @@ export default function AuditImportacoesV2() {
                               </div>
 
                               {/* Detalhe expandido: lista de imports daquele file_type */}
-                              {isExpanded && intakeRow && (
+                              {isExpanded && (intakeRow || docImports.length > 0) && (
                                 <div className="border-t border-border/50 px-2 py-2 space-y-1 text-xs bg-muted/30">
-                                  <div className="text-muted-foreground">
-                                    Período: <span className="text-foreground">{fmtDate(intakeRow.data_min)} → {fmtDate(intakeRow.data_max)}</span>
-                                    {' · '}
-                                    <span className="text-foreground">{fmtInt(intakeRow.linhas)}</span> linhas
-                                    {' · '}
-                                    Total: <span className="text-foreground">{fmtMoney(intakeRow.valor)}</span>
-                                  </div>
+                                  {intakeRow && (
+                                    <div className="text-muted-foreground">
+                                      Período: <span className="text-foreground">{fmtDate(intakeRow.data_min)} → {fmtDate(intakeRow.data_max)}</span>
+                                      {' · '}
+                                      <span className="text-foreground">{fmtInt(intakeRow.linhas)}</span> linhas
+                                      {' · '}
+                                      Total: <span className="text-foreground">{fmtMoney(intakeRow.valor)}</span>
+                                    </div>
+                                  )}
                                   <div className="pt-1 text-[11px] uppercase text-muted-foreground">Arquivos importados ({doc.fileTypes.join(', ')})</div>
                                   {docImports.length === 0 ? (
                                     <div className="text-muted-foreground italic">Nenhum registro em audit_imports.</div>
