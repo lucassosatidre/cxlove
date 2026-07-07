@@ -38,7 +38,7 @@ export const allMenuItems: MenuItem[] = [
       { label: "Fluxo de Caixa", icon: Wallet, path: "/admin/fluxo-caixa", menuKey: "fluxo_caixa" },
       { label: "Notas de Serviços", icon: Receipt, path: "/admin/notas-servicos", menuKey: "financeiro.nfse" },
       {
-        label: "Auditoria de Taxas",
+        label: "Taxas",
         icon: Search,
         children: [
           { label: "Importações", icon: FileSpreadsheet, path: "/admin/auditoria-v2/importacoes", menuKey: "audit.importacoes" },
