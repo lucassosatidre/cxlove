@@ -61,22 +61,22 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
   };
 
   const buildEntries = (children: MenuItem[] | undefined): ModuleEntry[] => {
-    return (children ?? []).flatMap((c) => {
+    const result: ModuleEntry[] = [];
+    for (const c of children ?? []) {
       if (c.path && c.menuKey) {
-        if (!canView(c.menuKey)) return [];
-        return [{ icon: c.icon, label: c.label, path: c.path, menuKey: c.menuKey }];
-      }
-      if (c.children) {
+        if (canView(c.menuKey)) result.push({ icon: c.icon, label: c.label, path: c.path, menuKey: c.menuKey });
+      } else if (c.children) {
         const nested = flattenItems(c.children);
-        if (nested.length === 0) return [];
-        return [{ icon: c.icon, label: c.label, children: nested }];
+        if (nested.length > 0) result.push({ icon: c.icon, label: c.label, children: nested });
       }
-      return [];
-    });
+    }
+    return result;
   };
 
   const modules = allMenuItems.map((m) => ({ label: m.label, icon: m.icon, entries: buildEntries(m.children) })).filter((m) => m.entries.length > 0);
-  const flatItems = modules.flatMap((m) => flattenItems(m.entries as any as MenuItem[]));
+  const flatItems: NavItem[] = modules.flatMap((m) =>
+    m.entries.flatMap((e) => ('path' in e ? [e] : e.children))
+  );
 
 
   const userName =
