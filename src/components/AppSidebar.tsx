@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
-import { allMenuItems } from '@/lib/menu-tree';
+import { allMenuItems, type MenuItem } from '@/lib/menu-tree';
 import { LogOut, X, PanelLeft, PanelLeftClose, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
