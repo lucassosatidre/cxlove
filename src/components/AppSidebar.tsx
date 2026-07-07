@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/hooks/useTheme';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { supabase } from '@/integrations/supabase/client';
-import { allMenuItems } from '@/lib/menu-tree';
+import { allMenuItems, type MenuItem } from '@/lib/menu-tree';
 import { LogOut, X, PanelLeft, PanelLeftClose, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -48,18 +48,35 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
   };
   const handleNav = (path: string) => { navigate(path); onClose?.(); };
 
-  const modules = allMenuItems
-    .map((m) => {
-      const items = (m.children ?? []).flatMap((c) => {
-        if (c.path && c.menuKey) return [c];
-        if (c.children) return c.children.filter((sc) => sc.path && sc.menuKey);
-        return [];
-      }).filter((c) => c.menuKey && canView(c.menuKey));
-      return { label: m.label, icon: m.icon, items };
-    })
-    .filter((m) => m.items.length > 0);
-  const flatItems = modules.flatMap((m) => m.items);
+  type NavItem = { icon: any; label: string; path: string; menuKey?: string };
+  type NavGroup = { label: string; icon: any; children: NavItem[] };
+  type ModuleEntry = NavItem | NavGroup;
 
+  const flattenItems = (children: MenuItem[] | undefined): NavItem[] => {
+    return (children ?? []).flatMap((c) => {
+      if (c.path && c.menuKey) return [c as NavItem];
+      if (c.children) return flattenItems(c.children);
+      return [];
+    }).filter((c) => c.menuKey && canView(c.menuKey));
+  };
+
+  const buildEntries = (children: MenuItem[] | undefined): ModuleEntry[] => {
+    const result: ModuleEntry[] = [];
+    for (const c of children ?? []) {
+      if (c.path && c.menuKey) {
+        if (canView(c.menuKey)) result.push({ icon: c.icon, label: c.label, path: c.path, menuKey: c.menuKey });
+      } else if (c.children) {
+        const nested = flattenItems(c.children);
+        if (nested.length > 0) result.push({ icon: c.icon, label: c.label, children: nested });
+      }
+    }
+    return result;
+  };
+
+  const modules = allMenuItems.map((m) => ({ label: m.label, icon: m.icon, entries: buildEntries(m.children) })).filter((m) => m.entries.length > 0);
+  const flatItems: NavItem[] = modules.flatMap((m) =>
+    m.entries.flatMap((e) => ('path' in e ? [e] : e.children))
+  );
 
   const userName =
     profile.full_name ||
@@ -118,7 +135,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
         {/* Navegação — grupos minimizáveis */}
         <nav className={`flex-1 overflow-y-auto py-3 ${collapsed ? 'px-1.5 space-y-0.5' : 'px-2'}`}>
           {collapsed
-            ? flatItems.map((item) => <NavButton key={item.path} item={item as any} />)
+            ? flatItems.map((item) => <NavButton key={item.path} item={item} />)
             : modules.map((m) => {
                 const isOpen = openGroups[m.label] ?? false;
                 const GroupIcon = m.icon;
@@ -133,7 +150,28 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
                     </button>
                     {isOpen && (
                       <div className="mt-0.5 space-y-0.5">
-                        {m.items.map((item) => <NavButton key={item.path} item={item as any} nested />)}
+                        {m.entries.map((entry, idx) => {
+                          if ('path' in entry) {
+                            return <NavButton key={entry.path} item={entry} nested />;
+                          }
+                          const subOpen = openGroups[`${m.label}::${entry.label}`] ?? false;
+                          return (
+                            <div key={idx} className="space-y-0.5">
+                              <button
+                                onClick={() => setOpenGroups((p) => ({ ...p, [`${m.label}::${entry.label}`]: !subOpen }))}
+                                className="w-full flex items-center justify-between pl-6 pr-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40 transition-colors"
+                              >
+                                <span className="flex items-center gap-2"><entry.icon className="h-3.5 w-3.5" />{entry.label}</span>
+                                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${subOpen ? '' : '-rotate-90'}`} />
+                              </button>
+                              {subOpen && (
+                                <div className="mt-0.5 space-y-0.5">
+                                  {entry.children.map((item) => <NavButton key={item.path} item={item} nested />)}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
