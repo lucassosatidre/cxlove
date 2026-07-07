@@ -48,17 +48,35 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
   };
   const handleNav = (path: string) => { navigate(path); onClose?.(); };
 
-  const modules = allMenuItems
-    .map((m) => {
-      const items = (m.children ?? []).flatMap((c) => {
-        if (c.path && c.menuKey) return [c];
-        if (c.children) return c.children.filter((sc) => sc.path && sc.menuKey);
-        return [];
-      }).filter((c) => c.menuKey && canView(c.menuKey));
-      return { label: m.label, icon: m.icon, items };
-    })
-    .filter((m) => m.items.length > 0);
-  const flatItems = modules.flatMap((m) => m.items);
+  type NavItem = { icon: any; label: string; path: string; menuKey?: string };
+  type NavGroup = { label: string; icon: any; children: NavItem[] };
+  type ModuleEntry = NavItem | NavGroup;
+
+  const flattenItems = (children: MenuItem[] | undefined): NavItem[] => {
+    return (children ?? []).flatMap((c) => {
+      if (c.path && c.menuKey) return [c as NavItem];
+      if (c.children) return flattenItems(c.children);
+      return [];
+    }).filter((c) => c.menuKey && canView(c.menuKey));
+  };
+
+  const buildEntries = (children: MenuItem[] | undefined): ModuleEntry[] => {
+    return (children ?? []).flatMap((c) => {
+      if (c.path && c.menuKey) {
+        if (!canView(c.menuKey)) return [];
+        return [{ icon: c.icon, label: c.label, path: c.path, menuKey: c.menuKey }];
+      }
+      if (c.children) {
+        const nested = flattenItems(c.children);
+        if (nested.length === 0) return [];
+        return [{ icon: c.icon, label: c.label, children: nested }];
+      }
+      return [];
+    });
+  };
+
+  const modules = allMenuItems.map((m) => ({ label: m.label, icon: m.icon, entries: buildEntries(m.children) })).filter((m) => m.entries.length > 0);
+  const flatItems = modules.flatMap((m) => flattenItems(m.entries as any as MenuItem[]));
 
 
   const userName =
