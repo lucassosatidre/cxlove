@@ -49,7 +49,14 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
   const handleNav = (path: string) => { navigate(path); onClose?.(); };
 
   const modules = allMenuItems
-    .map((m) => ({ label: m.label, icon: m.icon, items: (m.children ?? []).filter((c) => c.menuKey && c.path && canView(c.menuKey)) }))
+    .map((m) => {
+      const items = (m.children ?? []).flatMap((c) => {
+        if (c.path && c.menuKey) return [c];
+        if (c.children) return c.children.filter((sc) => sc.path && sc.menuKey);
+        return [];
+      }).filter((c) => c.menuKey && canView(c.menuKey));
+      return { label: m.label, icon: m.icon, items };
+    })
     .filter((m) => m.items.length > 0);
   const flatItems = modules.flatMap((m) => m.items);
 
