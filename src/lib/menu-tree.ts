@@ -32,23 +32,23 @@ export const allMenuItems: MenuItem[] = [
     ],
   },
   {
-    label: "Auditoria de Taxas",
-    icon: Search,
-    children: [
-      { label: "Importações", icon: FileSpreadsheet, path: "/admin/auditoria-v2/importacoes", menuKey: "audit.importacoes" },
-      { label: "Maquinona", icon: Receipt, path: "/admin/auditoria-v2/maquinona", menuKey: "audit.maquinona" },
-      { label: "Vouchers", icon: Ticket, path: "/admin/auditoria-v2/vouchers", menuKey: "audit.vouchers" },
-      { label: "Brendi", icon: ShoppingBag, path: "/admin/auditoria-v2/brendi", menuKey: "audit.brendi" },
-      { label: "iFood", icon: Utensils, path: "/admin/auditoria-v2/ifood-marketplace", menuKey: "audit.ifood" },
-      { label: "Relatórios", icon: FileBarChart, path: "/admin/auditoria-v2/relatorios", menuKey: "audit.relatorios" },
-    ],
-  },
-  {
     label: "Financeiro",
     icon: Wallet,
     children: [
       { label: "Fluxo de Caixa", icon: Wallet, path: "/admin/fluxo-caixa", menuKey: "fluxo_caixa" },
       { label: "Notas de Serviços", icon: Receipt, path: "/admin/notas-servicos", menuKey: "financeiro.nfse" },
+      {
+        label: "Auditoria de Taxas",
+        icon: Search,
+        children: [
+          { label: "Importações", icon: FileSpreadsheet, path: "/admin/auditoria-v2/importacoes", menuKey: "audit.importacoes" },
+          { label: "Maquinona", icon: Receipt, path: "/admin/auditoria-v2/maquinona", menuKey: "audit.maquinona" },
+          { label: "Vouchers", icon: Ticket, path: "/admin/auditoria-v2/vouchers", menuKey: "audit.vouchers" },
+          { label: "Brendi", icon: ShoppingBag, path: "/admin/auditoria-v2/brendi", menuKey: "audit.brendi" },
+          { label: "iFood", icon: Utensils, path: "/admin/auditoria-v2/ifood-marketplace", menuKey: "audit.ifood" },
+          { label: "Relatórios", icon: FileBarChart, path: "/admin/auditoria-v2/relatorios", menuKey: "audit.relatorios" },
+        ],
+      },
     ],
   },
   {
