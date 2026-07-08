@@ -13,10 +13,10 @@ import ClauPendingActions from './ClauPendingActions';
 
 const MODEL_OPTIONS = [
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: 'Rápido/barato' },
-  { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', hint: 'Equilibrado' },
+  { value: 'claude-sonnet-5', label: 'Sonnet 5', hint: 'Equilibrado' },
   { value: 'claude-opus-4-8', label: 'Opus 4.8', hint: 'Mais capaz' },
 ];
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 
 type Message = {
   id?: string;
