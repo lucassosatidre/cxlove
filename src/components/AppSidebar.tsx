@@ -87,12 +87,16 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
   const sidebarWidth = collapsed ? 'w-16' : 'w-56';
 
-  const NavButton = ({ item, nested }: { item: { icon: any; label: string; path: string }; nested?: boolean }) => {
+  const NavButton = ({ item, nested }: { item: { icon: any; label: string; path: string }; nested?: boolean | 'deep' }) => {
     const active = isActive(item.path);
+    const indentClass =
+      nested === 'deep' ? 'pl-12 pr-3' :
+      nested ? 'pl-9 pr-3' :
+      'px-3';
     const button = (
       <button
         onClick={() => handleNav(item.path)}
-        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} ${nested && !collapsed ? 'pl-9 pr-3' : 'px-3'} py-2.5 rounded-lg text-sm font-medium row-transition ${
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} ${indentClass} py-2.5 rounded-lg text-sm font-medium row-transition ${
           active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
         }`}
       >
