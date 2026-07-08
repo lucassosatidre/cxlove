@@ -1,0 +1,1 @@
+ALTER TABLE clau_conversations ALTER COLUMN model SET DEFAULT 'claude-sonnet-5';
