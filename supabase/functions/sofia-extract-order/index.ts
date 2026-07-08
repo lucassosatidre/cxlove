@@ -12,7 +12,7 @@ import { criarSofiaOrder } from "../_shared/sofia_order.ts";
  */
 
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 const PEDIDO_TOOL = {
   name: "registrar_pedido",
