@@ -87,12 +87,16 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
   const sidebarWidth = collapsed ? 'w-16' : 'w-56';
 
-  const NavButton = ({ item, nested }: { item: { icon: any; label: string; path: string }; nested?: boolean }) => {
+  const NavButton = ({ item, nested }: { item: { icon: any; label: string; path: string }; nested?: boolean | 'deep' }) => {
     const active = isActive(item.path);
+    const indentClass =
+      nested === 'deep' ? 'pl-12 pr-3' :
+      nested ? 'pl-9 pr-3' :
+      'px-3';
     const button = (
       <button
         onClick={() => handleNav(item.path)}
-        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} ${nested && !collapsed ? 'pl-9 pr-3' : 'px-3'} py-2.5 rounded-lg text-sm font-medium row-transition ${
+        className={`relative w-full flex items-center ${collapsed ? 'justify-center' : 'gap-3'} ${indentClass} py-2.5 rounded-lg text-sm font-medium row-transition ${
           active ? 'bg-sidebar-accent text-sidebar-accent-foreground' : 'text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground'
         }`}
       >
@@ -159,14 +163,14 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
                             <div key={idx} className="space-y-0.5">
                               <button
                                 onClick={() => setOpenGroups((p) => ({ ...p, [`${m.label}::${entry.label}`]: !subOpen }))}
-                                className="w-full flex items-center justify-between pl-6 pr-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40 transition-colors"
+                                className="w-full flex items-center justify-between pl-9 pr-3 py-2 rounded-lg text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/60 hover:text-sidebar-accent-foreground hover:bg-sidebar-accent/40 transition-colors"
                               >
                                 <span className="flex items-center gap-2"><entry.icon className="h-3.5 w-3.5" />{entry.label}</span>
                                 <ChevronDown className={`h-3.5 w-3.5 transition-transform ${subOpen ? '' : '-rotate-90'}`} />
                               </button>
                               {subOpen && (
                                 <div className="mt-0.5 space-y-0.5">
-                                  {entry.children.map((item) => <NavButton key={item.path} item={item} nested />)}
+                                  {entry.children.map((item) => <NavButton key={item.path} item={item} nested="deep" />)}
                                 </div>
                               )}
                             </div>
