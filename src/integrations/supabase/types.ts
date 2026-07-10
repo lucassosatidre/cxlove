@@ -1762,6 +1762,8 @@ export type Database = {
           amount: number
           category: string | null
           company: string | null
+          conferido: boolean
+          conferido_em: string | null
           conta: string | null
           created_at: string
           descricao: string | null
@@ -1783,6 +1785,8 @@ export type Database = {
           amount: number
           category?: string | null
           company?: string | null
+          conferido?: boolean
+          conferido_em?: string | null
           conta?: string | null
           created_at?: string
           descricao?: string | null
@@ -1804,6 +1808,8 @@ export type Database = {
           amount?: number
           category?: string | null
           company?: string | null
+          conferido?: boolean
+          conferido_em?: string | null
           conta?: string | null
           created_at?: string
           descricao?: string | null
@@ -1828,6 +1834,8 @@ export type Database = {
           account_id: string
           amount: number
           category: string | null
+          conferido: boolean
+          conferido_em: string | null
           counterparty: string | null
           created_at: string
           description: string | null
@@ -1848,6 +1856,8 @@ export type Database = {
           account_id: string
           amount: number
           category?: string | null
+          conferido?: boolean
+          conferido_em?: string | null
           counterparty?: string | null
           created_at?: string
           description?: string | null
@@ -1868,6 +1878,8 @@ export type Database = {
           account_id?: string
           amount?: number
           category?: string | null
+          conferido?: boolean
+          conferido_em?: string | null
           counterparty?: string | null
           created_at?: string
           description?: string | null
@@ -4233,15 +4245,22 @@ export type Database = {
         Returns: {
           account_name: string
           categoria: string
+          conferido: boolean
           confianca: string
           descricao: string
           descricao_banco: string
           fornecedor: string
+          saipos_id: string
           tipo: string
           tx_date: string
+          tx_id: string
           valor: number
           vencimento: string
         }[]
+      }
+      set_conferido: {
+        Args: { p_id: string; p_kind: string; p_value: boolean }
+        Returns: undefined
       }
       sofia_next_numero: { Args: never; Returns: number }
     }
