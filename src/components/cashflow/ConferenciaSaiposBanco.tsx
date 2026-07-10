@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Table,
@@ -14,6 +16,8 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useReconcileSaidas, type ReconRow } from '@/hooks/useCashflowAnalytics';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 const MESES_LBL = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 
@@ -43,12 +47,43 @@ function buildMonths(): { key: string; label: string; ini: string; fim: string }
   return out;
 }
 
+async function setConferido(kind: 'saipos' | 'banco', id: string, value: boolean) {
+  const { error } = await (supabase.rpc as any)('set_conferido', { p_kind: kind, p_id: id, p_value: value });
+  if (error) throw error;
+}
+
 export default function ConferenciaSaiposBanco() {
   const months = useMemo(buildMonths, []);
-  // default = mês passado (índice 1)
   const [monthKey, setMonthKey] = useState<string>(months[1]?.key ?? months[0].key);
   const sel = months.find((m) => m.key === monthKey)!;
   const { data, isLoading } = useReconcileSaidas(sel.ini, sel.fim);
+  const queryClient = useQueryClient();
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['cashflow', 'reconcile'] });
+
+  const handleToggle = async (kind: 'saipos' | 'banco', id: string | null, value: boolean) => {
+    if (!id) return;
+    try {
+      await setConferido(kind, id, value);
+      invalidate();
+    } catch (e: any) {
+      toast.error('Erro ao salvar: ' + (e?.message ?? e));
+    }
+  };
+
+  const handleBulk = async (rows: ReconRow[], kind: 'saipos' | 'banco', value: boolean) => {
+    const ids = rows
+      .map((r) => (kind === 'saipos' ? r.saipos_id : r.tx_id))
+      .filter((x): x is string => Boolean(x));
+    if (!ids.length) return;
+    try {
+      await Promise.all(ids.map((id) => setConferido(kind, id, value)));
+      invalidate();
+    } catch (e: any) {
+      toast.error('Erro ao salvar: ' + (e?.message ?? e));
+    }
+  };
 
   const [creditTotal, setCreditTotal] = useState<number>(0);
   useEffect(() => {
@@ -75,8 +110,13 @@ export default function ConferenciaSaiposBanco() {
   const aVerificar = rows.filter((r) => r.tipo === 'saipos_sem_banco');
   const noBanco = rows.filter((r) => r.tipo === 'banco_sem_saipos');
 
-  const totSaipos = casado.length + aVerificar.length;
-  const valSaipos = [...casado, ...aVerificar].reduce((s, r) => s + r.valor, 0);
+  const aVerifPend = aVerificar.filter((r) => !r.conferido);
+  const aVerifConf = aVerificar.filter((r) => r.conferido);
+  const noBancoPend = noBanco.filter((r) => !r.conferido);
+  const noBancoConf = noBanco.filter((r) => r.conferido);
+
+  const totSaipos = casado.length + aVerifPend.length;
+  const valSaipos = [...casado, ...aVerifPend].reduce((s, r) => s + r.valor, 0);
   const valCasado = casado.reduce((s, r) => s + r.valor, 0);
 
   return (
@@ -113,7 +153,7 @@ export default function ConferenciaSaiposBanco() {
               No mês, o Saipos diz que pagou <strong>{totSaipos}</strong> contas (
               <strong>{fmtBRL(valSaipos)}</strong>) por banco. Casaram com o extrato:{' '}
               <strong>{casado.length}</strong> (<strong>{fmtBRL(valCasado)}</strong>). No Saipos, sem banco:{' '}
-              <strong>{aVerificar.length}</strong>. E há <strong>{noBanco.length}</strong> débitos no
+              <strong>{aVerifPend.length}</strong>. E há <strong>{noBancoPend.length}</strong> débitos no
               banco que o Saipos não explica.
             </p>
           )}
@@ -123,8 +163,18 @@ export default function ConferenciaSaiposBanco() {
       <Tabs defaultValue="casado">
         <TabsList>
           <TabsTrigger value="casado">Casado ({casado.length})</TabsTrigger>
-          <TabsTrigger value="verif">No Saipos, sem banco ({aVerificar.length})</TabsTrigger>
-          <TabsTrigger value="banco">No banco, sem Saipos ({noBanco.length})</TabsTrigger>
+          <TabsTrigger value="verif">
+            No Saipos, sem banco ({aVerifPend.length})
+            {aVerifConf.length > 0 && (
+              <span className="ml-1 text-muted-foreground">· {aVerifConf.length} conferidos</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="banco">
+            No banco, sem Saipos ({noBancoPend.length})
+            {noBancoConf.length > 0 && (
+              <span className="ml-1 text-muted-foreground">· {noBancoConf.length} conferidos</span>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="casado">
@@ -144,7 +194,29 @@ export default function ConferenciaSaiposBanco() {
                 várias transferências), boletos pagos com juros/desconto (valor ficou diferente),
                 ou taxas definidas pelo banco. É <strong>"verificar"</strong>, não erro.
               </p>
-              <SaiposSemBancoTable rows={aVerificar} />
+              <FolhaAdiantHint rows={aVerificar} />
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleBulk(aVerifPend, 'saipos', true)}
+                  disabled={aVerifPend.length === 0}
+                >
+                  Marcar todos como conferido
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleBulk(aVerifConf, 'saipos', false)}
+                  disabled={aVerifConf.length === 0}
+                >
+                  Desmarcar todos
+                </Button>
+              </div>
+              <SaiposSemBancoTable
+                rows={aVerificar}
+                onToggle={(id, v) => handleToggle('saipos', id, v)}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -156,7 +228,28 @@ export default function ConferenciaSaiposBanco() {
                 Débitos no extrato que nenhum lançamento do Saipos explica (ex.: empréstimos em
                 débito automático, transferências).
               </p>
-              <BancoSemSaiposTable rows={noBanco} />
+              <div className="flex justify-end gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleBulk(noBancoPend, 'banco', true)}
+                  disabled={noBancoPend.length === 0}
+                >
+                  Marcar todos como conferido
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleBulk(noBancoConf, 'banco', false)}
+                  disabled={noBancoConf.length === 0}
+                >
+                  Desmarcar todos
+                </Button>
+              </div>
+              <BancoSemSaiposTable
+                rows={noBanco}
+                onToggle={(id, v) => handleToggle('banco', id, v)}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -174,6 +267,26 @@ export default function ConferenciaSaiposBanco() {
           </p>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function FolhaAdiantHint({ rows }: { rows: ReconRow[] }) {
+  const folha = rows
+    .filter((r) => (r.categoria || '').toLowerCase().includes('folha'))
+    .reduce((s, r) => s + r.valor, 0);
+  const adiant = rows
+    .filter((r) => (r.categoria || '').toLowerCase().includes('adiant'))
+    .reduce((s, r) => s + r.valor, 0);
+  if (folha <= 0 && adiant <= 0) return null;
+  const parts: string[] = [];
+  if (folha > 0) parts.push(`Folha lançada no Saipos: ${fmtBRL(folha)}`);
+  if (adiant > 0) parts.push(`Adiantamentos: ${fmtBRL(adiant)}`);
+  return (
+    <div className="rounded-md border border-border/60 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+      {parts.join(' · ')}. No banco isso sai como transferências individuais por funcionário (+ Luis
+      Carlos do Nascimento, o único pago pelo Banco do Brasil). Confira o total e marque como
+      conferido.
     </div>
   );
 }
@@ -225,15 +338,28 @@ function CasadoTable({ rows }: { rows: ReconRow[] }) {
   );
 }
 
-function SaiposSemBancoTable({ rows }: { rows: ReconRow[] }) {
+function SaiposSemBancoTable({
+  rows,
+  onToggle,
+}: {
+  rows: ReconRow[];
+  onToggle: (id: string | null, value: boolean) => void;
+}) {
   if (!rows.length) {
     return <p className="text-sm text-muted-foreground">Nada a verificar neste mês 🎉</p>;
   }
+  const sorted = rows
+    .slice()
+    .sort((a, b) => {
+      if (Number(a.conferido) !== Number(b.conferido)) return Number(a.conferido) - Number(b.conferido);
+      return b.valor - a.valor;
+    });
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[90px]">Conferido</TableHead>
             <TableHead>Vencimento</TableHead>
             <TableHead>Descrição</TableHead>
             <TableHead>Categoria</TableHead>
@@ -241,32 +367,48 @@ function SaiposSemBancoTable({ rows }: { rows: ReconRow[] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows
-            .slice()
-            .sort((a, b) => b.valor - a.valor)
-            .map((r, i) => (
-              <TableRow key={i}>
-                <TableCell className="text-xs">{fmtDDMM(r.vencimento)}</TableCell>
-                <TableCell className="text-xs">{r.descricao || r.fornecedor || '—'}</TableCell>
-                <TableCell className="text-xs">{r.categoria || 'Sem categoria'}</TableCell>
-                <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
-              </TableRow>
-            ))}
+          {sorted.map((r, i) => (
+            <TableRow key={r.saipos_id ?? i} className={r.conferido ? 'opacity-50' : ''}>
+              <TableCell>
+                <Checkbox
+                  checked={r.conferido}
+                  onCheckedChange={(v) => onToggle(r.saipos_id, Boolean(v))}
+                />
+              </TableCell>
+              <TableCell className="text-xs">{fmtDDMM(r.vencimento)}</TableCell>
+              <TableCell className="text-xs">{r.descricao || r.fornecedor || '—'}</TableCell>
+              <TableCell className="text-xs">{r.categoria || 'Sem categoria'}</TableCell>
+              <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>
   );
 }
 
-function BancoSemSaiposTable({ rows }: { rows: ReconRow[] }) {
+function BancoSemSaiposTable({
+  rows,
+  onToggle,
+}: {
+  rows: ReconRow[];
+  onToggle: (id: string | null, value: boolean) => void;
+}) {
   if (!rows.length) {
     return <p className="text-sm text-muted-foreground">Nenhum débito sem explicação.</p>;
   }
+  const sorted = rows
+    .slice()
+    .sort((a, b) => {
+      if (Number(a.conferido) !== Number(b.conferido)) return Number(a.conferido) - Number(b.conferido);
+      return (a.tx_date || '').localeCompare(b.tx_date || '');
+    });
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead className="w-[90px]">Conferido</TableHead>
             <TableHead>Data</TableHead>
             <TableHead>Conta</TableHead>
             <TableHead>Descrição</TableHead>
@@ -274,17 +416,20 @@ function BancoSemSaiposTable({ rows }: { rows: ReconRow[] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows
-            .slice()
-            .sort((a, b) => (a.tx_date || '').localeCompare(b.tx_date || ''))
-            .map((r, i) => (
-              <TableRow key={i}>
-                <TableCell className="text-xs">{fmtDDMM(r.tx_date)}</TableCell>
-                <TableCell className="text-xs">{r.account_name || '—'}</TableCell>
-                <TableCell className="text-xs">{r.descricao_banco || '—'}</TableCell>
-                <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
-              </TableRow>
-            ))}
+          {sorted.map((r, i) => (
+            <TableRow key={r.tx_id ?? i} className={r.conferido ? 'opacity-50' : ''}>
+              <TableCell>
+                <Checkbox
+                  checked={r.conferido}
+                  onCheckedChange={(v) => onToggle(r.tx_id, Boolean(v))}
+                />
+              </TableCell>
+              <TableCell className="text-xs">{fmtDDMM(r.tx_date)}</TableCell>
+              <TableCell className="text-xs">{r.account_name || '—'}</TableCell>
+              <TableCell className="text-xs">{r.descricao_banco || '—'}</TableCell>
+              <TableCell className="text-right font-mono text-xs">{fmtBRL(r.valor)}</TableCell>
+            </TableRow>
+          ))}
         </TableBody>
       </Table>
     </div>
