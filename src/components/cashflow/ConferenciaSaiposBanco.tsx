@@ -112,7 +112,7 @@ export default function ConferenciaSaiposBanco() {
             <p className="text-sm">
               No mês, o Saipos diz que pagou <strong>{totSaipos}</strong> contas (
               <strong>{fmtBRL(valSaipos)}</strong>) por banco. Casaram com o extrato:{' '}
-              <strong>{casado.length}</strong> (<strong>{fmtBRL(valCasado)}</strong>). A verificar:{' '}
+              <strong>{casado.length}</strong> (<strong>{fmtBRL(valCasado)}</strong>). No Saipos, sem banco:{' '}
               <strong>{aVerificar.length}</strong>. E há <strong>{noBanco.length}</strong> débitos no
               banco que o Saipos não explica.
             </p>
@@ -123,7 +123,7 @@ export default function ConferenciaSaiposBanco() {
       <Tabs defaultValue="casado">
         <TabsList>
           <TabsTrigger value="casado">Casado ({casado.length})</TabsTrigger>
-          <TabsTrigger value="verif">A verificar ({aVerificar.length})</TabsTrigger>
+          <TabsTrigger value="verif">No Saipos, sem banco ({aVerificar.length})</TabsTrigger>
           <TabsTrigger value="banco">No banco, sem Saipos ({noBanco.length})</TabsTrigger>
         </TabsList>
 
