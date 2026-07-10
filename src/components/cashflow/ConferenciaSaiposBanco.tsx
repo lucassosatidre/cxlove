@@ -57,7 +57,7 @@ export default function ConferenciaSaiposBanco() {
       const { data, error } = await supabase
         .from('cashflow_saipos')
         .select('amount')
-        .ilike('payment_method', '%crédito%')
+        .or('payment_method.ilike.%cart%,payment_method.ilike.%crédito%')
         .lt('amount', 0)
         .gte('vencimento', sel.ini)
         .lte('vencimento', sel.fim);
@@ -139,9 +139,10 @@ export default function ConferenciaSaiposBanco() {
           <Card className="border-amber-500/30 bg-amber-500/5">
             <CardContent className="pt-6 space-y-3">
               <p className="text-xs text-amber-800 dark:text-amber-300">
-                Constam como pagas no Saipos mas não achei um débito igual no extrato. Causas
-                comuns: valor mudou por juros/taxa do boleto, data fora de ±3 dias, ou o extrato
-                ainda não foi importado. É <strong>"verificar"</strong>, não erro.
+                Constam como pagas no Saipos mas não achei um débito 1-a-1 no extrato. Causas
+                comuns: pagamentos em lote (folha, adiantamento, pró-labore, empréstimo pagos em
+                várias transferências), boletos pagos com juros/desconto (valor ficou diferente),
+                ou taxas definidas pelo banco. É <strong>"verificar"</strong>, não erro.
               </p>
               <SaiposSemBancoTable rows={aVerificar} />
             </CardContent>
