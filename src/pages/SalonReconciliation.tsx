@@ -119,6 +119,15 @@ export default function SalonReconciliation() {
 
     setClosingDate(closing?.closing_date || '');
     setReconciliationStatus(closing?.reconciliation_status || 'pending');
+
+    if (closing?.closing_date) {
+      const { data: teleData } = await supabase
+        .from('card_transactions')
+        .select('sale_time, payment_method, gross_amount, machine_serial, matched_order_id')
+        .eq('sale_date', closing.closing_date);
+      setTeleTx((teleData || []).map((t: any) => ({ ...t, gross_amount: Number(t.gross_amount) })));
+    }
+
     const ordersList = (ordData || []).map((o: any) => ({
       ...o,
       discount_amount: Number(o.discount_amount || 0),
