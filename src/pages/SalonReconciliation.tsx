@@ -1047,6 +1047,12 @@ export default function SalonReconciliation() {
               });
               lines.push('');
             }
+            if (d.balcaoNoTele.length) {
+              lines.push(`🟣 Comanda de balcão paga no caixa Tele (${d.balcaoNoTele.length})`);
+              d.balcaoNoTele.forEach(({ order: o, tele }) => {
+                lines.push(`  • ${o.sale_time || ''} — ${o.payment_method} — ${formatCurrency(o.total_amount)} → Caixa Tele: ${tele.machine || 'Tele'} ${(tele.sale_time || '').slice(0, 5)} ${formatCurrency(tele.gross_amount)} (${tele.payment_method})`);
+              });
+              lines.push('');
             if (d.difValor.length) {
               lines.push(`🔴 Diferença de valor (${d.difValor.length})`);
               d.difValor.forEach(o => {
