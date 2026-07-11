@@ -480,12 +480,61 @@ export default function SalonReconciliation() {
 
     const sobras = transactions.filter(tx => !tx.matched_order_id);
 
+    // ── Comanda de balcão paga no caixa Tele ──
+    const minutesOf = (t?: string | null) => {
+      if (!t) return null;
+      const m = t.match(/(\d{1,2}):(\d{2})/);
+      return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+    };
+    const cleanSerial = (s: string) => (s || '').replace(/^S1F2-000/, '');
+    const problemOrders = [...trocaForma, ...difValor, ...semTx];
+    const payByOrderTele = new Map<string, SalonPayment[]>();
+    payments.forEach(p => {
+      if (!payByOrderTele.has(p.salon_order_id)) payByOrderTele.set(p.salon_order_id, []);
+      payByOrderTele.get(p.salon_order_id)!.push(p);
+    });
+    const balcaoNoTele: { order: SalonOrder; tele: { sale_time: string; payment_method: string; gross_amount: number; machine: string | null } }[] = [];
+    for (const order of problemOrders) {
+      const bk = (payByOrderTele.get(order.id) || []).filter(p => isCardMethod(canonicalMethod(p.payment_method)));
+      let declared: { method: string; amount: number }[];
+      if (bk.length > 0) {
+        declared = bk.map(p => ({ method: canonicalMethod(p.payment_method), amount: p.amount }));
+      } else {
+        const methods = (order.payment_method || '').split(',').map(s => s.trim()).filter(Boolean);
+        const cardM = methods.map(canonicalMethod).filter(isCardMethod);
+        declared = (cardM.length === methods.length && cardM.length === 1)
+          ? [{ method: cardM[0], amount: order.total_amount }] : [];
+      }
+      const orderMin = minutesOf(order.sale_time);
+      let best: { score: number; tele: { sale_time: string; payment_method: string; gross_amount: number; machine: string | null } } | null = null;
+      for (const dec of declared) {
+        for (const t of teleTx) {
+          if (canonicalMethod(t.payment_method) !== dec.method) continue;
+          const amtDiff = Math.abs(t.gross_amount - dec.amount);
+          if (amtDiff > 0.50) continue;
+          const tMin = minutesOf(t.sale_time);
+          const gap = (orderMin != null && tMin != null) ? Math.abs(tMin - orderMin) : 999;
+          if (gap > 90) continue;
+          const score = amtDiff * 1000 + gap;
+          if (!best || score < best.score) {
+            best = { score, tele: { sale_time: t.sale_time, payment_method: t.payment_method, gross_amount: t.gross_amount, machine: machineRegistry.get(cleanSerial(t.machine_serial))?.friendly_name || null } };
+          }
+        }
+      }
+      if (best) balcaoNoTele.push({ order, tele: best.tele });
+    }
+    const balcaoIds = new Set(balcaoNoTele.map(b => b.order.id));
+
+    const trocaFormaF = trocaForma.filter(o => !balcaoIds.has(o.id));
+    const difValorF = difValor.filter(o => !balcaoIds.has(o.id));
+    const semTxF = semTx.filter(o => !balcaoIds.has(o.id));
+
     const hasDiff =
       rows.some(r => Math.abs(r.diff) >= 0.01) ||
-      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0 || descontoCashback.length > 0;
+      trocaFormaF.length > 0 || difValorF.length > 0 || semTxF.length > 0 || sobras.length > 0 || descontoCashback.length > 0 || balcaoNoTele.length > 0;
 
-    return { rows, totals, trocaForma, difValor, descontoCashback, semTx, sobras, hasDiff };
-  }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions]);
+    return { rows, totals, trocaForma: trocaFormaF, difValor: difValorF, descontoCashback, semTx: semTxF, sobras, balcaoNoTele, hasDiff };
+  }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions, teleTx, machineRegistry, payments]);
 
   const [diagnosticOpenState, setDiagnosticOpenState] = useState<boolean | null>(null);
   const diagnosticOpen = diagnosticOpenState ?? diagnosticData.hasDiff;
