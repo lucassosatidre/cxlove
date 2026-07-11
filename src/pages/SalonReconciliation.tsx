@@ -23,6 +23,7 @@ import { formatCurrency } from '@/lib/payment-utils';
 
 import { getLatestCashSnapshots } from '@/lib/cash-snapshot-utils';
 import { SaiposCancellationsPanel } from '@/components/SaiposCancellationsPanel';
+import { useMachineRegistry } from '@/hooks/useMachineRegistry';
 
 interface SalonOrder {
   id: string;
@@ -99,6 +100,8 @@ export default function SalonReconciliation() {
   const [machineReadings, setMachineReadings] = useState<{ machine_serial: string; delivery_person: string }[]>([]);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
+  const [teleTx, setTeleTx] = useState<{ sale_time: string; payment_method: string; gross_amount: number; machine_serial: string; matched_order_id: string | null }[]>([]);
+  const { registry: machineRegistry } = useMachineRegistry();
 
   useEffect(() => {
     if (!id) return;
@@ -116,6 +119,15 @@ export default function SalonReconciliation() {
 
     setClosingDate(closing?.closing_date || '');
     setReconciliationStatus(closing?.reconciliation_status || 'pending');
+
+    if (closing?.closing_date) {
+      const { data: teleData } = await supabase
+        .from('card_transactions')
+        .select('sale_time, payment_method, gross_amount, machine_serial, matched_order_id')
+        .eq('sale_date', closing.closing_date);
+      setTeleTx((teleData || []).map((t: any) => ({ ...t, gross_amount: Number(t.gross_amount) })));
+    }
+
     const ordersList = (ordData || []).map((o: any) => ({
       ...o,
       discount_amount: Number(o.discount_amount || 0),
@@ -468,12 +480,61 @@ export default function SalonReconciliation() {
 
     const sobras = transactions.filter(tx => !tx.matched_order_id);
 
+    // ── Comanda de balcão paga no caixa Tele ──
+    const minutesOf = (t?: string | null) => {
+      if (!t) return null;
+      const m = t.match(/(\d{1,2}):(\d{2})/);
+      return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+    };
+    const cleanSerial = (s: string) => (s || '').replace(/^S1F2-000/, '');
+    const problemOrders = [...trocaForma, ...difValor, ...semTx];
+    const payByOrderTele = new Map<string, SalonPayment[]>();
+    payments.forEach(p => {
+      if (!payByOrderTele.has(p.salon_order_id)) payByOrderTele.set(p.salon_order_id, []);
+      payByOrderTele.get(p.salon_order_id)!.push(p);
+    });
+    const balcaoNoTele: { order: SalonOrder; tele: { sale_time: string; payment_method: string; gross_amount: number; machine: string | null } }[] = [];
+    for (const order of problemOrders) {
+      const bk = (payByOrderTele.get(order.id) || []).filter(p => isCardMethod(canonicalMethod(p.payment_method)));
+      let declared: { method: string; amount: number }[];
+      if (bk.length > 0) {
+        declared = bk.map(p => ({ method: canonicalMethod(p.payment_method), amount: p.amount }));
+      } else {
+        const methods = (order.payment_method || '').split(',').map(s => s.trim()).filter(Boolean);
+        const cardM = methods.map(canonicalMethod).filter(isCardMethod);
+        declared = (cardM.length === methods.length && cardM.length === 1)
+          ? [{ method: cardM[0], amount: order.total_amount }] : [];
+      }
+      const orderMin = minutesOf(order.sale_time);
+      let best: { score: number; tele: { sale_time: string; payment_method: string; gross_amount: number; machine: string | null } } | null = null;
+      for (const dec of declared) {
+        for (const t of teleTx) {
+          if (canonicalMethod(t.payment_method) !== dec.method) continue;
+          const amtDiff = Math.abs(t.gross_amount - dec.amount);
+          if (amtDiff > 0.50) continue;
+          const tMin = minutesOf(t.sale_time);
+          const gap = (orderMin != null && tMin != null) ? Math.abs(tMin - orderMin) : 999;
+          if (gap > 90) continue;
+          const score = amtDiff * 1000 + gap;
+          if (!best || score < best.score) {
+            best = { score, tele: { sale_time: t.sale_time, payment_method: t.payment_method, gross_amount: t.gross_amount, machine: machineRegistry.get(cleanSerial(t.machine_serial))?.friendly_name || null } };
+          }
+        }
+      }
+      if (best) balcaoNoTele.push({ order, tele: best.tele });
+    }
+    const balcaoIds = new Set(balcaoNoTele.map(b => b.order.id));
+
+    const trocaFormaF = trocaForma.filter(o => !balcaoIds.has(o.id));
+    const difValorF = difValor.filter(o => !balcaoIds.has(o.id));
+    const semTxF = semTx.filter(o => !balcaoIds.has(o.id));
+
     const hasDiff =
       rows.some(r => Math.abs(r.diff) >= 0.01) ||
-      trocaForma.length > 0 || difValor.length > 0 || semTx.length > 0 || sobras.length > 0 || descontoCashback.length > 0;
+      trocaFormaF.length > 0 || difValorF.length > 0 || semTxF.length > 0 || sobras.length > 0 || descontoCashback.length > 0 || balcaoNoTele.length > 0;
 
-    return { rows, totals, trocaForma, difValor, descontoCashback, semTx, sobras, hasDiff };
-  }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions]);
+    return { rows, totals, trocaForma: trocaFormaF, difValor: difValorF, descontoCashback, semTx: semTxF, sobras, balcaoNoTele, hasDiff };
+  }, [offlineMethodTotals, machineRealByMethod, orders, divergenceByOrder, matchedOrderIds, orderClassifications, transactions, teleTx, machineRegistry, payments]);
 
   const [diagnosticOpenState, setDiagnosticOpenState] = useState<boolean | null>(null);
   const diagnosticOpen = diagnosticOpenState ?? diagnosticData.hasDiff;
@@ -917,6 +978,14 @@ export default function SalonReconciliation() {
                   <p className="text-sm font-semibold text-destructive font-mono-tabular">{[...divergenceByOrder.values()].filter(t => t !== 'desconto_cashback').length}</p>
                 </div>
               </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <CreditCard className="h-4 w-4 text-violet-500" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">No caixa Tele</p>
+                  <p className="text-sm font-semibold text-violet-600 dark:text-violet-400 font-mono-tabular">{diagnosticData.balcaoNoTele.length}</p>
+                </div>
+              </div>
+
 
               <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
@@ -975,6 +1044,13 @@ export default function SalonReconciliation() {
                 const real = txs.map(t => t.payment_method).join(' + ');
                 const gar = [...new Set(txs.map(t => t.machine_serial ? (waiterMap.get(t.machine_serial) || '—') : '—'))].join(', ');
                 lines.push(`  • ${o.sale_time || ''} — ${formatCurrency(o.total_amount)} — Saipos: ${o.payment_method} → Maquininha: ${real} — ${gar}`);
+              });
+              lines.push('');
+            }
+            if (d.balcaoNoTele.length) {
+              lines.push(`🟣 Comanda de balcão paga no caixa Tele (${d.balcaoNoTele.length})`);
+              d.balcaoNoTele.forEach(({ order: o, tele }) => {
+                lines.push(`  • ${o.sale_time || ''} — ${o.payment_method} — ${formatCurrency(o.total_amount)} → Caixa Tele: ${tele.machine || 'Tele'} ${(tele.sale_time || '').slice(0, 5)} ${formatCurrency(tele.gross_amount)} (${tele.payment_method})`);
               });
               lines.push('');
             }
@@ -1092,7 +1168,7 @@ export default function SalonReconciliation() {
                     </div>
 
                     {/* Bloco B */}
-                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.descontoCashback.length > 0 || d.semTx.length > 0 || d.sobras.length > 0) && (
+                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.descontoCashback.length > 0 || d.semTx.length > 0 || d.sobras.length > 0 || d.balcaoNoTele.length > 0) && (
                       <>
                         <p className="text-xs text-muted-foreground">Os itens abaixo explicam as diferenças acima.</p>
 
@@ -1184,6 +1260,33 @@ export default function SalonReconciliation() {
                             </p>
                           </div>
                         )}
+
+                        {d.balcaoNoTele.length > 0 && (
+                          <div className="rounded-md border border-violet-500/30 bg-violet-500/5">
+                            <div className="px-3 py-2 border-b border-violet-500/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">🟣 Comanda de balcão paga no caixa Tele</span>
+                              <Badge variant="secondary" className="bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[10px]">{d.balcaoNoTele.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.balcaoNoTele.map(({ order: o, tele }) => {
+                                const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
+                                return (
+                                  <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{o.sale_time || ''}</span>
+                                    <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
+                                    <span className="text-foreground">{o.payment_method}</span>
+                                    <span className="font-mono tabular-nums font-semibold">{formatCurrency(o.total_amount)}</span>
+                                    <span className="text-muted-foreground">→ Caixa Tele: <span className="text-foreground">{tele.machine || 'Tele'}</span> · {(tele.sale_time || '').slice(0, 5)} · <span className="font-mono tabular-nums">{formatCurrency(tele.gross_amount)}</span> ({tele.payment_method})</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-violet-500/20">
+                              Esta comanda de balcão foi paga numa maquininha do caixa Tele (não na do salão). Por isso não bate no fechamento do salão — o pagamento está no caixa da Tele. Confira antes de fechar.
+                            </p>
+                          </div>
+                        )}
+
 
 
                         {d.semTx.length > 0 && (
