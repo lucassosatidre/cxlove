@@ -1254,6 +1254,33 @@ export default function SalonReconciliation() {
                           </div>
                         )}
 
+                        {d.balcaoNoTele.length > 0 && (
+                          <div className="rounded-md border border-violet-500/30 bg-violet-500/5">
+                            <div className="px-3 py-2 border-b border-violet-500/20 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">🟣 Comanda de balcão paga no caixa Tele</span>
+                              <Badge variant="secondary" className="bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[10px]">{d.balcaoNoTele.length}</Badge>
+                            </div>
+                            <div className="divide-y divide-border">
+                              {d.balcaoNoTele.map(({ order: o, tele }) => {
+                                const { label: typeLabel, cls: typeCls } = getOrderLabel(o.order_type);
+                                return (
+                                  <div key={o.id} className="px-3 py-2 text-xs flex flex-wrap items-center gap-2">
+                                    <span className="font-mono tabular-nums text-muted-foreground">{o.sale_time || ''}</span>
+                                    <Badge className={`text-[9px] ${typeCls}`}>{typeLabel}</Badge>
+                                    <span className="text-foreground">{o.payment_method}</span>
+                                    <span className="font-mono tabular-nums font-semibold">{formatCurrency(o.total_amount)}</span>
+                                    <span className="text-muted-foreground">→ Caixa Tele: <span className="text-foreground">{tele.machine || 'Tele'}</span> · {(tele.sale_time || '').slice(0, 5)} · <span className="font-mono tabular-nums">{formatCurrency(tele.gross_amount)}</span> ({tele.payment_method})</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-violet-500/20">
+                              Esta comanda de balcão foi paga numa maquininha do caixa Tele (não na do salão). Por isso não bate no fechamento do salão — o pagamento está no caixa da Tele. Confira antes de fechar.
+                            </p>
+                          </div>
+                        )}
+
+
 
                         {d.semTx.length > 0 && (
                           <div className="rounded-md border border-warning/30 bg-warning/5">
