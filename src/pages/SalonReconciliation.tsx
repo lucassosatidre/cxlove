@@ -978,6 +978,14 @@ export default function SalonReconciliation() {
                   <p className="text-sm font-semibold text-destructive font-mono-tabular">{[...divergenceByOrder.values()].filter(t => t !== 'desconto_cashback').length}</p>
                 </div>
               </div>
+              <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
+                <CreditCard className="h-4 w-4 text-violet-500" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">No caixa Tele</p>
+                  <p className="text-sm font-semibold text-violet-600 dark:text-violet-400 font-mono-tabular">{diagnosticData.balcaoNoTele.length}</p>
+                </div>
+              </div>
+
 
               <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-2 border border-border min-w-[120px]">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
