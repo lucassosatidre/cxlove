@@ -1161,7 +1161,7 @@ export default function SalonReconciliation() {
                     </div>
 
                     {/* Bloco B */}
-                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.descontoCashback.length > 0 || d.semTx.length > 0 || d.sobras.length > 0) && (
+                    {(d.trocaForma.length > 0 || d.difValor.length > 0 || d.descontoCashback.length > 0 || d.semTx.length > 0 || d.sobras.length > 0 || d.balcaoNoTele.length > 0) && (
                       <>
                         <p className="text-xs text-muted-foreground">Os itens abaixo explicam as diferenças acima.</p>
 
