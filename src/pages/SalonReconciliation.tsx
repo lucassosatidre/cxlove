@@ -100,6 +100,8 @@ export default function SalonReconciliation() {
   const [machineReadings, setMachineReadings] = useState<{ machine_serial: string; delivery_person: string }[]>([]);
   const [showCashDetailsAbertura, setShowCashDetailsAbertura] = useState(false);
   const [showCashDetailsFechamento, setShowCashDetailsFechamento] = useState(false);
+  const [teleTx, setTeleTx] = useState<{ sale_time: string; payment_method: string; gross_amount: number; machine_serial: string; matched_order_id: string | null }[]>([]);
+  const { registry: machineRegistry } = useMachineRegistry();
 
   useEffect(() => {
     if (!id) return;
