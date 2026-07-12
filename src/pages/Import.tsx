@@ -69,6 +69,7 @@ export default function Import() {
           net_amount: t.net_amount,
           machine_serial: t.machine_serial || null,
           transaction_id: t.transaction_id || null,
+          cashback_fee: t.cashback_fee ?? null,
         }));
 
         const { error: insertErr } = await supabase.from('card_transactions').insert(batch);
@@ -107,6 +108,7 @@ export default function Import() {
           net_amount: t.net_amount,
           machine_serial: t.machine_serial || null,
           transaction_id: t.transaction_id || null,
+          cashback_fee: t.cashback_fee ?? null,
         }));
 
         const { error: insertErr } = await supabase.from('salon_card_transactions').insert(batch);

@@ -10,6 +10,7 @@ export interface ParsedCardTransaction {
   net_amount: number;
   machine_serial: string;
   transaction_id: string;
+  cashback_fee: number | null; // coluna "Servico de CRM | Cashback" — >0 = venda identificada no programa
 }
 
 // Fixed machine serials - EXCLUDED from delivery, INCLUDED for salon
@@ -136,6 +137,7 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
               if (name.includes('valor liquido')) colMap['net_amount'] = idx;
               if (name.includes('serial')) colMap['machine_serial'] = idx;
               if (name.includes('id da transacao')) colMap['transaction_id'] = idx;
+              if (name.includes('cashback') || name.includes('servico de crm')) colMap['cashback_fee'] = idx;
             });
             break;
           }
@@ -190,6 +192,7 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
             net_amount: parseBRCurrency(row[colMap.net_amount]),
             machine_serial: serial,
             transaction_id: String(row[colMap.transaction_id] ?? '').trim(),
+            cashback_fee: colMap.cashback_fee != null ? (parseBRCurrency(row[colMap.cashback_fee]) || null) : null,
           });
         }
 
@@ -255,6 +258,7 @@ export function parseSalonCardTransactionFile(file: File): Promise<{ transaction
               if (n.includes('valor liquido')) colMap['net_amount'] = idx;
               if (n.includes('serial')) colMap['machine_serial'] = idx;
               if (n.includes('id da transacao')) colMap['transaction_id'] = idx;
+              if (n.includes('cashback') || n.includes('servico de crm')) colMap['cashback_fee'] = idx;
             });
             break;
           }
@@ -287,6 +291,7 @@ export function parseSalonCardTransactionFile(file: File): Promise<{ transaction
             net_amount: parseBRCurrency(row[colMap.net_amount]),
             machine_serial: serial,
             transaction_id: String(row[colMap.transaction_id] ?? '').trim(),
+            cashback_fee: colMap.cashback_fee != null ? (parseBRCurrency(row[colMap.cashback_fee]) || null) : null,
           });
         }
 
@@ -350,6 +355,7 @@ export function parseAllCardTransactions(file: File): Promise<{
               if (n.includes('valor liquido')) colMap['net_amount'] = idx;
               if (n.includes('serial')) colMap['machine_serial'] = idx;
               if (n.includes('id da transacao')) colMap['transaction_id'] = idx;
+              if (n.includes('cashback') || n.includes('servico de crm')) colMap['cashback_fee'] = idx;
             });
             break;
           }
@@ -380,6 +386,7 @@ export function parseAllCardTransactions(file: File): Promise<{
             net_amount: parseBRCurrency(row[colMap.net_amount]),
             machine_serial: serial,
             transaction_id: String(row[colMap.transaction_id] ?? '').trim(),
+            cashback_fee: colMap.cashback_fee != null ? (parseBRCurrency(row[colMap.cashback_fee]) || null) : null,
           };
 
           if (FIXED_MACHINE_SERIALS.has(serial)) {
