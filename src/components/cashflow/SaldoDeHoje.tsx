@@ -190,7 +190,7 @@ export default function SaldoDeHoje() {
               <button
                 type="button"
                 onClick={() => setLimiteOpen((v) => !v)}
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                className="text-sm text-foreground/80 hover:text-foreground transition-colors"
                 aria-label={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
                 title={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
               >
