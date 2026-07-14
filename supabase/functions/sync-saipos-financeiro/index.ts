@@ -217,10 +217,55 @@ Deno.serve(async (req) => {
       upserted += mapped.length;
     }
 
+    // Deletar órfãos: registros na janela que não vieram nesta rodada (foram apagados no Saipos)
+    const startStr = toIsoDate(start);
+    const endStr = toIsoDate(end);
+    const seenIds = Array.from(byId.keys());
+    let deleted = 0;
+    {
+      // Buscar IDs existentes na janela
+      const existingIds: number[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        const { data, error } = await supabaseAdmin
+          .from("saipos_fin_transactions")
+          .select("id_store_fin_transaction")
+          .gte("date", startStr)
+          .lte("date", endStr)
+          .range(from, from + pageSize - 1);
+        if (error) {
+          console.error("[fin] select existing error:", error.message);
+          break;
+        }
+        if (!data || data.length === 0) break;
+        for (const r of data) existingIds.push(Number(r.id_store_fin_transaction));
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      const seenSet = new Set(seenIds);
+      const toDelete = existingIds.filter((id) => !seenSet.has(id));
+      if (toDelete.length > 0) {
+        const delBatch = 500;
+        for (let i = 0; i < toDelete.length; i += delBatch) {
+          const slice = toDelete.slice(i, i + delBatch);
+          const { error } = await supabaseAdmin
+            .from("saipos_fin_transactions")
+            .delete()
+            .in("id_store_fin_transaction", slice);
+          if (error) {
+            console.error("[fin] delete error:", error.message);
+            break;
+          }
+          deleted += slice.length;
+        }
+      }
+    }
+
     await supabaseAdmin.from("sync_logs").insert({
       sync_type: "saipos_financeiro",
       status: "success",
-      details: `${upserted} lançamentos (${toIsoDate(start)}..${toIsoDate(end)})`,
+      details: `${upserted} lançamentos, ${deleted} deletados (${startStr}..${endStr})`,
       executed_at: startedAt,
     });
 
@@ -229,11 +274,13 @@ Deno.serve(async (req) => {
         ok: true,
         total_fetched: all.length,
         total_upserted: upserted,
-        range: { start: toIsoDate(start), end: toIsoDate(end) },
+        total_deleted: deleted,
+        range: { start: startStr, end: endStr },
         synced_at: now,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[fin] fatal:", msg);
