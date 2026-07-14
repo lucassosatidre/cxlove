@@ -1365,6 +1365,7 @@ export type Database = {
       card_transactions: {
         Row: {
           brand: string | null
+          cashback_fee: number | null
           created_at: string
           daily_closing_id: string
           gross_amount: number
@@ -1382,6 +1383,7 @@ export type Database = {
         }
         Insert: {
           brand?: string | null
+          cashback_fee?: number | null
           created_at?: string
           daily_closing_id: string
           gross_amount?: number
@@ -1399,6 +1401,7 @@ export type Database = {
         }
         Update: {
           brand?: string | null
+          cashback_fee?: number | null
           created_at?: string
           daily_closing_id?: string
           gross_amount?: number
@@ -3057,6 +3060,7 @@ export type Database = {
       salon_card_transactions: {
         Row: {
           brand: string | null
+          cashback_fee: number | null
           created_at: string
           gross_amount: number
           id: string
@@ -3074,6 +3078,7 @@ export type Database = {
         }
         Insert: {
           brand?: string | null
+          cashback_fee?: number | null
           created_at?: string
           gross_amount?: number
           id?: string
@@ -3091,6 +3096,7 @@ export type Database = {
         }
         Update: {
           brand?: string | null
+          cashback_fee?: number | null
           created_at?: string
           gross_amount?: number
           id?: string
@@ -4031,6 +4037,10 @@ export type Database = {
           valor: number
           ym: string
         }[]
+      }
+      cashback_identificadas: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
       }
       cashflow_category_summary: {
         Args: { p_end: string; p_start: string }
