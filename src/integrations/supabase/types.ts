@@ -3057,6 +3057,72 @@ export type Database = {
         }
         Relationships: []
       }
+      saipos_fin_transactions: {
+        Row: {
+          amount: number | null
+          children: Json | null
+          conciliated: string | null
+          created_at: string
+          date: string | null
+          desc_store_bank_account: string | null
+          desc_store_category_financial: string | null
+          desc_store_fin_transaction: string | null
+          desc_store_payment_method: string | null
+          id: string
+          id_store: number | null
+          id_store_fin_transaction: number
+          issuance_date: string | null
+          paid: string | null
+          payment_date: string | null
+          provider_trade_name: string | null
+          raw: Json | null
+          synced_at: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number | null
+          children?: Json | null
+          conciliated?: string | null
+          created_at?: string
+          date?: string | null
+          desc_store_bank_account?: string | null
+          desc_store_category_financial?: string | null
+          desc_store_fin_transaction?: string | null
+          desc_store_payment_method?: string | null
+          id?: string
+          id_store?: number | null
+          id_store_fin_transaction: number
+          issuance_date?: string | null
+          paid?: string | null
+          payment_date?: string | null
+          provider_trade_name?: string | null
+          raw?: Json | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number | null
+          children?: Json | null
+          conciliated?: string | null
+          created_at?: string
+          date?: string | null
+          desc_store_bank_account?: string | null
+          desc_store_category_financial?: string | null
+          desc_store_fin_transaction?: string | null
+          desc_store_payment_method?: string | null
+          id?: string
+          id_store?: number | null
+          id_store_fin_transaction?: number
+          issuance_date?: string | null
+          paid?: string | null
+          payment_date?: string | null
+          provider_trade_name?: string | null
+          raw?: Json | null
+          synced_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       salon_card_transactions: {
         Row: {
           brand: string | null
