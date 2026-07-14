@@ -182,7 +182,7 @@ export default function SaldoDeHoje() {
               <div
                 className={cn(
                   'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
-                  negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                  negativo ? 'text-destructive' : 'text-foreground',
                 )}
               >
                 {fmtBRL(ownSum)}
