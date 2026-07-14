@@ -86,7 +86,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
       <div
         className={cn(
           'font-mono text-sm font-semibold tabular-nums whitespace-nowrap',
-          own < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+          own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
         {fmtBRL(own)}
@@ -150,7 +150,7 @@ export default function SaldoDeHoje() {
           </div>
           <div>
             <CardTitle className="text-base font-semibold">Saldo de hoje</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-foreground/80 mt-0.5">
               Referência: {fmtDate(asOf)}
             </p>
           </div>
@@ -182,7 +182,7 @@ export default function SaldoDeHoje() {
               <div
                 className={cn(
                   'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
-                  negativo ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                  negativo ? 'text-destructive' : 'text-foreground',
                 )}
               >
                 {fmtBRL(ownSum)}
@@ -190,7 +190,7 @@ export default function SaldoDeHoje() {
               <button
                 type="button"
                 onClick={() => setLimiteOpen((v) => !v)}
-                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                className="text-sm text-foreground/80 hover:text-foreground transition-colors"
                 aria-label={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
                 title={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
               >
@@ -199,13 +199,13 @@ export default function SaldoDeHoje() {
             </div>
             {limiteOpen && (
               <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground/80">
                   LIMITE
                 </div>
                 <div
                   className={cn(
                     'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
-                    folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                    folegoNeg ? 'text-destructive' : 'text-foreground',
                   )}
                 >
                   {fmtBRL(folego)}
