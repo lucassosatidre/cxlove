@@ -150,7 +150,7 @@ export default function SaldoDeHoje() {
           </div>
           <div>
             <CardTitle className="text-base font-semibold">Saldo de hoje</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-foreground/80 mt-0.5">
               Referência: {fmtDate(asOf)}
             </p>
           </div>
