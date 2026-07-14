@@ -74,18 +74,18 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
   const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
   return (
-    <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
-      <div className="flex items-center gap-2">
+    <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full">
+      <div className="flex items-center gap-2 min-w-0 max-w-full">
         <BankLogo bank={acc.bank} name={acc.name} />
         {showName && (
-          <div className="text-xs font-medium text-center truncate" title={displayName}>
+          <div className="text-xs font-medium text-center truncate min-w-0" title={displayName}>
             {displayName}
           </div>
         )}
       </div>
       <div
         className={cn(
-          'font-mono text-sm font-semibold tabular-nums whitespace-nowrap',
+          'font-mono text-xs font-semibold tabular-nums text-center break-all leading-tight w-full',
           own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
@@ -157,8 +157,8 @@ export default function SaldoDeHoje() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Linha única de balões */}
-        <div className="flex gap-3 pb-2">
+        {/* Grid de balões — quebra em múltiplas linhas quando faltar espaço */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 pb-2 items-stretch">
           {estrelaAccs.map((a) => (
             <AccountBubble key={a.id} acc={a} showName={false} />
           ))}
@@ -170,8 +170,8 @@ export default function SaldoDeHoje() {
           ))}
 
           {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
-          <div className="flex flex-col gap-3 flex-1 min-w-0">
-            <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
+          <div className="flex flex-col gap-3 min-w-0">
+            <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 min-w-0 w-full">
               <div
                 className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl"
                 aria-label="Saldo de hoje"
@@ -181,7 +181,7 @@ export default function SaldoDeHoje() {
               </div>
               <div
                 className={cn(
-                  'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
+                  'font-mono text-xs font-bold tabular-nums text-center break-all leading-tight w-full',
                   negativo ? 'text-destructive' : 'text-foreground',
                 )}
               >
@@ -198,13 +198,13 @@ export default function SaldoDeHoje() {
               </button>
             </div>
             {limiteOpen && (
-              <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
+              <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 min-w-0 w-full">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground/80">
                   LIMITE
                 </div>
                 <div
                   className={cn(
-                    'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
+                    'font-mono text-xs font-bold tabular-nums text-center break-all leading-tight w-full',
                     folegoNeg ? 'text-destructive' : 'text-foreground',
                   )}
                 >
@@ -214,6 +214,7 @@ export default function SaldoDeHoje() {
             )}
           </div>
         </div>
+
       </CardContent>
     </Card>
   );
