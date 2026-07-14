@@ -26,7 +26,7 @@ interface Props {
 const formatDate = (s: string) => { const [y, m, d] = s.split('-'); return `${d}/${m}/${y}`; };
 const getWeekday = (s: string) => {
   const [y, m, d] = s.split('-');
-  return new Date(+y, +m - 1, +d).toLocaleDateString('pt-BR', { weekday: 'short' });
+  return new Date(+y, +m - 1, +d).toLocaleDateString('pt-BR', { weekday: 'long' });
 };
 const getProgress = (c: ClosingRow | null) => {
   if (!c) return 0;
