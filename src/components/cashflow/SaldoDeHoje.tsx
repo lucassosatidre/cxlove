@@ -199,13 +199,13 @@ export default function SaldoDeHoje() {
             </div>
             {limiteOpen && (
               <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground/80">
                   LIMITE
                 </div>
                 <div
                   className={cn(
                     'font-mono text-sm font-bold tabular-nums whitespace-nowrap',
-                    folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                    folegoNeg ? 'text-destructive' : 'text-foreground',
                   )}
                 >
                   {fmtBRL(folego)}
