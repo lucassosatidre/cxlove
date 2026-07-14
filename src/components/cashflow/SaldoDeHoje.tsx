@@ -74,18 +74,18 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
   const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
   return (
-    <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 flex-1 min-w-0">
-      <div className="flex items-center gap-2">
+    <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full">
+      <div className="flex items-center gap-2 min-w-0 max-w-full">
         <BankLogo bank={acc.bank} name={acc.name} />
         {showName && (
-          <div className="text-xs font-medium text-center truncate" title={displayName}>
+          <div className="text-xs font-medium text-center truncate min-w-0" title={displayName}>
             {displayName}
           </div>
         )}
       </div>
       <div
         className={cn(
-          'font-mono text-sm font-semibold tabular-nums whitespace-nowrap',
+          'font-mono text-xs font-semibold tabular-nums text-center break-all leading-tight w-full',
           own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
