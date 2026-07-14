@@ -86,7 +86,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
       <div
         className={cn(
           'font-mono text-sm font-semibold tabular-nums whitespace-nowrap',
-          own < 0 ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+          own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
         {fmtBRL(own)}
