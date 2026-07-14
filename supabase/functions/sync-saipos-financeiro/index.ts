@@ -19,7 +19,7 @@ async function fetchWithRetry(url: string, token: string, tentativas = 4): Promi
     try {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) return res;
-      if (res.status >= 500 || res.status === 429) {
+      if (res.status >= 500 || res.status === 429 || res.status === 403) {
         const txt = await res.text().catch(() => "");
         console.warn(`[fin-retry] ${attempt + 1}/${tentativas} status=${res.status} ${txt.slice(0, 150)}`);
         if (attempt < tentativas - 1) {
