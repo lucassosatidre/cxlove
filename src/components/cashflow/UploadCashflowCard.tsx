@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, UploadCloud, type LucideIcon } from 'lucide-react';
@@ -24,6 +24,8 @@ export type UploadCashflowCardProps = {
   table: Table;
   parse: (input: ParseFileInput) => Promise<ParseFileResult> | ParseFileResult;
   onAfter: () => void | Promise<void>;
+  extra?: ReactNode;
+  onImportSuccess?: () => void;
 };
 
 const TX_COLS = [
