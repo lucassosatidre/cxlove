@@ -331,6 +331,127 @@ export default function InterPagamentosCard() {
             </AlertDialogContent>
           </AlertDialog>
         </div>
+
+        <Separator />
+
+        {/* Pix */}
+        <div className="space-y-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Send className="h-4 w-4" /> Enviar Pix
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="pk" className="text-xs text-muted-foreground">
+                Chave Pix (email, CPF/CNPJ, telefone ou aleatória)
+              </Label>
+              <Input id="pk" value={chavePix} onChange={(e) => setChavePix(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pv" className="text-xs text-muted-foreground">Valor (R$)</Label>
+              <Input id="pv" inputMode="decimal" value={valorPix} onChange={(e) => setValorPix(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pd" className="text-xs text-muted-foreground">Descrição (opcional)</Label>
+              <Input id="pd" value={descPix} onChange={(e) => setDescPix(e.target.value)} maxLength={140} />
+            </div>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={!chavePix || !(Number(valorPix.replace(',', '.')) > 0) || loadingPix}
+                style={{ backgroundColor: '#FF6B00', color: '#fff' }}
+              >
+                {loadingPix && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                Enviar Pix
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar envio de Pix</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Enviar R$ {valorPix} para <b>{chavePix}</b> agora?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={enviarPix}>Enviar</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          {ultimoPix && (
+            <p className="text-xs text-muted-foreground">
+              Último Pix — código: <code className="font-mono">{ultimoPix}</code>
+            </p>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Lote */}
+        <div className="space-y-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Layers className="h-4 w-4" /> Pagamento em lote
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cole um código de barras por linha. Opcional: adicione o valor após ";" (ex.: <code>34191...;150.00</code>).
+            Se não informar valor por linha, o "Valor padrão" será usado. Máx. 100 boletos.
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1 md:col-span-3">
+              <Label htmlFor="lt" className="text-xs text-muted-foreground">Lista de boletos</Label>
+              <Textarea
+                id="lt" rows={6} value={loteTexto}
+                onChange={(e) => setLoteTexto(e.target.value)}
+                className="font-mono text-xs"
+                placeholder="34191...;150.00&#10;34192...;89.90"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ld" className="text-xs text-muted-foreground">Data de pagamento</Label>
+              <Input id="ld" type="date" value={loteData} onChange={(e) => setLoteData(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="lvp" className="text-xs text-muted-foreground">Valor padrão (R$) — opcional</Label>
+              <Input id="lvp" inputMode="decimal" value={loteValorPadrao} onChange={(e) => setLoteValorPadrao(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  disabled={!loteTexto.trim() || loadingLote}
+                  style={{ backgroundColor: '#FF6B00', color: '#fff' }}
+                >
+                  {loadingLote && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                  Processar Lote
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmar pagamento em lote</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Isso enviará todos os boletos da lista para pagamento na conta Inter em {loteData}.
+                    Esta ação não pode ser desfeita item a item — só via cancelamento do lote.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={processarLote}>Processar</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            {ultimoLote && (
+              <Button variant="outline" size="sm" onClick={checarLote}>
+                Consultar status do lote
+              </Button>
+            )}
+          </div>
+          {ultimoLote && (
+            <p className="text-xs text-muted-foreground">
+              Último lote — <b>{ultimoLote.total}</b> boletos — id: <code className="font-mono">{ultimoLote.id}</code>
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
