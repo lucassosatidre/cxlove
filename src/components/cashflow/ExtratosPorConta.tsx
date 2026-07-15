@@ -29,6 +29,58 @@ import { supabase } from '@/integrations/supabase/client';
 import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
 import { useCashflowStatementCoverage } from '@/hooks/useCashflowAnalytics';
 import { cn } from '@/lib/utils';
+import logoBb from '@/assets/logo-bb.png';
+import logoCresol from '@/assets/logo-cresol.webp';
+import logoIfood from '@/assets/logo-ifood.png';
+import logoSicredi from '@/assets/logo-sicredi.jpeg';
+
+const BANK_LOGOS: Record<string, string> = {
+  BB: logoBb,
+  Cresol: logoCresol,
+  iFood: logoIfood,
+  Sicredi: logoSicredi,
+};
+const BANK_COLORS: Record<string, { bg: string; fg: string; label: string }> = {
+  BB: { bg: '#FCEE21', fg: '#0033A0', label: 'BB' },
+  Cresol: { bg: '#00995D', fg: '#FFFFFF', label: 'Cr' },
+  C6: { bg: '#1A1A1A', fg: '#FFFFFF', label: 'C6' },
+  iFood: { bg: '#EA1D2C', fg: '#FFFFFF', label: 'iF' },
+  Sicredi: { bg: '#3DAE2B', fg: '#FFFFFF', label: 'Si' },
+};
+
+function BankLogoMini({ bank, name }: { bank: string | null; name: string }) {
+  const key = bank ?? '';
+  const src = BANK_LOGOS[key];
+  if (src) {
+    return (
+      <div className="h-9 w-9 rounded-lg bg-white overflow-hidden flex items-center justify-center shrink-0">
+        <img
+          src={src}
+          alt={name}
+          className={cn('h-full w-full object-contain', key === 'Cresol' ? 'p-0' : 'p-1')}
+        />
+      </div>
+    );
+  }
+  const style = BANK_COLORS[key];
+  if (style) {
+    return (
+      <div
+        className="h-9 w-9 rounded-lg flex items-center justify-center font-bold text-xs shrink-0"
+        style={{ backgroundColor: style.bg, color: style.fg }}
+        aria-label={name}
+      >
+        {style.label}
+      </div>
+    );
+  }
+  const initials = (name || '?').slice(0, 2).toUpperCase();
+  return (
+    <div className="h-9 w-9 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 bg-muted text-muted-foreground">
+      {initials}
+    </div>
+  );
+}
 
 function parseBRLInput(s: string): number | null {
   const t = (s || '').trim();
