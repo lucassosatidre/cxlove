@@ -3062,6 +3062,8 @@ export type Database = {
           amount: number | null
           children: Json | null
           conciliated: string | null
+          conferido: boolean
+          conferido_em: string | null
           created_at: string
           date: string | null
           desc_store_bank_account: string | null
@@ -3083,6 +3085,8 @@ export type Database = {
           amount?: number | null
           children?: Json | null
           conciliated?: string | null
+          conferido?: boolean
+          conferido_em?: string | null
           created_at?: string
           date?: string | null
           desc_store_bank_account?: string | null
@@ -3104,6 +3108,8 @@ export type Database = {
           amount?: number | null
           children?: Json | null
           conciliated?: string | null
+          conferido?: boolean
+          conferido_em?: string | null
           created_at?: string
           date?: string | null
           desc_store_bank_account?: string | null
