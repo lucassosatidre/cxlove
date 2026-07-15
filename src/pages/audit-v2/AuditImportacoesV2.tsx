@@ -567,7 +567,15 @@ export default function AuditImportacoesV2() {
           </Card>
         )}
 
+        {/* Banco Inter — API direta */}
+        <UploadInterCard
+          period={period}
+          ensurePeriod={ensurePeriod}
+          onAfter={onUploadAfter}
+        />
+
         {/* Grupos */}
+
         {groups.map(group => {
           const docsInGroup = DOCS.filter(d => d.group === group);
           return (
