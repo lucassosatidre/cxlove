@@ -103,6 +103,33 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
 
 export default function SaldoDeHoje() {
   const { data, isLoading, error } = useCashflowBalances();
+  const [inter, setInter] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
+  const [interLoading, setInterLoading] = useState(false);
+  const [interError, setInterError] = useState(false);
+
+  const fetchInter = useCallback(async () => {
+    setInterLoading(true);
+    setInterError(false);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke('inter-saldo', { body: {} });
+      if (err) throw err;
+      if ((res as any)?.error) throw new Error((res as any).error);
+      setInter({
+        disponivel: Number((res as any)?.disponivel ?? 0),
+        atualizado_em: String((res as any)?.atualizado_em ?? new Date().toISOString()),
+      });
+    } catch (e) {
+      console.error('inter-saldo error', e);
+      setInterError(true);
+    } finally {
+      setInterLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInter();
+  }, [fetchInter]);
+
   const [limiteOpen, setLimiteOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
