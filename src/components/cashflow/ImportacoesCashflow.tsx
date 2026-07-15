@@ -52,6 +52,7 @@ export default function ImportacoesCashflow() {
   const [accounts, setAccounts] = useState<AccountLite[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ifoodClosingBalance, setIfoodClosingBalance] = useState<string>('');
 
   const accByName = useMemo(() => {
     const m = new Map<string, string>();
