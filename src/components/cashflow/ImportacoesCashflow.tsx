@@ -176,19 +176,19 @@ export default function ImportacoesCashflow() {
               accept=".xlsx" fileType="c6" table="cashflow_transactions"
               parse={pC6} onAfter={onAfter} />
             <UploadCashflowCard label="Extrato iFood (Conta)" icon={CreditCard}
-              accept=".csv" fileType="ifood" table="cashflow_transactions"
+              accept=".csv,.pdf" fileType="ifood" table="cashflow_transactions"
               parse={pIfood} onAfter={onAfter}
               onImportSuccess={() => setIfoodClosingBalance('')}
               extra={
                 <div className="space-y-1">
                   <Label htmlFor="ifood-closing" className="text-xs text-muted-foreground">
-                    Saldo atual da conta iFood (R$)
+                    Saldo atual da conta iFood (R$) — só para CSV
                   </Label>
                   <Input
                     id="ifood-closing"
                     type="text"
                     inputMode="decimal"
-                    placeholder="ex: 37842,64"
+                    placeholder="ex: 37842,64 (ignorado se importar PDF)"
                     value={ifoodClosingBalance}
                     onChange={(e) => setIfoodClosingBalance(e.target.value)}
                   />
