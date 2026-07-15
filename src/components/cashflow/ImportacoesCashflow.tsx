@@ -19,6 +19,7 @@ import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from '.
 import ConectarBancoOpenFinance from './ConectarBancoOpenFinance';
 import InterWebhookCard from './InterWebhookCard';
 import ExtratoInterCard from './ExtratoInterCard';
+import InterPagamentosCard from './InterPagamentosCard';
 import {
   parseBB, parseCresol, parseC6, parseSicredi, parseIfoodConta, parseSaipos,
 } from '@/lib/cashflow-parsers';
