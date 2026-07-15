@@ -63,7 +63,7 @@ export async function parseIfoodPdf(
     if (!dt) { skipped++; continue; }
     const cat = m[2].trim();
     const desc = m[3].trim();
-    const sign = m[4] === '-' ? -1 : 1;
+    const sign = (m[4] === '-' || m[4] === '−') ? -1 : 1;
     const raw = parseNumber(m[5]);
     if (!raw) { skipped++; continue; }
     const amount = sign * raw;
