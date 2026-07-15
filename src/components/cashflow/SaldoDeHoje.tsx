@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -102,6 +103,33 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
 
 export default function SaldoDeHoje() {
   const { data, isLoading, error } = useCashflowBalances();
+  const [inter, setInter] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
+  const [interLoading, setInterLoading] = useState(false);
+  const [interError, setInterError] = useState(false);
+
+  const fetchInter = useCallback(async () => {
+    setInterLoading(true);
+    setInterError(false);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke('inter-saldo', { body: {} });
+      if (err) throw err;
+      if ((res as any)?.error) throw new Error((res as any).error);
+      setInter({
+        disponivel: Number((res as any)?.disponivel ?? 0),
+        atualizado_em: String((res as any)?.atualizado_em ?? new Date().toISOString()),
+      });
+    } catch (e) {
+      console.error('inter-saldo error', e);
+      setInterError(true);
+    } finally {
+      setInterLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchInter();
+  }, [fetchInter]);
+
   const [limiteOpen, setLimiteOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
@@ -201,6 +229,57 @@ export default function SaldoDeHoje() {
           {outrosAccs.map((a) => (
             <AccountBubble key={a.id} acc={a} showName />
           ))}
+
+          {/* Inter — saldo em tempo real via API REST (mTLS) */}
+          <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full relative">
+            <button
+              type="button"
+              onClick={fetchInter}
+              disabled={interLoading}
+              className="absolute top-1 right-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+              aria-label="Atualizar saldo Inter"
+              title="Atualizar saldo Inter"
+            >
+              <RefreshCw className={cn('h-3 w-3', interLoading && 'animate-spin')} />
+            </button>
+            <div className="flex items-center gap-2 min-w-0 max-w-full">
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm"
+                style={{ backgroundColor: '#FF6B00', color: '#FFFFFF' }}
+                aria-label="Banco Inter"
+              >
+                In
+              </div>
+              <div className="text-xs font-medium text-center truncate min-w-0" title="Inter">
+                Inter
+              </div>
+            </div>
+            {interLoading && !inter ? (
+              <Skeleton className="h-4 w-20" />
+            ) : interError ? (
+              <div className="font-mono text-xs font-semibold text-destructive text-center">
+                Indisponível
+              </div>
+            ) : inter ? (
+              <>
+                <div
+                  className={cn(
+                    'font-mono text-xs sm:text-[11px] font-semibold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
+                    inter.disponivel < 0 ? 'text-destructive' : 'text-foreground',
+                  )}
+                >
+                  {fmtBRL(inter.disponivel)}
+                </div>
+                <div className="text-[9px] text-muted-foreground leading-none" title={inter.atualizado_em}>
+                  {new Date(inter.atualizado_em).toLocaleTimeString('pt-BR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+              </>
+            ) : null}
+          </div>
+
 
           {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
           <div className="flex flex-col gap-3 min-w-0">
