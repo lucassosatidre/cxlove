@@ -103,5 +103,16 @@ export async function parseIfoodPdf(
     maxDate = out.reduce((m, r) => (r.tx_date > m ? r.tx_date : m), out[0].tx_date);
   }
 
-  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
+  let cleanRange: { start: string; end: string } | undefined;
+  if (out.length > 0) {
+    let minD = out[0].tx_date;
+    let maxD = out[0].tx_date;
+    for (const r of out) {
+      if (r.tx_date < minD) minD = r.tx_date;
+      if (r.tx_date > maxD) maxD = r.tx_date;
+    }
+    cleanRange = { start: minD, end: maxD };
+  }
+
+  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate }, cleanRange };
 }
