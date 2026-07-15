@@ -129,8 +129,13 @@ export default function ImportacoesCashflow() {
     const enriched = rows.map((r) => ({ ...r, account_id: acc }));
     return { rows: enriched as unknown as Record<string, unknown>[], account_id: acc, warn, closing };
   };
-  const pIfood = (i: ParseFileInput): ParseFileResult => {
+  const pIfood = async (i: ParseFileInput): Promise<ParseFileResult> => {
     const acc = accId('iFood Pago');
+    if (i.fileName.toLowerCase().endsWith('.pdf') && i.buffer) {
+      const { parseIfoodPdf } = await import('@/lib/ifood-pdf-parser');
+      const { rows, closing } = await parseIfoodPdf(i.buffer, acc);
+      return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
+    }
     const raw = ifoodClosingBalance.trim();
     let closingBal: number | null = null;
     if (raw) {
@@ -171,19 +176,19 @@ export default function ImportacoesCashflow() {
               accept=".xlsx" fileType="c6" table="cashflow_transactions"
               parse={pC6} onAfter={onAfter} />
             <UploadCashflowCard label="Extrato iFood (Conta)" icon={CreditCard}
-              accept=".csv" fileType="ifood" table="cashflow_transactions"
+              accept=".csv,.pdf" fileType="ifood" table="cashflow_transactions"
               parse={pIfood} onAfter={onAfter}
               onImportSuccess={() => setIfoodClosingBalance('')}
               extra={
                 <div className="space-y-1">
                   <Label htmlFor="ifood-closing" className="text-xs text-muted-foreground">
-                    Saldo atual da conta iFood (R$)
+                    Saldo atual da conta iFood (R$) — só para CSV
                   </Label>
                   <Input
                     id="ifood-closing"
                     type="text"
                     inputMode="decimal"
-                    placeholder="ex: 37842,64"
+                    placeholder="ex: 37842,64 (ignorado se importar PDF)"
                     value={ifoodClosingBalance}
                     onChange={(e) => setIfoodClosingBalance(e.target.value)}
                   />
