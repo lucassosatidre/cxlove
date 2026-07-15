@@ -26,17 +26,20 @@ function fmtDDMM(iso: string): string {
   return `${d}/${m}`;
 }
 
+const OPEN_START_ISO = '2026-07-14';
+
 type Item = { categoria: string; fornecedor: string | null; descricao: string | null; valor: number };
 
 export default function PagamentosDeHoje() {
   const hojeISO = useMemo(() => toISOLocal(new Date()), []);
-  const ontemISO = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return toISOLocal(d);
-  }, []);
-  // janela ONTEM + HOJE
-  const daily = useCashflowUpcomingBillsDaily(ontemISO, 2);
+  const days = useMemo(() => {
+    const start = new Date(`${OPEN_START_ISO}T00:00:00`);
+    const today = new Date(`${hojeISO}T00:00:00`);
+    const diff = Math.floor((today.getTime() - start.getTime()) / 86400000);
+    return Math.max(1, diff + 1);
+  }, [hojeISO]);
+  // janela: 14/07/2026 → hoje
+  const daily = useCashflowUpcomingBillsDaily(OPEN_START_ISO, days);
   const balances = useCashflowBalances();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
