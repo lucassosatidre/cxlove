@@ -85,7 +85,7 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
       </div>
       <div
         className={cn(
-          'font-mono text-xs font-semibold tabular-nums text-center break-all leading-tight w-full',
+          'font-mono text-xs sm:text-[11px] font-semibold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
           own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
