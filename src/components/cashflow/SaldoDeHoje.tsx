@@ -158,7 +158,7 @@ export default function SaldoDeHoje() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Grid de balões — quebra em múltiplas linhas quando faltar espaço */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 pb-2 items-stretch">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-3 pb-2 items-stretch">
           {estrelaAccs.map((a) => (
             <AccountBubble key={a.id} acc={a} showName={false} />
           ))}
@@ -181,7 +181,7 @@ export default function SaldoDeHoje() {
               </div>
               <div
                 className={cn(
-                  'font-mono text-xs font-bold tabular-nums text-center break-all leading-tight w-full',
+                  'font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
                   negativo ? 'text-destructive' : 'text-foreground',
                 )}
               >
@@ -204,7 +204,7 @@ export default function SaldoDeHoje() {
                 </div>
                 <div
                   className={cn(
-                    'font-mono text-xs font-bold tabular-nums text-center break-all leading-tight w-full',
+                    'font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
                     folegoNeg ? 'text-destructive' : 'text-foreground',
                   )}
                 >
