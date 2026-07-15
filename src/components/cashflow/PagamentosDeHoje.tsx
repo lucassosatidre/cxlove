@@ -151,7 +151,7 @@ export default function PagamentosDeHoje() {
         {open && (
           <div className="rounded-lg border border-border/60 bg-card p-4">
             {sortedRows.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2">Nenhuma conta em aberto de ontem ou hoje.</p>
+              <p className="text-xs text-muted-foreground py-2">Nenhuma conta em aberto.</p>
             ) : (
               <>
                 <Table>
@@ -165,13 +165,13 @@ export default function PagamentosDeHoje() {
                   </TableHeader>
                   <TableBody>
                     {sortedRows.map((r, i) => {
-                      const isOntem = r.date === ontemISO;
+                      const isVencida = r.date < hojeISO;
                       return (
                         <TableRow key={i}>
                           <TableCell className="py-2 text-xs">
-                            <span className={cn(isOntem && 'text-amber-600 dark:text-amber-400 font-medium')}>
+                            <span className={cn(isVencida && 'text-destructive font-medium')}>
                               {fmtDDMM(r.date)}
-                              {isOntem && ' (ontem)'}
+                              {isVencida && ' (vencida)'}
                             </span>
                           </TableCell>
                           <TableCell className="py-2 text-xs" title={r.item.descricao || r.item.fornecedor || '—'}>
