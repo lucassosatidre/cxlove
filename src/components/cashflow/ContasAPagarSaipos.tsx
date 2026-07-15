@@ -77,10 +77,10 @@ export default function ContasAPagarSaipos() {
       toast.error('Erro ao carregar contas a pagar');
     } else {
       setRows((data as FinTx[]) || []);
-      const latest = (data || []).reduce<string | null>((acc, r: any) => {
+      const latest = ((data as any[]) || []).reduce((acc: string | null, r: any) => {
         if (!acc || (r.synced_at && r.synced_at > acc)) return r.synced_at;
         return acc;
-      }, null);
+      }, null as string | null);
       setLastSyncAt(latest);
     }
 
