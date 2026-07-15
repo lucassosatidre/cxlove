@@ -166,9 +166,7 @@ export default function ImportacoesCashflow() {
             <UploadCashflowCard label="Extrato Sicredi" icon={Landmark}
               accept=".xls,.xlsx" fileType="sicredi" table="cashflow_transactions"
               parse={pSicredi} onAfter={onAfter} />
-            <UploadCashflowCard label="Lançamentos Saipos" icon={FileSpreadsheet}
-              accept=".xlsx" fileType="saipos" table="cashflow_saipos"
-              parse={pSaipos} onAfter={onAfter} />
+            {/* Importador manual de Lançamentos Saipos ocultado — dados vêm ao vivo via edge sync-saipos-financeiro */}
           </div>
         </CardContent>
       </Card>
