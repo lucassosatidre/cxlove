@@ -36,7 +36,7 @@ async function extractLines(buf: ArrayBuffer): Promise<string[]> {
 }
 
 const RE_SALDO_FINAL = /Saldo dispon[íi]vel no final do per[íi]odo selecionado:\s*R\$\s*([\d.,]+)/i;
-const RE_TX = /^(\d{2}\/\d{2}\/\d{4})\s+(\S+)\s+(.+?)\s+(-?)R\$\s*([\d.,]+)$/;
+const RE_TX = /^(\d{2}\/\d{2}\/\d{4})\s+(\S+)\s+(.+?)\s+([-−]?)R\$\s*([\d.,]+)$/;
 const RE_SALDO_DIA = /^Saldo do dia\s+\d{2}\/\d{2}\/\d{4}/i;
 
 export async function parseIfoodPdf(
