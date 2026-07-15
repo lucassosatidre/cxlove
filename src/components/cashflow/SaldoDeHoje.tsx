@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wallet, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
