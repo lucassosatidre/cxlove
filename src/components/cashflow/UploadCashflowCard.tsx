@@ -47,7 +47,7 @@ function pick<T extends readonly string[]>(row: Record<string, unknown>, cols: T
 }
 
 export default function UploadCashflowCard({
-  label, icon: Icon, accept, fileType, table, parse, onAfter,
+  label, icon: Icon, accept, fileType, table, parse, onAfter, extra, onImportSuccess,
 }: UploadCashflowCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
