@@ -210,8 +210,8 @@ export default function ExtratosPorConta() {
           ) : (
             <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
               {(cov.data ?? []).map((r) => {
-                const bal = (bal.data ?? []).find((a) => a.id === r.account_id);
-                const bank = bal?.bank ?? null;
+                const balAcc = (bal.data ?? []).find((a) => a.id === r.account_id);
+                const bank = balAcc?.bank ?? null;
                 const ofSync = ofSyncById.get(r.account_id);
                 const isOF = Boolean(ofSync);
 
