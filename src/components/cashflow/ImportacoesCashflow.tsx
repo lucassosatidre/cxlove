@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from './UploadCashflowCard';
 import ConectarBancoOpenFinance from './ConectarBancoOpenFinance';
 import InterWebhookCard from './InterWebhookCard';
+import ExtratoInterCard from './ExtratoInterCard';
 import {
   parseBB, parseCresol, parseC6, parseSicredi, parseIfoodConta, parseSaipos,
 } from '@/lib/cashflow-parsers';
