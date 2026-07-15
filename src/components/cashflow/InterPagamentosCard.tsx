@@ -9,7 +9,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Receipt, FileText } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Receipt, FileText, Send, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
