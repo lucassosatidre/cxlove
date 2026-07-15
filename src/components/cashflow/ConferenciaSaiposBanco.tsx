@@ -130,19 +130,34 @@ export default function ConferenciaSaiposBanco() {
                 Confere, por mês de vencimento, se as contas que o Saipos diz que pagou
                 realmente saíram do extrato bancário.
               </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Atualiza automaticamente com cada novo sync de banco e Saipos.
+              </p>
             </div>
-            <Select value={monthKey} onValueChange={setMonthKey}>
-              <SelectTrigger className="w-[140px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {months.map((m) => (
-                  <SelectItem key={m.key} value={m.key}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['cashflow', 'reconcile'] })}
+                aria-label="Atualizar"
+                title="Atualizar"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+              <Select value={monthKey} onValueChange={setMonthKey}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {months.map((m) => (
+                    <SelectItem key={m.key} value={m.key}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
