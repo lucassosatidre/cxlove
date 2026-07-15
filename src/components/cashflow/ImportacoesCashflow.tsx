@@ -216,6 +216,8 @@ export default function ImportacoesCashflow() {
         </CardContent>
       </Card>
 
+      <InterWebhookCard />
+
       <Card className="border-border/60">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="text-lg font-semibold">Histórico de importações</CardTitle>
