@@ -132,7 +132,7 @@ export default function PagamentosDeHoje() {
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Total a pagar (ontem + hoje)
+                Total em aberto (vencidos + hoje)
               </div>
               <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-foreground">
                 {fmtBRL(total)}
