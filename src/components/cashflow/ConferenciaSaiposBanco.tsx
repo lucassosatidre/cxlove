@@ -90,12 +90,12 @@ export default function ConferenciaSaiposBanco() {
     let cancelled = false;
     (async () => {
       const { data, error } = await supabase
-        .from('cashflow_saipos')
+        .from('saipos_fin_transactions')
         .select('amount')
-        .or('payment_method.ilike.%cart%,payment_method.ilike.%crédito%')
+        .or('desc_store_payment_method.ilike.%cart%,desc_store_payment_method.ilike.%crédito%')
         .lt('amount', 0)
-        .gte('vencimento', sel.ini)
-        .lte('vencimento', sel.fim);
+        .gte('date', sel.ini)
+        .lte('date', sel.fim);
       if (error || cancelled) return;
       const total = (data ?? []).reduce((s: number, r: any) => s + Math.abs(Number(r.amount) || 0), 0);
       setCreditTotal(total);
