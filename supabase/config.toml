@@ -35,3 +35,6 @@ verify_jwt = true
 
 [functions.nfse-ingest]
 verify_jwt = false
+
+[functions.inter-webhook]
+verify_jwt = false
