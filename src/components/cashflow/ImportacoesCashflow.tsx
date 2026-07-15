@@ -220,6 +220,7 @@ export default function ImportacoesCashflow() {
 
       <InterWebhookCard />
       <ExtratoInterCard />
+      <InterPagamentosCard />
 
       <Card className="border-border/60">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
