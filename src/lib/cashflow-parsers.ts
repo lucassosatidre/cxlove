@@ -508,6 +508,7 @@ export function parseSicredi(rows: unknown[][], accountId: string | null = null)
 export function parseIfoodConta(
   input: string | unknown[][],
   accountId: string | null = null,
+  closingBalance?: number | null,
 ): ParseResult<CashflowTxRow> {
   let rows: unknown[][];
   if (typeof input === 'string') {
@@ -552,6 +553,24 @@ export function parseIfoodConta(
       source_seq: i,
     });
   }
+
+  // Cadeia regressiva de running_balance quando o usuário informa o saldo atual.
+  // Ordena por tx_date DESC preservando a ordem original dentro do mesmo dia.
+  if (closingBalance != null && out.length > 0) {
+    const indexed = out.map((row, idx) => ({ row, idx }));
+    indexed.sort((a, b) => {
+      if (a.row.tx_date === b.row.tx_date) return a.idx - b.idx;
+      return a.row.tx_date < b.row.tx_date ? 1 : -1;
+    });
+    let running = closingBalance;
+    for (let i = 0; i < indexed.length; i++) {
+      indexed[i].row.running_balance = round2(running);
+      running = running - indexed[i].row.amount;
+    }
+    const maxDate = indexed[0].row.tx_date;
+    return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
+  }
+
   return { rows: out, skipped, closing: { balance: null, as_of: null } };
 }
 
