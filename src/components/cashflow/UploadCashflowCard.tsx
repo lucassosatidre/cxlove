@@ -191,6 +191,13 @@ export default function UploadCashflowCard({
           if (balErr) {
             toast.warning(`Saldo não atualizado: ${balErr.message}`);
           }
+          const { error: accErr } = await supabase
+            .from('cashflow_accounts')
+            .update({ balance_anchor: closing.balance, balance_anchor_date: closing.as_of })
+            .eq('id', account_id);
+          if (accErr) {
+            toast.warning(`Âncora não atualizada: ${accErr.message}`);
+          }
         }
 
         const periodMsg = periodMin && periodMax ? ` (período ${periodMin} a ${periodMax} atualizado)` : '';
