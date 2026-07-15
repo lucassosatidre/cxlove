@@ -129,8 +129,13 @@ export default function ImportacoesCashflow() {
     const enriched = rows.map((r) => ({ ...r, account_id: acc }));
     return { rows: enriched as unknown as Record<string, unknown>[], account_id: acc, warn, closing };
   };
-  const pIfood = (i: ParseFileInput): ParseFileResult => {
+  const pIfood = async (i: ParseFileInput): Promise<ParseFileResult> => {
     const acc = accId('iFood Pago');
+    if (i.fileName.toLowerCase().endsWith('.pdf') && i.buffer) {
+      const { parseIfoodPdf } = await import('@/lib/ifood-pdf-parser');
+      const { rows, closing } = await parseIfoodPdf(i.buffer, acc);
+      return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
+    }
     const raw = ifoodClosingBalance.trim();
     let closingBal: number | null = null;
     if (raw) {
