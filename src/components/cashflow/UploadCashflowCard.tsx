@@ -12,6 +12,7 @@ export type ParseFileResult = {
   account_id: string | null;
   warn?: string;
   closing?: { balance: number | null; as_of: string | null };
+  cleanRange?: { start: string; end: string };
 };
 
 type Table = 'cashflow_transactions' | 'cashflow_saipos';
