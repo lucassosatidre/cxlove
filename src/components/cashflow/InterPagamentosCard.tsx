@@ -9,7 +9,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
   AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Loader2, Receipt, FileText } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Receipt, FileText, Send, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -36,6 +37,109 @@ export default function InterPagamentosCard() {
   const [valorJuros, setValorJuros] = useState('');
   const [descDarf, setDescDarf] = useState('');
   const [loadingDarf, setLoadingDarf] = useState(false);
+
+  // Pix
+  const [chavePix, setChavePix] = useState('');
+  const [valorPix, setValorPix] = useState('');
+  const [descPix, setDescPix] = useState('');
+  const [loadingPix, setLoadingPix] = useState(false);
+  const [ultimoPix, setUltimoPix] = useState<string | null>(null);
+
+  // Lote
+  const [loteTexto, setLoteTexto] = useState('');
+  const [loteData, setLoteData] = useState(todayISO());
+  const [loteValorPadrao, setLoteValorPadrao] = useState('');
+  const [loadingLote, setLoadingLote] = useState(false);
+  const [ultimoLote, setUltimoLote] = useState<{ id: string; total: number } | null>(null);
+
+  async function enviarPix() {
+    setLoadingPix(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('inter-pix', {
+        body: {
+          chave_pix: chavePix.trim(),
+          valor: Number(valorPix.replace(',', '.')),
+          descricao: descPix || undefined,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const codigo = (data as any)?.codigoSolicitacao ?? (data as any)?.endToEnd ?? '(sem código)';
+      setUltimoPix(String(codigo));
+      toast.success(`Pix enviado (${codigo})`);
+      setChavePix(''); setValorPix(''); setDescPix('');
+    } catch (e: any) {
+      toast.error(`Falha Pix: ${e?.message || e}`);
+    } finally {
+      setLoadingPix(false);
+    }
+  }
+
+  async function processarLote() {
+    setLoadingLote(true);
+    try {
+      const linhas = loteTexto
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const pagamentos: any[] = [];
+      for (const l of linhas) {
+        // Formato aceito: "codigo_barras[;valor]"
+        const [cbRaw, vRaw] = l.split(/[;\t,|]/).map((x) => x?.trim());
+        const cb = String(cbRaw ?? '').replace(/\D/g, '');
+        if (!cb) continue;
+        const v = vRaw ? Number(vRaw.replace(',', '.')) : Number((loteValorPadrao || '0').replace(',', '.'));
+        pagamentos.push({
+          codigo_barras: cb,
+          data_pagamento: loteData,
+          valor_pagar: v,
+        });
+      }
+      if (pagamentos.length === 0) throw new Error('Nenhum boleto válido no lote');
+      if (pagamentos.length > 100) throw new Error('Máximo 100 boletos por lote');
+      const semValor = pagamentos.filter((p) => !isFinite(p.valor_pagar) || p.valor_pagar <= 0);
+      if (semValor.length > 0) {
+        throw new Error(
+          `${semValor.length} boleto(s) sem valor. Informe valor padrão ou use "codigo;valor" por linha.`,
+        );
+      }
+
+      const { data, error } = await supabase.functions.invoke('inter-pagar-lote', {
+        body: { pagamentos },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const idLote = (data as any)?.idLote ?? (data as any)?.meuIdentificador;
+      setUltimoLote({ id: String(idLote), total: pagamentos.length });
+      toast.success(`Lote enviado (${pagamentos.length} boletos) — id ${idLote}`);
+      setLoteTexto('');
+    } catch (e: any) {
+      toast.error(`Falha lote: ${e?.message || e}`);
+    } finally {
+      setLoadingLote(false);
+    }
+  }
+
+  async function checarLote() {
+    if (!ultimoLote?.id) return;
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inter-pagar-lote?idLote=${encodeURIComponent(ultimoLote.id)}`;
+      const anon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token ?? anon;
+      const r = await fetch(url, {
+        headers: { apikey: anon, Authorization: `Bearer ${token}` },
+      });
+      const resultado = await r.json();
+      if (!r.ok || resultado?.error) throw new Error(resultado?.error ?? `HTTP ${r.status}`);
+      toast.success(`Status: ${resultado?.situacao ?? resultado?.status ?? 'consultado'}`);
+      console.log('Lote status', resultado);
+    } catch (e: any) {
+      toast.error(`Falha ao consultar lote: ${e?.message || e}`);
+    }
+  }
+
+
 
   async function pagarBoleto() {
     setLoadingBoleto(true);
@@ -226,6 +330,127 @@ export default function InterPagamentosCard() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </div>
+
+        <Separator />
+
+        {/* Pix */}
+        <div className="space-y-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Send className="h-4 w-4" /> Enviar Pix
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-1 md:col-span-2">
+              <Label htmlFor="pk" className="text-xs text-muted-foreground">
+                Chave Pix (email, CPF/CNPJ, telefone ou aleatória)
+              </Label>
+              <Input id="pk" value={chavePix} onChange={(e) => setChavePix(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pv" className="text-xs text-muted-foreground">Valor (R$)</Label>
+              <Input id="pv" inputMode="decimal" value={valorPix} onChange={(e) => setValorPix(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pd" className="text-xs text-muted-foreground">Descrição (opcional)</Label>
+              <Input id="pd" value={descPix} onChange={(e) => setDescPix(e.target.value)} maxLength={140} />
+            </div>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                disabled={!chavePix || !(Number(valorPix.replace(',', '.')) > 0) || loadingPix}
+                style={{ backgroundColor: '#FF6B00', color: '#fff' }}
+              >
+                {loadingPix && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                Enviar Pix
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Confirmar envio de Pix</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Enviar R$ {valorPix} para <b>{chavePix}</b> agora?
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={enviarPix}>Enviar</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          {ultimoPix && (
+            <p className="text-xs text-muted-foreground">
+              Último Pix — código: <code className="font-mono">{ultimoPix}</code>
+            </p>
+          )}
+        </div>
+
+        <Separator />
+
+        {/* Lote */}
+        <div className="space-y-3">
+          <div className="text-sm font-semibold flex items-center gap-2">
+            <Layers className="h-4 w-4" /> Pagamento em lote
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Cole um código de barras por linha. Opcional: adicione o valor após ";" (ex.: <code>34191...;150.00</code>).
+            Se não informar valor por linha, o "Valor padrão" será usado. Máx. 100 boletos.
+          </p>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1 md:col-span-3">
+              <Label htmlFor="lt" className="text-xs text-muted-foreground">Lista de boletos</Label>
+              <Textarea
+                id="lt" rows={6} value={loteTexto}
+                onChange={(e) => setLoteTexto(e.target.value)}
+                className="font-mono text-xs"
+                placeholder="34191...;150.00&#10;34192...;89.90"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="ld" className="text-xs text-muted-foreground">Data de pagamento</Label>
+              <Input id="ld" type="date" value={loteData} onChange={(e) => setLoteData(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="lvp" className="text-xs text-muted-foreground">Valor padrão (R$) — opcional</Label>
+              <Input id="lvp" inputMode="decimal" value={loteValorPadrao} onChange={(e) => setLoteValorPadrao(e.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  disabled={!loteTexto.trim() || loadingLote}
+                  style={{ backgroundColor: '#FF6B00', color: '#fff' }}
+                >
+                  {loadingLote && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                  Processar Lote
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmar pagamento em lote</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Isso enviará todos os boletos da lista para pagamento na conta Inter em {loteData}.
+                    Esta ação não pode ser desfeita item a item — só via cancelamento do lote.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={processarLote}>Processar</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            {ultimoLote && (
+              <Button variant="outline" size="sm" onClick={checarLote}>
+                Consultar status do lote
+              </Button>
+            )}
+          </div>
+          {ultimoLote && (
+            <p className="text-xs text-muted-foreground">
+              Último lote — <b>{ultimoLote.total}</b> boletos — id: <code className="font-mono">{ultimoLote.id}</code>
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>
