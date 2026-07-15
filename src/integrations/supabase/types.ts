@@ -2999,6 +2999,8 @@ export type Database = {
           created_at: string
           id: string
           item_id: string
+          last_status_message: string | null
+          last_updated_at: string | null
           status: string | null
           updated_at: string
         }
@@ -3009,6 +3011,8 @@ export type Database = {
           created_at?: string
           id?: string
           item_id: string
+          last_status_message?: string | null
+          last_updated_at?: string | null
           status?: string | null
           updated_at?: string
         }
@@ -3019,6 +3023,8 @@ export type Database = {
           created_at?: string
           id?: string
           item_id?: string
+          last_status_message?: string | null
+          last_updated_at?: string | null
           status?: string | null
           updated_at?: string
         }
