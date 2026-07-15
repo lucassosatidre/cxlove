@@ -334,9 +334,36 @@ Deno.serve(async (req) => {
         }
 
         let chosenBalance: number | null = null;
-        let balanceSource: 'anchor' | 'account_balance' | 'none' = 'none';
+        let balanceSource: 'running_balance' | 'account_balance' | 'anchor' | 'none' = 'none';
 
-        if (hasAnchor) {
+        // 1) PREFERÊNCIA: running_balance da tx mais recente (saldo REAL informado pelo banco)
+        try {
+          const { data: lastTx, error: lastErr } = await supa
+            .from('cashflow_transactions')
+            .select('running_balance, tx_date, external_id')
+            .eq('account_id', cfAccountId)
+            .eq('source', 'pluggy')
+            .not('running_balance', 'is', null)
+            .order('tx_date', { ascending: false })
+            .order('external_id', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!lastErr && lastTx && lastTx.running_balance !== null) {
+            chosenBalance = Number(lastTx.running_balance);
+            balanceSource = 'running_balance';
+          }
+        } catch (e) {
+          console.warn('running_balance lookup falhou', e);
+        }
+
+        // 2) FALLBACK: pa.balance direto de /accounts
+        if (chosenBalance === null && typeof pa.balance === 'number') {
+          chosenBalance = pa.balance;
+          balanceSource = 'account_balance';
+        }
+
+        // 3) ÚLTIMO FALLBACK: anchor + rollforward
+        if (chosenBalance === null && hasAnchor) {
           try {
             const { data: txSum, error: sumErr } = await supa
               .from('cashflow_transactions')
@@ -353,11 +380,6 @@ Deno.serve(async (req) => {
           }
         }
 
-        if (chosenBalance === null && typeof pa.balance === 'number') {
-          chosenBalance = pa.balance;
-          balanceSource = 'account_balance';
-        }
-
         if (chosenBalance !== null) {
           try {
             await supa.from('cashflow_balances').upsert({
@@ -365,8 +387,13 @@ Deno.serve(async (req) => {
               as_of: toStr,
               own_balance: chosenBalance,
             }, { onConflict: 'account_id,as_of' });
+            // mantém o anchor atualizado — rollforward futuro é mínimo
+            await supa.from('cashflow_accounts').update({
+              balance_anchor: chosenBalance,
+              balance_anchor_date: toStr,
+            }).eq('id', cfAccountId);
           } catch (e) {
-            console.warn('upsert cashflow_balances falhou', e);
+            console.warn('upsert cashflow_balances/anchor falhou', e);
           }
         }
 

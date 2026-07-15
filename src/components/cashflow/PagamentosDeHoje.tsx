@@ -26,17 +26,20 @@ function fmtDDMM(iso: string): string {
   return `${d}/${m}`;
 }
 
+const OPEN_START_ISO = '2026-07-14';
+
 type Item = { categoria: string; fornecedor: string | null; descricao: string | null; valor: number };
 
 export default function PagamentosDeHoje() {
   const hojeISO = useMemo(() => toISOLocal(new Date()), []);
-  const ontemISO = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return toISOLocal(d);
-  }, []);
-  // janela ONTEM + HOJE
-  const daily = useCashflowUpcomingBillsDaily(ontemISO, 2);
+  const days = useMemo(() => {
+    const start = new Date(`${OPEN_START_ISO}T00:00:00`);
+    const today = new Date(`${hojeISO}T00:00:00`);
+    const diff = Math.floor((today.getTime() - start.getTime()) / 86400000);
+    return Math.max(1, diff + 1);
+  }, [hojeISO]);
+  // janela: 14/07/2026 → hoje
+  const daily = useCashflowUpcomingBillsDaily(OPEN_START_ISO, days);
   const balances = useCashflowBalances();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -95,7 +98,7 @@ export default function PagamentosDeHoje() {
           <div>
             <CardTitle className="text-base font-semibold">Pagamentos de hoje</CardTitle>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Inclui contas de ontem ainda em aberto
+              Vencidos desde 14/07 + hoje
             </p>
           </div>
         </div>
@@ -129,7 +132,7 @@ export default function PagamentosDeHoje() {
           <div className="flex items-end justify-between gap-4">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Total a pagar (ontem + hoje)
+                Total em aberto (vencidos + hoje)
               </div>
               <div className="mt-1 font-mono text-2xl font-semibold tabular-nums text-foreground">
                 {fmtBRL(total)}
@@ -148,7 +151,7 @@ export default function PagamentosDeHoje() {
         {open && (
           <div className="rounded-lg border border-border/60 bg-card p-4">
             {sortedRows.length === 0 ? (
-              <p className="text-xs text-muted-foreground py-2">Nenhuma conta em aberto de ontem ou hoje.</p>
+              <p className="text-xs text-muted-foreground py-2">Nenhuma conta em aberto.</p>
             ) : (
               <>
                 <Table>
@@ -162,13 +165,13 @@ export default function PagamentosDeHoje() {
                   </TableHeader>
                   <TableBody>
                     {sortedRows.map((r, i) => {
-                      const isOntem = r.date === ontemISO;
+                      const isVencida = r.date < hojeISO;
                       return (
                         <TableRow key={i}>
                           <TableCell className="py-2 text-xs">
-                            <span className={cn(isOntem && 'text-amber-600 dark:text-amber-400 font-medium')}>
+                            <span className={cn(isVencida && 'text-destructive font-medium')}>
                               {fmtDDMM(r.date)}
-                              {isOntem && ' (ontem)'}
+                              {isVencida && ' (vencida)'}
                             </span>
                           </TableCell>
                           <TableCell className="py-2 text-xs" title={r.item.descricao || r.item.fornecedor || '—'}>
