@@ -262,6 +262,7 @@ export default function UploadCashflowCard({
           )}
         </Button>
         <p className="mt-2 text-xs text-muted-foreground">Aceita: {accept}</p>
+        {extra ? <div className="mt-3">{extra}</div> : null}
       </CardContent>
     </Card>
   );
