@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
       client,
     } as any);
     const txt = await res.text();
-    if (!res.ok) return json({ error: `Inter (${res.status}): ${txt}`, payload }, res.status });
+    if (!res.ok) return json({ error: `Inter (${res.status}): ${txt}`, payload }, res.status);
     let parsed: any = null;
     try { parsed = txt ? JSON.parse(txt) : {}; } catch { parsed = { raw: txt }; }
     return json({ ok: true, ...(parsed ?? {}) });
