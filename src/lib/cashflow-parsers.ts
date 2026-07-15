@@ -39,7 +39,7 @@ export type CashflowSaiposRow = {
 };
 
 export type ClosingInfo = { balance: number | null; as_of: string | null };
-export type ParseResult<T> = { rows: T[]; skipped: number; closing?: ClosingInfo };
+export type ParseResult<T> = { rows: T[]; skipped: number; closing?: ClosingInfo; cleanRange?: { start: string; end: string } };
 
 // ============================================================================
 // Workbook / sheet helpers (copiado de UploadCards.tsx)
