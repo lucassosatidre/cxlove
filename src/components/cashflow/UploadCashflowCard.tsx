@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, UploadCloud, type LucideIcon } from 'lucide-react';
@@ -24,6 +24,8 @@ export type UploadCashflowCardProps = {
   table: Table;
   parse: (input: ParseFileInput) => Promise<ParseFileResult> | ParseFileResult;
   onAfter: () => void | Promise<void>;
+  extra?: ReactNode;
+  onImportSuccess?: () => void;
 };
 
 const TX_COLS = [
@@ -45,7 +47,7 @@ function pick<T extends readonly string[]>(row: Record<string, unknown>, cols: T
 }
 
 export default function UploadCashflowCard({
-  label, icon: Icon, accept, fileType, table, parse, onAfter,
+  label, icon: Icon, accept, fileType, table, parse, onAfter, extra, onImportSuccess,
 }: UploadCashflowCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -189,6 +191,13 @@ export default function UploadCashflowCard({
           if (balErr) {
             toast.warning(`Saldo não atualizado: ${balErr.message}`);
           }
+          const { error: accErr } = await supabase
+            .from('cashflow_accounts')
+            .update({ balance_anchor: closing.balance, balance_anchor_date: closing.as_of })
+            .eq('id', account_id);
+          if (accErr) {
+            toast.warning(`Âncora não atualizada: ${accErr.message}`);
+          }
         }
 
         const periodMsg = periodMin && periodMax ? ` (período ${periodMin} a ${periodMax} atualizado)` : '';
@@ -208,7 +217,10 @@ export default function UploadCashflowCard({
     setUploading(false);
     setProgress(null);
     if (inputRef.current) inputRef.current.value = '';
-    if (okCount > 0) await onAfter();
+    if (okCount > 0) {
+      await onAfter();
+      onImportSuccess?.();
+    }
   };
 
   return (
@@ -250,6 +262,7 @@ export default function UploadCashflowCard({
           )}
         </Button>
         <p className="mt-2 text-xs text-muted-foreground">Aceita: {accept}</p>
+        {extra ? <div className="mt-3">{extra}</div> : null}
       </CardContent>
     </Card>
   );

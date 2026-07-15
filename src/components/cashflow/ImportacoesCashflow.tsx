@@ -11,6 +11,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Landmark, CreditCard, FileSpreadsheet, Trash2, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from './UploadCashflowCard';
@@ -50,6 +52,7 @@ export default function ImportacoesCashflow() {
   const [accounts, setAccounts] = useState<AccountLite[]>([]);
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ifoodClosingBalance, setIfoodClosingBalance] = useState<string>('');
 
   const accByName = useMemo(() => {
     const m = new Map<string, string>();
@@ -128,8 +131,15 @@ export default function ImportacoesCashflow() {
   };
   const pIfood = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('iFood Pago');
-    const { rows } = parseIfoodConta(i.text ?? i.rows ?? '', acc);
-    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc };
+    const raw = ifoodClosingBalance.trim();
+    let closingBal: number | null = null;
+    if (raw) {
+      const normalized = raw.replace(/[R$\s.]/g, '').replace(',', '.');
+      const n = Number(normalized);
+      if (Number.isFinite(n)) closingBal = n;
+    }
+    const { rows, closing } = parseIfoodConta(i.text ?? i.rows ?? '', acc, closingBal);
+    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
   };
   const pSicredi = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('Sicredi');
@@ -162,7 +172,24 @@ export default function ImportacoesCashflow() {
               parse={pC6} onAfter={onAfter} />
             <UploadCashflowCard label="Extrato iFood (Conta)" icon={CreditCard}
               accept=".csv" fileType="ifood" table="cashflow_transactions"
-              parse={pIfood} onAfter={onAfter} />
+              parse={pIfood} onAfter={onAfter}
+              onImportSuccess={() => setIfoodClosingBalance('')}
+              extra={
+                <div className="space-y-1">
+                  <Label htmlFor="ifood-closing" className="text-xs text-muted-foreground">
+                    Saldo atual da conta iFood (R$)
+                  </Label>
+                  <Input
+                    id="ifood-closing"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="ex: 37842,64"
+                    value={ifoodClosingBalance}
+                    onChange={(e) => setIfoodClosingBalance(e.target.value)}
+                  />
+                </div>
+              } />
+
             <UploadCashflowCard label="Extrato Sicredi" icon={Landmark}
               accept=".xls,.xlsx" fileType="sicredi" table="cashflow_transactions"
               parse={pSicredi} onAfter={onAfter} />
