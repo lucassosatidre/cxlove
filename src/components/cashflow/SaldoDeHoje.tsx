@@ -1,8 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet } from 'lucide-react';
+import { Wallet, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import logoBb from '@/assets/logo-bb.png';
 import logoCresol from '@/assets/logo-cresol.webp';
 import logoIfood from '@/assets/logo-ifood.png';
