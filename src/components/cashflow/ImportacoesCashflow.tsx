@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from './UploadCashflowCard';
 import ConectarBancoOpenFinance from './ConectarBancoOpenFinance';
+import InterWebhookCard from './InterWebhookCard';
 import {
   parseBB, parseCresol, parseC6, parseSicredi, parseIfoodConta, parseSaipos,
 } from '@/lib/cashflow-parsers';
