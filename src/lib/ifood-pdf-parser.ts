@@ -28,7 +28,7 @@ async function extractLines(buf: ArrayBuffer): Promise<string[]> {
     }
     for (const b of buckets) {
       b.sort((a, b) => a.x - b.x);
-      const line = b.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim();
+      const line = b.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim().replace(/[-−]\s+R\$/g, '-R$');
       if (line) allLines.push(line);
     }
   }
