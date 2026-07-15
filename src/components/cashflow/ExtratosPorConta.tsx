@@ -201,157 +201,149 @@ export default function ExtratosPorConta() {
         <CardHeader>
           <CardTitle className="text-base">Cobertura dos extratos</CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Até que dia cada conta foi importada. Clique para abrir o extrato detalhado.
+            Até que dia cada conta foi importada. Clique no cartão para abrir o extrato detalhado.
           </p>
         </CardHeader>
         <CardContent>
           {cov.isLoading ? (
             <p className="text-sm text-muted-foreground">Carregando…</p>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Conta</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Atualizado até</TableHead>
-                    <TableHead className="text-right">Lançamentos</TableHead>
-                    <TableHead className="text-right">Saldo da conta</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(cov.data ?? []).map((r) => {
-                    const ofSync = ofSyncById.get(r.account_id);
-                    const isOF = Boolean(ofSync);
+            <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+              {(cov.data ?? []).map((r) => {
+                const bal = (bal.data ?? []).find((a) => a.id === r.account_id);
+                const bank = bal?.bank ?? null;
+                const ofSync = ofSyncById.get(r.account_id);
+                const isOF = Boolean(ofSync);
 
-                    // Frescor: OF usa last_synced_at (horas); Manual usa max_tx (dias)
-                    let dot = 'bg-emerald-500';
-                    let rowTint = '';
-                    let freshnessNode: React.ReactNode = null;
+                let dotClass = 'bg-emerald-500';
+                let ageLabel: string | null = null;
+                let ageTone: 'ok' | 'warn' | 'bad' = 'ok';
 
-                    if (isOF) {
-                      const hrs = hoursSince(ofSync);
-                      if (hrs === null) {
-                        dot = 'bg-muted-foreground/40';
-                      } else if (hrs > 48) {
-                        dot = 'bg-destructive';
-                        rowTint = 'bg-destructive/5';
-                      } else if (hrs > 24) {
-                        dot = 'bg-amber-500';
-                      }
-                      freshnessNode = (
-                        <div className="flex flex-col gap-0.5">
-                          <span className="flex items-center gap-2 text-sm">
-                            <span className={cn('inline-block h-2 w-2 rounded-full', dot)} />
-                            {fmtDate(r.max_tx)}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground pl-4">
-                            Sincronizado automaticamente • {fmtDateTime(ofSync)}
-                          </span>
+                if (isOF) {
+                  const hrs = hoursSince(ofSync);
+                  if (hrs === null) dotClass = 'bg-muted-foreground/40';
+                  else if (hrs > 48) { dotClass = 'bg-destructive'; ageTone = 'bad'; }
+                  else if (hrs > 24) { dotClass = 'bg-amber-500'; ageTone = 'warn'; }
+                } else {
+                  const age = daysSince(r.max_tx);
+                  if (age === null) dotClass = 'bg-muted-foreground/40';
+                  else if (age > 7) { dotClass = 'bg-destructive'; ageTone = 'bad'; ageLabel = `${age} dias atrás`; }
+                  else if (age > 3) { dotClass = 'bg-amber-500'; ageTone = 'warn'; ageLabel = `${age} dias atrás`; }
+                  else if (age > 0) { ageLabel = `${age} dia${age > 1 ? 's' : ''} atrás`; }
+                }
+
+                const saldo =
+                  balanceById.get(r.account_id) ??
+                  (r.saldo_final != null ? r.saldo_final : null);
+                const saldoNeg = saldo != null && saldo < 0;
+                const isSel = selectedId === r.account_id;
+
+                return (
+                  <button
+                    key={r.account_id}
+                    type="button"
+                    onClick={() => setSelectedId(r.account_id)}
+                    className={cn(
+                      'group text-left rounded-xl border p-3 flex flex-col gap-2 min-w-0 transition-colors',
+                      'bg-card hover:bg-muted/40',
+                      isSel ? 'border-primary ring-1 ring-primary/40' : 'border-border/60',
+                      ageTone === 'bad' && !isSel && 'border-destructive/40',
+                    )}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <BankLogoMini bank={bank} name={r.account_name} />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold truncate" title={r.account_name}>
+                          {r.account_name}
                         </div>
-                      );
-                    } else {
-                      const age = daysSince(r.max_tx);
-                      if (age === null) {
-                        dot = 'bg-muted-foreground/40';
-                      } else if (age > 7) {
-                        dot = 'bg-destructive';
-                        rowTint = 'bg-destructive/5';
-                      } else if (age > 3) {
-                        dot = 'bg-amber-500';
-                        rowTint = 'bg-amber-500/5';
-                      }
-                      freshnessNode = (
-                        <span className="flex items-center gap-2 text-sm">
-                          <span className={cn('inline-block h-2 w-2 rounded-full', dot)} />
-                          {fmtDate(r.max_tx)}
-                          {age !== null && age > 3 && (
-                            <span
-                              className={cn(
-                                'text-[11px]',
-                                age > 7 ? 'text-destructive' : 'text-amber-600 dark:text-amber-400',
-                              )}
-                            >
-                              ({age} dias atrás)
-                            </span>
-                          )}
-                        </span>
-                      );
-                    }
+                        {r.company && (
+                          <div className="text-[10px] text-muted-foreground truncate uppercase tracking-wide">
+                            {r.company}
+                          </div>
+                        )}
+                      </div>
+                      {isOF && (
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 text-[9px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                        >
+                          OF
+                        </Badge>
+                      )}
+                    </div>
 
-                    const saldo =
-                      balanceById.get(r.account_id) ??
-                      (r.saldo_final != null ? r.saldo_final : null);
-                    const isSel = selectedId === r.account_id;
-                    return (
-                      <TableRow
-                        key={r.account_id}
-                        onClick={() => setSelectedId(r.account_id)}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={cn('inline-block h-2 w-2 rounded-full shrink-0', dotClass)} />
+                      <span className="text-foreground/90">Até {fmtDate(r.max_tx)}</span>
+                      {ageLabel && (
+                        <span
+                          className={cn(
+                            'text-[10px]',
+                            ageTone === 'bad' ? 'text-destructive' : 'text-amber-600 dark:text-amber-400',
+                          )}
+                        >
+                          ({ageLabel})
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-baseline justify-between gap-2 border-t border-border/50 pt-2">
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Saldo</span>
+                      <span
                         className={cn(
-                          'cursor-pointer hover:bg-muted/50',
-                          rowTint,
-                          isSel && 'bg-primary/10 hover:bg-primary/15',
+                          'font-mono text-sm font-semibold tabular-nums whitespace-nowrap',
+                          saldoNeg ? 'text-destructive' : 'text-foreground',
                         )}
                       >
-                        <TableCell className="font-medium">
-                          {r.account_name}
-                          {r.company && (
-                            <Badge variant="outline" className="ml-2 text-[10px]">
-                              {r.company}
-                            </Badge>
-                          )}
-                          {isOF && (
-                            <Badge variant="outline" className="ml-2 text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
-                              Open Finance
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {r.min_tx ? `${fmtDate(r.min_tx)} → ${fmtDate(r.max_tx)}` : '—'}
-                        </TableCell>
-                        <TableCell>{freshnessNode}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">{r.n}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">
-                          <div className="flex items-center justify-end gap-2">
-                            <span>{saldo == null ? '—' : fmtBRL(saldo)}</span>
-                            {isOF && (
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 px-2 text-[10px] text-muted-foreground hover:text-foreground"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setReconfirmAccountId(r.account_id);
-                                        setReconfirmValue(
-                                          saldo == null
-                                            ? ''
-                                            : saldo.toLocaleString('pt-BR', {
-                                                minimumFractionDigits: 2,
-                                                maximumFractionDigits: 2,
-                                              }),
-                                        );
-                                      }}
-                                    >
-                                      <RefreshCw className="h-3 w-3 mr-1" />
-                                      Reconfirmar
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    Use quando o saldo estiver diferente do app do banco
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        {saldo == null ? '—' : fmtBRL(saldo)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>{r.n} lançamento{r.n === 1 ? '' : 's'}</span>
+                      {isOF && ofSync && (
+                        <span title={new Date(ofSync).toLocaleString('pt-BR')}>
+                          Sync {fmtDateTime(ofSync)}
+                        </span>
+                      )}
+                    </div>
+
+                    {isOF && (
+                      <div className="pt-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-full text-[10px] text-muted-foreground hover:text-foreground border border-dashed border-border/60"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReconfirmAccountId(r.account_id);
+                                  setReconfirmValue(
+                                    saldo == null
+                                      ? ''
+                                      : saldo.toLocaleString('pt-BR', {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        }),
+                                  );
+                                }}
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Reconfirmar saldo
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              Use quando o saldo estiver diferente do app do banco
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </CardContent>
