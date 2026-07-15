@@ -217,7 +217,10 @@ export default function UploadCashflowCard({
     setUploading(false);
     setProgress(null);
     if (inputRef.current) inputRef.current.value = '';
-    if (okCount > 0) await onAfter();
+    if (okCount > 0) {
+      await onAfter();
+      onImportSuccess?.();
+    }
   };
 
   return (
