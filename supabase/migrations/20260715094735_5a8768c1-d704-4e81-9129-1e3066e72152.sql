@@ -1,0 +1,1 @@
+ALTER VIEW public.saipos_fin_effective SET (security_invoker = true);

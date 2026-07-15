@@ -4084,7 +4084,81 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      saipos_fin_effective: {
+        Row: {
+          amount: number | null
+          amount_raw: number | null
+          children: Json | null
+          conciliated: string | null
+          conferido: boolean | null
+          conferido_em: string | null
+          created_at: string | null
+          date: string | null
+          desc_store_bank_account: string | null
+          desc_store_category_financial: string | null
+          desc_store_fin_transaction: string | null
+          desc_store_payment_method: string | null
+          id: string | null
+          id_store: number | null
+          id_store_fin_transaction: number | null
+          issuance_date: string | null
+          paid: string | null
+          payment_date: string | null
+          provider_trade_name: string | null
+          raw: Json | null
+          synced_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          amount?: never
+          amount_raw?: number | null
+          children?: Json | null
+          conciliated?: string | null
+          conferido?: boolean | null
+          conferido_em?: string | null
+          created_at?: string | null
+          date?: string | null
+          desc_store_bank_account?: string | null
+          desc_store_category_financial?: string | null
+          desc_store_fin_transaction?: string | null
+          desc_store_payment_method?: string | null
+          id?: string | null
+          id_store?: number | null
+          id_store_fin_transaction?: number | null
+          issuance_date?: string | null
+          paid?: string | null
+          payment_date?: string | null
+          provider_trade_name?: string | null
+          raw?: Json | null
+          synced_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: never
+          amount_raw?: number | null
+          children?: Json | null
+          conciliated?: string | null
+          conferido?: boolean | null
+          conferido_em?: string | null
+          created_at?: string | null
+          date?: string | null
+          desc_store_bank_account?: string | null
+          desc_store_category_financial?: string | null
+          desc_store_fin_transaction?: string | null
+          desc_store_payment_method?: string | null
+          id?: string | null
+          id_store?: number | null
+          id_store_fin_transaction?: number | null
+          issuance_date?: string | null
+          paid?: string | null
+          payment_date?: string | null
+          provider_trade_name?: string | null
+          raw?: Json | null
+          synced_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       attempt_checkin: {

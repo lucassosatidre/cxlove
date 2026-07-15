@@ -63,8 +63,8 @@ export default function ContasAPagarSaipos() {
     to.setDate(to.getDate() + 90);
     const toStr = (d: Date) => d.toISOString().slice(0, 10);
 
-    const { data, error } = await supabase
-      .from('saipos_fin_transactions')
+    const { data, error } = await (supabase as any)
+      .from('saipos_fin_effective')
       .select('id,id_store_fin_transaction,date,paid,amount,desc_store_fin_transaction,desc_store_category_financial,desc_store_payment_method,desc_store_bank_account,provider_trade_name,synced_at')
       .neq('paid', 'Y')
       .gte('date', toStr(from))
@@ -77,10 +77,10 @@ export default function ContasAPagarSaipos() {
       toast.error('Erro ao carregar contas a pagar');
     } else {
       setRows((data as FinTx[]) || []);
-      const latest = (data || []).reduce<string | null>((acc, r: any) => {
+      const latest = ((data as any[]) || []).reduce((acc: string | null, r: any) => {
         if (!acc || (r.synced_at && r.synced_at > acc)) return r.synced_at;
         return acc;
-      }, null);
+      }, null as string | null);
       setLastSyncAt(latest);
     }
 

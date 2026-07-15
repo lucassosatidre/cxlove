@@ -1,8 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet } from 'lucide-react';
+import { Wallet, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import logoBb from '@/assets/logo-bb.png';
 import logoCresol from '@/assets/logo-cresol.webp';
 import logoIfood from '@/assets/logo-ifood.png';
@@ -99,6 +103,24 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
 export default function SaldoDeHoje() {
   const { data, isLoading, error } = useCashflowBalances();
   const [limiteOpen, setLimiteOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke('pluggy-sync', { body: {} });
+      if (err) throw err;
+      const allAccounts = ((res as any)?.items ?? []).flatMap((it: any) => it.accounts ?? []);
+      const totalTx = allAccounts.reduce((s: number, a: any) => s + (a.transactions_upserted ?? 0), 0);
+      toast.success(`Saldos sincronizados (${totalTx} lançamentos novos)`);
+      await queryClient.invalidateQueries({ queryKey: ['cashflow', 'balances', 'latest'] });
+    } catch (e: any) {
+      toast.error(`Falha ao sincronizar: ${e?.message || e}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -155,6 +177,17 @@ export default function SaldoDeHoje() {
             </p>
           </div>
         </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+          onClick={handleSync}
+          disabled={syncing}
+          title="Sincronizar saldos via Open Finance"
+        >
+          <RefreshCw className={cn('h-3 w-3', syncing && 'animate-spin')} />
+          {syncing ? 'Sincronizando…' : 'Sincronizar'}
+        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Grid de balões — quebra em múltiplas linhas quando faltar espaço */}
