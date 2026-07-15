@@ -564,7 +564,7 @@ export function parseIfoodConta(
     });
     let running = closingBalance;
     for (let i = 0; i < indexed.length; i++) {
-      indexed[i].row.running_balance = round2(running);
+      indexed[i].row.running_balance = Math.round(running * 100) / 100;
       running = running - indexed[i].row.amount;
     }
     const maxDate = indexed[0].row.tx_date;
