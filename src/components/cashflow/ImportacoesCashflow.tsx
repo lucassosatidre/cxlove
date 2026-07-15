@@ -131,20 +131,32 @@ export default function ImportacoesCashflow() {
   };
   const pIfood = async (i: ParseFileInput): Promise<ParseFileResult> => {
     const acc = accId('iFood Pago');
+    let result: ParseFileResult;
     if (i.fileName.toLowerCase().endsWith('.pdf') && i.buffer) {
       const { parseIfoodPdf } = await import('@/lib/ifood-pdf-parser');
-      const { rows, closing } = await parseIfoodPdf(i.buffer, acc);
-      return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
+      const { rows, closing, cleanRange } = await parseIfoodPdf(i.buffer, acc);
+      result = { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing, cleanRange };
+    } else {
+      const raw = ifoodClosingBalance.trim();
+      let closingBal: number | null = null;
+      if (raw) {
+        const normalized = raw.replace(/[R$\s.]/g, '').replace(',', '.');
+        const n = Number(normalized);
+        if (Number.isFinite(n)) closingBal = n;
+      }
+      const { rows, closing } = parseIfoodConta(i.text ?? i.rows ?? '', acc, closingBal);
+      result = { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
     }
-    const raw = ifoodClosingBalance.trim();
-    let closingBal: number | null = null;
-    if (raw) {
-      const normalized = raw.replace(/[R$\s.]/g, '').replace(',', '.');
-      const n = Number(normalized);
-      if (Number.isFinite(n)) closingBal = n;
+    if (result.cleanRange && result.account_id) {
+      const { error } = await supabase.from('cashflow_transactions')
+        .delete()
+        .eq('source', 'ifood')
+        .eq('account_id', result.account_id)
+        .gte('tx_date', result.cleanRange.start)
+        .lte('tx_date', result.cleanRange.end);
+      if (error) toast.error(`Limpeza iFood: ${error.message}`);
     }
-    const { rows, closing } = parseIfoodConta(i.text ?? i.rows ?? '', acc, closingBal);
-    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
+    return result;
   };
   const pSicredi = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('Sicredi');

@@ -28,7 +28,7 @@ async function extractLines(buf: ArrayBuffer): Promise<string[]> {
     }
     for (const b of buckets) {
       b.sort((a, b) => a.x - b.x);
-      const line = b.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim();
+      const line = b.map((i) => i.str).join(' ').replace(/\s+/g, ' ').trim().replace(/[-−]\s+R\$/g, '-R$');
       if (line) allLines.push(line);
     }
   }
@@ -36,7 +36,7 @@ async function extractLines(buf: ArrayBuffer): Promise<string[]> {
 }
 
 const RE_SALDO_FINAL = /Saldo dispon[íi]vel no final do per[íi]odo selecionado:\s*R\$\s*([\d.,]+)/i;
-const RE_TX = /^(\d{2}\/\d{2}\/\d{4})\s+(\S+)\s+(.+?)\s+(-?)R\$\s*([\d.,]+)$/;
+const RE_TX = /^(\d{2}\/\d{2}\/\d{4})\s+(\S+)\s+(.+?)\s+([-−]?)R\$\s*([\d.,]+)$/;
 const RE_SALDO_DIA = /^Saldo do dia\s+\d{2}\/\d{2}\/\d{4}/i;
 
 export async function parseIfoodPdf(
@@ -63,7 +63,7 @@ export async function parseIfoodPdf(
     if (!dt) { skipped++; continue; }
     const cat = m[2].trim();
     const desc = m[3].trim();
-    const sign = m[4] === '-' ? -1 : 1;
+    const sign = (m[4] === '-' || m[4] === '−') ? -1 : 1;
     const raw = parseNumber(m[5]);
     if (!raw) { skipped++; continue; }
     const amount = sign * raw;
@@ -103,5 +103,16 @@ export async function parseIfoodPdf(
     maxDate = out.reduce((m, r) => (r.tx_date > m ? r.tx_date : m), out[0].tx_date);
   }
 
-  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate } };
+  let cleanRange: { start: string; end: string } | undefined;
+  if (out.length > 0) {
+    let minD = out[0].tx_date;
+    let maxD = out[0].tx_date;
+    for (const r of out) {
+      if (r.tx_date < minD) minD = r.tx_date;
+      if (r.tx_date > maxD) maxD = r.tx_date;
+    }
+    cleanRange = { start: minD, end: maxD };
+  }
+
+  return { rows: out, skipped, closing: { balance: closingBalance, as_of: maxDate }, cleanRange };
 }
