@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { readWorkbookFixed, sheetToRows } from '@/lib/cashflow-parsers';
 
-export type ParseFileInput = { rows?: unknown[][]; text?: string; fileName: string };
+export type ParseFileInput = { rows?: unknown[][]; text?: string; buffer?: ArrayBuffer; fileName: string };
 export type ParseFileResult = {
   rows: Record<string, unknown>[];
   account_id: string | null;
