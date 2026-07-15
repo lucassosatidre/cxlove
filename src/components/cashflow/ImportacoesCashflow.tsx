@@ -11,6 +11,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Landmark, CreditCard, FileSpreadsheet, Trash2, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from './UploadCashflowCard';
