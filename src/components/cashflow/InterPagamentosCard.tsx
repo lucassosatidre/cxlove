@@ -38,6 +38,118 @@ export default function InterPagamentosCard() {
   const [descDarf, setDescDarf] = useState('');
   const [loadingDarf, setLoadingDarf] = useState(false);
 
+  // Pix
+  const [chavePix, setChavePix] = useState('');
+  const [valorPix, setValorPix] = useState('');
+  const [descPix, setDescPix] = useState('');
+  const [loadingPix, setLoadingPix] = useState(false);
+  const [ultimoPix, setUltimoPix] = useState<string | null>(null);
+
+  // Lote
+  const [loteTexto, setLoteTexto] = useState('');
+  const [loteData, setLoteData] = useState(todayISO());
+  const [loteValorPadrao, setLoteValorPadrao] = useState('');
+  const [loadingLote, setLoadingLote] = useState(false);
+  const [ultimoLote, setUltimoLote] = useState<{ id: string; total: number } | null>(null);
+
+  async function enviarPix() {
+    setLoadingPix(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('inter-pix', {
+        body: {
+          chave_pix: chavePix.trim(),
+          valor: Number(valorPix.replace(',', '.')),
+          descricao: descPix || undefined,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const codigo = (data as any)?.codigoSolicitacao ?? (data as any)?.endToEnd ?? '(sem código)';
+      setUltimoPix(String(codigo));
+      toast.success(`Pix enviado (${codigo})`);
+      setChavePix(''); setValorPix(''); setDescPix('');
+    } catch (e: any) {
+      toast.error(`Falha Pix: ${e?.message || e}`);
+    } finally {
+      setLoadingPix(false);
+    }
+  }
+
+  async function processarLote() {
+    setLoadingLote(true);
+    try {
+      const linhas = loteTexto
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const pagamentos: any[] = [];
+      for (const l of linhas) {
+        // Formato aceito: "codigo_barras[;valor]"
+        const [cbRaw, vRaw] = l.split(/[;\t,|]/).map((x) => x?.trim());
+        const cb = String(cbRaw ?? '').replace(/\D/g, '');
+        if (!cb) continue;
+        const v = vRaw ? Number(vRaw.replace(',', '.')) : Number((loteValorPadrao || '0').replace(',', '.'));
+        pagamentos.push({
+          codigo_barras: cb,
+          data_pagamento: loteData,
+          valor_pagar: v,
+        });
+      }
+      if (pagamentos.length === 0) throw new Error('Nenhum boleto válido no lote');
+      if (pagamentos.length > 100) throw new Error('Máximo 100 boletos por lote');
+      const semValor = pagamentos.filter((p) => !isFinite(p.valor_pagar) || p.valor_pagar <= 0);
+      if (semValor.length > 0) {
+        throw new Error(
+          `${semValor.length} boleto(s) sem valor. Informe valor padrão ou use "codigo;valor" por linha.`,
+        );
+      }
+
+      const { data, error } = await supabase.functions.invoke('inter-pagar-lote', {
+        body: { pagamentos },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const idLote = (data as any)?.idLote ?? (data as any)?.meuIdentificador;
+      setUltimoLote({ id: String(idLote), total: pagamentos.length });
+      toast.success(`Lote enviado (${pagamentos.length} boletos) — id ${idLote}`);
+      setLoteTexto('');
+    } catch (e: any) {
+      toast.error(`Falha lote: ${e?.message || e}`);
+    } finally {
+      setLoadingLote(false);
+    }
+  }
+
+  async function checarLote() {
+    if (!ultimoLote?.id) return;
+    try {
+      const { data, error } = await supabase.functions.invoke('inter-pagar-lote', {
+        body: {},
+        method: 'GET' as any,
+      });
+      // fallback: usar fetch direto se o SDK não suportar query params
+      let resultado: any = data;
+      if (error || !resultado || (resultado as any)?.error) {
+        const url = new URL(
+          `/functions/v1/inter-pagar-lote?idLote=${encodeURIComponent(ultimoLote.id)}`,
+          import.meta.env.VITE_SUPABASE_URL,
+        );
+        const r = await fetch(url.toString(), {
+          headers: {
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string}`,
+          },
+        });
+        resultado = await r.json();
+      }
+      toast.success(`Status: ${(resultado as any)?.situacao ?? (resultado as any)?.status ?? 'consultado'}`);
+      console.log('Lote status', resultado);
+    } catch (e: any) {
+      toast.error(`Falha ao consultar lote: ${e?.message || e}`);
+    }
+  }
+
+
   async function pagarBoleto() {
     setLoadingBoleto(true);
     try {
