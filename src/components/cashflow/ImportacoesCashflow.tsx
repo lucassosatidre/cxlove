@@ -131,8 +131,15 @@ export default function ImportacoesCashflow() {
   };
   const pIfood = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('iFood Pago');
-    const { rows } = parseIfoodConta(i.text ?? i.rows ?? '', acc);
-    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc };
+    const raw = ifoodClosingBalance.trim();
+    let closingBal: number | null = null;
+    if (raw) {
+      const normalized = raw.replace(/[R$\s.]/g, '').replace(',', '.');
+      const n = Number(normalized);
+      if (Number.isFinite(n)) closingBal = n;
+    }
+    const { rows, closing } = parseIfoodConta(i.text ?? i.rows ?? '', acc, closingBal);
+    return { rows: rows as unknown as Record<string, unknown>[], account_id: acc, closing };
   };
   const pSicredi = (i: ParseFileInput): ParseFileResult => {
     const acc = accId('Sicredi');
