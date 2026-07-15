@@ -98,7 +98,7 @@ export default function PagamentosDeHoje() {
           <div>
             <CardTitle className="text-base font-semibold">Pagamentos de hoje</CardTitle>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Inclui contas de ontem ainda em aberto
+              Vencidos desde 14/07 + hoje
             </p>
           </div>
         </div>
