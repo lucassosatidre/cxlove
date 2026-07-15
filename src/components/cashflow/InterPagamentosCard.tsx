@@ -123,31 +123,22 @@ export default function InterPagamentosCard() {
   async function checarLote() {
     if (!ultimoLote?.id) return;
     try {
-      const { data, error } = await supabase.functions.invoke('inter-pagar-lote', {
-        body: {},
-        method: 'GET' as any,
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inter-pagar-lote?idLote=${encodeURIComponent(ultimoLote.id)}`;
+      const anon = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess?.session?.access_token ?? anon;
+      const r = await fetch(url, {
+        headers: { apikey: anon, Authorization: `Bearer ${token}` },
       });
-      // fallback: usar fetch direto se o SDK não suportar query params
-      let resultado: any = data;
-      if (error || !resultado || (resultado as any)?.error) {
-        const url = new URL(
-          `/functions/v1/inter-pagar-lote?idLote=${encodeURIComponent(ultimoLote.id)}`,
-          import.meta.env.VITE_SUPABASE_URL,
-        );
-        const r = await fetch(url.toString(), {
-          headers: {
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string}`,
-          },
-        });
-        resultado = await r.json();
-      }
-      toast.success(`Status: ${(resultado as any)?.situacao ?? (resultado as any)?.status ?? 'consultado'}`);
+      const resultado = await r.json();
+      if (!r.ok || resultado?.error) throw new Error(resultado?.error ?? `HTTP ${r.status}`);
+      toast.success(`Status: ${resultado?.situacao ?? resultado?.status ?? 'consultado'}`);
       console.log('Lote status', resultado);
     } catch (e: any) {
       toast.error(`Falha ao consultar lote: ${e?.message || e}`);
     }
   }
+
 
 
   async function pagarBoleto() {
