@@ -1,8 +1,10 @@
 // Card de importação de NF-e (XML/ZIP) que gera contas a pagar em cashflow_launches.
 
 import { useMemo, useRef, useState } from 'react';
-import { FileUp, Loader2, Upload } from 'lucide-react';
+import { FileUp, Loader2, Upload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
