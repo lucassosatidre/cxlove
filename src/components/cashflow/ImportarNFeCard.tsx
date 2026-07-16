@@ -202,6 +202,17 @@ export default function ImportarNFeCard() {
           </AlertDescription>
         </Alert>
 
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-xs text-muted-foreground max-w-md">
+            Puxa automaticamente todas as notas de entrada da SEFAZ (via Maná), sem precisar subir XML.
+          </div>
+          <Button size="sm" onClick={handleSyncEspiao} disabled={syncing || importing || loading}>
+            {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Sincronizar automático (Espião)
+          </Button>
+        </div>
+
+
         <div className="grid gap-3 md:grid-cols-3">
           <div className="md:col-span-2 space-y-1">
             <Label htmlFor="nfe-files" className="text-xs">Arquivos XML ou ZIP</Label>
