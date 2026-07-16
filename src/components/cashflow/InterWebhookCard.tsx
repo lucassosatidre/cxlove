@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Zap, Copy, Check } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, Zap, Copy, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -87,6 +88,15 @@ export default function InterWebhookCard() {
             </Button>
           </div>
         </div>
+
+        <Alert className="bg-amber-50 text-amber-900 border-amber-200">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-xs">
+            Para ativar os webhooks, a conta Inter precisa ter esta funcionalidade habilitada no
+            Portal do Desenvolvedor do Inter (developers.inter.co → Webhooks). Se o botão retornar
+            erro, entre em contato com o suporte Inter para habilitar webhooks na conta empresarial.
+          </AlertDescription>
+        </Alert>
       </CardContent>
     </Card>
   );
