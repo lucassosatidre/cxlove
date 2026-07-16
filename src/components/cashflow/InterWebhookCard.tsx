@@ -76,7 +76,7 @@ export default function InterWebhookCard() {
                 ) : isActive ? (
                   <Check className="h-3 w-3 mr-1" />
                 ) : null}
-                {isActive ? `Ativado (${t})` : `Ativar ${t}`}
+                {isActive ? `Ativado (${LABELS[t]})` : `Ativar ${LABELS[t]}`}
               </Button>
             );
           })}
