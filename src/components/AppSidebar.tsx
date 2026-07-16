@@ -8,7 +8,7 @@ import { allMenuItems, type MenuItem } from '@/lib/menu-tree';
 import { LogOut, X, PanelLeft, PanelLeftClose, ChevronDown, Sun, Moon } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import vigiaLogo from '@/assets/vigia-logo.png';
+import vigiaLogoAsset from '@/assets/vigia-logo.png.asset.json';
 
 interface AppSidebarProps {
   open?: boolean;
@@ -133,7 +133,7 @@ export default function AppSidebar({ open = true, onClose, collapsed = false, on
 
         {/* Logo transparente (sem fundo branco) */}
         <div className={`flex items-center justify-center border-b border-sidebar-border ${collapsed ? 'px-2 pt-5 pb-4' : 'px-4 pt-5 pb-4'}`}>
-          <img src={vigiaLogo} alt="VIGIA" className={collapsed ? 'h-12 w-12 object-contain' : 'w-[150px] object-contain'} />
+          <img src={vigiaLogoAsset.url} alt="VIGIA" className={collapsed ? 'h-12 w-12 object-contain' : 'w-[150px] object-contain'} />
         </div>
 
         {/* Navegação — grupos minimizáveis */}

@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Lock } from 'lucide-react';
-import vigiaLogo from '@/assets/vigia-logo.png';
+import vigiaLogoAsset from '@/assets/vigia-logo.png.asset.json';
 
 export default function Login() {
   const { user, loading, signIn } = useAuth();
@@ -96,7 +96,7 @@ export default function Login() {
             boxShadow: '0 24px 60px rgba(3,9,20,0.45), inset 0 0 0 1px rgba(201,151,46,0.18)',
           }}
         >
-          <img src={vigiaLogo} alt="VIGIA" className="w-[180px] h-[180px] object-contain -mt-2" />
+          <img src={vigiaLogoAsset.url} alt="VIGIA" className="w-[180px] h-[180px] object-contain -mt-2" />
 
           <p className="mt-2 text-xs uppercase tracking-[0.2em]" style={{ color: '#6B7280' }}>
             Acesse sua conta
