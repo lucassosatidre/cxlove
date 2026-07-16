@@ -45,6 +45,8 @@ interface TransferredItem {
 interface ApiResponse {
   closing_date: string;
   scope: 'salon' | 'tele';
+  partial?: boolean;
+  warning?: string;
   canceled_sales: CanceledSale[];
   canceled_items: CanceledItem[];
   transferred_items: TransferredItem[];
