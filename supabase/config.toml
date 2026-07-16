@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.inter-webhook]
 verify_jwt = false
+
+[functions.sync-nfe-vigia]
+verify_jwt = false
