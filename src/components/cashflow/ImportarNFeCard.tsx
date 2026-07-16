@@ -82,8 +82,8 @@ export default function ImportarNFeCard() {
     }
   }
 
-  const [categoria, setCategoria] = useState<string>('Matéria Prima');
-  const [errors, setErrors] = useState<string[]>([]);
+
+
 
   const totals = useMemo(() => {
     let total = 0, parcelas = 0;
