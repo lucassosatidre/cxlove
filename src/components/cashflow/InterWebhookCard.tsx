@@ -89,7 +89,7 @@ export default function InterWebhookCard() {
           </div>
         </div>
 
-        <Alert variant="warning" className="bg-amber-50 text-amber-900 border-amber-200">
+        <Alert className="bg-amber-50 text-amber-900 border-amber-200">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-xs">
             Para ativar os webhooks, a conta Inter precisa ter esta funcionalidade habilitada no
