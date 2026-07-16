@@ -43,7 +43,7 @@ export default function InterWebhookCard() {
     setTimeout(() => setCopied(false), 1500);
   }
 
-  const tipos: Tipo[] = ['transacao', 'pix', 'boleto', 'ted'];
+  const tipos: Tipo[] = ['pix-pagamento', 'boleto-pagamento'];
 
   return (
     <Card className="border-l-4" style={{ borderLeftColor: '#FF6B00' }}>
