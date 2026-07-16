@@ -1654,6 +1654,72 @@ export type Database = {
           },
         ]
       }
+      cashflow_launches: {
+        Row: {
+          amount: number
+          category: string | null
+          cnpj: string | null
+          conta: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          emissao: string
+          fornecedor: string | null
+          id: string
+          nfe_access_key: string | null
+          nfe_dup: string | null
+          numero_nota: string | null
+          pagamento: string | null
+          paid: boolean
+          payment_method: string | null
+          source: string
+          updated_at: string
+          vencimento: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          cnpj?: string | null
+          conta?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          emissao: string
+          fornecedor?: string | null
+          id?: string
+          nfe_access_key?: string | null
+          nfe_dup?: string | null
+          numero_nota?: string | null
+          pagamento?: string | null
+          paid?: boolean
+          payment_method?: string | null
+          source?: string
+          updated_at?: string
+          vencimento?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          cnpj?: string | null
+          conta?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          emissao?: string
+          fornecedor?: string | null
+          id?: string
+          nfe_access_key?: string | null
+          nfe_dup?: string | null
+          numero_nota?: string | null
+          pagamento?: string | null
+          paid?: boolean
+          payment_method?: string | null
+          source?: string
+          updated_at?: string
+          vencimento?: string | null
+        }
+        Relationships: []
+      }
       cashflow_loan_installments: {
         Row: {
           amount: number
@@ -3063,6 +3129,60 @@ export type Database = {
         }
         Relationships: []
       }
+      saipos_fin_overrides: {
+        Row: {
+          amount: number | null
+          category: string | null
+          conta: string | null
+          descricao: string | null
+          emissao: string | null
+          fornecedor: string | null
+          hidden: boolean
+          id: string
+          id_store_fin_transaction: number
+          pagamento: string | null
+          paid: boolean | null
+          payment_method: string | null
+          updated_at: string
+          updated_by: string | null
+          vencimento: string | null
+        }
+        Insert: {
+          amount?: number | null
+          category?: string | null
+          conta?: string | null
+          descricao?: string | null
+          emissao?: string | null
+          fornecedor?: string | null
+          hidden?: boolean
+          id?: string
+          id_store_fin_transaction: number
+          pagamento?: string | null
+          paid?: boolean | null
+          payment_method?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vencimento?: string | null
+        }
+        Update: {
+          amount?: number | null
+          category?: string | null
+          conta?: string | null
+          descricao?: string | null
+          emissao?: string | null
+          fornecedor?: string | null
+          hidden?: boolean
+          id?: string
+          id_store_fin_transaction?: number
+          pagamento?: string | null
+          paid?: boolean | null
+          payment_method?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          vencimento?: string | null
+        }
+        Relationships: []
+      }
       saipos_fin_transactions: {
         Row: {
           amount: number | null
@@ -4090,6 +4210,26 @@ export type Database = {
       }
     }
     Views: {
+      cashflow_lancamentos: {
+        Row: {
+          amount: number | null
+          banco: string | null
+          categoria: string | null
+          competencia_mes: string | null
+          descricao: string | null
+          emissao: string | null
+          fonte: string | null
+          fornecedor: string | null
+          metodo: string | null
+          numero_nota: string | null
+          pagamento: string | null
+          paid: boolean | null
+          ref_id: string | null
+          tipo: string | null
+          vencimento: string | null
+        }
+        Relationships: []
+      }
       saipos_fin_effective: {
         Row: {
           amount: number | null
@@ -4293,6 +4433,34 @@ export type Database = {
         }[]
       }
       delete_audit_import: { Args: { p_import_id: string }; Returns: Json }
+      fin_banco_norm: { Args: { txt: string }; Returns: string }
+      fin_metodo_norm: { Args: { txt: string }; Returns: string }
+      fin_upsert_override: {
+        Args: { p_id_store: number; p_patch: Json }
+        Returns: {
+          amount: number | null
+          category: string | null
+          conta: string | null
+          descricao: string | null
+          emissao: string | null
+          fornecedor: string | null
+          hidden: boolean
+          id: string
+          id_store_fin_transaction: number
+          pagamento: string | null
+          paid: boolean | null
+          payment_method: string | null
+          updated_at: string
+          updated_by: string | null
+          vencimento: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "saipos_fin_overrides"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_audit_contabil_breakdown: {
         Args: { p_period_id: string }
         Returns: {
