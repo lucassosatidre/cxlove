@@ -52,7 +52,7 @@ export default function CashflowDashboard() {
           </TabsContent>
 
           <TabsContent value="contas-pagar">
-            <ContasAPagarSaipos />
+            <LancamentosFinanceiros />
           </TabsContent>
 
           <TabsContent value="import">
