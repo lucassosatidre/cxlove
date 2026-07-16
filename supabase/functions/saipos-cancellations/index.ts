@@ -26,16 +26,18 @@ function saleTime(created_at: string | null | undefined): string | null {
   }
 }
 
-async function fetchSaiposWithRetry(url: string, token: string, tentativas = 4): Promise<Response> {
-  const delays = [1500, 4000, 9000];
+async function fetchSaiposWithRetry(url: string, token: string, tentativas = 6): Promise<Response> {
+  const delays = [1500, 3000, 6000, 9000, 12000];
   let lastErr: unknown = null;
   for (let attempt = 0; attempt < tentativas; attempt++) {
     try {
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) return res;
-      if (res.status >= 500 || res.status === 429) {
+      const transient = res.status >= 500 || res.status === 429 || res.status === 403 || res.status === 408;
+      if (transient) {
         if (attempt < tentativas - 1) {
-          await new Promise((r) => setTimeout(r, delays[Math.min(attempt, delays.length - 1)]));
+          const base = delays[Math.min(attempt, delays.length - 1)];
+          await new Promise((r) => setTimeout(r, base + Math.random() * 1000));
           continue;
         }
         return res;
@@ -44,7 +46,8 @@ async function fetchSaiposWithRetry(url: string, token: string, tentativas = 4):
     } catch (err) {
       lastErr = err;
       if (attempt < tentativas - 1) {
-        await new Promise((r) => setTimeout(r, delays[Math.min(attempt, delays.length - 1)]));
+        const base = delays[Math.min(attempt, delays.length - 1)];
+        await new Promise((r) => setTimeout(r, base + Math.random() * 1000));
         continue;
       }
     }
@@ -129,17 +132,36 @@ Deno.serve(async (req) => {
 
     const allowedTypes = scope === "salon" ? [2, 3, 4] : [1];
 
-    let sales: any[], histories: any[], salesItems: any[];
+    // search_sales é OBRIGATÓRIO
+    let sales: any[];
     try {
-      [sales, histories, salesItems] = await Promise.all([
-        fetchAllPaged("search_sales", closing_date, saiposToken),
-        fetchAllPaged("sales_status_histories", closing_date, saiposToken),
-        fetchAllPaged("sales_items", closing_date, saiposToken),
-      ]);
+      sales = await fetchAllPaged("search_sales", closing_date, saiposToken);
     } catch (e) {
       return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
+    }
+
+    // histories e sales_items são independentes/tolerantes
+    const warnings: string[] = [];
+    let histories: any[] = [];
+    let salesItems: any[] = [];
+
+    const [histRes, itemsRes] = await Promise.allSettled([
+      fetchAllPaged("sales_status_histories", closing_date, saiposToken),
+      fetchAllPaged("sales_items", closing_date, saiposToken),
+    ]);
+    if (histRes.status === "fulfilled") {
+      histories = histRes.value;
+    } else {
+      console.warn("[saipos-cancellations] histories falhou:", histRes.reason);
+      warnings.push("Não consegui carregar as vendas canceladas agora (Saipos instável).");
+    }
+    if (itemsRes.status === "fulfilled") {
+      salesItems = itemsRes.value;
+    } else {
+      console.warn("[saipos-cancellations] sales_items falhou:", itemsRes.reason);
+      warnings.push("Não consegui carregar os itens cancelados/transferidos agora (Saipos instável).");
     }
 
     // saleMeta by id_sale
@@ -233,7 +255,8 @@ Deno.serve(async (req) => {
     canceled_items.sort(byTime);
     transferred_items.sort(byTime);
 
-    return new Response(JSON.stringify({
+    const partial = warnings.length > 0;
+    const payload: Record<string, unknown> = {
       closing_date,
       scope,
       canceled_sales,
@@ -244,7 +267,16 @@ Deno.serve(async (req) => {
         canceled_items: canceled_items.length,
         transferred_items: transferred_items.length,
       },
-    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    };
+    if (partial) {
+      payload.partial = true;
+      payload.warning = warnings.join(" ") + " Aguarde alguns segundos e clique em Atualizar.";
+    }
+
+    return new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return new Response(JSON.stringify({ error: msg || "Erro interno" }), {
