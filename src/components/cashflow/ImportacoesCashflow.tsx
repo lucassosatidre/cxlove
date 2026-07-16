@@ -174,6 +174,7 @@ export default function ImportacoesCashflow() {
 
   return (
     <div className="space-y-6">
+      <ImportarNFeCard />
       <ConectarBancoOpenFinance />
 
       <Card className="border-border/60">
