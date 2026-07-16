@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
 
     const client = buildMtlsClient();
     // Extrato + webhook: usamos escopos amplos suportados; se o Inter pedir só webhook.write, ele aceita.
-    const token = await getToken(client, 'extrato.read webhook.write');
+    const token = await getToken(client, 'webhook.write');
 
     const res = await fetch(`${INTER_BASE}/banking/v2/webhooks/${tipo}`, {
       method: 'PUT',
@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
       client,
     } as any);
     const txt = await res.text();
-    if (!res.ok) return json({ error: `Inter respondeu ${res.status}: ${txt}`, tipo, webhookUrl: WEBHOOK_URL }, 500);
+    if (!res.ok) return json({ error: `Inter respondeu ${res.status}: ${txt}`, tipo, webhookUrl: WEBHOOK_URL, inter_status: res.status }, 200);
 
     let parsed: any = null;
     try { parsed = txt ? JSON.parse(txt) : null; } catch { parsed = txt; }
