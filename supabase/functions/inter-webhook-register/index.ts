@@ -57,13 +57,12 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
     const body = await req.json().catch(() => ({}));
-    const tipo = String(body?.tipo ?? 'transacao').toLowerCase();
-    const ALLOWED = ['pix', 'boleto', 'ted', 'transacao'];
+    const tipo = String(body?.tipo ?? 'pix-pagamento').toLowerCase();
+    const ALLOWED = ['pix-pagamento', 'boleto-pagamento'];
     if (!ALLOWED.includes(tipo)) return json({ error: `tipo inválido (use ${ALLOWED.join('|')})` }, 400);
 
     const client = buildMtlsClient();
-    // Extrato + webhook: usamos escopos amplos suportados; se o Inter pedir só webhook.write, ele aceita.
-    const token = await getToken(client, 'webhook.write');
+    const token = await getToken(client, 'webhook-banking.write');
 
     const res = await fetch(`${INTER_BASE}/banking/v2/webhooks/${tipo}`, {
       method: 'PUT',
@@ -75,6 +74,11 @@ Deno.serve(async (req) => {
       body: JSON.stringify({ webhookUrl: WEBHOOK_URL }),
       client,
     } as any);
+
+    if (res.status === 204) {
+      return json({ ok: true, tipo, webhookUrl: WEBHOOK_URL });
+    }
+
     const txt = await res.text();
     if (!res.ok) return json({ error: `Inter respondeu ${res.status}: ${txt}`, tipo, webhookUrl: WEBHOOK_URL, inter_status: res.status }, 200);
 
