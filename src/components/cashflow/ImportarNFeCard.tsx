@@ -1,8 +1,10 @@
 // Card de importação de NF-e (XML/ZIP) que gera contas a pagar em cashflow_launches.
 
 import { useMemo, useRef, useState } from 'react';
-import { FileUp, Loader2, Upload } from 'lucide-react';
+import { FileUp, Loader2, Upload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,11 +55,35 @@ function fmtCNPJ(v: string) {
 
 export default function ImportarNFeCard() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [categoria, setCategoria] = useState<string>('Matéria Prima');
   const [errors, setErrors] = useState<string[]>([]);
+
+  async function handleSyncEspiao() {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-nfe-vigia');
+      if (error) throw error;
+      const inserted = (data as any)?.inserted ?? 0;
+      const skipped = (data as any)?.skipped ?? 0;
+      toast.success(`Sincronizado: ${inserted} novas contas a pagar, ${skipped} já existiam`);
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && String(q.queryKey[0] ?? '').startsWith('cashflow_lancamentos'),
+      });
+    } catch (e: any) {
+      console.error(e);
+      toast.error(`Erro na sincronização: ${e?.message || e}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+
+
 
   const totals = useMemo(() => {
     let total = 0, parcelas = 0;
@@ -175,6 +201,17 @@ export default function ImportarNFeCard() {
             Enquanto a integração com o TecnoSpeed não fica pronta, importe aqui os XMLs das NF-e.
           </AlertDescription>
         </Alert>
+
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-xs text-muted-foreground max-w-md">
+            Puxa automaticamente todas as notas de entrada da SEFAZ (via Maná), sem precisar subir XML.
+          </div>
+          <Button size="sm" onClick={handleSyncEspiao} disabled={syncing || importing || loading}>
+            {syncing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            Sincronizar automático (Espião)
+          </Button>
+        </div>
+
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="md:col-span-2 space-y-1">
