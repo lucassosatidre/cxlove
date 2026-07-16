@@ -215,7 +215,7 @@ function LancamentoDialog({
           };
           const { error } = await supabase.rpc('fin_upsert_override', {
             p_id_store: Number(row.ref_id),
-            p_patch: patch,
+            p_patch: patch as any,
           });
           if (error) throw error;
         } else {
