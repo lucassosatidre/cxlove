@@ -55,9 +55,33 @@ function fmtCNPJ(v: string) {
 
 export default function ImportarNFeCard() {
   const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [previews, setPreviews] = useState<Preview[]>([]);
+  const [categoria, setCategoria] = useState<string>('Matéria Prima');
+  const [errors, setErrors] = useState<string[]>([]);
+
+  async function handleSyncEspiao() {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-nfe-vigia');
+      if (error) throw error;
+      const inserted = (data as any)?.inserted ?? 0;
+      const skipped = (data as any)?.skipped ?? 0;
+      toast.success(`Sincronizado: ${inserted} novas contas a pagar, ${skipped} já existiam`);
+      queryClient.invalidateQueries({
+        predicate: (q) => Array.isArray(q.queryKey) && String(q.queryKey[0] ?? '').startsWith('cashflow_lancamentos'),
+      });
+    } catch (e: any) {
+      console.error(e);
+      toast.error(`Erro na sincronização: ${e?.message || e}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const [categoria, setCategoria] = useState<string>('Matéria Prima');
   const [errors, setErrors] = useState<string[]>([]);
 
