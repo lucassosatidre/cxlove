@@ -8,7 +8,12 @@ import { supabase } from '@/integrations/supabase/client';
 
 const WEBHOOK_URL = 'https://hvpmkkxvvjnefayrlcjy.supabase.co/functions/v1/inter-webhook';
 
-type Tipo = 'transacao' | 'pix' | 'boleto' | 'ted';
+type Tipo = 'pix-pagamento' | 'boleto-pagamento';
+
+const LABELS: Record<Tipo, string> = {
+  'pix-pagamento': 'Pix pagamento',
+  'boleto-pagamento': 'Boleto pagamento',
+};
 
 export default function InterWebhookCard() {
   const [loading, setLoading] = useState<Tipo | null>(null);
