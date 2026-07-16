@@ -1378,6 +1378,7 @@ export default function DeliveryReconciliation() {
       )}
 
       <SaiposCancellationsPanel closingDate={closingDate} scope="tele" />
+      <SaiposDiscountsPanel closingDate={closingDate} scope="tele" />
 
       {/* 6. Resumo de Pedidos */}
       <div className="border-b border-border bg-card">
