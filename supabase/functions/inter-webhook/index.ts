@@ -22,20 +22,25 @@ function toIsoDate(v: any): string | null {
 }
 
 async function processEvent(supabase: any, accountId: string, ev: any) {
-  const tipoOp = String(ev.tipoOperacao ?? '').toUpperCase();
   const rawValor = Number(ev.valor ?? ev.valorLancamento ?? 0);
   if (!isFinite(rawValor) || rawValor === 0) return { skipped: true, reason: 'valor inválido' };
-  const tx_date =
-    toIsoDate(ev.dataHora ?? ev.dataEntrada ?? ev.dataLancamento ?? ev.dataTransacao) ??
-    new Date().toISOString().slice(0, 10);
-  const description = String(ev.descricao ?? ev.tipoTransacao ?? ev.titulo ?? 'Movimentação Inter').trim();
-  const detail = ev.detalhes ? String(ev.detalhes).trim() : null;
+
+  const dh = String(ev.dataHoraMovimento ?? ev.dataHora ?? ev.dataEntrada ?? ev.dataLancamento ?? ev.dataTransacao ?? '');
+  const tx_date = toIsoDate(dh) ?? new Date().toISOString().slice(0, 10);
+
+  const tipoMov = String(ev.tipoMovimentacao ?? ev.tipoOperacao ?? '').toUpperCase();
+  const recebedor = ev.chave ?? ev.nomeRecebedor ?? ev.nome ?? ev.descricao ?? '';
+  const description = [tipoMov || 'Movimentação Inter', recebedor].filter(Boolean).join(' — ').trim();
+  const detail = ev.detalhes ? String(ev.detalhes).trim() : (ev.status ? String(ev.status) : null);
+
+  // PAGAMENTO / D = saída (negativo); RECEBIMENTO / C = entrada (positivo).
   let amount = Math.abs(rawValor);
-  if (tipoOp === 'D') amount = -amount;
-  else if (tipoOp !== 'C') amount = rawValor;
+  if (tipoMov === 'PAGAMENTO' || tipoMov === 'D' || tipoMov === 'DEBITO') amount = -amount;
+  else if (tipoMov === 'RECEBIMENTO' || tipoMov === 'C' || tipoMov === 'CREDITO') amount = Math.abs(amount);
+  else amount = rawValor;
 
   const external_id = String(
-    ev.idTransacao ?? ev.endToEnd ?? ev.codigoTransacao ?? ev.id ?? `${tx_date}-${rawValor}-${description}`,
+    ev.endToEnd ?? ev.codigoSolicitacao ?? ev.idTransacao ?? ev.codigoTransacao ?? ev.id ?? `${tx_date}-${rawValor}-${description}`,
   );
   const row_hash = `inter:${accountId}:${external_id}`;
 

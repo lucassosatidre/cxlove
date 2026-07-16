@@ -8,7 +8,12 @@ import { supabase } from '@/integrations/supabase/client';
 
 const WEBHOOK_URL = 'https://hvpmkkxvvjnefayrlcjy.supabase.co/functions/v1/inter-webhook';
 
-type Tipo = 'transacao' | 'pix' | 'boleto' | 'ted';
+type Tipo = 'pix-pagamento' | 'boleto-pagamento';
+
+const LABELS: Record<Tipo, string> = {
+  'pix-pagamento': 'Pix pagamento',
+  'boleto-pagamento': 'Boleto pagamento',
+};
 
 export default function InterWebhookCard() {
   const [loading, setLoading] = useState<Tipo | null>(null);
@@ -38,7 +43,7 @@ export default function InterWebhookCard() {
     setTimeout(() => setCopied(false), 1500);
   }
 
-  const tipos: Tipo[] = ['transacao', 'pix', 'boleto', 'ted'];
+  const tipos: Tipo[] = ['pix-pagamento', 'boleto-pagamento'];
 
   return (
     <Card className="border-l-4" style={{ borderLeftColor: '#FF6B00' }}>
@@ -71,7 +76,7 @@ export default function InterWebhookCard() {
                 ) : isActive ? (
                   <Check className="h-3 w-3 mr-1" />
                 ) : null}
-                {isActive ? `Ativado (${t})` : `Ativar ${t}`}
+                {isActive ? `Ativado (${LABELS[t]})` : `Ativar ${LABELS[t]}`}
               </Button>
             );
           })}
