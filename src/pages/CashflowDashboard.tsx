@@ -13,6 +13,7 @@ import DescontadoNaFonte from '@/components/cashflow/DescontadoNaFonte';
 import ExtratosPorConta from '@/components/cashflow/ExtratosPorConta';
 import ConferenciaSaiposBanco from '@/components/cashflow/ConferenciaSaiposBanco';
 import ContasAPagarSaipos from '@/components/cashflow/ContasAPagarSaipos';
+import LancamentosFinanceiros from '@/components/cashflow/LancamentosFinanceiros';
 
 export default function CashflowDashboard() {
   return (
