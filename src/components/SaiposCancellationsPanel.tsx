@@ -95,8 +95,29 @@ export function SaiposCancellationsPanel({ closingDate, scope }: Props) {
       const { data: resp, error: err } = await supabase.functions.invoke('saipos-cancellations', {
         body: { closing_date: closingDate, scope },
       });
-      if (err) throw err;
-      if ((resp as any)?.error) throw new Error((resp as any).error);
+      if (err) {
+        // Try to read real backend error from FunctionsHttpError context
+        let backendMsg: string | null = null;
+        try {
+          const ctx = (err as any)?.context;
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json();
+            if (body?.error) backendMsg = String(body.error);
+          }
+        } catch { /* ignore */ }
+        const raw = backendMsg || (err instanceof Error ? err.message : String(err));
+        if (/504|502|timeout|timed out|pool/i.test(raw)) {
+          throw new Error("O Saipos está instável no momento e demorou para responder. Já tentei algumas vezes automaticamente — aguarde alguns segundos e clique em 'Tentar de novo'.");
+        }
+        throw new Error(backendMsg || 'Não consegui carregar os cancelamentos agora. Tente de novo em alguns segundos.');
+      }
+      if ((resp as any)?.error) {
+        const raw = String((resp as any).error);
+        if (/504|502|timeout|timed out|pool/i.test(raw)) {
+          throw new Error("O Saipos está instável no momento e demorou para responder. Já tentei algumas vezes automaticamente — aguarde alguns segundos e clique em 'Tentar de novo'.");
+        }
+        throw new Error(raw);
+      }
       setData(resp as ApiResponse);
       setLoaded(true);
     } catch (e) {
