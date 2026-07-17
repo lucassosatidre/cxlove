@@ -27,6 +27,8 @@ export const FIXED_MACHINE_SERIALS = new Set([
   'S1F2-000158242610139',
   'S1F2-000158242609530',
   'S1F2-000158242610541',
+  'S1F2-000158252515175', // 2 maquinonas novas do salão (jul/2026)
+  'S1F2-000158252514128', // 2 maquinonas novas do salão (jul/2026)
 ]);
 
 const EXCLUDED_SERIALS = FIXED_MACHINE_SERIALS;
