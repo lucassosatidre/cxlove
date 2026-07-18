@@ -139,7 +139,7 @@ export function parseCardTransactionFile(file: File): Promise<{ transactions: Pa
               if (name.includes('valor liquido')) colMap['net_amount'] = idx;
               if (name.includes('serial')) colMap['machine_serial'] = idx;
               if (name.includes('id da transacao')) colMap['transaction_id'] = idx;
-              if (name.includes('cashback') || name.includes('servico de crm')) colMap['cashback_fee'] = idx;
+              if (colMap['cashback_fee'] == null && name.includes('cashback')) colMap['cashback_fee'] = idx;
             });
             break;
           }
@@ -260,7 +260,7 @@ export function parseSalonCardTransactionFile(file: File): Promise<{ transaction
               if (n.includes('valor liquido')) colMap['net_amount'] = idx;
               if (n.includes('serial')) colMap['machine_serial'] = idx;
               if (n.includes('id da transacao')) colMap['transaction_id'] = idx;
-              if (n.includes('cashback') || n.includes('servico de crm')) colMap['cashback_fee'] = idx;
+              if (colMap['cashback_fee'] == null && n.includes('cashback')) colMap['cashback_fee'] = idx;
             });
             break;
           }
@@ -357,7 +357,7 @@ export function parseAllCardTransactions(file: File): Promise<{
               if (n.includes('valor liquido')) colMap['net_amount'] = idx;
               if (n.includes('serial')) colMap['machine_serial'] = idx;
               if (n.includes('id da transacao')) colMap['transaction_id'] = idx;
-              if (n.includes('cashback') || n.includes('servico de crm')) colMap['cashback_fee'] = idx;
+              if (colMap['cashback_fee'] == null && n.includes('cashback')) colMap['cashback_fee'] = idx;
             });
             break;
           }
