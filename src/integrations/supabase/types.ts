@@ -2293,6 +2293,102 @@ export type Database = {
           },
         ]
       }
+      ctrl_contas_pagar: {
+        Row: {
+          amount: number
+          category: string | null
+          cnpj: string | null
+          conta: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          emissao: string | null
+          fornecedor: string | null
+          id: string
+          nota_chave: string | null
+          numero_nota: string | null
+          pagamento: string | null
+          paid: boolean
+          parcela: string | null
+          payment_method: string | null
+          source: string
+          updated_at: string
+          vencimento: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          cnpj?: string | null
+          conta?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          emissao?: string | null
+          fornecedor?: string | null
+          id?: string
+          nota_chave?: string | null
+          numero_nota?: string | null
+          pagamento?: string | null
+          paid?: boolean
+          parcela?: string | null
+          payment_method?: string | null
+          source?: string
+          updated_at?: string
+          vencimento?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          cnpj?: string | null
+          conta?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          emissao?: string | null
+          fornecedor?: string | null
+          id?: string
+          nota_chave?: string | null
+          numero_nota?: string | null
+          pagamento?: string | null
+          paid?: boolean
+          parcela?: string | null
+          payment_method?: string | null
+          source?: string
+          updated_at?: string
+          vencimento?: string | null
+        }
+        Relationships: []
+      }
+      ctrl_nota_status: {
+        Row: {
+          chave: string
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          status: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          chave: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          status?: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          chave?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          status?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       daily_closings: {
         Row: {
           closing_date: string
@@ -2845,11 +2941,13 @@ export type Database = {
           access_key: string | null
           created_at: string
           dest_cnpj: string | null
+          duplicatas: Json | null
           emission_date: string | null
           emit_cnpj: string | null
           emit_name: string | null
           id: string
           numero: string | null
+          pag_method: string | null
           raw_xml: string | null
           serie: string | null
           source: string
@@ -2859,11 +2957,13 @@ export type Database = {
           access_key?: string | null
           created_at?: string
           dest_cnpj?: string | null
+          duplicatas?: Json | null
           emission_date?: string | null
           emit_cnpj?: string | null
           emit_name?: string | null
           id?: string
           numero?: string | null
+          pag_method?: string | null
           raw_xml?: string | null
           serie?: string | null
           source?: string
@@ -2873,11 +2973,13 @@ export type Database = {
           access_key?: string | null
           created_at?: string
           dest_cnpj?: string | null
+          duplicatas?: Json | null
           emission_date?: string | null
           emit_cnpj?: string | null
           emit_name?: string | null
           id?: string
           numero?: string | null
+          pag_method?: string | null
           raw_xml?: string | null
           serie?: string | null
           source?: string
