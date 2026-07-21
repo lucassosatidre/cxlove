@@ -25,10 +25,22 @@ interface ParsedItem {
   u_com: string; q_com: number; v_un_com: number;
   u_trib: string; q_trib: number; v_un_trib: number; v_prod: number; v_desc: number; v_encargos: number;
 }
+interface ParsedDup { nDup: string; dVenc: string | null; vDup: number }
 interface Parsed {
   access_key: string; numero: string; serie: string;
   emit_cnpj: string; emit_name: string; dest_cnpj: string;
   emission_date: string | null; total_value: number; items: ParsedItem[]; raw_xml: string;
+  duplicatas: ParsedDup[]; pag_method: string;
+}
+
+const TPAG_MAP: Record<string, string> = {
+  '01': 'Dinheiro', '02': 'Cheque', '03': 'Cartão de Crédito', '04': 'Cartão de Débito',
+  '15': 'Boleto', '17': 'Pix', '90': 'Sem pagamento',
+};
+function toISODate(v: string): string | null {
+  if (!v) return null;
+  const m = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 }
 
 function parseNfeXml(xmlText: string): Parsed | null {
@@ -63,6 +75,23 @@ function parseNfeXml(xmlText: string): Parsed | null {
     });
   }
 
+  // Duplicatas (parcelas) e método de pagamento — usados pela Controladoria Financeira.
+  const cobr = infNFe.getElementsByTagName('cobr')[0] ?? null;
+  const dupEls = cobr ? cobr.getElementsByTagName('dup') : [];
+  const duplicatas: ParsedDup[] = [];
+  for (let i = 0; i < dupEls.length; i++) {
+    const d = dupEls[i];
+    duplicatas.push({
+      nDup: T(d, 'nDup') || String(i + 1),
+      dVenc: toISODate(T(d, 'dVenc')),
+      vDup: N(d, 'vDup'),
+    });
+  }
+  const pagEl = infNFe.getElementsByTagName('pag')[0] ?? null;
+  const detPag = pagEl?.getElementsByTagName('detPag')[0] ?? null;
+  const tPag = T(detPag, 'tPag');
+  const pag_method = TPAG_MAP[tPag] ?? 'Boleto';
+
   return {
     access_key,
     numero: T(ide, 'nNF'), serie: T(ide, 'serie'),
@@ -70,6 +99,7 @@ function parseNfeXml(xmlText: string): Parsed | null {
     dest_cnpj: onlyDigits(T(dest, 'CNPJ')),
     emission_date, total_value: N(icmsTot, 'vNF'),
     items, raw_xml: xmlText,
+    duplicatas, pag_method,
   };
 }
 
@@ -113,6 +143,8 @@ Deno.serve(async (req) => {
       total_value: parsed.total_value,
       source,
       raw_xml: parsed.raw_xml,
+      duplicatas: parsed.duplicatas.length > 0 ? parsed.duplicatas : null,
+      pag_method: parsed.pag_method,
     }).select('id').single();
     if (insErr || !ins) { summary.errors++; summary.errorDetails.push(`insert ${parsed.access_key}: ${insErr?.message}`); return; }
 

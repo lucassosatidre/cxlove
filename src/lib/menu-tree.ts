@@ -1,7 +1,9 @@
 import {
   LayoutDashboard, Phone, Utensils, Bike, CreditCard, Search, FileSpreadsheet,
   Receipt, Ticket, ShoppingBag, FileBarChart, Wallet, Sparkles, ShieldCheck, Settings,
+  ClipboardList,
 } from "lucide-react";
+
 
 export interface MenuItem {
   label: string;
@@ -36,6 +38,7 @@ export const allMenuItems: MenuItem[] = [
     icon: Wallet,
     children: [
       { label: "Caixa", icon: Wallet, path: "/admin/fluxo-caixa", menuKey: "fluxo_caixa" },
+      { label: "Controladoria Financeira", icon: ClipboardList, path: "/controladoria", menuKey: "controladoria" },
       { label: "Notas de Serviços", icon: Receipt, path: "/admin/notas-servicos", menuKey: "financeiro.nfse" },
       {
         label: "Taxas",
