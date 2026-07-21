@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import JSZip from 'jszip';
-import { Upload, FileText, Eye, Trash2, Loader2, RefreshCw } from 'lucide-react';
+import { Upload, FileText, Eye, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { supabase } from '@/integrations/supabase/client';
@@ -79,7 +79,6 @@ async function extractXmls(files: File[]): Promise<string[]> {
 export default function NotasEntrada() {
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [syncing, setSyncing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [from, setFrom] = useState<string>(firstOfMonthISO());
   const [to, setTo] = useState<string>(todayISO());
@@ -126,22 +125,6 @@ export default function NotasEntrada() {
     },
   });
 
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('espiao-sync-entrada', { body: { days: 30 } });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const s: any = data ?? {};
-      toast.success(`Espião: ${s.imported ?? 0} nova(s), ${s.skipped ?? 0} já tinha` + (s.errors ? `, ${s.errors} erro(s)` : ''));
-      qc.invalidateQueries({ queryKey: ['nfe_entrada'] });
-    } catch (e: any) {
-      toast.error(`Falha na sincronização: ${e?.message || e}`);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   async function handleUpload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setImporting(true);
@@ -179,7 +162,8 @@ export default function NotasEntrada() {
         <div>
           <CardTitle>Notas de Entrada</CardTitle>
           <p className="text-sm text-muted-foreground mt-1">
-            NF-e de entrada puxadas direto do Espião (SEFAZ). Também importa XML manual.
+            NF-e de entrada capturadas na SEFAZ (Espião). Entram sozinhas várias vezes ao dia.
+            Para adicionar uma nota na hora, importe o XML.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -191,10 +175,6 @@ export default function NotasEntrada() {
             className="hidden"
             onChange={(e) => handleUpload(e.target.files)}
           />
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing || importing}>
-            {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-            Sincronizar com Espião
-          </Button>
           <Button size="sm" onClick={() => inputRef.current?.click()} disabled={importing}>
             {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
             Importar XML
@@ -240,7 +220,7 @@ export default function NotasEntrada() {
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <FileText className="h-14 w-14 text-muted-foreground mb-3" />
             <h3 className="text-base font-semibold">Nenhuma nota de entrada no período</h3>
-            <p className="text-sm text-muted-foreground">Clique em "Sincronizar com Espião" para puxar da SEFAZ.</p>
+            <p className="text-sm text-muted-foreground">As notas entram sozinhas ao longo do dia, ou use "Importar XML".</p>
           </div>
         ) : (
           <div className="overflow-x-auto rounded-md border border-border">
