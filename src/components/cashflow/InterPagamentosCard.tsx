@@ -19,6 +19,20 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+async function parseFunctionError(error: any): Promise<Error> {
+  let msg = error?.message ?? 'Erro';
+  try {
+    const ctx = error?.context;
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await ctx.json();
+      if (body?.error) msg = body.error;
+    }
+  } catch {
+    /* mantém msg genérica */
+  }
+  return new Error(msg);
+}
+
 export default function InterPagamentosCard() {
   // Boleto
   const [codigoBarras, setCodigoBarras] = useState('');
