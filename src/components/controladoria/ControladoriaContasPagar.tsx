@@ -754,11 +754,18 @@ export default function ControladoriaContasPagar() {
               Escolha como aplicar as alterações. Ao aplicar a todas as parcelas, apenas Categoria, Método, Conta e Fornecedor são propagados — valor, vencimento e pagamento continuam individuais.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel onClick={() => resolveScope('cancel')}>Cancelar</AlertDialogCancel>
-            <Button variant="outline" onClick={() => resolveScope('single')}>Aplicar só a esta parcela</Button>
-            <AlertDialogAction onClick={() => resolveScope('all')}>Aplicar a todas as parcelas</AlertDialogAction>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:flex-col sm:space-x-0">
+            <AlertDialogAction className="w-full" onClick={() => resolveScope('all')}>
+              Aplicar a todas as parcelas
+            </AlertDialogAction>
+            <Button variant="outline" className="w-full" onClick={() => resolveScope('single')}>
+              Aplicar só a esta parcela
+            </Button>
+            <AlertDialogCancel className="w-full mt-0" onClick={() => resolveScope('cancel')}>
+              Cancelar
+            </AlertDialogCancel>
           </AlertDialogFooter>
+
         </AlertDialogContent>
       </AlertDialog>
 
