@@ -1,6 +1,6 @@
 // Contas a pagar da Controladoria — lê e grava direto em ctrl_contas_pagar.
 // Mesma experiência de LancamentosFinanceiros, sem Saipos.
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
