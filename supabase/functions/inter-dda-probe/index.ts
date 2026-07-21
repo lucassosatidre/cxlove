@@ -1,11 +1,12 @@
 // @ts-nocheck
-// inter-dda-probe — TESTE temporário: descobre se a API Inter expõe DDA (escopos + endpoints).
+// inter-dda-probe — TESTE temporário: DDA na API Inter (endpoints com 1 token + escopos espaçados).
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 const INTER_BASE = 'https://cdpj.partners.bancointer.com.br';
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 function b64ToText(b64: string): string {
   const bin = atob((b64 || '').replace(/\s+/g, ''));
   const bytes = new Uint8Array(bin.length);
@@ -38,28 +39,13 @@ async function tokenFor(client: any, scope: string) {
 }
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
-  const out: any = { scopes: [], grantedScopes: [], endpoints: [] };
+  const out: any = { baseToken: null, endpoints: [], scopes: [] };
   try {
     const client = buildClient();
-    const scopes = [
-      'pagamento-boleto.read', 'pagamento-boleto.write',
-      'pagamento-dda.read', 'pagamento-dda.write',
-      'dda.read', 'consulta-dda.read', 'boleto-pagamento.read',
-      'pagamento-lote.read', 'agenda-pagamento.read', 'pagamento.read',
-      'boletos-pagamento.read', 'pagamentos.read',
-    ];
-    for (const s of scopes) {
-      const r = await tokenFor(client, s);
-      out.scopes.push({ scope: s, ok: r.ok, status: r.status, body: r.ok ? '(ok)' : r.body });
-      if (r.ok) out.grantedScopes.push(s);
-    }
-    let token: string | null = null;
-    if (out.grantedScopes.length > 0) {
-      const r = await tokenFor(client, out.grantedScopes.join(' '));
-      token = r.token;
-      out.combinedTokenStatus = r.status;
-    }
-    if (token) {
+    // 1) UM token válido conhecido, reutilizado para todos os endpoints
+    const base = await tokenFor(client, 'pagamento-boleto.read pagamento-boleto.write');
+    out.baseToken = { ok: base.ok, status: base.status, body: base.ok ? '(ok)' : base.body };
+    if (base.token) {
       const today = new Date().toISOString().slice(0, 10);
       const d = new Date(); d.setMonth(d.getMonth() - 1);
       const from = d.toISOString().slice(0, 10);
@@ -76,12 +62,13 @@ Deno.serve(async (req) => {
         `/banking/v2/pagamento/dda?dataInicial=${from}&dataFinal=${today}`,
         `/banking/v2/dda?dataInicial=${from}&dataFinal=${today}`,
         '/banking/v3/pagamento',
+        '/banking/v2/pagamento/buscar',
       ];
       for (const ep of eps) {
         try {
           const r = await fetch(`${INTER_BASE}${ep}`, {
             method: 'GET',
-            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+            headers: { Authorization: `Bearer ${base.token}`, Accept: 'application/json' },
             client,
           } as any);
           const t = await r.text();
@@ -89,7 +76,15 @@ Deno.serve(async (req) => {
         } catch (e: any) {
           out.endpoints.push({ ep, error: String(e?.message ?? e).slice(0, 200) });
         }
+        await sleep(400);
       }
+    }
+    // 2) escopos DDA candidatos, ESPAÇADOS (evita 429)
+    const ddaScopes = ['pagamento-dda.read', 'dda.read', 'boleto-pagamento.read', 'agenda-pagamento.read', 'consulta-dda.read'];
+    for (const s of ddaScopes) {
+      await sleep(3000);
+      const r = await tokenFor(client, s);
+      out.scopes.push({ scope: s, ok: r.ok, status: r.status, body: r.ok ? '(ok)' : r.body });
     }
     return new Response(JSON.stringify(out, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (e: any) {
