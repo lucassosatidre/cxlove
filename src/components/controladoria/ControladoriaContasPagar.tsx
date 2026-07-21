@@ -466,21 +466,9 @@ export default function ControladoriaContasPagar() {
         if (error) throw error;
       }
 
-      // Se a nota não tem mais parcelas, reverter status para pendente
-      if (chave) {
-        const { count } = await (supabase as any)
-          .from('ctrl_contas_pagar')
-          .select('id', { count: 'exact', head: true })
-          .eq('nota_chave', chave);
-        if (!count || Number(count) === 0) {
-          await (supabase as any).from('ctrl_nota_status').upsert({
-            chave,
-            status: 'pendente',
-            handled_by: null,
-            handled_at: null,
-          }, { onConflict: 'chave' });
-        }
-      }
+      // Status da nota é derivado da presença de parcelas em ctrl_contas_pagar
+      // (ver ControladoriaNotas). Não precisamos mais escrever em ctrl_nota_status aqui.
+
       toast.success(mode === 'all' ? 'Todas as parcelas apagadas' : 'Parcela apagada');
       setDeleteRow(null);
       refetch();
