@@ -19,7 +19,6 @@ import UploadCashflowCard, { type ParseFileInput, type ParseFileResult } from '.
 import ConectarBancoOpenFinance from './ConectarBancoOpenFinance';
 import InterWebhookCard from './InterWebhookCard';
 import ExtratoInterCard from './ExtratoInterCard';
-import InterPagamentosCard from './InterPagamentosCard';
 import ImportarNFeCard from './ImportarNFeCard';
 import {
   parseBB, parseCresol, parseC6, parseSicredi, parseIfoodConta, parseSaipos,
@@ -222,7 +221,6 @@ export default function ImportacoesCashflow() {
 
       <InterWebhookCard />
       <ExtratoInterCard />
-      <InterPagamentosCard />
 
       <Card className="border-border/60">
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
