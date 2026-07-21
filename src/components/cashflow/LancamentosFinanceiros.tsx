@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Pencil, Plus, X } from 'lucide-react';
+import { CalendarIcon, Check, Loader2, Pencil, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { supabase } from '@/integrations/supabase/client';
@@ -27,12 +27,18 @@ import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { TagCombobox } from './TagCombobox';
 
 type Fonte = 'saipos' | 'manual' | 'nfe';
 type Tipo = 'saida' | 'entrada';
 type DateKind = 'emissao' | 'vencimento' | 'pagamento';
 type StatusFilter = 'todas' | 'pagas' | 'nao_pagas';
 type TipoFilter = 'saidas' | 'entradas' | 'todos';
+type OrderDir = 'asc' | 'desc';
+
+type OptionKind = 'categoria' | 'metodo' | 'conta' | 'fornecedor' | 'descricao';
+type OptionsMap = Record<OptionKind, string[]>;
+const EMPTY_OPTIONS: OptionsMap = { categoria: [], metodo: [], conta: [], fornecedor: [], descricao: [] };
 
 type Row = {
   fonte: Fonte;
@@ -63,6 +69,49 @@ const METODOS = [
   'Transferência',
   'Não informado',
 ];
+
+// Paleta de cores das tags (categoria) — determinística pelo texto.
+const TAG_PALETTE = [
+  'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300',
+  'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
+  'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  'bg-purple-100 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+  'bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
+  'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300',
+  'bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300',
+  'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300',
+];
+function tagColorClass(s: string): string {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return TAG_PALETTE[h % TAG_PALETTE.length];
+}
+
+// Dedup case-insensitive mantendo o primeiro, ordenado alfabeticamente.
+function uniqSort(list: string[]): string[] {
+  const seen = new Map<string, string>();
+  for (const v of list) {
+    const t = (v ?? '').trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (!seen.has(k)) seen.set(k, t);
+  }
+  return Array.from(seen.values()).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+// Dedup mantendo a ordem original (para métodos: baseline fixa + extras).
+function uniqKeepOrder(list: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of list) {
+    const t = (v ?? '').trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(t);
+  }
+  return out;
+}
 
 function fmtBRL(v: number | null | undefined) {
   const n = Number(v ?? 0);
@@ -145,27 +194,14 @@ function DatePickerField({
 
 // ---------------- Edit / Create Dialog ----------------
 
-type EditPatch = Partial<{
-  emissao: string | null;
-  vencimento: string | null;
-  pagamento: string | null;
-  paid: boolean;
-  amount: number;
-  category: string | null;
-  payment_method: string | null;
-  conta: string | null;
-  fornecedor: string | null;
-  descricao: string | null;
-}>;
-
 function LancamentoDialog({
-  open, onOpenChange, row, categorias, bancos, onSaved,
+  open, onOpenChange, row, options, onAddOption, onSaved,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   row: Row | null; // null = novo manual
-  categorias: string[];
-  bancos: string[];
+  options: OptionsMap;
+  onAddOption: (kind: OptionKind, value: string) => Promise<void>;
   onSaved: () => void;
 }) {
   const isNew = row === null;
@@ -344,44 +380,53 @@ function LancamentoDialog({
 
           <div>
             <Label className="text-xs">Categoria</Label>
-            <Input
-              list="lf-categorias"
+            <TagCombobox
               value={categoria}
-              onChange={(e) => setCategoria(e.target.value)}
-              placeholder="Digite ou escolha"
+              onChange={setCategoria}
+              options={options.categoria}
+              onCreate={(v) => onAddOption('categoria', v)}
+              placeholder="Escolher ou criar"
             />
-            <datalist id="lf-categorias">
-              {categorias.map((c) => <option key={c} value={c} />)}
-            </datalist>
           </div>
           <div>
             <Label className="text-xs">Método</Label>
-            <Select value={metodo || undefined} onValueChange={setMetodo}>
-              <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
-              <SelectContent>
-                {METODOS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <TagCombobox
+              value={metodo}
+              onChange={setMetodo}
+              options={options.metodo}
+              onCreate={(v) => onAddOption('metodo', v)}
+              placeholder="Escolher ou criar"
+            />
           </div>
           <div>
             <Label className="text-xs">Conta / Banco</Label>
-            <Input
-              list="lf-bancos"
+            <TagCombobox
               value={conta}
-              onChange={(e) => setConta(e.target.value)}
-              placeholder="Digite ou escolha"
+              onChange={setConta}
+              options={options.conta}
+              onCreate={(v) => onAddOption('conta', v)}
+              placeholder="Escolher ou criar"
             />
-            <datalist id="lf-bancos">
-              {bancos.map((b) => <option key={b} value={b} />)}
-            </datalist>
           </div>
           <div>
             <Label className="text-xs">Fornecedor</Label>
-            <Input value={fornecedor} onChange={(e) => setFornecedor(e.target.value)} />
+            <TagCombobox
+              value={fornecedor}
+              onChange={setFornecedor}
+              options={options.fornecedor}
+              onCreate={(v) => onAddOption('fornecedor', v)}
+              placeholder="Escolher ou criar"
+            />
           </div>
           <div className="md:col-span-2">
             <Label className="text-xs">Descrição</Label>
-            <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
+            <TagCombobox
+              value={descricao}
+              onChange={setDescricao}
+              options={options.descricao}
+              onCreate={(v) => onAddOption('descricao', v)}
+              placeholder="Escolher ou criar"
+            />
           </div>
 
           <div className="md:col-span-2 flex items-center gap-3">
@@ -412,20 +457,23 @@ export default function LancamentosFinanceiros() {
   const [metodo, setMetodo] = useState<string>('__all');
   const [categoria, setCategoria] = useState<string>('__all');
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>('saidas');
+  const [orderBy, setOrderBy] = useState<DateKind>('vencimento');
+  const [orderDir, setOrderDir] = useState<OrderDir>('asc');
   const [busca, setBusca] = useState('');
 
   const [editRow, setEditRow] = useState<Row | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
+  const [payingKey, setPayingKey] = useState<string | null>(null);
 
   // Fetch com filtros server-side
   const query = useQuery({
-    queryKey: ['cashflow_lancamentos', { dateKind, dateStart, dateEnd, status, conta, metodo, categoria, tipoFilter }],
+    queryKey: ['cashflow_lancamentos', { dateKind, dateStart, dateEnd, status, conta, metodo, categoria, tipoFilter, orderBy, orderDir }],
     queryFn: async () => {
       let q = (supabase as any)
         .from('cashflow_lancamentos')
         .select('fonte,ref_id,emissao,vencimento,pagamento,paid,amount,categoria,metodo,banco,fornecedor,descricao,numero_nota,tipo,competencia_mes')
-        .order(dateKind, { ascending: true, nullsFirst: false })
+        .order(orderBy, { ascending: orderDir === 'asc', nullsFirst: false })
         .limit(5000);
 
       if (dateStart) q = q.gte(dateKind, dateStart);
@@ -451,16 +499,49 @@ export default function LancamentosFinanceiros() {
       since.setMonth(since.getMonth() - 12);
       const { data, error } = await (supabase as any)
         .from('cashflow_lancamentos')
-        .select('banco,categoria')
+        .select('banco,categoria,fornecedor')
         .gte('emissao', toISO(since))
         .limit(20000);
       if (error) throw error;
-      const bancos = Array.from(new Set(((data ?? []) as any[]).map(r => r.banco).filter(Boolean))).sort() as string[];
-      const categorias = Array.from(new Set(((data ?? []) as any[]).map(r => r.categoria).filter(Boolean))).sort() as string[];
-      return { bancos, categorias };
+      const bancos = uniqSort(((data ?? []) as any[]).map(r => r.banco).filter(Boolean));
+      const categorias = uniqSort(((data ?? []) as any[]).map(r => r.categoria).filter(Boolean));
+      const fornecedores = uniqSort(((data ?? []) as any[]).map(r => r.fornecedor).filter(Boolean));
+      return { bancos, categorias, fornecedores };
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  // Opções/tags gerenciáveis (criadas pelo usuário) — persistem mesmo sem lançamento
+  const optionsQuery = useQuery({
+    queryKey: ['cashflow_options'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('cashflow_options')
+        .select('kind,value')
+        .order('value');
+      if (error) throw error;
+      const grouped: OptionsMap = { categoria: [], metodo: [], conta: [], fornecedor: [], descricao: [] };
+      for (const r of (data ?? []) as { kind: OptionKind; value: string }[]) {
+        if (grouped[r.kind]) grouped[r.kind].push(r.value);
+      }
+      return grouped;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  async function addOption(kind: OptionKind, value: string) {
+    const v = value.trim();
+    if (!v) return;
+    const { data: userRes } = await supabase.auth.getUser();
+    const { error } = await (supabase as any)
+      .from('cashflow_options')
+      .insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
+    if (error && !/duplicate|unique/i.test(error.message ?? '')) {
+      toast.error(`Erro ao criar opção: ${error.message}`);
+      throw error;
+    }
+    await qc.invalidateQueries({ queryKey: ['cashflow_options'] });
+  }
 
   const rows = useMemo(() => {
     const all = query.data ?? [];
@@ -487,6 +568,34 @@ export default function LancamentosFinanceiros() {
     return !r.paid && r.vencimento && r.vencimento < hojeISO;
   }
 
+  async function markPaid(r: Row) {
+    const key = `${r.fonte}:${r.ref_id}`;
+    setPayingKey(key);
+    try {
+      const pgto = r.pagamento ?? todayISO();
+      if (r.fonte === 'saipos') {
+        const { error } = await supabase.rpc('fin_upsert_override', {
+          p_id_store: Number(r.ref_id),
+          p_patch: { paid: true, pagamento: pgto } as any,
+        });
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('cashflow_launches')
+          .update({ paid: true, pagamento: pgto })
+          .eq('id', r.ref_id);
+        if (error) throw error;
+      }
+      toast.success('Marcado como pago');
+      refetch();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao marcar pago: ${err?.message || err}`);
+    } finally {
+      setPayingKey(null);
+    }
+  }
+
   function clearFilters() {
     setDateKind('vencimento');
     setDateStart(firstOfMonth());
@@ -496,6 +605,8 @@ export default function LancamentosFinanceiros() {
     setMetodo('__all');
     setCategoria('__all');
     setTipoFilter('saidas');
+    setOrderBy('vencimento');
+    setOrderDir('asc');
     setBusca('');
   }
 
@@ -504,8 +615,33 @@ export default function LancamentosFinanceiros() {
     qc.invalidateQueries({ queryKey: ['cashflow_lancamentos_distincts'] });
   }
 
-  const bancos = distincts.data?.bancos ?? [];
-  const categorias = distincts.data?.categorias ?? [];
+  // Listas mescladas: dados existentes + opções criadas pelo usuário
+  const dbOpts = optionsQuery.data ?? EMPTY_OPTIONS;
+  const categoriasAll = useMemo(
+    () => uniqSort([...(distincts.data?.categorias ?? []), ...dbOpts.categoria]),
+    [distincts.data?.categorias, dbOpts.categoria],
+  );
+  const contasAll = useMemo(
+    () => uniqSort([...(distincts.data?.bancos ?? []), ...dbOpts.conta]),
+    [distincts.data?.bancos, dbOpts.conta],
+  );
+  const metodosAll = useMemo(
+    () => uniqKeepOrder([...METODOS, ...dbOpts.metodo]),
+    [dbOpts.metodo],
+  );
+  const fornecedoresAll = useMemo(
+    () => uniqSort([...(distincts.data?.fornecedores ?? []), ...dbOpts.fornecedor]),
+    [distincts.data?.fornecedores, dbOpts.fornecedor],
+  );
+  const descricoesAll = useMemo(() => uniqSort([...dbOpts.descricao]), [dbOpts.descricao]);
+
+  const optionsMap: OptionsMap = useMemo(() => ({
+    categoria: categoriasAll,
+    metodo: metodosAll,
+    conta: contasAll,
+    fornecedor: fornecedoresAll,
+    descricao: descricoesAll,
+  }), [categoriasAll, metodosAll, contasAll, fornecedoresAll, descricoesAll]);
 
   return (
     <Card>
@@ -530,7 +666,7 @@ export default function LancamentosFinanceiros() {
         {/* Filtros */}
         <div className="grid gap-3 md:grid-cols-4">
           <div>
-            <Label className="text-xs">Tipo de data</Label>
+            <Label className="text-xs">Tipo de data (filtro)</Label>
             <Select value={dateKind} onValueChange={(v) => setDateKind(v as DateKind)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -566,7 +702,7 @@ export default function LancamentosFinanceiros() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all">Todas</SelectItem>
-                {bancos.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                {contasAll.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -576,7 +712,7 @@ export default function LancamentosFinanceiros() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all">Todos</SelectItem>
-                {METODOS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                {metodosAll.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -586,7 +722,7 @@ export default function LancamentosFinanceiros() {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all">Todas</SelectItem>
-                {categorias.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {categoriasAll.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -602,7 +738,28 @@ export default function LancamentosFinanceiros() {
             </Select>
           </div>
 
-          <div className="md:col-span-3">
+          <div>
+            <Label className="text-xs">Ordenar por</Label>
+            <Select value={orderBy} onValueChange={(v) => setOrderBy(v as DateKind)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="emissao">Emissão</SelectItem>
+                <SelectItem value="vencimento">Vencimento</SelectItem>
+                <SelectItem value="pagamento">Pagamento</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Ordem</Label>
+            <Select value={orderDir} onValueChange={(v) => setOrderDir(v as OrderDir)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="asc">Crescente (mais antigo primeiro)</SelectItem>
+                <SelectItem value="desc">Decrescente (mais recente primeiro)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="md:col-span-1">
             <Label className="text-xs">Busca (fornecedor ou descrição)</Label>
             <Input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar…" />
           </div>
@@ -635,17 +792,17 @@ export default function LancamentosFinanceiros() {
 
         {/* Tabela */}
         <div className="overflow-x-auto rounded-md border border-border">
-          <Table>
+          <Table className="w-full">
             <TableHeader>
               <TableRow>
-                <TableHead>Emissão</TableHead>
-                <TableHead>Vencimento</TableHead>
-                <TableHead>Pagamento</TableHead>
-                <TableHead>Fornecedor / Descrição</TableHead>
+                <TableHead className="whitespace-nowrap">Emissão</TableHead>
+                <TableHead className="whitespace-nowrap">Vencimento</TableHead>
+                <TableHead className="whitespace-nowrap">Pagamento</TableHead>
+                <TableHead className="min-w-[220px]">Fornecedor / Descrição</TableHead>
                 <TableHead>Categoria</TableHead>
                 <TableHead>Método</TableHead>
                 <TableHead>Banco</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Valor</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead />
               </TableRow>
@@ -658,35 +815,53 @@ export default function LancamentosFinanceiros() {
               ) : rows.map((r) => {
                 const vencida = isVencida(r);
                 const isSaida = r.tipo === 'saida';
+                const key = `${r.fonte}:${r.ref_id}`;
                 return (
                   <TableRow
-                    key={`${r.fonte}:${r.ref_id}`}
+                    key={key}
                     className={cn(vencida && 'bg-destructive/5 hover:bg-destructive/10')}
                   >
-                    <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.emissao)}</TableCell>
-                    <TableCell className={cn('text-xs whitespace-nowrap', vencida && 'text-destructive font-medium')}>
+                    <TableCell className="text-xs whitespace-nowrap align-top">{fmtDate(r.emissao)}</TableCell>
+                    <TableCell className={cn('text-xs whitespace-nowrap align-top', vencida && 'text-destructive font-medium')}>
                       {fmtDate(r.vencimento)}
                     </TableCell>
-                    <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.pagamento)}</TableCell>
-                    <TableCell className="text-sm max-w-[280px]">
-                      <div className="truncate" title={[r.fornecedor, r.descricao].filter(Boolean).join(' — ')}>
+                    <TableCell className="text-xs whitespace-nowrap align-top">{fmtDate(r.pagamento)}</TableCell>
+                    <TableCell className="text-sm align-top">
+                      <div className="whitespace-normal break-words">
                         {fmtLancamentoLinha(r)}
                       </div>
                     </TableCell>
-                    <TableCell className="text-xs">{r.categoria || '—'}</TableCell>
-                    <TableCell className="text-xs">{r.metodo || '—'}</TableCell>
-                    <TableCell className="text-xs">{r.banco || '—'}</TableCell>
-                    <TableCell className={cn('text-right font-mono text-sm whitespace-nowrap', isSaida && 'text-destructive')}>
+                    <TableCell className="align-top">
+                      {r.categoria ? (
+                        <span className={cn('inline-block rounded px-1.5 py-0.5 text-[11px] font-medium whitespace-normal break-words', tagColorClass(r.categoria))}>
+                          {r.categoria}
+                        </span>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-xs align-top whitespace-normal break-words">{r.metodo || '—'}</TableCell>
+                    <TableCell className="text-xs align-top whitespace-normal break-words">{r.banco || '—'}</TableCell>
+                    <TableCell className={cn('text-right font-mono text-sm whitespace-nowrap align-top', isSaida && 'text-destructive')}>
                       {isSaida ? '- ' : ''}{fmtBRL(Math.abs(Number(r.amount ?? 0)))}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top">
                       {r.paid ? (
                         <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white">Pago</Badge>
                       ) : (
-                        <Badge variant="secondary">Em aberto</Badge>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs border-emerald-600/40 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10 whitespace-nowrap"
+                          onClick={() => markPaid(r)}
+                          disabled={payingKey === key}
+                          title="Marcar como pago (hoje)"
+                        >
+                          {payingKey === key
+                            ? <Loader2 className="h-3 w-3 animate-spin" />
+                            : <><Check className="h-3 w-3 mr-1" /> Marcar pago</>}
+                        </Button>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top">
                       <Button
                         variant="ghost"
                         size="icon"
@@ -708,16 +883,16 @@ export default function LancamentosFinanceiros() {
         open={dialogOpen}
         onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditRow(null); }}
         row={editRow}
-        categorias={categorias}
-        bancos={bancos}
+        options={optionsMap}
+        onAddOption={addOption}
         onSaved={refetch}
       />
       <LancamentoDialog
         open={newOpen}
         onOpenChange={setNewOpen}
         row={null}
-        categorias={categorias}
-        bancos={bancos}
+        options={optionsMap}
+        onAddOption={addOption}
         onSaved={refetch}
       />
     </Card>
