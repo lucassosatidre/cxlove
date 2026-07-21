@@ -44,18 +44,6 @@ async function getToken(client: Deno.HttpClient): Promise<string> {
   return JSON.parse(t).access_token as string;
 }
 
-function detectTipoChave(chave: string): string {
-  const s = String(chave).trim();
-  if (/^\+?\d{10,15}$/.test(s.replace(/\D/g, '')) && s.length <= 20 && /\+?55/.test(s)) return 'TELEFONE';
-  const digits = s.replace(/\D/g, '');
-  if (digits.length === 11 && !s.includes('@')) return 'CPF';
-  if (digits.length === 14) return 'CNPJ';
-  if (s.includes('@')) return 'EMAIL';
-  // UUID / EVP
-  if (/^[0-9a-fA-F-]{32,36}$/.test(s)) return 'CHAVE_ALEATORIA';
-  return 'CHAVE_ALEATORIA';
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
@@ -87,7 +75,7 @@ Deno.serve(async (req) => {
 
     const payload: Record<string, unknown> = {
       valor: v,
-      destinatario: { tipo: detectTipoChave(chave), chave },
+      destinatario: { tipo: 'CHAVE', chave },
     };
     if (descricao) payload.descricao = String(descricao).slice(0, 140);
     if (data_pagamento) payload.dataPagamento = String(data_pagamento).slice(0, 10);

@@ -19,6 +19,20 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+async function parseFunctionError(error: any): Promise<Error> {
+  let msg = error?.message ?? 'Erro';
+  try {
+    const ctx = error?.context;
+    if (ctx && typeof ctx.json === 'function') {
+      const body = await ctx.json();
+      if (body?.error) msg = body.error;
+    }
+  } catch {
+    /* mantém msg genérica */
+  }
+  return new Error(msg);
+}
+
 export default function InterPagamentosCard() {
   // Boleto
   const [codigoBarras, setCodigoBarras] = useState('');
@@ -62,7 +76,7 @@ export default function InterPagamentosCard() {
           descricao: descPix || undefined,
         },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       const codigo = (data as any)?.codigoSolicitacao ?? (data as any)?.endToEnd ?? '(sem código)';
       setUltimoPix(String(codigo));
@@ -107,7 +121,7 @@ export default function InterPagamentosCard() {
       const { data, error } = await supabase.functions.invoke('inter-pagar-lote', {
         body: { pagamentos },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       const idLote = (data as any)?.idLote ?? (data as any)?.meuIdentificador;
       setUltimoLote({ id: String(idLote), total: pagamentos.length });
@@ -152,7 +166,7 @@ export default function InterPagamentosCard() {
           descricao: descBoleto || undefined,
         },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Boleto enviado para pagamento');
       setCodigoBarras(''); setValorBoleto(''); setDescBoleto('');
@@ -178,7 +192,7 @@ export default function InterPagamentosCard() {
           descricao: descDarf || undefined,
         },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('DARF enviado para pagamento');
       setCodigoReceita(''); setValorPrincipal(''); setValorMulta(''); setValorJuros(''); setDescDarf('');
