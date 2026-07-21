@@ -14,6 +14,7 @@ import ExtratosPorConta from '@/components/cashflow/ExtratosPorConta';
 import ConferenciaSaiposBanco from '@/components/cashflow/ConferenciaSaiposBanco';
 import ContasAPagarSaipos from '@/components/cashflow/ContasAPagarSaipos';
 import LancamentosFinanceiros from '@/components/cashflow/LancamentosFinanceiros';
+import NotasEntrada from '@/components/cashflow/NotasEntrada';
 import InterPagamentosCard from '@/components/cashflow/InterPagamentosCard';
 
 export default function CashflowDashboard() {
@@ -30,6 +31,7 @@ export default function CashflowDashboard() {
             <TabsTrigger value="extratos">Extratos</TabsTrigger>
             <TabsTrigger value="conferencia">Conferência</TabsTrigger>
             <TabsTrigger value="contas-pagar">Lançamentos</TabsTrigger>
+            <TabsTrigger value="notas-entrada">Notas de Entrada</TabsTrigger>
             <TabsTrigger value="pagamentos">Pagamentos</TabsTrigger>
             <TabsTrigger value="import">Importações</TabsTrigger>
             <TabsTrigger value="detalhes">Mais detalhes</TabsTrigger>
@@ -55,6 +57,10 @@ export default function CashflowDashboard() {
 
           <TabsContent value="contas-pagar">
             <LancamentosFinanceiros />
+          </TabsContent>
+
+          <TabsContent value="notas-entrada">
+            <NotasEntrada />
           </TabsContent>
 
           <TabsContent value="pagamentos">

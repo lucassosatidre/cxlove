@@ -28,6 +28,7 @@ import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { TagCombobox } from './TagCombobox';
+import { MultiSelectFilter } from './MultiSelectFilter';
 
 type Fonte = 'saipos' | 'manual' | 'nfe';
 type Tipo = 'saida' | 'entrada';
@@ -453,9 +454,9 @@ export default function LancamentosFinanceiros() {
   const [dateStart, setDateStart] = useState<string>(firstOfMonth());
   const [dateEnd, setDateEnd] = useState<string>(lastOfMonth());
   const [status, setStatus] = useState<StatusFilter>('nao_pagas');
-  const [conta, setConta] = useState<string>('__all');
-  const [metodo, setMetodo] = useState<string>('__all');
-  const [categoria, setCategoria] = useState<string>('__all');
+  const [conta, setConta] = useState<string[]>([]);
+  const [metodo, setMetodo] = useState<string[]>([]);
+  const [categoria, setCategoria] = useState<string[]>([]);
   const [tipoFilter, setTipoFilter] = useState<TipoFilter>('saidas');
   const [orderBy, setOrderBy] = useState<DateKind>('vencimento');
   const [orderDir, setOrderDir] = useState<OrderDir>('asc');
@@ -480,9 +481,9 @@ export default function LancamentosFinanceiros() {
       if (dateEnd) q = q.lte(dateKind, dateEnd);
       if (status === 'pagas') q = q.eq('paid', true);
       if (status === 'nao_pagas') q = q.eq('paid', false);
-      if (conta !== '__all') q = q.eq('banco', conta);
-      if (metodo !== '__all') q = q.eq('metodo', metodo);
-      if (categoria !== '__all') q = q.eq('categoria', categoria);
+      if (conta.length > 0) q = q.in('banco', conta);
+      if (metodo.length > 0) q = q.in('metodo', metodo);
+      if (categoria.length > 0) q = q.in('categoria', categoria);
       if (tipoFilter !== 'todos') q = q.eq('tipo', tipoFilter === 'saidas' ? 'saida' : 'entrada');
 
       const { data, error } = await q;
@@ -601,9 +602,9 @@ export default function LancamentosFinanceiros() {
     setDateStart(firstOfMonth());
     setDateEnd(lastOfMonth());
     setStatus('nao_pagas');
-    setConta('__all');
-    setMetodo('__all');
-    setCategoria('__all');
+    setConta([]);
+    setMetodo([]);
+    setCategoria([]);
     setTipoFilter('saidas');
     setOrderBy('vencimento');
     setOrderDir('asc');
@@ -698,33 +699,15 @@ export default function LancamentosFinanceiros() {
 
           <div>
             <Label className="text-xs">Conta</Label>
-            <Select value={conta} onValueChange={setConta}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all">Todas</SelectItem>
-                {contasAll.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter values={conta} onChange={setConta} options={contasAll} allLabel="Todas" />
           </div>
           <div>
             <Label className="text-xs">Método</Label>
-            <Select value={metodo} onValueChange={setMetodo}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all">Todos</SelectItem>
-                {metodosAll.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter values={metodo} onChange={setMetodo} options={metodosAll} allLabel="Todos" />
           </div>
           <div>
             <Label className="text-xs">Categoria</Label>
-            <Select value={categoria} onValueChange={setCategoria}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all">Todas</SelectItem>
-                {categoriasAll.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter values={categoria} onChange={setCategoria} options={categoriasAll} allLabel="Todas" />
           </div>
           <div>
             <Label className="text-xs">Tipo</Label>
