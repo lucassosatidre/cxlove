@@ -806,7 +806,6 @@ export default function ControladoriaContasPagar() {
             <AlertDialogCancel className="w-full mt-0" disabled={deleting}>Cancelar</AlertDialogCancel>
           </AlertDialogFooter>
 
-          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </Card>
