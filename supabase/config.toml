@@ -48,6 +48,4 @@ verify_jwt = false
 [functions.ctrl-backfill-parcelas]
 verify_jwt = false
 
-[functions.inter-dda-probe]
-verify_jwt = false
 
