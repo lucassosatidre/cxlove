@@ -56,8 +56,10 @@ type Row = {
   fornecedor: string | null;
   descricao: string | null;
   numero_nota: string | null;
+  nota_chave: string | null;
   source: string;
 };
+
 
 const METODOS = [
   'Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Boleto', 'Dinheiro',
