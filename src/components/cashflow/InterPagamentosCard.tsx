@@ -192,7 +192,7 @@ export default function InterPagamentosCard() {
           descricao: descDarf || undefined,
         },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('DARF enviado para pagamento');
       setCodigoReceita(''); setValorPrincipal(''); setValorMulta(''); setValorJuros(''); setDescDarf('');
