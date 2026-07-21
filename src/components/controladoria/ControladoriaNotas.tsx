@@ -93,13 +93,31 @@ export default function ControladoriaNotas() {
         .select('chave,status')
         .limit(20000);
 
-      const [nfeRes, nfseRes, statusRes] = await Promise.all([nfePromise, nfsePromise, statusPromise]);
+      const lancadasPromise = (supabase as any)
+        .from('ctrl_contas_pagar')
+        .select('nota_chave')
+        .not('nota_chave', 'is', null)
+        .limit(50000);
+
+      const [nfeRes, nfseRes, statusRes, lancadasRes] = await Promise.all([nfePromise, nfsePromise, statusPromise, lancadasPromise]);
       if (nfeRes.error) throw nfeRes.error;
       if (nfseRes.error) throw nfseRes.error;
       if (statusRes.error) throw statusRes.error;
+      if (lancadasRes.error) throw lancadasRes.error;
 
-      const statusMap = new Map<string, NotaStatus>();
-      for (const s of (statusRes.data ?? []) as any[]) statusMap.set(s.chave, s.status);
+      const ignoradas = new Set<string>();
+      for (const s of (statusRes.data ?? []) as any[]) {
+        if (s.status === 'ignorada' && s.chave) ignoradas.add(s.chave);
+      }
+      const lancadas = new Set<string>();
+      for (const l of (lancadasRes.data ?? []) as any[]) {
+        if (l.nota_chave) lancadas.add(l.nota_chave);
+      }
+      const deriveStatus = (chave: string): NotaStatus => {
+        if (ignoradas.has(chave)) return 'ignorada';
+        if (lancadas.has(chave)) return 'lancada';
+        return 'pendente';
+      };
 
       const nfeRows: NotaRow[] = ((nfeRes.data ?? []) as any[])
         .filter((r) => r.access_key)
@@ -112,7 +130,7 @@ export default function ControladoriaNotas() {
           emissao: r.emission_date ? r.emission_date.slice(0, 10) : null,
           valor: Number(r.total_value ?? 0),
           parcelas: Array.isArray(r.duplicatas) ? r.duplicatas.length : (r.duplicatas ? 1 : null),
-          status: statusMap.get(r.access_key) ?? 'pendente',
+          status: deriveStatus(r.access_key),
           duplicatas: r.duplicatas ?? null,
           pag_method: r.pag_method ?? null,
           raw_xml: r.raw_xml ?? null,
@@ -129,11 +147,12 @@ export default function ControladoriaNotas() {
           emissao: r.data_emissao ?? null,
           valor: Number(r.valor_servico ?? 0),
           parcelas: null,
-          status: statusMap.get(r.chave_acesso) ?? 'pendente',
+          status: deriveStatus(r.chave_acesso),
           duplicatas: null,
           pag_method: null,
           raw_xml: null,
         }));
+
 
       const all = [...nfeRows, ...nfseRows].sort((a, b) => (b.emissao ?? '').localeCompare(a.emissao ?? ''));
       return all;
