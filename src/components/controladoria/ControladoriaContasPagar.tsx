@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Check, Loader2, Pencil, Plus, X } from 'lucide-react';
+import { CalendarIcon, Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { supabase } from '@/integrations/supabase/client';
