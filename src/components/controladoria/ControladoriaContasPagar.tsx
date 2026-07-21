@@ -345,9 +345,9 @@ export default function ControladoriaContasPagar() {
   });
 
   const optionsQuery = useQuery({
-    queryKey: ['cashflow_options'],
+    queryKey: ['ctrl_options'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from('cashflow_options').select('kind,value').order('value');
+      const { data, error } = await (supabase as any).from('ctrl_options').select('kind,value').order('value');
       if (error) throw error;
       const grouped: OptionsMap = { categoria: [], metodo: [], conta: [], fornecedor: [], descricao: [] };
       for (const r of (data ?? []) as { kind: OptionKind; value: string }[]) {
@@ -363,16 +363,137 @@ export default function ControladoriaContasPagar() {
     if (!v) return;
     const { data: userRes } = await supabase.auth.getUser();
     const { error } = await (supabase as any)
-      .from('cashflow_options')
+      .from('ctrl_options')
       .insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
     if (error && !/duplicate|unique/i.test(error.message ?? '')) {
       toast.error(`Erro ao criar opção: ${error.message}`);
       throw error;
     }
-    await qc.invalidateQueries({ queryKey: ['cashflow_options'] });
+    await qc.invalidateQueries({ queryKey: ['ctrl_options'] });
+  }
+
+  function askScope(): Promise<'single' | 'all' | 'cancel'> {
+    return new Promise((resolve) => {
+      scopeResolveRef.current = resolve;
+      setScopeDialogOpen(true);
+    });
+  }
+  function resolveScope(v: 'single' | 'all' | 'cancel') {
+    setScopeDialogOpen(false);
+    scopeResolveRef.current?.(v);
+    scopeResolveRef.current = null;
+  }
+
+  async function countSiblings(nota_chave: string | null): Promise<number> {
+    if (!nota_chave) return 0;
+    const { count, error } = await (supabase as any)
+      .from('ctrl_contas_pagar')
+      .select('id', { count: 'exact', head: true })
+      .eq('nota_chave', nota_chave);
+    if (error) return 0;
+    return Number(count ?? 0);
+  }
+
+  async function handleSubmit(payload: SavePayload, isNew: boolean, r: Row | null): Promise<boolean> {
+    try {
+      if (isNew) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const { error } = await (supabase as any).from('ctrl_contas_pagar').insert({
+          ...payload, source: 'manual', created_by: userRes?.user?.id ?? null,
+        });
+        if (error) throw error;
+        toast.success('Lançamento criado');
+        refetch();
+        return true;
+      }
+      if (!r) return false;
+
+      // Verifica se é parcelado (tem irmãs pelo mesmo nota_chave)
+      const total = await countSiblings(r.nota_chave);
+      let scope: 'single' | 'all' = 'single';
+      if (r.nota_chave && total > 1) {
+        const choice = await askScope();
+        if (choice === 'cancel') return false;
+        scope = choice;
+      }
+
+      // Salva a linha atual (todos os campos)
+      const { error: err1 } = await (supabase as any)
+        .from('ctrl_contas_pagar').update(payload).eq('id', r.id);
+      if (err1) throw err1;
+
+      if (scope === 'all' && r.nota_chave) {
+        // Propaga apenas classificação para as parcelas irmãs
+        const classif = {
+          category: payload.category,
+          payment_method: payload.payment_method,
+          conta: payload.conta,
+          fornecedor: payload.fornecedor,
+        };
+        const { error: err2 } = await (supabase as any)
+          .from('ctrl_contas_pagar').update(classif)
+          .eq('nota_chave', r.nota_chave).neq('id', r.id);
+        if (err2) throw err2;
+        toast.success('Todas as parcelas da nota foram atualizadas');
+      } else {
+        toast.success('Lançamento atualizado');
+      }
+      refetch();
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro: ${err?.message || err}`);
+      return false;
+    }
+  }
+
+  async function openDelete(r: Row) {
+    const total = await countSiblings(r.nota_chave);
+    setDeleteSiblings(r.nota_chave ? total : 0);
+    setDeleteRow(r);
+  }
+
+  async function doDelete(mode: 'single' | 'all') {
+    if (!deleteRow) return;
+    setDeleting(true);
+    try {
+      const chave = deleteRow.nota_chave;
+      if (mode === 'all' && chave) {
+        const { error } = await (supabase as any).from('ctrl_contas_pagar').delete().eq('nota_chave', chave);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('ctrl_contas_pagar').delete().eq('id', deleteRow.id);
+        if (error) throw error;
+      }
+
+      // Se a nota não tem mais parcelas, reverter status para pendente
+      if (chave) {
+        const { count } = await (supabase as any)
+          .from('ctrl_contas_pagar')
+          .select('id', { count: 'exact', head: true })
+          .eq('nota_chave', chave);
+        if (!count || Number(count) === 0) {
+          await (supabase as any).from('ctrl_nota_status').upsert({
+            chave,
+            status: 'pendente',
+            handled_by: null,
+            handled_at: null,
+          }, { onConflict: 'chave' });
+        }
+      }
+      toast.success(mode === 'all' ? 'Todas as parcelas apagadas' : 'Parcela apagada');
+      setDeleteRow(null);
+      refetch();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao apagar: ${err?.message || err}`);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const rows = useMemo(() => {
+
     const all = query.data ?? [];
     const q = busca.trim().toLowerCase();
     if (!q) return all;
