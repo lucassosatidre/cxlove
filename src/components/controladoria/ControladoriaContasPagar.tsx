@@ -26,8 +26,13 @@ import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TagCombobox } from '@/components/cashflow/TagCombobox';
 import { MultiSelectFilter } from '@/components/cashflow/MultiSelectFilter';
+
 
 type DateKind = 'emissao' | 'vencimento' | 'pagamento';
 type StatusFilter = 'todas' | 'pagas' | 'nao_pagas';
