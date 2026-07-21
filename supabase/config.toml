@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.sync-nfe-vigia]
 verify_jwt = false
+
+[functions.espiao-sync-entrada]
+verify_jwt = false
