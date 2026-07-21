@@ -76,7 +76,7 @@ export default function InterPagamentosCard() {
           descricao: descPix || undefined,
         },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       const codigo = (data as any)?.codigoSolicitacao ?? (data as any)?.endToEnd ?? '(sem código)';
       setUltimoPix(String(codigo));
@@ -121,7 +121,7 @@ export default function InterPagamentosCard() {
       const { data, error } = await supabase.functions.invoke('inter-pagar-lote', {
         body: { pagamentos },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       const idLote = (data as any)?.idLote ?? (data as any)?.meuIdentificador;
       setUltimoLote({ id: String(idLote), total: pagamentos.length });
@@ -166,7 +166,7 @@ export default function InterPagamentosCard() {
           descricao: descBoleto || undefined,
         },
       });
-      if (error) throw error;
+      if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Boleto enviado para pagamento');
       setCodigoBarras(''); setValorBoleto(''); setDescBoleto('');
