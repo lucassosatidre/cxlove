@@ -1826,6 +1826,33 @@ export type Database = {
           },
         ]
       }
+      cashflow_options: {
+        Row: {
+          color: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          value: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          value: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          value?: string
+        }
+        Relationships: []
+      }
       cashflow_saipos: {
         Row: {
           amount: number
@@ -2812,6 +2839,119 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      nfe_entrada: {
+        Row: {
+          access_key: string | null
+          created_at: string
+          dest_cnpj: string | null
+          emission_date: string | null
+          emit_cnpj: string | null
+          emit_name: string | null
+          id: string
+          numero: string | null
+          raw_xml: string | null
+          serie: string | null
+          source: string
+          total_value: number | null
+        }
+        Insert: {
+          access_key?: string | null
+          created_at?: string
+          dest_cnpj?: string | null
+          emission_date?: string | null
+          emit_cnpj?: string | null
+          emit_name?: string | null
+          id?: string
+          numero?: string | null
+          raw_xml?: string | null
+          serie?: string | null
+          source?: string
+          total_value?: number | null
+        }
+        Update: {
+          access_key?: string | null
+          created_at?: string
+          dest_cnpj?: string | null
+          emission_date?: string | null
+          emit_cnpj?: string | null
+          emit_name?: string | null
+          id?: string
+          numero?: string | null
+          raw_xml?: string | null
+          serie?: string | null
+          source?: string
+          total_value?: number | null
+        }
+        Relationships: []
+      }
+      nfe_entrada_items: {
+        Row: {
+          c_ean: string | null
+          c_prod: string | null
+          cfop: string | null
+          description: string | null
+          id: string
+          ncm: string | null
+          nfe_id: string
+          q_com: number | null
+          q_trib: number | null
+          seq: number | null
+          u_com: string | null
+          u_trib: string | null
+          v_desc: number | null
+          v_encargos: number | null
+          v_prod: number | null
+          v_un_com: number | null
+          v_un_trib: number | null
+        }
+        Insert: {
+          c_ean?: string | null
+          c_prod?: string | null
+          cfop?: string | null
+          description?: string | null
+          id?: string
+          ncm?: string | null
+          nfe_id: string
+          q_com?: number | null
+          q_trib?: number | null
+          seq?: number | null
+          u_com?: string | null
+          u_trib?: string | null
+          v_desc?: number | null
+          v_encargos?: number | null
+          v_prod?: number | null
+          v_un_com?: number | null
+          v_un_trib?: number | null
+        }
+        Update: {
+          c_ean?: string | null
+          c_prod?: string | null
+          cfop?: string | null
+          description?: string | null
+          id?: string
+          ncm?: string | null
+          nfe_id?: string
+          q_com?: number | null
+          q_trib?: number | null
+          seq?: number | null
+          u_com?: string | null
+          u_trib?: string | null
+          v_desc?: number | null
+          v_encargos?: number | null
+          v_prod?: number | null
+          v_un_com?: number | null
+          v_un_trib?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfe_entrada_items_nfe_id_fkey"
+            columns: ["nfe_id"]
+            isOneToOne: false
+            referencedRelation: "nfe_entrada"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       nfse_documents: {
         Row: {
