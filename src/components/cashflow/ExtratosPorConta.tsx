@@ -360,39 +360,37 @@ export default function ExtratosPorConta() {
                       )}
                     </div>
 
-                    {isOF && (
-                      <div className="pt-1">
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-full text-[10px] text-muted-foreground hover:text-foreground border border-dashed border-border/60"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setReconfirmAccountId(r.account_id);
-                                  setReconfirmValue(
-                                    saldo == null
-                                      ? ''
-                                      : saldo.toLocaleString('pt-BR', {
-                                          minimumFractionDigits: 2,
-                                          maximumFractionDigits: 2,
-                                        }),
-                                  );
-                                }}
-                              >
-                                <RefreshCw className="h-3 w-3 mr-1" />
-                                Reconfirmar saldo
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              Use quando o saldo estiver diferente do app do banco
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                    )}
+                    <div className="pt-1">
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-full text-[10px] text-muted-foreground hover:text-foreground border border-dashed border-border/60"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setReconfirmAccountId(r.account_id);
+                                setReconfirmValue(
+                                  saldo == null
+                                    ? ''
+                                    : saldo.toLocaleString('pt-BR', {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      }),
+                                );
+                              }}
+                            >
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Reconfirmar saldo
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Use quando o saldo estiver diferente do app do banco
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </div>
                   </button>
                 );
               })}
@@ -403,7 +401,9 @@ export default function ExtratosPorConta() {
 
       {(() => {
         const acc = cov.data?.find((r) => r.account_id === reconfirmAccountId);
-        const currentSaldo = reconfirmAccountId ? balanceById.get(reconfirmAccountId) ?? null : null;
+        const currentSaldo = reconfirmAccountId
+          ? balanceById.get(reconfirmAccountId) ?? (acc?.saldo_final ?? null)
+          : null;
         const parsed = parseBRLInput(reconfirmValue);
         return (
           <Dialog
