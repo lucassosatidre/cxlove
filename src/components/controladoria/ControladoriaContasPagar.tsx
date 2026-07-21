@@ -147,15 +147,28 @@ function DatePickerField({
   );
 }
 
+export type SavePayload = {
+  emissao: string | null;
+  vencimento: string | null;
+  pagamento: string | null;
+  paid: boolean;
+  amount: number;
+  category: string | null;
+  payment_method: string | null;
+  conta: string | null;
+  fornecedor: string | null;
+  descricao: string | null;
+};
+
 function LancamentoDialog({
-  open, onOpenChange, row, options, onAddOption, onSaved,
+  open, onOpenChange, row, options, onAddOption, onSubmit,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   row: Row | null;
   options: OptionsMap;
   onAddOption: (kind: OptionKind, value: string) => Promise<void>;
-  onSaved: () => void;
+  onSubmit: (payload: SavePayload, isNew: boolean, row: Row | null) => Promise<boolean>;
 }) {
   const isNew = row === null;
   const [emissao, setEmissao] = useState<string | null>(null);
@@ -195,10 +208,11 @@ function LancamentoDialog({
   async function handleSave() {
     const amountNum = Number(String(amountStr).replace(/\./g, '').replace(',', '.'));
     if (!isFinite(amountNum) || amountNum === 0) { toast.error('Valor inválido'); return; }
+    if (isNew && !emissao) { toast.error('Emissão é obrigatória'); return; }
     setSaving(true);
     try {
       const signed = tipoNovo === 'saida' ? -Math.abs(amountNum) : Math.abs(amountNum);
-      const payload = {
+      const payload: SavePayload = {
         emissao, vencimento, pagamento, paid,
         amount: signed,
         category: categoria || null,
@@ -207,24 +221,8 @@ function LancamentoDialog({
         fornecedor: fornecedor || null,
         descricao: descricao || null,
       };
-      if (isNew) {
-        if (!emissao) { toast.error('Emissão é obrigatória'); setSaving(false); return; }
-        const { data: userRes } = await supabase.auth.getUser();
-        const { error } = await (supabase as any).from('ctrl_contas_pagar').insert({
-          ...payload, source: 'manual', created_by: userRes?.user?.id ?? null,
-        });
-        if (error) throw error;
-        toast.success('Lançamento criado');
-      } else if (row) {
-        const { error } = await (supabase as any).from('ctrl_contas_pagar').update(payload).eq('id', row.id);
-        if (error) throw error;
-        toast.success('Lançamento atualizado');
-      }
-      onSaved();
-      onOpenChange(false);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(`Erro: ${err?.message || err}`);
+      const ok = await onSubmit(payload, isNew, row);
+      if (ok) onOpenChange(false);
     } finally {
       setSaving(false);
     }
@@ -272,6 +270,7 @@ function LancamentoDialog({
     </Dialog>
   );
 }
+
 
 export default function ControladoriaContasPagar() {
   const qc = useQueryClient();
