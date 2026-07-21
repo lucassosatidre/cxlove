@@ -466,21 +466,9 @@ export default function ControladoriaContasPagar() {
         if (error) throw error;
       }
 
-      // Se a nota não tem mais parcelas, reverter status para pendente
-      if (chave) {
-        const { count } = await (supabase as any)
-          .from('ctrl_contas_pagar')
-          .select('id', { count: 'exact', head: true })
-          .eq('nota_chave', chave);
-        if (!count || Number(count) === 0) {
-          await (supabase as any).from('ctrl_nota_status').upsert({
-            chave,
-            status: 'pendente',
-            handled_by: null,
-            handled_at: null,
-          }, { onConflict: 'chave' });
-        }
-      }
+      // Status da nota é derivado da presença de parcelas em ctrl_contas_pagar
+      // (ver ControladoriaNotas). Não precisamos mais escrever em ctrl_nota_status aqui.
+
       toast.success(mode === 'all' ? 'Todas as parcelas apagadas' : 'Parcela apagada');
       setDeleteRow(null);
       refetch();
@@ -766,11 +754,18 @@ export default function ControladoriaContasPagar() {
               Escolha como aplicar as alterações. Ao aplicar a todas as parcelas, apenas Categoria, Método, Conta e Fornecedor são propagados — valor, vencimento e pagamento continuam individuais.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel onClick={() => resolveScope('cancel')}>Cancelar</AlertDialogCancel>
-            <Button variant="outline" onClick={() => resolveScope('single')}>Aplicar só a esta parcela</Button>
-            <AlertDialogAction onClick={() => resolveScope('all')}>Aplicar a todas as parcelas</AlertDialogAction>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:flex-col sm:space-x-0">
+            <AlertDialogAction className="w-full" onClick={() => resolveScope('all')}>
+              Aplicar a todas as parcelas
+            </AlertDialogAction>
+            <Button variant="outline" className="w-full" onClick={() => resolveScope('single')}>
+              Aplicar só a esta parcela
+            </Button>
+            <AlertDialogCancel className="w-full mt-0" onClick={() => resolveScope('cancel')}>
+              Cancelar
+            </AlertDialogCancel>
           </AlertDialogFooter>
+
         </AlertDialogContent>
       </AlertDialog>
 
@@ -785,31 +780,32 @@ export default function ControladoriaContasPagar() {
                 : 'Esta ação não pode ser desfeita.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:flex-col sm:space-x-0">
             {deleteSiblings > 1 ? (
               <>
-                <Button variant="outline" onClick={() => doDelete('single')} disabled={deleting}>
-                  Apagar só esta parcela
-                </Button>
                 <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   onClick={(e) => { e.preventDefault(); doDelete('all'); }}
                   disabled={deleting}
                 >
                   Apagar todas as parcelas
                 </AlertDialogAction>
+                <Button variant="outline" className="w-full" onClick={() => doDelete('single')} disabled={deleting}>
+                  Apagar só esta parcela
+                </Button>
               </>
             ) : (
               <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={(e) => { e.preventDefault(); doDelete('single'); }}
                 disabled={deleting}
               >
                 Apagar
               </AlertDialogAction>
             )}
+            <AlertDialogCancel className="w-full mt-0" disabled={deleting}>Cancelar</AlertDialogCancel>
           </AlertDialogFooter>
+
         </AlertDialogContent>
       </AlertDialog>
     </Card>
