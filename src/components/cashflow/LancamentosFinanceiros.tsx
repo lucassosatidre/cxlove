@@ -73,6 +73,23 @@ function fmtDate(v: string | null | undefined) {
   const [y, m, d] = v.split('-');
   return `${d}/${m}/${y}`;
 }
+// Uma linha só: NF-e => "NF-e {número} {fornecedor}"; demais => fornecedor/descrição existente.
+function fmtLancamentoLinha(r: {
+  fonte: string;
+  fornecedor: string | null;
+  descricao: string | null;
+  numero_nota: string | null;
+}): string {
+  if (r.fonte === 'nfe' && r.numero_nota) {
+    const forn = (r.fornecedor ?? '').trim();
+    return forn ? `NF-e ${r.numero_nota} ${forn}` : `NF-e ${r.numero_nota}`;
+  }
+  const linha = [r.fornecedor, r.descricao]
+    .map((s) => (s ?? '').trim())
+    .filter(Boolean)
+    .join(' — ');
+  return linha || '—';
+}
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -652,8 +669,9 @@ export default function LancamentosFinanceiros() {
                     </TableCell>
                     <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.pagamento)}</TableCell>
                     <TableCell className="text-sm max-w-[280px]">
-                      <div className="truncate" title={r.fornecedor || ''}>{r.fornecedor || '—'}</div>
-                      {r.descricao && <div className="truncate text-xs text-muted-foreground" title={r.descricao}>{r.descricao}</div>}
+                      <div className="truncate" title={[r.fornecedor, r.descricao].filter(Boolean).join(' — ')}>
+                        {fmtLancamentoLinha(r)}
+                      </div>
                     </TableCell>
                     <TableCell className="text-xs">{r.categoria || '—'}</TableCell>
                     <TableCell className="text-xs">{r.metodo || '—'}</TableCell>

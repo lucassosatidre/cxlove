@@ -18,10 +18,10 @@ import InterPagamentosCard from '@/components/cashflow/InterPagamentosCard';
 
 export default function CashflowDashboard() {
   return (
-    <AppLayout title="Fluxo de Caixa">
+    <AppLayout title="Caixa">
       <div className="space-y-6 p-4 md:p-6">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fluxo de Caixa</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Caixa</h1>
         </div>
 
         <Tabs defaultValue="visao" className="space-y-6">
