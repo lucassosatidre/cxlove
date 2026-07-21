@@ -292,12 +292,21 @@ export default function ControladoriaContasPagar() {
   const [newOpen, setNewOpen] = useState(false);
   const [payingKey, setPayingKey] = useState<string | null>(null);
 
+  // Delete dialog state
+  const [deleteRow, setDeleteRow] = useState<Row | null>(null);
+  const [deleteSiblings, setDeleteSiblings] = useState<number>(0);
+  const [deleting, setDeleting] = useState(false);
+
+  // Edit-scope dialog state (parcelas)
+  const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
+  const scopeResolveRef = useRef<((v: 'single' | 'all' | 'cancel') => void) | null>(null);
+
   const query = useQuery({
     queryKey: ['ctrl_contas_pagar', { dateKind, dateStart, dateEnd, status, conta, metodo, categoria, tipoFilter, orderBy, orderDir }],
     queryFn: async () => {
       let q = (supabase as any)
         .from('ctrl_contas_pagar')
-        .select('id,emissao,vencimento,pagamento,paid,amount,category,payment_method,conta,fornecedor,descricao,numero_nota,source')
+        .select('id,emissao,vencimento,pagamento,paid,amount,category,payment_method,conta,fornecedor,descricao,numero_nota,nota_chave,source')
         .order(orderBy, { ascending: orderDir === 'asc', nullsFirst: false })
         .limit(5000);
       if (dateStart) q = q.gte(dateKind, dateStart);
@@ -314,6 +323,7 @@ export default function ControladoriaContasPagar() {
       return (data ?? []) as Row[];
     },
   });
+
 
   const distincts = useQuery({
     queryKey: ['ctrl_contas_pagar_distincts'],
