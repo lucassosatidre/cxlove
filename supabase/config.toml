@@ -44,3 +44,7 @@ verify_jwt = false
 
 [functions.espiao-sync-entrada]
 verify_jwt = false
+
+[functions.ctrl-backfill-parcelas]
+verify_jwt = false
+

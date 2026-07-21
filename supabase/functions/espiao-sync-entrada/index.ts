@@ -143,6 +143,8 @@ Deno.serve(async (req) => {
       total_value: parsed.total_value,
       source,
       raw_xml: parsed.raw_xml,
+      duplicatas: parsed.duplicatas.length > 0 ? parsed.duplicatas : null,
+      pag_method: parsed.pag_method,
     }).select('id').single();
     if (insErr || !ins) { summary.errors++; summary.errorDetails.push(`insert ${parsed.access_key}: ${insErr?.message}`); return; }
 
