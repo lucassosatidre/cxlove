@@ -723,9 +723,14 @@ export default function ControladoriaContasPagar() {
                       )}
                     </TableCell>
                     <TableCell className="align-top">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditRow(r); setDialogOpen(true); }} title="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditRow(r); setDialogOpen(true); }} title="Editar">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openDelete(r)} title="Apagar">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -741,7 +746,7 @@ export default function ControladoriaContasPagar() {
         row={editRow}
         options={optionsMap}
         onAddOption={addOption}
-        onSaved={refetch}
+        onSubmit={handleSubmit}
       />
       <LancamentoDialog
         open={newOpen}
@@ -749,8 +754,65 @@ export default function ControladoriaContasPagar() {
         row={null}
         options={optionsMap}
         onAddOption={addOption}
-        onSaved={refetch}
+        onSubmit={handleSubmit}
       />
+
+      {/* Diálogo de escolha de escopo na edição de parcelas */}
+      <AlertDialog open={scopeDialogOpen} onOpenChange={(v) => { if (!v) resolveScope('cancel'); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Este lançamento faz parte de uma nota parcelada</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escolha como aplicar as alterações. Ao aplicar a todas as parcelas, apenas Categoria, Método, Conta e Fornecedor são propagados — valor, vencimento e pagamento continuam individuais.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel onClick={() => resolveScope('cancel')}>Cancelar</AlertDialogCancel>
+            <Button variant="outline" onClick={() => resolveScope('single')}>Aplicar só a esta parcela</Button>
+            <AlertDialogAction onClick={() => resolveScope('all')}>Aplicar a todas as parcelas</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de confirmação de exclusão */}
+      <AlertDialog open={!!deleteRow} onOpenChange={(v) => { if (!v && !deleting) setDeleteRow(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar lançamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteSiblings > 1
+                ? `Este lançamento faz parte de uma nota parcelada (${deleteSiblings} parcelas). O que deseja apagar?`
+                : 'Esta ação não pode ser desfeita.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            {deleteSiblings > 1 ? (
+              <>
+                <Button variant="outline" onClick={() => doDelete('single')} disabled={deleting}>
+                  Apagar só esta parcela
+                </Button>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={(e) => { e.preventDefault(); doDelete('all'); }}
+                  disabled={deleting}
+                >
+                  Apagar todas as parcelas
+                </AlertDialogAction>
+              </>
+            ) : (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => { e.preventDefault(); doDelete('single'); }}
+                disabled={deleting}
+              >
+                Apagar
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
+
