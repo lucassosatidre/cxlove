@@ -780,30 +780,32 @@ export default function ControladoriaContasPagar() {
                 : 'Esta ação não pode ser desfeita.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2">
-            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+          <AlertDialogFooter className="flex flex-col gap-2 sm:flex-col sm:space-x-0">
             {deleteSiblings > 1 ? (
               <>
-                <Button variant="outline" onClick={() => doDelete('single')} disabled={deleting}>
-                  Apagar só esta parcela
-                </Button>
                 <AlertDialogAction
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   onClick={(e) => { e.preventDefault(); doDelete('all'); }}
                   disabled={deleting}
                 >
                   Apagar todas as parcelas
                 </AlertDialogAction>
+                <Button variant="outline" className="w-full" onClick={() => doDelete('single')} disabled={deleting}>
+                  Apagar só esta parcela
+                </Button>
               </>
             ) : (
               <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 onClick={(e) => { e.preventDefault(); doDelete('single'); }}
                 disabled={deleting}
               >
                 Apagar
               </AlertDialogAction>
             )}
+            <AlertDialogCancel className="w-full mt-0" disabled={deleting}>Cancelar</AlertDialogCancel>
+          </AlertDialogFooter>
+
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
