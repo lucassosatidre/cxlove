@@ -151,8 +151,9 @@ export default function ConciliacaoNotaDialog({
     const v = value.trim();
     if (!v) return;
     const { data: userRes } = await supabase.auth.getUser();
-    await (supabase as any).from('cashflow_options').insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
+    await (supabase as any).from('ctrl_options').insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
   }
+
 
   async function confirmar() {
     if (!nota) return;
