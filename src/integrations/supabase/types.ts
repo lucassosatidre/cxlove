@@ -2389,6 +2389,30 @@ export type Database = {
         }
         Relationships: []
       }
+      ctrl_options: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          value?: string
+        }
+        Relationships: []
+      }
       daily_closings: {
         Row: {
           closing_date: string

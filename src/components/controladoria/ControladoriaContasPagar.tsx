@@ -1,10 +1,10 @@
 // Contas a pagar da Controladoria — lê e grava direto em ctrl_contas_pagar.
 // Mesma experiência de LancamentosFinanceiros, sem Saipos.
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Check, Loader2, Pencil, Plus, X } from 'lucide-react';
+import { CalendarIcon, Check, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { supabase } from '@/integrations/supabase/client';
@@ -26,8 +26,13 @@ import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TagCombobox } from '@/components/cashflow/TagCombobox';
 import { MultiSelectFilter } from '@/components/cashflow/MultiSelectFilter';
+
 
 type DateKind = 'emissao' | 'vencimento' | 'pagamento';
 type StatusFilter = 'todas' | 'pagas' | 'nao_pagas';
@@ -51,8 +56,10 @@ type Row = {
   fornecedor: string | null;
   descricao: string | null;
   numero_nota: string | null;
+  nota_chave: string | null;
   source: string;
 };
+
 
 const METODOS = [
   'Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Boleto', 'Dinheiro',
@@ -140,15 +147,28 @@ function DatePickerField({
   );
 }
 
+export type SavePayload = {
+  emissao: string | null;
+  vencimento: string | null;
+  pagamento: string | null;
+  paid: boolean;
+  amount: number;
+  category: string | null;
+  payment_method: string | null;
+  conta: string | null;
+  fornecedor: string | null;
+  descricao: string | null;
+};
+
 function LancamentoDialog({
-  open, onOpenChange, row, options, onAddOption, onSaved,
+  open, onOpenChange, row, options, onAddOption, onSubmit,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   row: Row | null;
   options: OptionsMap;
   onAddOption: (kind: OptionKind, value: string) => Promise<void>;
-  onSaved: () => void;
+  onSubmit: (payload: SavePayload, isNew: boolean, row: Row | null) => Promise<boolean>;
 }) {
   const isNew = row === null;
   const [emissao, setEmissao] = useState<string | null>(null);
@@ -188,10 +208,11 @@ function LancamentoDialog({
   async function handleSave() {
     const amountNum = Number(String(amountStr).replace(/\./g, '').replace(',', '.'));
     if (!isFinite(amountNum) || amountNum === 0) { toast.error('Valor inválido'); return; }
+    if (isNew && !emissao) { toast.error('Emissão é obrigatória'); return; }
     setSaving(true);
     try {
       const signed = tipoNovo === 'saida' ? -Math.abs(amountNum) : Math.abs(amountNum);
-      const payload = {
+      const payload: SavePayload = {
         emissao, vencimento, pagamento, paid,
         amount: signed,
         category: categoria || null,
@@ -200,24 +221,8 @@ function LancamentoDialog({
         fornecedor: fornecedor || null,
         descricao: descricao || null,
       };
-      if (isNew) {
-        if (!emissao) { toast.error('Emissão é obrigatória'); setSaving(false); return; }
-        const { data: userRes } = await supabase.auth.getUser();
-        const { error } = await (supabase as any).from('ctrl_contas_pagar').insert({
-          ...payload, source: 'manual', created_by: userRes?.user?.id ?? null,
-        });
-        if (error) throw error;
-        toast.success('Lançamento criado');
-      } else if (row) {
-        const { error } = await (supabase as any).from('ctrl_contas_pagar').update(payload).eq('id', row.id);
-        if (error) throw error;
-        toast.success('Lançamento atualizado');
-      }
-      onSaved();
-      onOpenChange(false);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(`Erro: ${err?.message || err}`);
+      const ok = await onSubmit(payload, isNew, row);
+      if (ok) onOpenChange(false);
     } finally {
       setSaving(false);
     }
@@ -266,6 +271,7 @@ function LancamentoDialog({
   );
 }
 
+
 export default function ControladoriaContasPagar() {
   const qc = useQueryClient();
 
@@ -286,12 +292,21 @@ export default function ControladoriaContasPagar() {
   const [newOpen, setNewOpen] = useState(false);
   const [payingKey, setPayingKey] = useState<string | null>(null);
 
+  // Delete dialog state
+  const [deleteRow, setDeleteRow] = useState<Row | null>(null);
+  const [deleteSiblings, setDeleteSiblings] = useState<number>(0);
+  const [deleting, setDeleting] = useState(false);
+
+  // Edit-scope dialog state (parcelas)
+  const [scopeDialogOpen, setScopeDialogOpen] = useState(false);
+  const scopeResolveRef = useRef<((v: 'single' | 'all' | 'cancel') => void) | null>(null);
+
   const query = useQuery({
     queryKey: ['ctrl_contas_pagar', { dateKind, dateStart, dateEnd, status, conta, metodo, categoria, tipoFilter, orderBy, orderDir }],
     queryFn: async () => {
       let q = (supabase as any)
         .from('ctrl_contas_pagar')
-        .select('id,emissao,vencimento,pagamento,paid,amount,category,payment_method,conta,fornecedor,descricao,numero_nota,source')
+        .select('id,emissao,vencimento,pagamento,paid,amount,category,payment_method,conta,fornecedor,descricao,numero_nota,nota_chave,source')
         .order(orderBy, { ascending: orderDir === 'asc', nullsFirst: false })
         .limit(5000);
       if (dateStart) q = q.gte(dateKind, dateStart);
@@ -308,6 +323,7 @@ export default function ControladoriaContasPagar() {
       return (data ?? []) as Row[];
     },
   });
+
 
   const distincts = useQuery({
     queryKey: ['ctrl_contas_pagar_distincts'],
@@ -329,9 +345,9 @@ export default function ControladoriaContasPagar() {
   });
 
   const optionsQuery = useQuery({
-    queryKey: ['cashflow_options'],
+    queryKey: ['ctrl_options'],
     queryFn: async () => {
-      const { data, error } = await (supabase as any).from('cashflow_options').select('kind,value').order('value');
+      const { data, error } = await (supabase as any).from('ctrl_options').select('kind,value').order('value');
       if (error) throw error;
       const grouped: OptionsMap = { categoria: [], metodo: [], conta: [], fornecedor: [], descricao: [] };
       for (const r of (data ?? []) as { kind: OptionKind; value: string }[]) {
@@ -347,16 +363,137 @@ export default function ControladoriaContasPagar() {
     if (!v) return;
     const { data: userRes } = await supabase.auth.getUser();
     const { error } = await (supabase as any)
-      .from('cashflow_options')
+      .from('ctrl_options')
       .insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
     if (error && !/duplicate|unique/i.test(error.message ?? '')) {
       toast.error(`Erro ao criar opção: ${error.message}`);
       throw error;
     }
-    await qc.invalidateQueries({ queryKey: ['cashflow_options'] });
+    await qc.invalidateQueries({ queryKey: ['ctrl_options'] });
+  }
+
+  function askScope(): Promise<'single' | 'all' | 'cancel'> {
+    return new Promise((resolve) => {
+      scopeResolveRef.current = resolve;
+      setScopeDialogOpen(true);
+    });
+  }
+  function resolveScope(v: 'single' | 'all' | 'cancel') {
+    setScopeDialogOpen(false);
+    scopeResolveRef.current?.(v);
+    scopeResolveRef.current = null;
+  }
+
+  async function countSiblings(nota_chave: string | null): Promise<number> {
+    if (!nota_chave) return 0;
+    const { count, error } = await (supabase as any)
+      .from('ctrl_contas_pagar')
+      .select('id', { count: 'exact', head: true })
+      .eq('nota_chave', nota_chave);
+    if (error) return 0;
+    return Number(count ?? 0);
+  }
+
+  async function handleSubmit(payload: SavePayload, isNew: boolean, r: Row | null): Promise<boolean> {
+    try {
+      if (isNew) {
+        const { data: userRes } = await supabase.auth.getUser();
+        const { error } = await (supabase as any).from('ctrl_contas_pagar').insert({
+          ...payload, source: 'manual', created_by: userRes?.user?.id ?? null,
+        });
+        if (error) throw error;
+        toast.success('Lançamento criado');
+        refetch();
+        return true;
+      }
+      if (!r) return false;
+
+      // Verifica se é parcelado (tem irmãs pelo mesmo nota_chave)
+      const total = await countSiblings(r.nota_chave);
+      let scope: 'single' | 'all' = 'single';
+      if (r.nota_chave && total > 1) {
+        const choice = await askScope();
+        if (choice === 'cancel') return false;
+        scope = choice;
+      }
+
+      // Salva a linha atual (todos os campos)
+      const { error: err1 } = await (supabase as any)
+        .from('ctrl_contas_pagar').update(payload).eq('id', r.id);
+      if (err1) throw err1;
+
+      if (scope === 'all' && r.nota_chave) {
+        // Propaga apenas classificação para as parcelas irmãs
+        const classif = {
+          category: payload.category,
+          payment_method: payload.payment_method,
+          conta: payload.conta,
+          fornecedor: payload.fornecedor,
+        };
+        const { error: err2 } = await (supabase as any)
+          .from('ctrl_contas_pagar').update(classif)
+          .eq('nota_chave', r.nota_chave).neq('id', r.id);
+        if (err2) throw err2;
+        toast.success('Todas as parcelas da nota foram atualizadas');
+      } else {
+        toast.success('Lançamento atualizado');
+      }
+      refetch();
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro: ${err?.message || err}`);
+      return false;
+    }
+  }
+
+  async function openDelete(r: Row) {
+    const total = await countSiblings(r.nota_chave);
+    setDeleteSiblings(r.nota_chave ? total : 0);
+    setDeleteRow(r);
+  }
+
+  async function doDelete(mode: 'single' | 'all') {
+    if (!deleteRow) return;
+    setDeleting(true);
+    try {
+      const chave = deleteRow.nota_chave;
+      if (mode === 'all' && chave) {
+        const { error } = await (supabase as any).from('ctrl_contas_pagar').delete().eq('nota_chave', chave);
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any).from('ctrl_contas_pagar').delete().eq('id', deleteRow.id);
+        if (error) throw error;
+      }
+
+      // Se a nota não tem mais parcelas, reverter status para pendente
+      if (chave) {
+        const { count } = await (supabase as any)
+          .from('ctrl_contas_pagar')
+          .select('id', { count: 'exact', head: true })
+          .eq('nota_chave', chave);
+        if (!count || Number(count) === 0) {
+          await (supabase as any).from('ctrl_nota_status').upsert({
+            chave,
+            status: 'pendente',
+            handled_by: null,
+            handled_at: null,
+          }, { onConflict: 'chave' });
+        }
+      }
+      toast.success(mode === 'all' ? 'Todas as parcelas apagadas' : 'Parcela apagada');
+      setDeleteRow(null);
+      refetch();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(`Erro ao apagar: ${err?.message || err}`);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const rows = useMemo(() => {
+
     const all = query.data ?? [];
     const q = busca.trim().toLowerCase();
     if (!q) return all;
@@ -586,9 +723,14 @@ export default function ControladoriaContasPagar() {
                       )}
                     </TableCell>
                     <TableCell className="align-top">
-                      <Button variant="ghost" size="icon" onClick={() => { setEditRow(r); setDialogOpen(true); }} title="Editar">
-                        <Pencil className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => { setEditRow(r); setDialogOpen(true); }} title="Editar">
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openDelete(r)} title="Apagar">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -604,7 +746,7 @@ export default function ControladoriaContasPagar() {
         row={editRow}
         options={optionsMap}
         onAddOption={addOption}
-        onSaved={refetch}
+        onSubmit={handleSubmit}
       />
       <LancamentoDialog
         open={newOpen}
@@ -612,8 +754,65 @@ export default function ControladoriaContasPagar() {
         row={null}
         options={optionsMap}
         onAddOption={addOption}
-        onSaved={refetch}
+        onSubmit={handleSubmit}
       />
+
+      {/* Diálogo de escolha de escopo na edição de parcelas */}
+      <AlertDialog open={scopeDialogOpen} onOpenChange={(v) => { if (!v) resolveScope('cancel'); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Este lançamento faz parte de uma nota parcelada</AlertDialogTitle>
+            <AlertDialogDescription>
+              Escolha como aplicar as alterações. Ao aplicar a todas as parcelas, apenas Categoria, Método, Conta e Fornecedor são propagados — valor, vencimento e pagamento continuam individuais.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel onClick={() => resolveScope('cancel')}>Cancelar</AlertDialogCancel>
+            <Button variant="outline" onClick={() => resolveScope('single')}>Aplicar só a esta parcela</Button>
+            <AlertDialogAction onClick={() => resolveScope('all')}>Aplicar a todas as parcelas</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Diálogo de confirmação de exclusão */}
+      <AlertDialog open={!!deleteRow} onOpenChange={(v) => { if (!v && !deleting) setDeleteRow(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar lançamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteSiblings > 1
+                ? `Este lançamento faz parte de uma nota parcelada (${deleteSiblings} parcelas). O que deseja apagar?`
+                : 'Esta ação não pode ser desfeita.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            {deleteSiblings > 1 ? (
+              <>
+                <Button variant="outline" onClick={() => doDelete('single')} disabled={deleting}>
+                  Apagar só esta parcela
+                </Button>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  onClick={(e) => { e.preventDefault(); doDelete('all'); }}
+                  disabled={deleting}
+                >
+                  Apagar todas as parcelas
+                </AlertDialogAction>
+              </>
+            ) : (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={(e) => { e.preventDefault(); doDelete('single'); }}
+                disabled={deleting}
+              >
+                Apagar
+              </AlertDialogAction>
+            )}
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
+

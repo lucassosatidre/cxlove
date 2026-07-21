@@ -81,13 +81,13 @@ export default function ConciliacaoNotaDialog({
   const [conta, setConta] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Opções (mesmas listas do Caixa, mas só para sugestão — grava em ctrl_contas_pagar).
+  // Opções próprias da Controladoria (isoladas do Caixa).
   const optionsQuery = useQuery({
-    queryKey: ['cashflow_options'],
+    queryKey: ['ctrl_options'],
     enabled: open,
     queryFn: async () => {
       const { data, error } = await (supabase as any)
-        .from('cashflow_options')
+        .from('ctrl_options')
         .select('kind,value')
         .order('value');
       if (error) throw error;
@@ -99,6 +99,7 @@ export default function ConciliacaoNotaDialog({
     },
     staleTime: 5 * 60 * 1000,
   });
+
 
   useEffect(() => {
     if (!nota) return;
@@ -150,8 +151,9 @@ export default function ConciliacaoNotaDialog({
     const v = value.trim();
     if (!v) return;
     const { data: userRes } = await supabase.auth.getUser();
-    await (supabase as any).from('cashflow_options').insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
+    await (supabase as any).from('ctrl_options').insert({ kind, value: v, created_by: userRes?.user?.id ?? null });
   }
+
 
   async function confirmar() {
     if (!nota) return;
