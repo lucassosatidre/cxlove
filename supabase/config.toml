@@ -48,4 +48,13 @@ verify_jwt = false
 [functions.ctrl-backfill-parcelas]
 verify_jwt = false
 
+[functions.stark-saldo]
+verify_jwt = false
+
+[functions.stark-extrato]
+verify_jwt = false
+
+[functions.stark-cobrancas]
+verify_jwt = false
+
 
