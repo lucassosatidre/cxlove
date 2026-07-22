@@ -430,21 +430,8 @@ export default function StarkBank() {
       {/* Avisos em tempo real */}
       <StarkWebhookCard />
 
-      {/* Seção travada — só pagamentos */}
-      <Card className="opacity-70 border-dashed">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Pagamentos automáticos 🔒
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Pagar boletos/contas/impostos pelo app exige a permissão <strong>Administrador</strong> do
-            Stark (servidor com IP fixo). Em construção.
-          </p>
-        </CardContent>
-      </Card>
+      {/* Pagamentos com aprovação */}
+      <StarkPagamentosCard />
     </div>
   );
 }
@@ -565,6 +552,250 @@ function StarkWebhookCard() {
             </TableBody>
           </Table>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+type Pagamento = {
+  id: string;
+  tipo: string;
+  linha: string;
+  description: string | null;
+  amount_reais: number | null;
+  beneficiario: string | null;
+  status: string;
+  erro: string | null;
+  stark_id: string | null;
+  created_at: string;
+  approved_at: string | null;
+  processed_at: string | null;
+};
+
+function pagStatusBadge(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'aguardando_aprovacao') return <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Aguardando aprovação</Badge>;
+  if (s === 'aprovado') return <Badge className="bg-sky-600 hover:bg-sky-600 text-white">Aprovado — na fila</Badge>;
+  if (s === 'processando') return <Badge className="bg-sky-600 hover:bg-sky-600 text-white animate-pulse">Processando…</Badge>;
+  if (s === 'sucesso') return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Pago</Badge>;
+  if (s === 'falha') return <Badge className="bg-rose-600 hover:bg-rose-600 text-white">Falhou</Badge>;
+  if (s === 'recusado') return <Badge variant="secondary">Recusado</Badge>;
+  return <Badge variant="outline">{status}</Badge>;
+}
+
+function StarkPagamentosCard() {
+  const [list, setList] = useState<Pagamento[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [linha, setLinha] = useState('');
+  const [desc, setDesc] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [actingId, setActingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('stark_pagamentos')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setList((data ?? []) as Pagamento[]);
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao carregar pagamentos');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel('stark_pagamentos_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stark_pagamentos' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [load]);
+
+  async function submit() {
+    const digits = linha.replace(/\D/g, '');
+    if (digits.length < 20) { toast.error('Linha digitável inválida'); return; }
+    setSaving(true);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const { error } = await (supabase as any).from('stark_pagamentos').insert({
+        tipo: 'boleto',
+        linha: digits,
+        description: desc.trim() || 'Pagamento Vigia',
+        created_by: userRes?.user?.id ?? null,
+      });
+      if (error) throw error;
+      toast.success('Enviado para aprovação');
+      setOpen(false); setLinha(''); setDesc('');
+      load();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao enviar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function aprovar(id: string) {
+    setActingId(id);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const { error } = await (supabase as any)
+        .from('stark_pagamentos')
+        .update({ status: 'aprovado', approved_at: new Date().toISOString(), approved_by: userRes?.user?.id ?? null })
+        .eq('id', id);
+      if (error) throw error;
+      toast.success('Aprovado — porteiro executa em até 1 minuto');
+      load();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao aprovar');
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  async function recusar(id: string) {
+    setActingId(id);
+    try {
+      const { error } = await (supabase as any)
+        .from('stark_pagamentos')
+        .update({ status: 'recusado' })
+        .eq('id', id);
+      if (error) throw error;
+      toast.success('Pagamento recusado');
+      load();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao recusar');
+    } finally {
+      setActingId(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className="text-base">Pagamentos (com aprovação)</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Envie boletos para a fila. A execução acontece após aprovação.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            </Button>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">Pagar boleto</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Novo pagamento de boleto</DialogTitle>
+                  <DialogDescription>Cole a linha digitável ou código de barras.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="pag-linha">Linha digitável</Label>
+                    <Textarea
+                      id="pag-linha"
+                      value={linha}
+                      onChange={(e) => setLinha(e.target.value)}
+                      className="font-mono text-xs h-24"
+                      placeholder="Com ou sem pontuação"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="pag-desc">Descrição (opcional)</Label>
+                    <Input
+                      id="pag-desc"
+                      value={desc}
+                      onChange={(e) => setDesc(e.target.value)}
+                      placeholder="Pagamento Vigia"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
+                  <Button onClick={submit} disabled={saving}>
+                    {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Enviar para aprovação
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[140px]">Data</TableHead>
+                <TableHead>Descrição</TableHead>
+                <TableHead className="w-[140px]">Linha</TableHead>
+                <TableHead className="text-right w-[120px]">Valor</TableHead>
+                <TableHead className="w-[190px]">Status</TableHead>
+                <TableHead className="w-[170px] text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
+              ) : list.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Nenhum pagamento ainda.</TableCell></TableRow>
+              ) : list.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="text-xs">{fmtDateTime(p.created_at)}</TableCell>
+                  <TableCell className="text-sm">
+                    <div>{p.description || '—'}</div>
+                    {p.beneficiario && <div className="text-xs text-muted-foreground">{p.beneficiario}</div>}
+                    {p.status === 'falha' && p.erro && <div className="text-xs text-rose-500 mt-1">{p.erro}</div>}
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">…{p.linha.slice(-8)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{p.amount_reais != null ? fmtBRL(Number(p.amount_reais)) : '—'}</TableCell>
+                  <TableCell>{pagStatusBadge(p.status)}</TableCell>
+                  <TableCell className="text-right">
+                    {p.status === 'aguardando_aprovacao' && (
+                      <div className="flex justify-end gap-1">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700" disabled={actingId === p.id}>
+                              {actingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aprovar'}
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Aprovar pagamento?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                O porteiro vai executar em até 1 minuto. Essa ação libera saída de dinheiro.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Voltar</AlertDialogCancel>
+                              <AlertDialogAction onClick={() => aprovar(p.id)}>Aprovar</AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <Button size="sm" variant="outline" onClick={() => recusar(p.id)} disabled={actingId === p.id}>Recusar</Button>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Executado pelo servidor porteiro (IP fixo) via Stark Bank. Dinheiro só sai após aprovação.
+        </p>
       </CardContent>
     </Card>
   );
