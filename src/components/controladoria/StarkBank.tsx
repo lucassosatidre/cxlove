@@ -165,7 +165,25 @@ export default function StarkBank() {
       toast.success(label);
     } catch {
       toast.error('Falha ao copiar');
+  }
+
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  async function handleCancel(id: string) {
+    setCancelingId(id);
+    try {
+      const { data, error } = await supabase.functions.invoke('stark-cobrancas', {
+        body: { action: 'cancel', id },
+      });
+      if (error) throw error;
+      if (!data?.ok) throw new Error(data?.error || 'Erro ao cancelar cobrança');
+      toast.success('Cobrança cancelada');
+      loadInvoices();
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Erro ao cancelar cobrança');
+    } finally {
+      setCancelingId(null);
     }
+  }
   }
 
   return (
