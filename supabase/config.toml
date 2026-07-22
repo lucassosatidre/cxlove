@@ -60,4 +60,7 @@ verify_jwt = false
 [functions.stark-webhook]
 verify_jwt = false
 
+[functions.stark-fila]
+verify_jwt = false
+
 
