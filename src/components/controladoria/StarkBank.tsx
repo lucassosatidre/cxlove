@@ -165,6 +165,7 @@ export default function StarkBank() {
       toast.success(label);
     } catch {
       toast.error('Falha ao copiar');
+    }
   }
 
   const [cancelingId, setCancelingId] = useState<string | null>(null);
@@ -183,7 +184,6 @@ export default function StarkBank() {
     } finally {
       setCancelingId(null);
     }
-  }
   }
 
   return (
