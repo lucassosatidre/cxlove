@@ -63,4 +63,8 @@ verify_jwt = false
 [functions.stark-fila]
 verify_jwt = false
 
+[functions.stark-aprovar]
+verify_jwt = true
+
+
 
