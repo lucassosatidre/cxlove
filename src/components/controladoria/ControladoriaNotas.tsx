@@ -18,6 +18,8 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import ConciliacaoNotaDialog, { type NotaParaConciliar } from './ConciliacaoNotaDialog';
+import NotaDetalheDialog from './NotaDetalheDialog';
+import ImportarPorChaveDialog from './ImportarPorChaveDialog';
 
 type NotaTipo = 'nfe' | 'nfse';
 type NotaStatus = 'pendente' | 'lancada' | 'ignorada';
@@ -68,6 +70,8 @@ export default function ControladoriaNotas() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('pendente');
   const [busca, setBusca] = useState('');
   const [notaConciliando, setNotaConciliando] = useState<NotaParaConciliar | null>(null);
+  const [detalhe, setDetalhe] = useState<{ chave: string; tipo: NotaTipo } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const notasQuery = useQuery({
     queryKey: ['ctrl_notas', { from, to }],
