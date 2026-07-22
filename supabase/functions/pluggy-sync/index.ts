@@ -343,8 +343,25 @@ Deno.serve(async (req) => {
         }
 
         let chosenBalance: number | null = null;
-        let balanceSource: 'running_balance' | 'account_balance' | 'anchor' | 'none' = 'none';
+        let balanceSource: 'running_balance' | 'account_balance' | 'anchor' | 'manual' | 'none' = 'none';
 
+        if (manualAt && hasAnchor) {
+          // Saldo reconfirmado manualmente vence o sync automático até o usuário
+          // clicar em "Sincronizar" (clearManual) ou reconfirmar de novo.
+          try {
+            const { data: txSumM } = await supa
+              .from('cashflow_transactions')
+              .select('amount')
+              .eq('account_id', cfAccountId)
+              .eq('source', 'pluggy')
+              .gt('tx_date', balanceAnchorDate!);
+            const somaM = (txSumM ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+            chosenBalance = Number(balanceAnchor) + somaM;
+          } catch {
+            chosenBalance = Number(balanceAnchor);
+          }
+          balanceSource = 'manual';
+        } else {
         // 1) PREFERÊNCIA: running_balance da tx mais recente (saldo REAL informado pelo banco)
         try {
           const { data: lastTx, error: lastErr } = await supa
