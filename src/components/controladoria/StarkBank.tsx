@@ -466,6 +466,9 @@ function eventBadge(type: string | null, subscription: string | null) {
   if (t === "invoice" && s === "credited") {
     return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Pix recebido</Badge>;
   }
+  if (t === "invoice" && s === "canceled") {
+    return <Badge variant="secondary">Cobrança cancelada</Badge>;
+  }
   if (t === "deposit" && (s === "created" || s === "credited")) {
     return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Depósito</Badge>;
   }
