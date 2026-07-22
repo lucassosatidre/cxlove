@@ -4324,6 +4324,57 @@ export type Database = {
         }
         Relationships: []
       }
+      stark_pagamentos: {
+        Row: {
+          amount_reais: number | null
+          approved_at: string | null
+          approved_by: string | null
+          beneficiario: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          erro: string | null
+          id: string
+          linha: string
+          processed_at: string | null
+          stark_id: string | null
+          status: string
+          tipo: string
+        }
+        Insert: {
+          amount_reais?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          beneficiario?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          erro?: string | null
+          id?: string
+          linha: string
+          processed_at?: string | null
+          stark_id?: string | null
+          status?: string
+          tipo?: string
+        }
+        Update: {
+          amount_reais?: number | null
+          approved_at?: string | null
+          approved_by?: string | null
+          beneficiario?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          erro?: string | null
+          id?: string
+          linha?: string
+          processed_at?: string | null
+          stark_id?: string | null
+          status?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           details: Json | null
