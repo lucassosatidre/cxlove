@@ -405,6 +405,7 @@ Deno.serve(async (req) => {
             console.warn('anchored balance falhou', e);
           }
         }
+        } // fim do else (fluxo automático)
 
         if (chosenBalance !== null) {
           try {
@@ -413,11 +414,13 @@ Deno.serve(async (req) => {
               as_of: toStr,
               own_balance: chosenBalance,
             }, { onConflict: 'account_id,as_of' });
-            // mantém o anchor atualizado — rollforward futuro é mínimo
-            await supa.from('cashflow_accounts').update({
-              balance_anchor: chosenBalance,
-              balance_anchor_date: toStr,
-            }).eq('id', cfAccountId);
+            // No override manual, preserva a âncora reconfirmada pelo usuário.
+            if (balanceSource !== 'manual') {
+              await supa.from('cashflow_accounts').update({
+                balance_anchor: chosenBalance,
+                balance_anchor_date: toStr,
+              }).eq('id', cfAccountId);
+            }
           } catch (e) {
             console.warn('upsert cashflow_balances/anchor falhou', e);
           }
