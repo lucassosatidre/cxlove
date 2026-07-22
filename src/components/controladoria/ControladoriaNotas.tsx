@@ -211,10 +211,17 @@ export default function ControladoriaNotas() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Notas do Espião</CardTitle>
-        <p className="text-sm text-muted-foreground mt-1">
-          NF-e e NFS-e capturadas automaticamente. Lance em contas a pagar ou ignore.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>Notas do Espião</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              NF-e e NFS-e capturadas automaticamente. Lance em contas a pagar ou ignore.
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <ScanLine className="h-4 w-4 mr-1" /> Importar por chave
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-5">
@@ -293,6 +300,9 @@ export default function ControladoriaNotas() {
                       )}
                     </TableCell>
                     <TableCell className="text-right align-top whitespace-nowrap">
+                      <Button size="sm" variant="ghost" onClick={() => setDetalhe({ chave: r.chave, tipo: r.tipo })} title="Ver conteúdo">
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       {r.status === 'pendente' && (
                         <>
                           <Button size="sm" onClick={() => abrirConciliacao(r)}>
@@ -316,6 +326,17 @@ export default function ControladoriaNotas() {
           </div>
         )}
       </CardContent>
+
+      <NotaDetalheDialog
+        chave={detalhe?.chave ?? null}
+        tipo={detalhe?.tipo ?? null}
+        onClose={() => setDetalhe(null)}
+      />
+      <ImportarPorChaveDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => qc.invalidateQueries({ queryKey: ['ctrl_notas'] })}
+      />
 
       <ConciliacaoNotaDialog
         nota={notaConciliando}
