@@ -68,12 +68,11 @@ Deno.serve(async (req) => {
   try {
     const body = JSON.parse(rawBody);
     const event = body?.event ?? {};
-    const type = event?.type ?? null;
-    const log = event?.log ?? {};
-    const resource = type ? log?.[type] : null;
-    const subscription = event?.subscription ?? log?.type ?? null;
-    const amount_reais = resource?.amount != null ? Number(resource.amount) / 100 : null;
+    const type = event?.subscription ?? null;
+    const subscription = event?.log?.type ?? null;
+    const resource = type ? event?.log?.[type] : null;
     const resource_id = resource?.id ?? null;
+    const amount_reais = resource?.amount != null ? Number(resource.amount) / 100 : null;
     const event_created = event?.created ?? null;
     const id = event?.id;
 
