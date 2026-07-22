@@ -388,11 +388,36 @@ export default function StarkBank() {
                     <TableCell className="text-xs">{fmtDate(i.due)}</TableCell>
                     <TableCell>{statusBadge(i.status)}</TableCell>
                     <TableCell className="text-right">
-                      {i.brcode && (
-                        <Button variant="ghost" size="sm" onClick={() => copy(i.brcode, 'Pix Copia e Cola copiado')}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <div className="flex justify-end gap-1">
+                        {i.brcode && (
+                          <Button variant="ghost" size="sm" onClick={() => copy(i.brcode, 'Pix Copia e Cola copiado')}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {i.status?.toLowerCase() === 'created' && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm" disabled={cancelingId === i.id} title="Cancelar cobrança">
+                                {cancelingId === i.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4 text-rose-500" />}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Cancelar cobrança?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  {i.name} · {fmtBRL(i.amount)}. Essa ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleCancel(i.id)}>
+                                  Cancelar cobrança
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
