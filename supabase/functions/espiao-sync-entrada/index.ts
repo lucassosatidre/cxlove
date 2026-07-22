@@ -158,6 +158,39 @@ Deno.serve(async (req) => {
   try {
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
 
+    // Modo importação por CHAVE / código de barras (44 dígitos).
+    // O Vigia não alcança o Espião (IP fora do BR); busca o XML pela ponte do Maná (nfe-feed).
+    if (typeof body?.chave === 'string' && body.chave.replace(/\D/g, '').length > 0) {
+      const chave = body.chave.replace(/\D/g, '');
+      const jh = { ...corsHeaders, 'Content-Type': 'application/json' };
+      const done = (obj: any) => new Response(JSON.stringify(obj), { headers: jh });
+      if (chave.length !== 44) return done({ ok: false, message: 'Chave inválida: informe os 44 dígitos.' });
+
+      const feedUrl = Deno.env.get('COLOVE_NFE_FEED_URL');
+      const feedToken = Deno.env.get('NFE_FEED_TOKEN');
+      if (!feedUrl || !feedToken) return done({ ok: false, message: 'Ponte do Espião (Maná) não configurada.' });
+
+      let bridge: any = null;
+      try {
+        const r = await fetch(feedUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${feedToken}` },
+          body: JSON.stringify({ chave }),
+        });
+        bridge = await r.json().catch(() => null);
+      } catch (e: any) {
+        return done({ ok: false, message: `Falha ao consultar o Espião: ${e?.message ?? e}` });
+      }
+      if (!bridge?.found || !bridge?.xml) {
+        return done({ ok: false, message: bridge?.error || 'Nota não encontrada no Espião.' });
+      }
+
+      await processXml(bridge.xml, 'chave');
+      if (summary.imported > 0) return done({ ok: true, imported: 1, message: 'Nota importada com sucesso.' });
+      if (summary.skipped > 0) return done({ ok: true, imported: 0, skipped: 1, message: 'Essa nota já estava importada.' });
+      return done({ ok: false, message: summary.errorDetails[0] || 'Não foi possível importar a nota.' });
+    }
+
     // Modo importação manual: XMLs crus enviados pelo app
     if (Array.isArray(body?.xmls) && body.xmls.length > 0) {
       for (const x of body.xmls) {
