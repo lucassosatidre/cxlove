@@ -401,3 +401,121 @@ export default function StarkBank() {
     </div>
   );
 }
+
+const WEBHOOK_URL = "https://hvpmkkxvvjnefayrlcjy.supabase.co/functions/v1/stark-webhook";
+
+type StarkEvent = {
+  id: string;
+  type: string | null;
+  subscription: string | null;
+  amount_reais: number | null;
+  event_created: string | null;
+  received_at: string;
+};
+
+function eventBadge(type: string | null, subscription: string | null) {
+  const t = (type || "").toLowerCase();
+  const s = (subscription || "").toLowerCase();
+  if (t === "invoice" && s === "credited") {
+    return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Pix recebido</Badge>;
+  }
+  if (t === "deposit" && (s === "created" || s === "credited")) {
+    return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Depósito</Badge>;
+  }
+  if (t === "boleto-payment" && (s === "success" || s === "paid")) {
+    return <Badge className="bg-sky-600 hover:bg-sky-600 text-white">Boleto pago</Badge>;
+  }
+  return <Badge variant="outline">{[type, subscription].filter(Boolean).join(" · ") || "evento"}</Badge>;
+}
+
+function StarkWebhookCard() {
+  const [events, setEvents] = useState<StarkEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await (supabase as any)
+        .from("stark_events")
+        .select("id, type, subscription, amount_reais, event_created, received_at")
+        .order("received_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setEvents((data ?? []) as StarkEvent[]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Erro ao carregar avisos");
+      setEvents([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(WEBHOOK_URL);
+      toast.success("URL copiada");
+    } catch {
+      toast.error("Falha ao copiar");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <CardTitle className="text-base">Avisos em tempo real (webhook)</CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Últimos 20 eventos recebidos do Stark.
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            <span className="ml-2">Atualizar</span>
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="text-xs">URL do webhook (cadastre no painel do Stark)</Label>
+          <div className="flex gap-2 mt-1">
+            <Input readOnly value={WEBHOOK_URL} className="text-xs font-mono" />
+            <Button size="sm" variant="outline" onClick={copyUrl}>
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[160px]">Recebido</TableHead>
+                <TableHead>Evento</TableHead>
+                <TableHead className="text-right w-[140px]">Valor</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
+              ) : events.length === 0 ? (
+                <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
+                  Nenhum aviso recebido ainda. Cadastre o webhook no painel do Stark apontando para a URL acima.
+                </TableCell></TableRow>
+              ) : events.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell className="text-xs">{fmtDateTime(e.received_at)}</TableCell>
+                  <TableCell>{eventBadge(e.type, e.subscription)}</TableCell>
+                  <TableCell className="text-right tabular-nums font-medium">
+                    {e.amount_reais != null ? fmtBRL(e.amount_reais) : "—"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
