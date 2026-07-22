@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { CheckCircle2, EyeOff, FileText, RotateCcw } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, FileText, RotateCcw, ScanLine } from 'lucide-react';
 
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
