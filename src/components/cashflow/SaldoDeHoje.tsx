@@ -130,7 +130,7 @@ export default function SaldoDeHoje() {
     fetchInter();
   }, [fetchInter]);
 
-  const [limiteOpen, setLimiteOpen] = useState(false);
+  
   const [syncing, setSyncing] = useState(false);
   const queryClient = useQueryClient();
 
@@ -281,15 +281,28 @@ export default function SaldoDeHoje() {
           </div>
 
 
-          {/* Coluna final: SALDO DE HOJE + LIMITE maximizável */}
-          <div className="flex flex-col gap-3 min-w-0">
-            <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 min-w-0 w-full">
+          {/* Coluna final: os 3 números — próprio, limite e o total pra usar hoje */}
+          <div className="flex flex-col gap-2 min-w-0">
+            {/* PRA USAR HOJE (destaque) */}
+            <div className="rounded-lg border border-primary/50 bg-primary/10 p-2 flex flex-col items-center gap-1 min-w-0 w-full">
+              <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/80 text-center leading-tight">
+                <span aria-hidden>💰</span> Pra usar hoje
+              </div>
               <div
-                className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-xl"
-                aria-label="Saldo de hoje"
-                title="Saldo de hoje"
+                className={cn(
+                  'font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
+                  folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
+                )}
               >
-                💰
+                {fmtBRL(folego)}
+              </div>
+              <div className="text-[9px] text-muted-foreground leading-none text-center">saldo + limite</div>
+            </div>
+
+            {/* SALDO PRÓPRIO */}
+            <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-1 min-w-0 w-full">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center leading-tight">
+                Saldo próprio
               </div>
               <div
                 className={cn(
@@ -299,32 +312,20 @@ export default function SaldoDeHoje() {
               >
                 {fmtBRL(ownSum)}
               </div>
-              <button
-                type="button"
-                onClick={() => setLimiteOpen((v) => !v)}
-                className="text-sm text-foreground/80 hover:text-foreground transition-colors"
-                aria-label={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
-                title={limiteOpen ? 'Ocultar limite' : 'Ver limite'}
-              >
-                {limiteOpen ? '▲' : '▼'}
-              </button>
             </div>
-            {limiteOpen && (
-              <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 flex flex-col items-center gap-2 min-w-0 w-full">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground/80">
-                  LIMITE
-                </div>
-                <div
-                  className={cn(
-                    'font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
-                    folegoNeg ? 'text-destructive' : 'text-foreground',
-                  )}
-                >
-                  {fmtBRL(folego)}
-                </div>
+
+            {/* LIMITE */}
+            <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-1 min-w-0 w-full">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground text-center leading-tight">
+                Limite
               </div>
-            )}
+              <div className="font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden text-foreground">
+                {fmtBRL(limitSum)}
+              </div>
+              <div className="text-[9px] text-muted-foreground leading-none text-center">contratado</div>
+            </div>
           </div>
+
         </div>
 
       </CardContent>
