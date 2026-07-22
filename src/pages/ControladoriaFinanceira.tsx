@@ -4,6 +4,7 @@ import AppLayout from '@/components/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ControladoriaNotas from '@/components/controladoria/ControladoriaNotas';
 import ControladoriaContasPagar from '@/components/controladoria/ControladoriaContasPagar';
+import StarkBank from '@/components/controladoria/StarkBank';
 
 export default function ControladoriaFinanceira() {
   return (
@@ -20,6 +21,7 @@ export default function ControladoriaFinanceira() {
           <TabsList>
             <TabsTrigger value="notas">Notas</TabsTrigger>
             <TabsTrigger value="contas">Contas a Pagar</TabsTrigger>
+            <TabsTrigger value="stark">Stark Bank</TabsTrigger>
           </TabsList>
 
           <TabsContent value="notas">
@@ -28,6 +30,10 @@ export default function ControladoriaFinanceira() {
 
           <TabsContent value="contas">
             <ControladoriaContasPagar />
+          </TabsContent>
+
+          <TabsContent value="stark">
+            <StarkBank />
           </TabsContent>
         </Tabs>
       </div>
