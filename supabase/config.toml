@@ -57,4 +57,7 @@ verify_jwt = false
 [functions.stark-cobrancas]
 verify_jwt = false
 
+[functions.stark-webhook]
+verify_jwt = false
+
 
