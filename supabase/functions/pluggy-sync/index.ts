@@ -124,11 +124,13 @@ Deno.serve(async (req) => {
 
     let filterItemId: string | undefined;
     let skipTrigger = false;
+    let clearManual = false;
     if (req.method === 'POST') {
       try {
         const body = await req.json();
         if (body?.itemId && typeof body.itemId === 'string') filterItemId = body.itemId;
         if (body?.skipTrigger === true) skipTrigger = true;
+        if (body?.clearManual === true) clearManual = true;
       } catch { /* body opcional */ }
     }
 
