@@ -90,9 +90,28 @@ Deno.serve(async (req) => {
     }, { onConflict: "id" });
 
     if (error) console.error("stark-webhook insert error", error);
+
+    try {
+      if (type === 'boleto-payment' && resource_id) {
+        const patch: any = {};
+        if (subscription === 'success') { patch.status = 'sucesso'; }
+        else if (subscription === 'failed') {
+          patch.status = 'falha';
+          const errs = event?.log?.errors;
+          patch.erro = Array.isArray(errs) && errs.length ? errs.join(' | ') : 'Pagamento falhou no banco';
+        }
+        if (resource?.amount) { patch.amount_reais = Number(resource.amount) / 100; }
+        if (Object.keys(patch).length) {
+          await supabase.from('stark_pagamentos').update(patch).eq('stark_id', resource_id);
+        }
+      }
+    } catch (paymentErr) {
+      console.error("stark-webhook boleto-payment update error", paymentErr);
+    }
   } catch (e) {
     console.error("stark-webhook processing error", e);
   }
+
 
   return new Response(JSON.stringify({ ok: true }), {
     headers: { ...corsHeaders, "Content-Type": "application/json" },
