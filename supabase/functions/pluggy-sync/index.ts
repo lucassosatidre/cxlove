@@ -244,12 +244,19 @@ Deno.serve(async (req) => {
 
         let balanceAnchor: number | null = null;
         let balanceAnchorDate: string | null = null;
+        let manualAt: string | null = null;
         if (cfAccountId) {
           const { data: cfAcc } = await supa.from('cashflow_accounts')
-            .select('balance_anchor, balance_anchor_date')
+            .select('balance_anchor, balance_anchor_date, balance_manual_at')
             .eq('id', cfAccountId).maybeSingle();
           balanceAnchor = cfAcc?.balance_anchor ?? null;
           balanceAnchorDate = cfAcc?.balance_anchor_date ?? null;
+          manualAt = cfAcc?.balance_manual_at ?? null;
+        }
+        // Se o usuário pediu sincronização explícita, descarta o override manual.
+        if (clearManual && cfAccountId && manualAt) {
+          await supa.from('cashflow_accounts').update({ balance_manual_at: null }).eq('id', cfAccountId);
+          manualAt = null;
         }
         const hasAnchor = balanceAnchor !== null && balanceAnchorDate !== null;
 
