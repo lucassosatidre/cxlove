@@ -430,21 +430,8 @@ export default function StarkBank() {
       {/* Avisos em tempo real */}
       <StarkWebhookCard />
 
-      {/* Seção travada — só pagamentos */}
-      <Card className="opacity-70 border-dashed">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Pagamentos automáticos 🔒
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Pagar boletos/contas/impostos pelo app exige a permissão <strong>Administrador</strong> do
-            Stark (servidor com IP fixo). Em construção.
-          </p>
-        </CardContent>
-      </Card>
+      {/* Pagamentos com aprovação */}
+      <StarkPagamentosCard />
     </div>
   );
 }
