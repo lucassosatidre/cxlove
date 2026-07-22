@@ -583,6 +583,10 @@ function pagStatusBadge(status: string) {
   return <Badge variant="outline">{status}</Badge>;
 }
 
+// A lista abaixo é SÓ ESTÉTICA (esconde botões pra quem não é aprovador).
+// A segurança real está na edge stark-aprovar: whitelist + senha validadas no servidor.
+const APROVADORES_UI = ['adm@vigia.com', 'lucassosatidre@gmail.com', 'luana@vigia.com'];
+
 function StarkPagamentosCard() {
   const [list, setList] = useState<Pagamento[]>([]);
   const [loading, setLoading] = useState(false);
@@ -591,6 +595,18 @@ function StarkPagamentosCard() {
   const [desc, setDesc] = useState('');
   const [saving, setSaving] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+
+  const [aprovarDialog, setAprovarDialog] = useState<Pagamento | null>(null);
+  const [senha, setSenha] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail((data?.user?.email || '').toLowerCase() || null);
+    });
+  }, []);
+
+  const isAprovador = !!userEmail && APROVADORES_UI.includes(userEmail);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -642,19 +658,27 @@ function StarkPagamentosCard() {
     }
   }
 
-  async function aprovar(id: string) {
-    setActingId(id);
+  async function confirmarAprovacao() {
+    if (!aprovarDialog) return;
+    if (!senha) { toast.error('Informe a senha'); return; }
+    setActingId(aprovarDialog.id);
     try {
-      const { data: userRes } = await supabase.auth.getUser();
-      const { error } = await (supabase as any)
-        .from('stark_pagamentos')
-        .update({ status: 'aprovado', approved_at: new Date().toISOString(), approved_by: userRes?.user?.id ?? null })
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('stark-aprovar', {
+        body: { id: aprovarDialog.id, decisao: 'aprovar', senha },
+      });
       if (error) throw error;
+      if (!data?.ok) {
+        toast.error(data?.error || 'Falha ao aprovar');
+        setSenha('');
+        return;
+      }
       toast.success('Aprovado — porteiro executa em até 1 minuto');
+      setAprovarDialog(null);
+      setSenha('');
       load();
     } catch (e: any) {
       toast.error(e?.message ?? 'Erro ao aprovar');
+      setSenha('');
     } finally {
       setActingId(null);
     }
@@ -663,11 +687,11 @@ function StarkPagamentosCard() {
   async function recusar(id: string) {
     setActingId(id);
     try {
-      const { error } = await (supabase as any)
-        .from('stark_pagamentos')
-        .update({ status: 'recusado' })
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('stark-aprovar', {
+        body: { id, decisao: 'recusar' },
+      });
       if (error) throw error;
+      if (!data?.ok) { toast.error(data?.error || 'Falha ao recusar'); return; }
       toast.success('Pagamento recusado');
       load();
     } catch (e: any) {
@@ -763,28 +787,34 @@ function StarkPagamentosCard() {
                   <TableCell className="text-right tabular-nums">{p.amount_reais != null ? fmtBRL(Number(p.amount_reais)) : '—'}</TableCell>
                   <TableCell>{pagStatusBadge(p.status)}</TableCell>
                   <TableCell className="text-right">
-                    {p.status === 'aguardando_aprovacao' && (
+                    {p.status === 'aguardando_aprovacao' && isAprovador && (
                       <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                          disabled={actingId === p.id}
+                          onClick={() => { setAprovarDialog(p); setSenha(''); }}
+                        >
+                          {actingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aprovar'}
+                        </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="default" className="bg-emerald-600 hover:bg-emerald-700" disabled={actingId === p.id}>
-                              {actingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aprovar'}
-                            </Button>
+                            <Button size="sm" variant="outline" disabled={actingId === p.id}>Recusar</Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader>
-                              <AlertDialogTitle>Aprovar pagamento?</AlertDialogTitle>
+                              <AlertDialogTitle>Recusar pagamento?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                O porteiro vai executar em até 1 minuto. Essa ação libera saída de dinheiro.
+                                O pagamento ficará marcado como recusado e não será enviado ao porteiro.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                               <AlertDialogCancel>Voltar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => aprovar(p.id)}>Aprovar</AlertDialogAction>
+                              <AlertDialogAction onClick={() => recusar(p.id)}>Recusar</AlertDialogAction>
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
-                        <Button size="sm" variant="outline" onClick={() => recusar(p.id)} disabled={actingId === p.id}>Recusar</Button>
                       </div>
                     )}
                   </TableCell>
@@ -794,9 +824,51 @@ function StarkPagamentosCard() {
           </Table>
         </div>
         <p className="text-xs text-muted-foreground">
-          Executado pelo servidor porteiro (IP fixo) via Stark Bank. Dinheiro só sai após aprovação.
+          Aprovação exige senha e é registrada (quem/quando). Executado pelo porteiro via Stark Bank.
         </p>
       </CardContent>
+
+      <Dialog open={!!aprovarDialog} onOpenChange={(v) => { if (!v) { setAprovarDialog(null); setSenha(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Aprovar pagamento</DialogTitle>
+            <DialogDescription>
+              Essa ação libera saída de dinheiro. O porteiro executa em até 1 minuto.
+            </DialogDescription>
+          </DialogHeader>
+          {aprovarDialog && (
+            <div className="space-y-3">
+              <div className="rounded-md border p-3 text-sm space-y-1">
+                <div><span className="text-muted-foreground">Descrição: </span>{aprovarDialog.description || '—'}</div>
+                <div><span className="text-muted-foreground">Linha: </span><span className="font-mono">…{aprovarDialog.linha.slice(-8)}</span></div>
+              </div>
+              <div>
+                <Label htmlFor="pag-senha">Senha de aprovação</Label>
+                <Input
+                  id="pag-senha"
+                  type="password"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter' && senha) confirmarAprovacao(); }}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAprovarDialog(null); setSenha(''); }}>Cancelar</Button>
+            <Button
+              onClick={confirmarAprovacao}
+              disabled={!senha || actingId === aprovarDialog?.id}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {actingId === aprovarDialog?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Confirmar aprovação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
+
