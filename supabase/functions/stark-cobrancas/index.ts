@@ -74,6 +74,19 @@ Deno.serve(async (req) => {
       return json({ ok: true, invoice: mapInvoice(created) });
     }
 
+    if (action === 'cancel') {
+      const id = String(body.id || '').trim();
+      if (!id) return json({ ok: false, error: 'ID da cobrança é obrigatório' }, 400);
+      const { ok, status, data, raw } = await starkFetch(`/invoice/${id}`, {
+        method: 'PATCH',
+        body: { status: 'canceled' },
+      });
+      if (!ok) return json({ ok: false, error: starkErrorMessage(data, raw, status), status }, 200);
+      const updated = data?.invoice ?? null;
+      if (!updated) return json({ ok: false, error: 'Resposta sem invoice' }, 200);
+      return json({ ok: true, invoice: mapInvoice(updated) });
+    }
+
     return json({ ok: false, error: `Ação inválida: ${action}` }, 400);
   } catch (e: any) {
     console.error('stark-cobrancas error', e);
