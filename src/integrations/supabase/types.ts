@@ -4291,6 +4291,39 @@ export type Database = {
         }
         Relationships: []
       }
+      stark_events: {
+        Row: {
+          amount_reais: number | null
+          event_created: string | null
+          id: string
+          payload: Json
+          received_at: string
+          resource_id: string | null
+          subscription: string | null
+          type: string | null
+        }
+        Insert: {
+          amount_reais?: number | null
+          event_created?: string | null
+          id: string
+          payload: Json
+          received_at?: string
+          resource_id?: string | null
+          subscription?: string | null
+          type?: string | null
+        }
+        Update: {
+          amount_reais?: number | null
+          event_created?: string | null
+          id?: string
+          payload?: Json
+          received_at?: string
+          resource_id?: string | null
+          subscription?: string | null
+          type?: string | null
+        }
+        Relationships: []
+      }
       sync_logs: {
         Row: {
           details: Json | null
