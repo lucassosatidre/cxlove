@@ -124,11 +124,13 @@ Deno.serve(async (req) => {
 
     let filterItemId: string | undefined;
     let skipTrigger = false;
+    let clearManual = false;
     if (req.method === 'POST') {
       try {
         const body = await req.json();
         if (body?.itemId && typeof body.itemId === 'string') filterItemId = body.itemId;
         if (body?.skipTrigger === true) skipTrigger = true;
+        if (body?.clearManual === true) clearManual = true;
       } catch { /* body opcional */ }
     }
 
@@ -242,12 +244,19 @@ Deno.serve(async (req) => {
 
         let balanceAnchor: number | null = null;
         let balanceAnchorDate: string | null = null;
+        let manualAt: string | null = null;
         if (cfAccountId) {
           const { data: cfAcc } = await supa.from('cashflow_accounts')
-            .select('balance_anchor, balance_anchor_date')
+            .select('balance_anchor, balance_anchor_date, balance_manual_at')
             .eq('id', cfAccountId).maybeSingle();
           balanceAnchor = cfAcc?.balance_anchor ?? null;
           balanceAnchorDate = cfAcc?.balance_anchor_date ?? null;
+          manualAt = cfAcc?.balance_manual_at ?? null;
+        }
+        // Se o usuário pediu sincronização explícita, descarta o override manual.
+        if (clearManual && cfAccountId && manualAt) {
+          await supa.from('cashflow_accounts').update({ balance_manual_at: null }).eq('id', cfAccountId);
+          manualAt = null;
         }
         const hasAnchor = balanceAnchor !== null && balanceAnchorDate !== null;
 
@@ -334,8 +343,25 @@ Deno.serve(async (req) => {
         }
 
         let chosenBalance: number | null = null;
-        let balanceSource: 'running_balance' | 'account_balance' | 'anchor' | 'none' = 'none';
+        let balanceSource: 'running_balance' | 'account_balance' | 'anchor' | 'manual' | 'none' = 'none';
 
+        if (manualAt && hasAnchor) {
+          // Saldo reconfirmado manualmente vence o sync automático até o usuário
+          // clicar em "Sincronizar" (clearManual) ou reconfirmar de novo.
+          try {
+            const { data: txSumM } = await supa
+              .from('cashflow_transactions')
+              .select('amount')
+              .eq('account_id', cfAccountId)
+              .eq('source', 'pluggy')
+              .gt('tx_date', balanceAnchorDate!);
+            const somaM = (txSumM ?? []).reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+            chosenBalance = Number(balanceAnchor) + somaM;
+          } catch {
+            chosenBalance = Number(balanceAnchor);
+          }
+          balanceSource = 'manual';
+        } else {
         // 1) PREFERÊNCIA: running_balance da tx mais recente (saldo REAL informado pelo banco)
         try {
           const { data: lastTx, error: lastErr } = await supa
@@ -379,6 +405,7 @@ Deno.serve(async (req) => {
             console.warn('anchored balance falhou', e);
           }
         }
+        } // fim do else (fluxo automático)
 
         if (chosenBalance !== null) {
           try {
@@ -387,11 +414,13 @@ Deno.serve(async (req) => {
               as_of: toStr,
               own_balance: chosenBalance,
             }, { onConflict: 'account_id,as_of' });
-            // mantém o anchor atualizado — rollforward futuro é mínimo
-            await supa.from('cashflow_accounts').update({
-              balance_anchor: chosenBalance,
-              balance_anchor_date: toStr,
-            }).eq('id', cfAccountId);
+            // No override manual, preserva a âncora reconfirmada pelo usuário.
+            if (balanceSource !== 'manual') {
+              await supa.from('cashflow_accounts').update({
+                balance_anchor: chosenBalance,
+                balance_anchor_date: toStr,
+              }).eq('id', cfAccountId);
+            }
           } catch (e) {
             console.warn('upsert cashflow_balances/anchor falhou', e);
           }

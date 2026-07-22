@@ -1524,6 +1524,7 @@ export type Database = {
           active: boolean
           balance_anchor: number | null
           balance_anchor_date: string | null
+          balance_manual_at: string | null
           bank: string | null
           company: string
           created_at: string
@@ -1538,6 +1539,7 @@ export type Database = {
           active?: boolean
           balance_anchor?: number | null
           balance_anchor_date?: string | null
+          balance_manual_at?: string | null
           bank?: string | null
           company: string
           created_at?: string
@@ -1552,6 +1554,7 @@ export type Database = {
           active?: boolean
           balance_anchor?: number | null
           balance_anchor_date?: string | null
+          balance_manual_at?: string | null
           bank?: string | null
           company?: string
           created_at?: string

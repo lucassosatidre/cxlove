@@ -1,0 +1,1 @@
+ALTER TABLE public.cashflow_accounts ADD COLUMN IF NOT EXISTS balance_manual_at timestamptz;

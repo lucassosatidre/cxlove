@@ -137,7 +137,7 @@ export default function SaldoDeHoje() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const { data: res, error: err } = await supabase.functions.invoke('pluggy-sync', { body: {} });
+      const { data: res, error: err } = await supabase.functions.invoke('pluggy-sync', { body: { clearManual: true } });
       if (err) throw err;
       const allAccounts = ((res as any)?.items ?? []).flatMap((it: any) => it.accounts ?? []);
       const totalTx = allAccounts.reduce((s: number, a: any) => s + (a.transactions_upserted ?? 0), 0);

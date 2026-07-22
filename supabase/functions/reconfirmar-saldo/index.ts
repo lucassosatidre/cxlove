@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
 
     const { error: updErr } = await supabase
       .from('cashflow_accounts')
-      .update({ balance_anchor: balance, balance_anchor_date: anchor_date })
+      .update({ balance_anchor: balance, balance_anchor_date: anchor_date, balance_manual_at: new Date().toISOString() })
       .eq('id', account_id);
     if (updErr) throw updErr;
 
