@@ -1,5 +1,6 @@
 // @ts-nocheck
 // inter-pagar-lote — pagamento em lote de boletos via API Inter.
+import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
