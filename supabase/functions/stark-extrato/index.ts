@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { starkFetch, starkErrorMessage } from "../_shared/stark.ts";
 import { getAuthedUser } from "../_shared/require-user.ts";
 
@@ -14,6 +15,13 @@ function json(obj: any, status = 200) {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
+}
+
+// Extrai id do formato "boleto-payment/<id>", "utility-payment/<id>", "tax-payment/<id>", "brcode-payment/<id>"
+function extractPaymentId(source: string | null | undefined): string | null {
+  if (!source) return null;
+  const m = /^(?:boleto-payment|utility-payment|tax-payment|brcode-payment)\/([A-Za-z0-9-]+)/.exec(source);
+  return m ? m[1] : null;
 }
 
 Deno.serve(async (req) => {
@@ -49,6 +57,37 @@ Deno.serve(async (req) => {
       created: t.created,
       balance: t.balance != null ? Number(t.balance) / 100 : null,
     }));
+
+    // Enriquecimento: para transações de pagamento, buscar beneficiário salvo em stark_pagamentos
+    try {
+      const idMap = new Map<string, number[]>(); // stark_id -> índices em txs
+      txs.forEach((t: any, idx: number) => {
+        const pid = extractPaymentId(t.source);
+        if (pid) {
+          const arr = idMap.get(pid) || [];
+          arr.push(idx);
+          idMap.set(pid, arr);
+        }
+      });
+      const ids = Array.from(idMap.keys());
+      if (ids.length > 0) {
+        const svc = createClient(
+          Deno.env.get('SUPABASE_URL')!,
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+        );
+        const { data: pags } = await svc
+          .from('stark_pagamentos')
+          .select('stark_id, beneficiario')
+          .in('stark_id', ids);
+        for (const p of pags ?? []) {
+          if (!p?.stark_id || !p?.beneficiario) continue;
+          const idxs = idMap.get(p.stark_id) || [];
+          for (const i of idxs) txs[i].description = p.beneficiario;
+        }
+      }
+    } catch (enrichErr) {
+      console.warn('stark-extrato enrich fail', enrichErr);
+    }
 
     return json({ ok: true, transactions: txs });
   } catch (e: any) {
