@@ -587,11 +587,11 @@ function BoletoDialog() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="i-v">Valor (R$) — opcional</Label>
-              <Input id="i-v" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="usa o do boleto" />
+              <Label htmlFor="i-v">Valor (R$)</Label>
+              <Input id="i-v" inputMode="decimal" value={valor} onChange={(e) => setValor(e.target.value)} />
             </div>
             <div>
-              <Label htmlFor="i-dp">Data do pagamento</Label>
+              <Label htmlFor="i-dp">Vencimento do boleto</Label>
               <Input id="i-dp" type="date" value={dataPagamento} onChange={(e) => setDataPagamento(e.target.value)} />
             </div>
           </div>
