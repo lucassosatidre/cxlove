@@ -1,15 +1,19 @@
-// Cópia fiel de src/components/cashflow/SaldoDeHoje.tsx para uso na aba
-// "Fluxo de Caixa" da Controladoria. Reutiliza o mesmo hook e edge.
+// Controladoria — Saldo de hoje com saldos MANUAIS (ctrl_account_balances).
+// Inter continua live via edge inter-saldo.
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, RefreshCw } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { Wallet, RefreshCw, Pencil } from 'lucide-react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useCashflowBalances, fmtBRL, type AccountWithBalance } from '@/hooks/useCashflowBalances';
+import { fmtBRL } from '@/hooks/useCashflowBalances';
+import { useCtrlAccountBalances, useUpdateCtrlBalances, type CtrlAccountWithBalance } from '@/hooks/useCtrlAccountBalances';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
-import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { parseMoneyBR, formatMoneyBR } from '@/lib/money';
 import logoBb from '@/assets/logo-bb.png';
 import logoCresol from '@/assets/logo-cresol.webp';
 import logoIfood from '@/assets/logo-ifood.png';
@@ -17,8 +21,8 @@ import logoSicredi from '@/assets/logo-sicredi.jpeg';
 
 const fmtDate = (iso?: string | null) => {
   if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
+  const d = new Date(iso);
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
 const BANK_LOGOS: Record<string, string> = {
@@ -48,11 +52,7 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   if (src) {
     return (
       <div className="h-10 w-10 rounded-xl bg-white overflow-hidden flex items-center justify-center shrink-0">
-        <img
-          src={src}
-          alt={name}
-          className={cn('h-full w-full object-contain', isCresol ? 'p-0' : 'p-1')}
-        />
+        <img src={src} alt={name} className={cn('h-full w-full object-contain', isCresol ? 'p-0' : 'p-1')} />
       </div>
     );
   }
@@ -76,7 +76,7 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   );
 }
 
-function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: boolean }) {
+function AccountBubble({ acc, showName }: { acc: CtrlAccountWithBalance; showName: boolean }) {
   const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
   return (
@@ -101,11 +101,85 @@ function AccountBubble({ acc, showName }: { acc: AccountWithBalance; showName: b
   );
 }
 
+function EditBalancesDialog({
+  open,
+  onOpenChange,
+  accounts,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  accounts: CtrlAccountWithBalance[];
+}) {
+  const update = useUpdateCtrlBalances();
+  const [values, setValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (open) {
+      const init: Record<string, string> = {};
+      for (const a of accounts) {
+        init[a.id] = formatMoneyBR(Number(a.balance?.own_balance ?? 0));
+      }
+      setValues(init);
+    }
+  }, [open, accounts]);
+
+  const handleSave = async () => {
+    try {
+      const rows = accounts.map((a) => ({
+        account_id: a.id,
+        own_balance: parseMoneyBR(values[a.id] ?? '0'),
+      }));
+      await update.mutateAsync(rows);
+      toast.success('Saldos atualizados');
+      onOpenChange(false);
+    } catch (e: any) {
+      toast.error(`Falha ao salvar: ${e?.message || e}`);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Atualizar saldos manuais</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+          {accounts.map((a) => {
+            const displayName = DISPLAY_NAME[a.name] ?? a.name;
+            return (
+              <div key={a.id} className="flex items-center gap-3">
+                <BankLogo bank={a.bank} name={a.name} />
+                <Label className="flex-1 text-sm">{displayName}</Label>
+                <Input
+                  className="w-40 font-mono text-right"
+                  value={values[a.id] ?? ''}
+                  onChange={(e) => setValues((v) => ({ ...v, [a.id]: e.target.value }))}
+                  placeholder="R$ 0,00"
+                  inputMode="decimal"
+                />
+              </div>
+            );
+          })}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={update.isPending}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={update.isPending}>
+            {update.isPending ? 'Salvando…' : 'Salvar'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SaldoDeHoje() {
-  const { data, isLoading, error } = useCashflowBalances();
+  const { data, isLoading, error } = useCtrlAccountBalances();
   const [inter, setInter] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
   const [interLoading, setInterLoading] = useState(false);
   const [interError, setInterError] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const fetchInter = useCallback(async () => {
     setInterLoading(true);
@@ -130,40 +204,22 @@ export default function SaldoDeHoje() {
     fetchInter();
   }, [fetchInter]);
 
-  const [syncing, setSyncing] = useState(false);
-  const queryClient = useQueryClient();
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const { data: res, error: err } = await supabase.functions.invoke('pluggy-sync', { body: { clearManual: true } });
-      if (err) throw err;
-      const allAccounts = ((res as any)?.items ?? []).flatMap((it: any) => it.accounts ?? []);
-      const totalTx = allAccounts.reduce((s: number, a: any) => s + (a.transactions_upserted ?? 0), 0);
-      toast.success(`Saldos sincronizados (${totalTx} lançamentos novos)`);
-      await queryClient.invalidateQueries({ queryKey: ['cashflow', 'balances', 'latest'] });
-    } catch (e: any) {
-      toast.error(`Falha ao sincronizar: ${e?.message || e}`);
-    } finally {
-      setSyncing(false);
-    }
-  };
+  const asOf = useMemo(() => {
+    if (!data) return undefined;
+    return data.map((d) => d.balance?.as_of).filter(Boolean).sort().pop() as string | undefined;
+  }, [data]);
 
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          Carregando saldos…
-        </CardContent>
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">Carregando saldos…</CardContent>
       </Card>
     );
   }
   if (error || !data) {
     return (
       <Card>
-        <CardContent className="py-10 text-center text-sm text-destructive">
-          Erro ao carregar saldos.
-        </CardContent>
+        <CardContent className="py-10 text-center text-sm text-destructive">Erro ao carregar saldos.</CardContent>
       </Card>
     );
   }
@@ -172,10 +228,6 @@ export default function SaldoDeHoje() {
   const ownSum = ownAccs.reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
   const limitSum = ownAccs.reduce((s, a) => s + Number(a.overdraft_limit ?? 0), 0);
   const folego = ownSum + limitSum;
-
-  const asOf = data.map((d) => d.balance?.as_of).filter(Boolean).sort().pop() as
-    | string
-    | undefined;
 
   const isEstrela = (raw: string | null | undefined) => (raw || '').toLowerCase().trim() === 'estrela';
   const isGrupo = (raw: string | null | undefined) => {
@@ -198,21 +250,18 @@ export default function SaldoDeHoje() {
           </div>
           <div>
             <CardTitle className="text-base font-semibold">Saldo de hoje</CardTitle>
-            <p className="text-xs text-foreground/80 mt-0.5">
-              Referência: {fmtDate(asOf)}
-            </p>
+            <p className="text-xs text-foreground/80 mt-0.5">Referência: {fmtDate(asOf)}</p>
           </div>
         </div>
         <Button
           variant="ghost"
           size="sm"
           className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-          onClick={handleSync}
-          disabled={syncing}
-          title="Sincronizar saldos via Open Finance"
+          onClick={() => setEditOpen(true)}
+          title="Atualizar saldos manualmente"
         >
-          <RefreshCw className={cn('h-3 w-3', syncing && 'animate-spin')} />
-          {syncing ? 'Sincronizando…' : 'Sincronizar'}
+          <Pencil className="h-3 w-3" />
+          Atualizar saldos
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -253,9 +302,7 @@ export default function SaldoDeHoje() {
             {interLoading && !inter ? (
               <Skeleton className="h-4 w-20" />
             ) : interError ? (
-              <div className="font-mono text-xs font-semibold text-destructive text-center">
-                Indisponível
-              </div>
+              <div className="font-mono text-xs font-semibold text-destructive text-center">Indisponível</div>
             ) : inter ? (
               <>
                 <div
@@ -267,10 +314,7 @@ export default function SaldoDeHoje() {
                   {fmtBRL(inter.disponivel)}
                 </div>
                 <div className="text-[9px] text-muted-foreground leading-none" title={inter.atualizado_em}>
-                  {new Date(inter.atualizado_em).toLocaleTimeString('pt-BR', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {new Date(inter.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </>
             ) : null}
@@ -318,6 +362,8 @@ export default function SaldoDeHoje() {
           </div>
         </div>
       </CardContent>
+
+      <EditBalancesDialog open={editOpen} onOpenChange={setEditOpen} accounts={data} />
     </Card>
   );
 }
