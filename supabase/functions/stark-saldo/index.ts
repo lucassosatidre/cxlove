@@ -19,6 +19,8 @@ function json(obj: any, status = 200) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
+    const user = await getAuthedUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
     const { ok, status, data, raw } = await starkFetch('/balance');
     if (!ok) return json({ ok: false, error: starkErrorMessage(data, raw, status), status }, 200);
     const b = data?.balances?.[0];
