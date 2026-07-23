@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
+import { fmtBRL } from '@/hooks/useCashflowBalances';
+import { useCtrlAccountBalances } from '@/hooks/useCtrlAccountBalances';
 import { useCtrlUpcomingBillsDaily, type CtrlBillRow } from '@/hooks/useCtrlCashflowAnalytics';
 import { cn } from '@/lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
