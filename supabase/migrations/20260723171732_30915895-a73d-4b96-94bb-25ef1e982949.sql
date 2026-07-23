@@ -1,0 +1,1 @@
+ALTER VIEW public.cashflow_lancamentos SET (security_invoker = on);
