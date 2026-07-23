@@ -229,6 +229,15 @@ export default function InterBank() {
 }
 
 function InterPagamentosCard() {
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setUserEmail((data?.user?.email || '').toLowerCase() || null);
+    });
+  }, []);
+  // Estética apenas — a segurança real está nas edges inter-pagar-* / inter-pix (checagem APROVADORES).
+  const isAprovador = isAprovadorUI(userEmail);
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -243,19 +252,28 @@ function InterPagamentosCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex flex-wrap gap-2">
-          <BoletoDialog />
-          <DarfDialog />
-          <PixDialog />
-          <LoteDialog />
-        </div>
-        <p className="text-xs text-muted-foreground pt-2 border-t">
-          A liberação final acontece na fila de aprovação do app do Banco Inter.
-        </p>
+        {isAprovador ? (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <BoletoDialog />
+              <DarfDialog />
+              <PixDialog />
+              <LoteDialog />
+            </div>
+            <p className="text-xs text-muted-foreground pt-2 border-t">
+              A liberação final acontece na fila de aprovação do app do Banco Inter.
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Pagamentos disponíveis apenas para aprovadores.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
 }
+
 
 /* ---------------- Boleto ---------------- */
 function BoletoDialog() {
