@@ -45,8 +45,8 @@ export default function PickNGoImport() {
       const { rows } = await parsePickNGoFile(file);
 
       // Cadastro oficial de entregadores (alimenta a Escala) — para normalizar nomes
-      const { data: driverRows } = await supabase.from('delivery_drivers').select('nome');
-      const driverNames = (driverRows || []).map(d => d.nome).filter(Boolean) as string[];
+      const { data: driverRows } = await supabase.from('delivery_drivers_public' as any).select('nome');
+      const driverNames = ((driverRows as any[]) || []).map((d: any) => d.nome).filter(Boolean) as string[];
 
       // Agrupa as linhas do PickNGo por data
       const byDate = new Map<string, typeof rows>();
