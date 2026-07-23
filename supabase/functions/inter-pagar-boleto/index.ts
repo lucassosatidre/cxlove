@@ -1,5 +1,6 @@
 // @ts-nocheck
 // inter-pagar-boleto — paga boleto/código de barras via API Inter (mTLS + OAuth2).
+import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
