@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { starkFetch, starkErrorMessage } from "../_shared/stark.ts";
-import { getAuthedUser } from "../_shared/require-user.ts";
+import { getAuthedUser, isFinance } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

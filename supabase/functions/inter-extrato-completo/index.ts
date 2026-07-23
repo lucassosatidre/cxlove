@@ -1,6 +1,6 @@
 // @ts-nocheck
 // inter-extrato-completo — extrato enriquecido do Banco Inter.
-import { getAuthedUser } from "../_shared/require-user.ts";
+import { getAuthedUser, isFinance } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':

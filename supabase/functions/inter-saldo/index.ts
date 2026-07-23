@@ -1,6 +1,6 @@
 // @ts-nocheck
 // inter-saldo — consulta saldo em tempo real do Banco Inter Empresas via API REST + mTLS.
-import { getAuthedUser } from "../_shared/require-user.ts";
+import { getAuthedUser, isFinance } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',

@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { starkFetch, starkErrorMessage } from "../_shared/stark.ts";
-import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
+import { getAuthedUser, isAprovador, isFinance } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
