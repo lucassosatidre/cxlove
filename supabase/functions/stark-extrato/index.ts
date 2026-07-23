@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
   try {
     const user = await getAuthedUser(req);
     if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!(await isFinance(user.email))) return json({ error: 'Acesso restrito ao financeiro' }, 403);
     let after: string | undefined, before: string | undefined, limit = 100;
     if (req.method === 'POST') {
       const b = await req.json().catch(() => ({}));
