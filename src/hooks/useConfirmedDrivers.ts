@@ -47,7 +47,7 @@ export function useConfirmedDrivers(closingDate: string) {
         .in('id', driverIds)
         .order('nome');
 
-      setConfirmedDrivers(drivers || []);
+      setConfirmedDrivers((drivers as any) || []);
       setLoading(false);
     };
 

@@ -67,7 +67,7 @@ export function useDriverAttendance(closingDate: string) {
         .from('delivery_drivers_public' as any)
         .select('id, nome')
         .in('id', driverIds);
-      (drivers || []).forEach(d => { driversMap[d.id] = d.nome; });
+      ((drivers as any[]) || []).forEach((d: any) => { driversMap[d.id] = d.nome; });
     }
 
     const result: ShiftBlock[] = dayShifts
