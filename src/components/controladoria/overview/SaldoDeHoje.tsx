@@ -183,6 +183,21 @@ export default function SaldoDeHoje() {
   const [starkLoading, setStarkLoading] = useState(false);
   const [starkError, setStarkError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem('ctrl_saldo_hidden') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('ctrl_saldo_hidden', String(hidden));
+    } catch {
+      // ignore storage errors
+    }
+  }, [hidden]);
 
   const fetchInter = useCallback(async () => {
     setInterLoading(true);
