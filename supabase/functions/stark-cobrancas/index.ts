@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { starkFetch, starkErrorMessage } from "../_shared/stark.ts";
+import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,6 +35,8 @@ function mapInvoice(i: any) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
+    const user = await getAuthedUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
     const body = await req.json().catch(() => ({}));
     const action = body?.action;
 
@@ -75,6 +78,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'cancel') {
+      if (!isAprovador(user.email)) return json({ ok: false, error: 'Sem permissão para cancelar cobranças' }, 403);
       const id = String(body.id || '').trim();
       if (!id) return json({ ok: false, error: 'ID da cobrança é obrigatório' }, 400);
       const { ok, status, data, raw } = await starkFetch(`/invoice/${id}`, {

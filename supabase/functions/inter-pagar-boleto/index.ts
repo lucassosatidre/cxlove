@@ -1,5 +1,6 @@
 // @ts-nocheck
 // inter-pagar-boleto — paga boleto/código de barras via API Inter (mTLS + OAuth2).
+import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
@@ -47,6 +48,9 @@ async function getToken(client: Deno.HttpClient): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
+    const user = await getAuthedUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!isAprovador(user.email)) return json({ error: 'Sem permissão para pagamentos' }, 403);
     const { codigo_barras, data_vencimento, valor_pagar, descricao } =
       await req.json().catch(() => ({}));
     const codigoBarras = String(codigo_barras ?? '').replace(/\D/g, '');

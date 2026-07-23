@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { isAprovadorUI } from '@/lib/aprovadores';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -583,9 +584,8 @@ function pagStatusBadge(status: string) {
   return <Badge variant="outline">{status}</Badge>;
 }
 
-// A lista abaixo é SÓ ESTÉTICA (esconde botões pra quem não é aprovador).
+// A lista de aprovadores é SÓ ESTÉTICA (esconde botões pra quem não é aprovador).
 // A segurança real está na edge stark-aprovar: whitelist + senha validadas no servidor.
-const APROVADORES_UI = ['adm@vigia.com', 'lucassosatidre@gmail.com', 'luana@vigia.com'];
 
 function StarkPagamentosCard() {
   const [list, setList] = useState<Pagamento[]>([]);
@@ -606,7 +606,7 @@ function StarkPagamentosCard() {
     });
   }, []);
 
-  const isAprovador = !!userEmail && APROVADORES_UI.includes(userEmail);
+  const isAprovador = isAprovadorUI(userEmail);
 
   const load = useCallback(async () => {
     setLoading(true);
