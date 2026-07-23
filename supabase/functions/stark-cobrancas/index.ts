@@ -78,6 +78,7 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'cancel') {
+      if (!isAprovador(user.email)) return json({ ok: false, error: 'Sem permissão para cancelar cobranças' }, 403);
       const id = String(body.id || '').trim();
       if (!id) return json({ ok: false, error: 'ID da cobrança é obrigatório' }, 400);
       const { ok, status, data, raw } = await starkFetch(`/invoice/${id}`, {
