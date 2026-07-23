@@ -584,9 +584,8 @@ function pagStatusBadge(status: string) {
   return <Badge variant="outline">{status}</Badge>;
 }
 
-// A lista abaixo é SÓ ESTÉTICA (esconde botões pra quem não é aprovador).
+// A lista de aprovadores é SÓ ESTÉTICA (esconde botões pra quem não é aprovador).
 // A segurança real está na edge stark-aprovar: whitelist + senha validadas no servidor.
-import { isAprovadorUI } from '@/lib/aprovadores';
 
 function StarkPagamentosCard() {
   const [list, setList] = useState<Pagamento[]>([]);
