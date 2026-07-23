@@ -48,6 +48,9 @@ async function getToken(client: Deno.HttpClient): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
+    const user = await getAuthedUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!isAprovador(user.email)) return json({ error: 'Sem permissão para pagamentos' }, 403);
     const b = await req.json().catch(() => ({}));
     const cnpjCpf = String(b.cnpj_cpf ?? '').replace(/\D/g, '');
     const codigoReceita = String(b.codigo_receita ?? '').trim();
