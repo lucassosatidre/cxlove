@@ -207,9 +207,7 @@ export default function StarkBank() {
                 <Landmark className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
                 <div>
                   <CardTitle className="font-brand">Stark Bank</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Projeto Vigia API · Permissão Financeiro
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Conta digital</p>
                 </div>
               </div>
               {saldoLoading ? (
