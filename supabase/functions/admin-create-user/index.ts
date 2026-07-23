@@ -15,8 +15,8 @@ serve(async (req) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: callerData, error: callerErr } = await supabaseAdmin.auth.getUser(token);
     if (callerErr || !callerData?.user) return new Response(JSON.stringify({ error: "Not authenticated" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    const { data: callerPerms } = await supabaseAdmin.from("menu_permissions").select("menu_key, can_edit").eq("user_id", callerData.user.id);
-    const isAdmin = (callerPerms?.length ?? 0) === 0 || callerPerms?.find((p) => p.menu_key === "config.usuarios")?.can_edit === true;
+    const { data: adminRole } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", callerData.user.id).eq("role", "admin").maybeSingle();
+    const isAdmin = !!adminRole;
     if (!isAdmin) return new Response(JSON.stringify({ error: "Sem permissão para gerenciar usuários" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const { email, password, full_name, phone } = await req.json();

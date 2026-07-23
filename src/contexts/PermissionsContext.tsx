@@ -42,13 +42,7 @@ export const PermissionsProvider = ({ children }: { children: ReactNode }) => {
       .eq("user_id", user.id);
 
     if (!data || data.length === 0) {
-      const rows = ALL_MENU_KEYS.map((key) => ({
-        user_id: user.id, menu_key: key, can_view: true, can_create: true, can_edit: true, can_delete: true,
-      }));
-      await supabase.from("menu_permissions").insert(rows);
-      setPermissions(ALL_MENU_KEYS.map((key) => ({
-        menu_key: key, can_view: true, can_create: true, can_edit: true, can_delete: true,
-      })));
+      setPermissions([]);
     } else {
       setPermissions(data.map((d) => ({
         menu_key: d.menu_key,
