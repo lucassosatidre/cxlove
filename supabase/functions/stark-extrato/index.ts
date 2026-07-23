@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { starkFetch, starkErrorMessage } from "../_shared/stark.ts";
-import { getAuthedUser } from "../_shared/require-user.ts";
+import { getAuthedUser, isFinance } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +29,7 @@ Deno.serve(async (req) => {
   try {
     const user = await getAuthedUser(req);
     if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!(await isFinance(user.email))) return json({ error: 'Acesso restrito ao financeiro' }, 403);
     let after: string | undefined, before: string | undefined, limit = 100;
     if (req.method === 'POST') {
       const b = await req.json().catch(() => ({}));

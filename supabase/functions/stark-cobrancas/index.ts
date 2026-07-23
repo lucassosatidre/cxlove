@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { starkFetch, starkErrorMessage } from "../_shared/stark.ts";
-import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
+import { getAuthedUser, isAprovador, isFinance } from "../_shared/require-user.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,6 +37,7 @@ Deno.serve(async (req) => {
   try {
     const user = await getAuthedUser(req);
     if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!(await isFinance(user.email))) return json({ error: 'Acesso restrito ao financeiro' }, 403);
     const body = await req.json().catch(() => ({}));
     const action = body?.action;
 

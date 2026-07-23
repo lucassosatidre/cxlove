@@ -1,6 +1,6 @@
 // @ts-nocheck
 // inter-extrato-completo — extrato enriquecido do Banco Inter.
-import { getAuthedUser } from "../_shared/require-user.ts";
+import { getAuthedUser, isFinance } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
   try {
     const user = await getAuthedUser(req);
     if (!user) return json({ error: 'Não autenticado' }, 401);
+    if (!(await isFinance(user.email))) return json({ error: 'Acesso restrito ao financeiro' }, 403);
     const { data_inicio, data_fim, pagina = 0, tamanhoPagina = 100 } = await req.json().catch(() => ({}));
     if (!data_inicio || !data_fim) return json({ error: 'data_inicio e data_fim são obrigatórios' }, 400);
 
