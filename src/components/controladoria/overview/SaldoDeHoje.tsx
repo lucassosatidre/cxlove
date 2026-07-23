@@ -406,7 +406,7 @@ export default function SaldoDeHoje() {
                     stark.disponivel < 0 ? 'text-destructive' : 'text-foreground',
                   )}
                 >
-                  {fmtBRL(stark.disponivel)}
+                  {hidden ? 'R$ •••••' : fmtBRL(stark.disponivel)}
                 </div>
                 <div className="text-[9px] text-muted-foreground leading-none" title={stark.atualizado_em}>
                   {new Date(stark.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
