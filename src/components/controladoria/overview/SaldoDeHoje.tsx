@@ -1,7 +1,7 @@
 // Controladoria — Saldo de hoje com saldos MANUAIS (ctrl_account_balances).
 // Inter continua live via edge inter-saldo.
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, RefreshCw, Pencil } from 'lucide-react';
+import { Wallet, RefreshCw, Pencil, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
@@ -76,7 +76,7 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   );
 }
 
-function AccountBubble({ acc, showName }: { acc: CtrlAccountWithBalance; showName: boolean }) {
+function AccountBubble({ acc, showName, hidden }: { acc: CtrlAccountWithBalance; showName: boolean; hidden?: boolean }) {
   const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
   return (
@@ -95,7 +95,7 @@ function AccountBubble({ acc, showName }: { acc: CtrlAccountWithBalance; showNam
           own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
-        {fmtBRL(own)}
+        {hidden ? 'R$ •••••' : fmtBRL(own)}
       </div>
     </div>
   );
@@ -183,6 +183,21 @@ export default function SaldoDeHoje() {
   const [starkLoading, setStarkLoading] = useState(false);
   const [starkError, setStarkError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return window.localStorage.getItem('ctrl_saldo_hidden') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('ctrl_saldo_hidden', String(hidden));
+    } catch {
+      // ignore storage errors
+    }
+  }, [hidden]);
 
   const fetchInter = useCallback(async () => {
     setInterLoading(true);
@@ -277,27 +292,39 @@ export default function SaldoDeHoje() {
             <p className="text-xs text-foreground/80 mt-0.5">Referência: {fmtDate(asOf)}</p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-          onClick={() => setEditOpen(true)}
-          title="Atualizar saldos manualmente"
-        >
-          <Pencil className="h-3 w-3" />
-          Atualizar saldos
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setHidden((v) => !v)}
+            aria-label={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+            title={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+          >
+            {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => setEditOpen(true)}
+            title="Atualizar saldos manualmente"
+          >
+            <Pencil className="h-3 w-3" />
+            Atualizar saldos
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-3 pb-2 items-stretch">
           {estrelaAccs.map((a) => (
-            <AccountBubble key={a.id} acc={a} showName={false} />
+            <AccountBubble key={a.id} acc={a} showName={false} hidden={hidden} />
           ))}
           {grupoAccs.map((a) => (
-            <AccountBubble key={a.id} acc={a} showName />
+            <AccountBubble key={a.id} acc={a} showName hidden={hidden} />
           ))}
           {outrosAccs.map((a) => (
-            <AccountBubble key={a.id} acc={a} showName />
+            <AccountBubble key={a.id} acc={a} showName hidden={hidden} />
           ))}
 
           <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full relative">
@@ -335,7 +362,7 @@ export default function SaldoDeHoje() {
                     inter.disponivel < 0 ? 'text-destructive' : 'text-foreground',
                   )}
                 >
-                  {fmtBRL(inter.disponivel)}
+                  {hidden ? 'R$ •••••' : fmtBRL(inter.disponivel)}
                 </div>
                 <div className="text-[9px] text-muted-foreground leading-none" title={inter.atualizado_em}>
                   {new Date(inter.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -379,7 +406,7 @@ export default function SaldoDeHoje() {
                     stark.disponivel < 0 ? 'text-destructive' : 'text-foreground',
                   )}
                 >
-                  {fmtBRL(stark.disponivel)}
+                  {hidden ? 'R$ •••••' : fmtBRL(stark.disponivel)}
                 </div>
                 <div className="text-[9px] text-muted-foreground leading-none" title={stark.atualizado_em}>
                   {new Date(stark.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -401,7 +428,7 @@ export default function SaldoDeHoje() {
                   folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
                 )}
               >
-                {fmtBRL(folego)}
+                {hidden ? 'R$ •••••' : fmtBRL(folego)}
               </div>
               <div className="text-[9px] text-muted-foreground leading-none text-center">saldo + limite</div>
             </div>
@@ -416,7 +443,7 @@ export default function SaldoDeHoje() {
                   negativo ? 'text-destructive' : 'text-foreground',
                 )}
               >
-                {fmtBRL(ownSum)}
+                {hidden ? 'R$ •••••' : fmtBRL(ownSum)}
               </div>
             </div>
 
@@ -425,7 +452,7 @@ export default function SaldoDeHoje() {
                 Limite
               </div>
               <div className="font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden text-foreground">
-                {fmtBRL(limitSum)}
+                {hidden ? 'R$ •••••' : fmtBRL(limitSum)}
               </div>
               <div className="text-[9px] text-muted-foreground leading-none text-center">contratado</div>
             </div>
