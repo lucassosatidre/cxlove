@@ -636,14 +636,25 @@ function StarkPagamentosCard() {
   }, [load]);
 
   async function submit() {
-    const digits = linha.replace(/\D/g, '');
-    if (digits.length < 20) { toast.error('Linha digitável inválida'); return; }
+    const raw = linha.trim();
+    const hasLetters = /[A-Za-z]/.test(raw);
+    let payload = '';
+    if (hasLetters) {
+      // Pix copia-e-cola: preserva o texto (sem espaços)
+      const compact = raw.replace(/\s+/g, '');
+      if (compact.length < 30) { toast.error('Pix copia-e-cola inválido'); return; }
+      payload = compact;
+    } else {
+      const digits = raw.replace(/\D/g, '');
+      if (digits.length < 20) { toast.error('Linha digitável inválida'); return; }
+      payload = digits;
+    }
     setSaving(true);
     try {
       const { data: userRes } = await supabase.auth.getUser();
       const { error } = await (supabase as any).from('stark_pagamentos').insert({
         tipo: 'boleto',
-        linha: digits,
+        linha: payload,
         description: desc.trim() || 'Pagamento Vigia',
         created_by: userRes?.user?.id ?? null,
       });
@@ -657,6 +668,7 @@ function StarkPagamentosCard() {
       setSaving(false);
     }
   }
+
 
   async function confirmarAprovacao() {
     if (!aprovarDialog) return;
@@ -717,16 +729,18 @@ function StarkPagamentosCard() {
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">Pagar boleto</Button>
+                <Button size="sm">Pagar conta</Button>
               </DialogTrigger>
               <DialogContent className="max-w-lg">
                 <DialogHeader>
-                  <DialogTitle>Novo pagamento de boleto</DialogTitle>
-                  <DialogDescription>Cole a linha digitável ou código de barras.</DialogDescription>
+                  <DialogTitle>Novo pagamento</DialogTitle>
+                  <DialogDescription>
+                    Cole a linha digitável (boleto, consumo, tributo) ou um Pix copia-e-cola. O tipo é detectado automaticamente.
+                  </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
                   <div>
-                    <Label htmlFor="pag-linha">Linha digitável</Label>
+                    <Label htmlFor="pag-linha">Linha digitável ou Pix copia-e-cola</Label>
                     <Textarea
                       id="pag-linha"
                       value={linha}
@@ -745,6 +759,7 @@ function StarkPagamentosCard() {
                     />
                   </div>
                 </div>
+
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
                   <Button onClick={submit} disabled={saving}>
