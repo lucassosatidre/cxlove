@@ -19,6 +19,8 @@ function json(obj: any, status = 200) {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
+    const user = await getAuthedUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
     let after: string | undefined, before: string | undefined, limit = 100;
     if (req.method === 'POST') {
       const b = await req.json().catch(() => ({}));
