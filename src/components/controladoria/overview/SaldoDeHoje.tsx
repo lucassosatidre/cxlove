@@ -452,7 +452,7 @@ export default function SaldoDeHoje() {
                 Limite
               </div>
               <div className="font-mono text-xs sm:text-[11px] font-bold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden text-foreground">
-                {fmtBRL(limitSum)}
+                {hidden ? 'R$ •••••' : fmtBRL(limitSum)}
               </div>
               <div className="text-[9px] text-muted-foreground leading-none text-center">contratado</div>
             </div>
