@@ -1,5 +1,6 @@
 // @ts-nocheck
 // inter-pix — envia Pix por chave via API Inter (mTLS + OAuth2).
+import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
