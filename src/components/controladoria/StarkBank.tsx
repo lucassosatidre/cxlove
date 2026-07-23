@@ -13,7 +13,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, RefreshCw, QrCode, Copy, ExternalLink, Ban,
-  Landmark, Wallet, FileText, Send, Receipt, Bell, AlertCircle, Inbox,
+  Landmark, Wallet, FileText, Send, Receipt, AlertCircle, Inbox,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
