@@ -162,7 +162,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     if (!checkins || checkins.length === 0) return;
     const driverIds = [...new Set(checkins.map(c => c.driver_id))];
     const { data: driversRaw } = await supabase.from('delivery_drivers_public' as any).select('id, nome').in('id', driverIds).order('nome');
-    const drivers = (driversRaw as any[]) | null as any;
+    const drivers = (driversRaw as any[]) || null;
     if (drivers) {
       const names = [...new Set((drivers as any[]).map((d: any) => d.nome.split(' ')[0]))].sort();
       setConfirmedDriverNames(names);
