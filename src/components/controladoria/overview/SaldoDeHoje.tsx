@@ -179,6 +179,9 @@ export default function SaldoDeHoje() {
   const [inter, setInter] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
   const [interLoading, setInterLoading] = useState(false);
   const [interError, setInterError] = useState(false);
+  const [stark, setStark] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
+  const [starkLoading, setStarkLoading] = useState(false);
+  const [starkError, setStarkError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const fetchInter = useCallback(async () => {
@@ -200,9 +203,29 @@ export default function SaldoDeHoje() {
     }
   }, []);
 
+  const fetchStark = useCallback(async () => {
+    setStarkLoading(true);
+    setStarkError(false);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke('stark-saldo', { body: {} });
+      if (err) throw err;
+      if (!(res as any)?.ok) throw new Error((res as any)?.error || 'stark error');
+      setStark({
+        disponivel: Number((res as any)?.disponivel ?? 0),
+        atualizado_em: String((res as any)?.atualizado_em ?? new Date().toISOString()),
+      });
+    } catch (e) {
+      console.error('stark-saldo error', e);
+      setStarkError(true);
+    } finally {
+      setStarkLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchInter();
-  }, [fetchInter]);
+    fetchStark();
+  }, [fetchInter, fetchStark]);
 
   const asOf = useMemo(() => {
     if (!data) return undefined;
@@ -225,7 +248,8 @@ export default function SaldoDeHoje() {
   }
 
   const ownAccs = data.filter((a) => !a.is_passthrough);
-  const ownSum = ownAccs.reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
+  const manualSum = ownAccs.reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
+  const ownSum = manualSum + (inter ? inter.disponivel : 0) + (stark ? stark.disponivel : 0);
   const limitSum = ownAccs.reduce((s, a) => s + Number(a.overdraft_limit ?? 0), 0);
   const folego = ownSum + limitSum;
 
@@ -319,6 +343,52 @@ export default function SaldoDeHoje() {
               </>
             ) : null}
           </div>
+
+          <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full relative">
+            <button
+              type="button"
+              onClick={fetchStark}
+              disabled={starkLoading}
+              className="absolute top-1 right-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+              aria-label="Atualizar saldo Stark"
+              title="Atualizar saldo Stark"
+            >
+              <RefreshCw className={cn('h-3 w-3', starkLoading && 'animate-spin')} />
+            </button>
+            <div className="flex items-center gap-2 min-w-0 max-w-full">
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm"
+                style={{ backgroundColor: '#0B7285', color: '#FFFFFF' }}
+                aria-label="Stark Bank"
+              >
+                St
+              </div>
+              <div className="text-xs font-medium text-center truncate min-w-0" title="Stark">
+                Stark
+              </div>
+            </div>
+            {starkLoading && !stark ? (
+              <Skeleton className="h-4 w-20" />
+            ) : starkError ? (
+              <div className="font-mono text-xs font-semibold text-destructive text-center">Indisponível</div>
+            ) : stark ? (
+              <>
+                <div
+                  className={cn(
+                    'font-mono text-xs sm:text-[11px] font-semibold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
+                    stark.disponivel < 0 ? 'text-destructive' : 'text-foreground',
+                  )}
+                >
+                  {fmtBRL(stark.disponivel)}
+                </div>
+                <div className="text-[9px] text-muted-foreground leading-none" title={stark.atualizado_em}>
+                  {new Date(stark.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </>
+            ) : null}
+          </div>
+
+
 
           <div className="flex flex-col gap-2 min-w-0">
             <div className="rounded-lg border border-primary/50 bg-primary/10 p-2 flex flex-col items-center gap-1 min-w-0 w-full">
