@@ -2590,6 +2590,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "delivery_checkins_driver_id_fkey"
+            columns: ["driver_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_drivers_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "delivery_checkins_shift_id_fkey"
             columns: ["shift_id"]
             isOneToOne: false
@@ -4652,6 +4659,39 @@ export type Database = {
           ref_id: string | null
           tipo: string | null
           vencimento: string | null
+        }
+        Relationships: []
+      }
+      delivery_drivers_public: {
+        Row: {
+          auth_user_id: string | null
+          created_at: string | null
+          id: string | null
+          nome: string | null
+          password_changed: boolean | null
+          status: string | null
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          auth_user_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          nome?: string | null
+          password_changed?: boolean | null
+          status?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          auth_user_id?: string | null
+          created_at?: string | null
+          id?: string | null
+          nome?: string | null
+          password_changed?: boolean | null
+          status?: string | null
+          telefone?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
