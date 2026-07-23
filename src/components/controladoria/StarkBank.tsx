@@ -819,7 +819,6 @@ function StarkPagamentosCard() {
                 <TableRow>
                   <TableHead className="w-[140px]">Data</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead className="w-[140px]">Linha</TableHead>
                   <TableHead className="text-right w-[120px]">Valor</TableHead>
                   <TableHead className="w-[190px]">Status</TableHead>
                   <TableHead className="w-[170px] text-right">Ações</TableHead>
@@ -829,12 +828,12 @@ function StarkPagamentosCard() {
                 {loading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={`pgsk-${i}`}>
-                      <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+                      <TableCell colSpan={5}><Skeleton className="h-5 w-full" /></TableCell>
                     </TableRow>
                   ))
                 ) : list.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={5}>
                       <div className="flex flex-col items-center justify-center py-10 text-center">
                         <Receipt className="h-10 w-10 text-muted-foreground mb-2" aria-hidden="true" />
                         <p className="font-medium">Nenhum pagamento ainda</p>
@@ -844,15 +843,17 @@ function StarkPagamentosCard() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : list.map((p) => (
+                ) : list.map((p) => {
+                  const titulo = p.beneficiario || p.description || '—';
+                  const subtitulo = p.beneficiario && p.description && p.description !== p.beneficiario ? p.description : null;
+                  return (
                   <TableRow key={p.id}>
                     <TableCell className="text-xs">{fmtDateTime(p.created_at)}</TableCell>
                     <TableCell className="text-sm">
-                      <div>{p.description || '—'}</div>
-                      {p.beneficiario && <div className="text-xs text-muted-foreground">{p.beneficiario}</div>}
-                      {p.status === 'falha' && p.erro && <div className="text-xs text-destructive mt-1">{p.erro}</div>}
+                      <div>{titulo}</div>
+                      {subtitulo && <div className="text-xs text-muted-foreground">{subtitulo}</div>}
+                      {p.status === 'falha' && p.erro && <div className="text-xs text-destructive mt-1">{mapErroPagamento(p.erro)}</div>}
                     </TableCell>
-                    <TableCell className="text-xs font-mono">…{p.linha.slice(-8)}</TableCell>
                     <TableCell className="text-right font-mono-tabular">{p.amount_reais != null ? formatMoneyBR(Number(p.amount_reais)) : '—'}</TableCell>
                     <TableCell>{pagStatusBadge(p.status)}</TableCell>
                     <TableCell className="text-right">
@@ -888,13 +889,14 @@ function StarkPagamentosCard() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Aprovação exige senha e é registrada (quem/quando). Executado pelo porteiro via Stark Bank.
+          O pagamento sai só depois de aprovado com senha. Toda aprovação fica registrada.
         </p>
       </CardContent>
 
