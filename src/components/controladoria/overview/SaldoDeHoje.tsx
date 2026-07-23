@@ -76,7 +76,7 @@ function BankLogo({ bank, name }: { bank: string | null | undefined; name: strin
   );
 }
 
-function AccountBubble({ acc, showName }: { acc: CtrlAccountWithBalance; showName: boolean }) {
+function AccountBubble({ acc, showName, hidden }: { acc: CtrlAccountWithBalance; showName: boolean; hidden?: boolean }) {
   const own = Number(acc.balance?.own_balance ?? 0);
   const displayName = DISPLAY_NAME[acc.name] ?? acc.name;
   return (
@@ -95,7 +95,7 @@ function AccountBubble({ acc, showName }: { acc: CtrlAccountWithBalance; showNam
           own < 0 ? 'text-destructive' : 'text-foreground',
         )}
       >
-        {fmtBRL(own)}
+        {hidden ? 'R$ •••••' : fmtBRL(own)}
       </div>
     </div>
   );
