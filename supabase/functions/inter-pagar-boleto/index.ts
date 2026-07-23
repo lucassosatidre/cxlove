@@ -58,17 +58,19 @@ Deno.serve(async (req) => {
       return json({ error: 'codigo_barras inválido (esperado 44/47/48 dígitos)' }, 400);
     }
     const hoje = new Date().toISOString().slice(0, 10);
-    const dataPagamento = String(data_vencimento ?? hoje).slice(0, 10);
+    const dataVencimento = String(data_vencimento ?? hoje).slice(0, 10);
+
+    if (valor_pagar === undefined || valor_pagar === null || valor_pagar === '') {
+      return json({ error: 'O Inter exige o valor do boleto. Informe o valor.' }, 400);
+    }
+    const v = Number(valor_pagar);
+    if (!isFinite(v) || v <= 0) return json({ error: 'valor_pagar inválido' }, 400);
 
     const payload: Record<string, unknown> = {
-      codigoBarras,
-      dataPagamento,
+      codBarraLinhaDigitavel: codigoBarras,
+      dataVencimento,
+      valorPagar: v,
     };
-    if (valor_pagar !== undefined && valor_pagar !== null && valor_pagar !== '') {
-      const v = Number(valor_pagar);
-      if (!isFinite(v) || v <= 0) return json({ error: 'valor_pagar inválido' }, 400);
-      payload.valorPagar = v;
-    }
     if (descricao) payload.descricao = String(descricao);
 
     const client = buildClient();
