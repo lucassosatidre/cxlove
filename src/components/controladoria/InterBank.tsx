@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { isAprovadorUI } from '@/lib/aprovadores';
 
 type SaldoResp = {
   disponivel?: number; bloqueado?: number; limite?: number; saldo_total?: number;
