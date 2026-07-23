@@ -8,14 +8,12 @@ import InterBank from '@/components/controladoria/InterBank';
 
 export default function ControladoriaFinanceira() {
   return (
-    <AppLayout title="Controladoria Financeira">
+    <AppLayout
+      title="Controladoria Financeira"
+      subtitle="Concilie notas fiscais em contas a pagar. Independente do Fluxo de Caixa."
+    >
       <div className="space-y-6 p-4 md:p-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Controladoria Financeira</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Concilie notas fiscais em contas a pagar. Independente do Fluxo de Caixa.
-          </p>
-        </div>
+
 
         <Tabs defaultValue="notas" className="space-y-6">
           <TabsList>
