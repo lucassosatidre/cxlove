@@ -2658,6 +2658,21 @@ export type Database = {
         }
         Relationships: []
       }
+      finance_viewers: {
+        Row: {
+          created_at: string
+          email: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+        }
+        Relationships: []
+      }
       imported_orders: {
         Row: {
           cancelled_at: string | null
@@ -4948,6 +4963,7 @@ export type Database = {
       }
       ifood_calc_data_repasse: { Args: { base: string }; Returns: string }
       ifood_shift_back21d: { Args: { base: string }; Returns: string }
+      is_finance: { Args: never; Returns: boolean }
       mark_password_changed: { Args: { p_user_id: string }; Returns: undefined }
       openclaw_run_sql_select: { Args: { p_sql: string }; Returns: Json }
       promote_from_waitlist: {
