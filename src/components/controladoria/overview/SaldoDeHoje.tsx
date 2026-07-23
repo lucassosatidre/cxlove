@@ -428,7 +428,7 @@ export default function SaldoDeHoje() {
                   folegoNeg ? 'text-destructive' : 'text-emerald-700 dark:text-emerald-400',
                 )}
               >
-                {fmtBRL(folego)}
+                {hidden ? 'R$ •••••' : fmtBRL(folego)}
               </div>
               <div className="text-[9px] text-muted-foreground leading-none text-center">saldo + limite</div>
             </div>
