@@ -612,7 +612,7 @@ function BoletoDialog() {
               <AlertDialogHeader>
                 <AlertDialogTitle>Confirmar pagamento</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Debitar da conta Inter em {dataPagamento} — {valor ? `R$ ${valor}` : 'valor do boleto'}.
+                  Debitar da conta Inter com vencimento em {dataPagamento} — R$ {valor}.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
