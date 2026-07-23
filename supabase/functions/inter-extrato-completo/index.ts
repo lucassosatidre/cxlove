@@ -49,6 +49,8 @@ async function getToken(client: Deno.HttpClient): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
   try {
+    const user = await getAuthedUser(req);
+    if (!user) return json({ error: 'Não autenticado' }, 401);
     const { data_inicio, data_fim, pagina = 0, tamanhoPagina = 100 } = await req.json().catch(() => ({}));
     if (!data_inicio || !data_fim) return json({ error: 'data_inicio e data_fim são obrigatórios' }, 400);
 
