@@ -1,7 +1,7 @@
 // Controladoria — Saldo de hoje com saldos MANUAIS (ctrl_account_balances).
 // Inter continua live via edge inter-saldo.
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Wallet, RefreshCw, Pencil } from 'lucide-react';
+import { Wallet, RefreshCw, Pencil, Eye, EyeOff } from 'lucide-react';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fmtBRL } from '@/hooks/useCashflowBalances';
