@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
@@ -15,10 +16,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   Loader2, RefreshCw, Landmark, Wallet, Receipt, FileText, Send, Layers,
+  AlertCircle, Inbox, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { isAprovadorUI } from '@/lib/aprovadores';
+import { parseMoneyBR, formatMoneyBR } from '@/lib/money';
 
 type SaldoResp = {
   disponivel?: number; bloqueado?: number; limite?: number; saldo_total?: number;
@@ -36,9 +39,6 @@ type Tx = {
   descricao?: string;
   detalhes?: any;
 };
-
-const fmtBRL = (n: number) =>
-  Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const fmtDateTime = (iso?: string) => {
   if (!iso) return '—';
@@ -68,23 +68,61 @@ async function parseFunctionError(error: any): Promise<Error> {
   return new Error(msg);
 }
 
+// Mascara últimas posições (linha digitável / chave Pix) para o rastro.
+function maskDestino(v: string, keep = 4) {
+  const s = String(v || '').trim();
+  if (!s) return '—';
+  if (s.length <= keep) return s;
+  return `…${s.slice(-keep)}`;
+}
+
+async function logInterPagamento(row: {
+  tipo: string;
+  descricao?: string | null;
+  valor?: number | null;
+  destino?: string | null;
+  status: 'enviado' | 'erro';
+  retorno?: any;
+}) {
+  try {
+    const { data: userRes } = await supabase.auth.getUser();
+    await (supabase as any).from('inter_pagamentos').insert({
+      tipo: row.tipo,
+      descricao: row.descricao ?? null,
+      valor: row.valor ?? null,
+      destino: row.destino ?? null,
+      status: row.status,
+      retorno: row.retorno ?? null,
+      created_by: userRes?.user?.id ?? null,
+    });
+    window.dispatchEvent(new CustomEvent('inter-pagamentos:refresh'));
+  } catch {
+    /* silencioso — não bloqueia o pagamento */
+  }
+}
+
 export default function InterBank() {
   const [saldo, setSaldo] = useState<SaldoResp | null>(null);
   const [saldoLoading, setSaldoLoading] = useState(false);
+  const [saldoError, setSaldoError] = useState<string | null>(null);
 
   const [range, setRange] = useState<7 | 30>(7);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [txsLoading, setTxsLoading] = useState(false);
+  const [txsError, setTxsError] = useState<string | null>(null);
 
   const loadSaldo = useCallback(async () => {
     setSaldoLoading(true);
+    setSaldoError(null);
     try {
       const { data, error } = await supabase.functions.invoke('inter-saldo');
       if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       setSaldo(data as SaldoResp);
     } catch (e: any) {
-      setSaldo({ error: e?.message ?? 'Falha na conexão' });
+      const msg = e?.message ?? 'Falha na conexão';
+      setSaldo(null);
+      setSaldoError(msg);
     } finally {
       setSaldoLoading(false);
     }
@@ -92,6 +130,7 @@ export default function InterBank() {
 
   const loadTxs = useCallback(async (days: 7 | 30) => {
     setTxsLoading(true);
+    setTxsError(null);
     try {
       const { data, error } = await supabase.functions.invoke('inter-extrato-completo', {
         body: { data_inicio: daysAgoISO(days), data_fim: todayISO(), pagina: 0, tamanhoPagina: 100 },
@@ -100,17 +139,19 @@ export default function InterBank() {
       if ((data as any)?.error) throw new Error((data as any).error);
       setTxs(((data as any)?.transacoes ?? []) as Tx[]);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Erro no extrato Inter');
+      const msg = e?.message ?? 'Erro no extrato Inter';
+      setTxsError(msg);
       setTxs([]);
     } finally {
       setTxsLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadSaldo(); loadTxs(7); }, [loadSaldo, loadTxs]);
+  useEffect(() => { loadSaldo(); }, [loadSaldo]);
+  // Efeito único: dispara ao mudar range (inclui o mount).
   useEffect(() => { loadTxs(range); }, [range, loadTxs]);
 
-  const conectado = !saldoLoading && !saldo?.error && saldo != null;
+  const conectado = !saldoLoading && !saldoError && saldo != null;
 
   return (
     <div className="space-y-6">
@@ -121,9 +162,9 @@ export default function InterBank() {
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2">
-                <Landmark className="h-4 w-4 mt-0.5 text-muted-foreground" />
+                <Landmark className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
                 <div>
-                  <CardTitle className="text-base">Banco Inter</CardTitle>
+                  <CardTitle className="font-brand">Banco Inter</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
                     Banco Inter Empresas · certificado mTLS
                   </p>
@@ -132,10 +173,12 @@ export default function InterBank() {
               {saldoLoading ? (
                 <Badge variant="outline"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Conectando…</Badge>
               ) : conectado ? (
-                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Conectado · Produção</Badge>
+                <Badge className="bg-success text-success-foreground hover:bg-success border border-accent/40">
+                  Conectado · Produção
+                </Badge>
               ) : (
-                <Badge className="bg-rose-600 hover:bg-rose-600 text-white">
-                  Sem conexão{saldo?.error ? ` · ${saldo.error}` : ''}
+                <Badge className="bg-destructive text-destructive-foreground hover:bg-destructive">
+                  Sem conexão
                 </Badge>
               )}
             </div>
@@ -146,23 +189,47 @@ export default function InterBank() {
         <Card>
           <CardHeader className="pb-2 flex-row items-center justify-between">
             <div className="flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-sm text-muted-foreground">Saldo disponível</CardTitle>
+              <Wallet className="h-4 w-4 text-accent" aria-hidden="true" />
+              <CardTitle className="font-brand">Saldo disponível</CardTitle>
             </div>
-            <Button variant="ghost" size="sm" onClick={loadSaldo} disabled={saldoLoading}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadSaldo}
+              disabled={saldoLoading}
+              aria-label="Atualizar saldo"
+              title="Atualizar saldo"
+            >
               {saldoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               <span className="ml-2">Atualizar</span>
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-bold tabular-nums">
-              {conectado ? fmtBRL(saldo?.disponivel ?? 0) : '—'}
-            </div>
-            <div className="text-xs text-muted-foreground mt-2 space-x-3">
-              {(saldo?.bloqueado ?? 0) > 0 && <span>Bloqueado {fmtBRL(saldo!.bloqueado!)}</span>}
-              {(saldo?.limite ?? 0) > 0 && <span>Limite {fmtBRL(saldo!.limite!)}</span>}
-              <span>Atualizado {fmtDateTime(saldo?.atualizado_em)}</span>
-            </div>
+            {saldoLoading ? (
+              <Skeleton className="h-10 w-40" />
+            ) : saldoError ? (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3">
+                <AlertCircle className="h-4 w-4 text-destructive mt-0.5" aria-hidden="true" />
+                <div className="text-sm">
+                  <p className="text-destructive font-medium">Não deu para ler o saldo</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{saldoError}</p>
+                  <Button size="sm" variant="outline" className="mt-2" onClick={loadSaldo}>
+                    <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-4xl font-bold font-mono-tabular text-accent">
+                  {formatMoneyBR(saldo?.disponivel ?? 0)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-2 space-x-3">
+                  {(saldo?.bloqueado ?? 0) > 0 && <span>Bloqueado {formatMoneyBR(saldo!.bloqueado!)}</span>}
+                  {(saldo?.limite ?? 0) > 0 && <span>Limite {formatMoneyBR(saldo!.limite!)}</span>}
+                  <span>Atualizado {fmtDateTime(saldo?.atualizado_em)}</span>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -172,53 +239,87 @@ export default function InterBank() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-start gap-2">
-              <FileText className="h-4 w-4 mt-0.5 text-muted-foreground" />
+              <FileText className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
               <div>
-                <CardTitle className="text-base">Extrato</CardTitle>
+                <CardTitle className="font-brand">Extrato</CardTitle>
                 <p className="text-xs text-muted-foreground mt-1">Movimentações recentes da conta Inter.</p>
               </div>
             </div>
             <div className="flex gap-2">
               <Button variant={range === 7 ? 'default' : 'outline'} size="sm" onClick={() => setRange(7)}>7 dias</Button>
               <Button variant={range === 30 ? 'default' : 'outline'} size="sm" onClick={() => setRange(30)}>30 dias</Button>
-              <Button variant="ghost" size="sm" onClick={() => loadTxs(range)} disabled={txsLoading}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => loadTxs(range)}
+                disabled={txsLoading}
+                aria-label="Recarregar extrato"
+                title="Recarregar extrato"
+              >
                 {txsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right w-[140px]">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {txsLoading ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
-                ) : txs.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">Sem movimentações no período.</TableCell></TableRow>
-                ) : txs.map((t, i) => {
-                  const isDebit = (t.tipoOperacao === 'D');
-                  const valor = Number(t.valor ?? 0) * (isDebit ? -1 : 1);
-                  const desc = t.descricao || t.titulo || t.tipoTransacao || '—';
-                  return (
-                    <TableRow key={t.idTransacao || `${t.dataTransacao}-${i}`}>
-                      <TableCell className="text-xs">{fmtDateTime(t.dataInclusao || t.dataTransacao)}</TableCell>
-                      <TableCell className="text-sm">{desc}</TableCell>
-                      <TableCell className={`text-right tabular-nums font-medium ${valor < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                        {fmtBRL(valor)}
+          {txsError ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <AlertCircle className="h-10 w-10 text-destructive mb-2" aria-hidden="true" />
+              <p className="font-medium text-destructive">Erro ao carregar o extrato</p>
+              <p className="text-xs text-muted-foreground mt-1">{txsError}</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => loadTxs(range)}>
+                <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[160px]">Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead className="text-right w-[140px]">Valor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {txsLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={`sk-${i}`}>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-full max-w-[420px]" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : txs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3}>
+                        <div className="flex flex-col items-center justify-center py-10 text-center">
+                          <Inbox className="h-10 w-10 text-muted-foreground mb-2" aria-hidden="true" />
+                          <p className="font-medium">Sem movimentações no período</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Tente aumentar o intervalo para 30 dias.
+                          </p>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
+                  ) : txs.map((t, i) => {
+                    const isDebit = (t.tipoOperacao === 'D');
+                    const valor = Number(t.valor ?? 0) * (isDebit ? -1 : 1);
+                    const desc = t.descricao || t.titulo || t.tipoTransacao || '—';
+                    return (
+                      <TableRow key={t.idTransacao || `${t.dataTransacao}-${i}`}>
+                        <TableCell className="text-xs">{fmtDateTime(t.dataInclusao || t.dataTransacao)}</TableCell>
+                        <TableCell className="text-sm">{desc}</TableCell>
+                        <TableCell className={`text-right font-mono-tabular font-medium ${valor < 0 ? 'text-destructive' : 'text-success'}`}>
+                          {formatMoneyBR(valor)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -239,35 +340,175 @@ function InterPagamentosCard() {
   const isAprovador = isAprovadorUI(userEmail);
 
   return (
+    <>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-start gap-2">
+            <Send className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+            <div>
+              <CardTitle className="font-brand">Pagamentos</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Envio direto pelo Inter — boletos, DARF, Pix e lote.
+              </p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isAprovador ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <BoletoDialog />
+                <DarfDialog />
+                <PixDialog />
+                <LoteDialog />
+              </div>
+              <p className="text-xs text-muted-foreground pt-2 border-t">
+                A liberação final acontece na fila de aprovação do app do Banco Inter.
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Pagamentos disponíveis apenas para aprovadores.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {isAprovador && <InterPagamentosHistoricoCard />}
+    </>
+  );
+}
+
+/* ---------------- Histórico local (inter_pagamentos) ---------------- */
+
+type InterPag = {
+  id: string;
+  tipo: string;
+  descricao: string | null;
+  valor: number | null;
+  destino: string | null;
+  status: string;
+  created_at: string;
+};
+
+function pagStatusBadge(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'enviado') return <Badge className="bg-info text-info-foreground hover:bg-info">Enviado</Badge>;
+  if (s === 'erro') return <Badge className="bg-destructive text-destructive-foreground hover:bg-destructive">Erro</Badge>;
+  return <Badge variant="outline">{status}</Badge>;
+}
+
+function InterPagamentosHistoricoCard() {
+  const [rows, setRows] = useState<InterPag[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('inter_pagamentos')
+        .select('id, tipo, descricao, valor, destino, status, created_at')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      setRows((data ?? []) as InterPag[]);
+    } catch (e: any) {
+      setError(e?.message ?? 'Erro ao carregar histórico');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const handler = () => load();
+    window.addEventListener('inter-pagamentos:refresh', handler);
+    return () => window.removeEventListener('inter-pagamentos:refresh', handler);
+  }, [load]);
+
+  return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-start gap-2">
-          <Send className="h-4 w-4 mt-0.5 text-muted-foreground" />
-          <div>
-            <CardTitle className="text-base">Pagamentos</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Envio direto pelo Inter — boletos, DARF, Pix e lote.
-            </p>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-start gap-2">
+            <History className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+            <div>
+              <CardTitle className="font-brand">Pagamentos enviados (Inter)</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Rastro dos últimos 20 envios pelo Inter (só aparece para aprovadores).
+              </p>
+            </div>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={load}
+            disabled={loading}
+            aria-label="Atualizar histórico Inter"
+            title="Atualizar histórico"
+          >
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          </Button>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {isAprovador ? (
-          <>
-            <div className="flex flex-wrap gap-2">
-              <BoletoDialog />
-              <DarfDialog />
-              <PixDialog />
-              <LoteDialog />
-            </div>
-            <p className="text-xs text-muted-foreground pt-2 border-t">
-              A liberação final acontece na fila de aprovação do app do Banco Inter.
-            </p>
-          </>
+      <CardContent>
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mb-2" aria-hidden="true" />
+            <p className="text-sm text-destructive">{error}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={load}>
+              <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+            </Button>
+          </div>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            Pagamentos disponíveis apenas para aprovadores.
-          </p>
+          <div className="overflow-x-auto rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[140px]">Data</TableHead>
+                  <TableHead className="w-[90px]">Tipo</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead className="w-[120px]">Destino</TableHead>
+                  <TableHead className="text-right w-[120px]">Valor</TableHead>
+                  <TableHead className="w-[100px]">Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={`hp-${i}`}>
+                      <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <Inbox className="h-8 w-8 text-muted-foreground mb-2" aria-hidden="true" />
+                        <p className="text-sm font-medium">Nenhum pagamento enviado ainda</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Envios pelo Inter aparecem aqui automaticamente.
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : rows.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-xs">{fmtDateTime(p.created_at)}</TableCell>
+                    <TableCell className="text-xs uppercase">{p.tipo}</TableCell>
+                    <TableCell className="text-sm">{p.descricao || '—'}</TableCell>
+                    <TableCell className="text-xs font-mono">{p.destino || '—'}</TableCell>
+                    <TableCell className="text-right font-mono-tabular">
+                      {p.valor != null ? formatMoneyBR(Number(p.valor)) : '—'}
+                    </TableCell>
+                    <TableCell>{pagStatusBadge(p.status)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>
@@ -288,21 +529,40 @@ function BoletoDialog() {
 
   async function pagar() {
     setLoading(true);
+    const cb = codigoBarras.replace(/\D/g, '');
+    const valorNum = valor ? parseMoneyBR(valor) : undefined;
+    const descricao = desc || 'Boleto Inter';
     try {
       const { data, error } = await supabase.functions.invoke('inter-pagar-boleto', {
         body: {
-          codigo_barras: codigoBarras.replace(/\D/g, ''),
+          codigo_barras: cb,
           data_vencimento: dataPagamento,
-          valor_pagar: valor ? Number(valor.replace(',', '.')) : undefined,
+          valor_pagar: valorNum,
           descricao: desc || undefined,
         },
       });
       if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('Boleto enviado para pagamento');
+      await logInterPagamento({
+        tipo: 'boleto',
+        descricao,
+        valor: valorNum ?? null,
+        destino: maskDestino(cb),
+        status: 'enviado',
+        retorno: data,
+      });
       setOpen(false); setCodigoBarras(''); setValor(''); setDesc('');
     } catch (e: any) {
       toast.error(`Falha no pagamento: ${e?.message || e}`);
+      await logInterPagamento({
+        tipo: 'boleto',
+        descricao,
+        valor: valorNum ?? null,
+        destino: maskDestino(cb),
+        status: 'erro',
+        retorno: { message: e?.message ?? String(e) },
+      });
     } finally {
       setLoading(false);
     }
@@ -381,29 +641,49 @@ function DarfDialog() {
 
   const ok = cnpjCpf.replace(/\D/g, '').length >= 11 && !!codigoReceita
     && !!dataApuracao && !!dataVencimento
-    && Number(valorPrincipal.replace(',', '.')) > 0;
+    && parseMoneyBR(valorPrincipal) > 0;
 
   async function pagar() {
     setLoading(true);
+    const cnpjClean = cnpjCpf.replace(/\D/g, '');
+    const principal = parseMoneyBR(valorPrincipal);
+    const total = principal + parseMoneyBR(valorMulta) + parseMoneyBR(valorJuros);
+    const descricao = desc || `DARF ${codigoReceita}`;
     try {
       const { data, error } = await supabase.functions.invoke('inter-pagar-darf', {
         body: {
-          cnpj_cpf: cnpjCpf.replace(/\D/g, ''),
+          cnpj_cpf: cnpjClean,
           codigo_receita: codigoReceita,
           data_apuracao: dataApuracao,
           data_vencimento: dataVencimento,
-          valor_principal: Number(valorPrincipal.replace(',', '.')),
-          valor_multa: valorMulta ? Number(valorMulta.replace(',', '.')) : undefined,
-          valor_juros: valorJuros ? Number(valorJuros.replace(',', '.')) : undefined,
+          valor_principal: principal,
+          valor_multa: valorMulta ? parseMoneyBR(valorMulta) : undefined,
+          valor_juros: valorJuros ? parseMoneyBR(valorJuros) : undefined,
           descricao: desc || undefined,
         },
       });
       if (error) throw await parseFunctionError(error);
       if ((data as any)?.error) throw new Error((data as any).error);
       toast.success('DARF enviado para pagamento');
+      await logInterPagamento({
+        tipo: 'darf',
+        descricao,
+        valor: total,
+        destino: maskDestino(cnpjClean),
+        status: 'enviado',
+        retorno: data,
+      });
       setOpen(false);
     } catch (e: any) {
       toast.error(`Falha no DARF: ${e?.message || e}`);
+      await logInterPagamento({
+        tipo: 'darf',
+        descricao,
+        valor: total,
+        destino: maskDestino(cnpjClean),
+        status: 'erro',
+        retorno: { message: e?.message ?? String(e) },
+      });
     } finally {
       setLoading(false);
     }
@@ -464,15 +744,18 @@ function PixDialog() {
   const [desc, setDesc] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const ok = !!chave && Number(valor.replace(',', '.')) > 0;
+  const ok = !!chave && parseMoneyBR(valor) > 0;
 
   async function enviar() {
     setLoading(true);
+    const chaveTrim = chave.trim();
+    const valorNum = parseMoneyBR(valor);
+    const descricao = desc || 'Pix Inter';
     try {
       const { data, error } = await supabase.functions.invoke('inter-pix', {
         body: {
-          chave_pix: chave.trim(),
-          valor: Number(valor.replace(',', '.')),
+          chave_pix: chaveTrim,
+          valor: valorNum,
           descricao: desc || undefined,
         },
       });
@@ -480,9 +763,25 @@ function PixDialog() {
       if ((data as any)?.error) throw new Error((data as any).error);
       const codigo = (data as any)?.codigoSolicitacao ?? (data as any)?.endToEnd ?? '(sem código)';
       toast.success(`Pix enviado (${codigo})`);
+      await logInterPagamento({
+        tipo: 'pix',
+        descricao,
+        valor: valorNum,
+        destino: maskDestino(chaveTrim),
+        status: 'enviado',
+        retorno: data,
+      });
       setOpen(false); setChave(''); setValor(''); setDesc('');
     } catch (e: any) {
       toast.error(`Falha Pix: ${e?.message || e}`);
+      await logInterPagamento({
+        tipo: 'pix',
+        descricao,
+        valor: valorNum,
+        destino: maskDestino(chaveTrim),
+        status: 'erro',
+        retorno: { message: e?.message ?? String(e) },
+      });
     } finally {
       setLoading(false);
     }
@@ -544,6 +843,8 @@ function LoteDialog() {
 
   async function processar() {
     setLoading(true);
+    let total = 0;
+    let idLote: string | undefined;
     try {
       const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       const pagamentos: any[] = [];
@@ -551,7 +852,7 @@ function LoteDialog() {
         const [cbRaw, vRaw] = l.split(/[;\t,|]/).map((x) => x?.trim());
         const cb = String(cbRaw ?? '').replace(/\D/g, '');
         if (!cb) continue;
-        const v = vRaw ? Number(vRaw.replace(',', '.')) : Number((valorPadrao || '0').replace(',', '.'));
+        const v = vRaw ? parseMoneyBR(vRaw) : parseMoneyBR(valorPadrao || '0');
         pagamentos.push({ codigo_barras: cb, data_pagamento: data, valor_pagar: v });
       }
       if (pagamentos.length === 0) throw new Error('Nenhum boleto válido no lote');
@@ -559,15 +860,32 @@ function LoteDialog() {
       const semValor = pagamentos.filter((p) => !isFinite(p.valor_pagar) || p.valor_pagar <= 0);
       if (semValor.length > 0) throw new Error(`${semValor.length} boleto(s) sem valor.`);
 
+      total = pagamentos.reduce((acc, p) => acc + Number(p.valor_pagar || 0), 0);
       const { data: resp, error } = await supabase.functions.invoke('inter-pagar-lote', { body: { pagamentos } });
       if (error) throw await parseFunctionError(error);
       if ((resp as any)?.error) throw new Error((resp as any).error);
-      const idLote = (resp as any)?.idLote ?? (resp as any)?.meuIdentificador;
+      idLote = (resp as any)?.idLote ?? (resp as any)?.meuIdentificador;
       setUltimo({ id: String(idLote), total: pagamentos.length });
       toast.success(`Lote enviado (${pagamentos.length} boletos)`);
+      await logInterPagamento({
+        tipo: 'lote',
+        descricao: `Lote de ${pagamentos.length} boleto(s)`,
+        valor: total,
+        destino: idLote ? maskDestino(String(idLote), 6) : null,
+        status: 'enviado',
+        retorno: resp,
+      });
       setTexto('');
     } catch (e: any) {
       toast.error(`Falha lote: ${e?.message || e}`);
+      await logInterPagamento({
+        tipo: 'lote',
+        descricao: 'Pagamento em lote',
+        valor: total || null,
+        destino: null,
+        status: 'erro',
+        retorno: { message: e?.message ?? String(e) },
+      });
     } finally {
       setLoading(false);
     }

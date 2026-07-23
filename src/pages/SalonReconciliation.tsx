@@ -560,7 +560,6 @@ export default function SalonReconciliation() {
         net_amount: t.net_amount,
         machine_serial: t.machine_serial || null,
         transaction_id: t.transaction_id || null,
-        cashback_fee: t.cashback_fee ?? null,
       }));
 
       const { data: inserted, error } = await supabase

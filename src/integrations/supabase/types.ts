@@ -2786,6 +2786,42 @@ export type Database = {
           },
         ]
       }
+      inter_pagamentos: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          destino: string | null
+          id: string
+          retorno: Json | null
+          status: string
+          tipo: string
+          valor: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          destino?: string | null
+          id?: string
+          retorno?: Json | null
+          status?: string
+          tipo: string
+          valor?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          destino?: string | null
+          id?: string
+          retorno?: Json | null
+          status?: string
+          tipo?: string
+          valor?: number | null
+        }
+        Relationships: []
+      }
       label_orders: {
         Row: {
           created_at: string
