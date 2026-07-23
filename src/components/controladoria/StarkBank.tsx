@@ -6,17 +6,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, RefreshCw, QrCode, Copy, Lock, ExternalLink, Ban } from 'lucide-react';
+import {
+  Loader2, RefreshCw, QrCode, Copy, ExternalLink, Ban,
+  Landmark, Wallet, FileText, Send, Receipt, Bell, AlertCircle, Inbox,
+} from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { parseMoneyBR, formatMoneyBR } from '@/lib/money';
 
 type SaldoResp = { ok: boolean; disponivel?: number; moeda?: string; atualizado_em?: string; error?: string };
 type Tx = { id: string; amount: number; description: string; fee: number; source: string; created: string; balance: number | null };
@@ -24,9 +29,6 @@ type Invoice = {
   id: string; amount: number; nominalAmount: number | null; fee: number | null;
   name: string; taxId: string; status: string; brcode: string; link: string; due?: string; created?: string;
 };
-
-const fmtBRL = (n: number) =>
-  n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 const fmtDateTime = (iso?: string) => {
   if (!iso) return '—';
@@ -40,11 +42,11 @@ const fmtDate = (iso?: string) => {
 
 function statusBadge(status: string) {
   const s = (status || '').toLowerCase();
-  if (s === 'paid') return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Pago</Badge>;
-  if (s === 'created') return <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Aguardando</Badge>;
+  if (s === 'paid') return <Badge className="bg-success text-success-foreground hover:bg-success">Pago</Badge>;
+  if (s === 'created') return <Badge className="bg-warning text-warning-foreground hover:bg-warning">Aguardando</Badge>;
   if (s === 'expired') return <Badge variant="secondary">Expirada</Badge>;
   if (s === 'canceled') return <Badge variant="secondary">Cancelada</Badge>;
-  if (s === 'overdue') return <Badge className="bg-rose-600 hover:bg-rose-600 text-white">Vencida</Badge>;
+  if (s === 'overdue') return <Badge className="bg-destructive text-destructive-foreground hover:bg-destructive">Vencida</Badge>;
   return <Badge variant="outline">{status}</Badge>;
 }
 
@@ -61,9 +63,11 @@ export default function StarkBank() {
   const [range, setRange] = useState<7 | 30>(7);
   const [txs, setTxs] = useState<Tx[]>([]);
   const [txsLoading, setTxsLoading] = useState(false);
+  const [txsError, setTxsError] = useState<string | null>(null);
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoicesLoading, setInvoicesLoading] = useState(false);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -89,6 +93,7 @@ export default function StarkBank() {
 
   const loadTxs = useCallback(async (days: 7 | 30) => {
     setTxsLoading(true);
+    setTxsError(null);
     try {
       const { data, error } = await supabase.functions.invoke('stark-extrato', {
         body: { after: daysAgoISO(days), limit: 100 },
@@ -97,7 +102,7 @@ export default function StarkBank() {
       if (!data?.ok) throw new Error(data?.error || 'Erro ao carregar extrato');
       setTxs(data.transactions ?? []);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Erro no extrato Stark');
+      setTxsError(e?.message ?? 'Erro no extrato Stark');
       setTxs([]);
     } finally {
       setTxsLoading(false);
@@ -106,6 +111,7 @@ export default function StarkBank() {
 
   const loadInvoices = useCallback(async () => {
     setInvoicesLoading(true);
+    setInvoicesError(null);
     try {
       const { data, error } = await supabase.functions.invoke('stark-cobrancas', {
         body: { action: 'list' },
@@ -114,19 +120,19 @@ export default function StarkBank() {
       if (!data?.ok) throw new Error(data?.error || 'Erro ao carregar cobranças');
       setInvoices(data.invoices ?? []);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Erro nas cobranças Stark');
+      setInvoicesError(e?.message ?? 'Erro nas cobranças Stark');
       setInvoices([]);
     } finally {
       setInvoicesLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadSaldo(); loadTxs(7); loadInvoices(); }, [loadSaldo, loadTxs, loadInvoices]);
-
+  useEffect(() => { loadSaldo(); loadInvoices(); }, [loadSaldo, loadInvoices]);
+  // Efeito único: dispara no mount e ao trocar range (evita fetch duplicado).
   useEffect(() => { loadTxs(range); }, [range, loadTxs]);
 
   async function handleCreate() {
-    const val = Number(String(amount).replace(',', '.'));
+    const val = parseMoneyBR(amount);
     if (!val || val <= 0) { toast.error('Informe um valor válido'); return; }
     if (!name.trim()) { toast.error('Nome do pagador é obrigatório'); return; }
     const cleanTax = taxId.replace(/\D/g, '');
@@ -187,91 +193,166 @@ export default function StarkBank() {
     }
   }
 
+  const conectado = !saldoLoading && saldo?.ok;
+
   return (
     <div className="space-y-6">
-      {/* Status */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <CardTitle className="text-base">Stark Bank</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Projeto Vigia API · Permissão Financeiro
-              </p>
+      {/* Grid: Status + Saldo */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Status */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <Landmark className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+                <div>
+                  <CardTitle className="font-brand">Stark Bank</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Projeto Vigia API · Permissão Financeiro
+                  </p>
+                </div>
+              </div>
+              {saldoLoading ? (
+                <Badge variant="outline"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Conectando…</Badge>
+              ) : conectado ? (
+                <Badge className="bg-success text-success-foreground hover:bg-success border border-accent/40">
+                  Conectado · Produção
+                </Badge>
+              ) : (
+                <Badge className="bg-destructive text-destructive-foreground hover:bg-destructive">
+                  Sem conexão
+                </Badge>
+              )}
             </div>
-            {saldoLoading ? (
-              <Badge variant="outline"><Loader2 className="h-3 w-3 mr-1 animate-spin" />Conectando…</Badge>
-            ) : saldo?.ok ? (
-              <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Conectado · Produção</Badge>
-            ) : (
-              <Badge className="bg-rose-600 hover:bg-rose-600 text-white">
-                Sem conexão{saldo?.error ? ` · ${saldo.error}` : ''}
-              </Badge>
-            )}
-          </div>
-        </CardHeader>
-      </Card>
+          </CardHeader>
+        </Card>
 
-      {/* Saldo */}
-      <Card>
-        <CardHeader className="pb-2 flex-row items-center justify-between">
-          <CardTitle className="text-sm text-muted-foreground">Saldo disponível</CardTitle>
-          <Button variant="ghost" size="sm" onClick={loadSaldo} disabled={saldoLoading}>
-            {saldoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-2">Atualizar</span>
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="text-4xl font-bold tabular-nums">
-            {saldo?.ok ? fmtBRL(saldo.disponivel ?? 0) : '—'}
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            Atualizado em {fmtDateTime(saldo?.atualizado_em)}
-          </p>
-        </CardContent>
-      </Card>
+        {/* Saldo */}
+        <Card>
+          <CardHeader className="pb-2 flex-row items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-accent" aria-hidden="true" />
+              <CardTitle className="font-brand">Saldo disponível</CardTitle>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={loadSaldo}
+              disabled={saldoLoading}
+              aria-label="Atualizar saldo"
+              title="Atualizar saldo"
+            >
+              {saldoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <span className="ml-2">Atualizar</span>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {saldoLoading ? (
+              <Skeleton className="h-10 w-40" />
+            ) : !saldo?.ok ? (
+              <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3">
+                <AlertCircle className="h-4 w-4 text-destructive mt-0.5" aria-hidden="true" />
+                <div className="text-sm">
+                  <p className="text-destructive font-medium">Não deu para ler o saldo</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{saldo?.error ?? 'Falha na conexão'}</p>
+                  <Button size="sm" variant="outline" className="mt-2" onClick={loadSaldo}>
+                    <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-4xl font-bold font-mono-tabular text-accent">
+                  {formatMoneyBR(saldo.disponivel ?? 0)}
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Atualizado em {fmtDateTime(saldo?.atualizado_em)}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Extrato */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <CardTitle className="text-base">Extrato</CardTitle>
+            <div className="flex items-start gap-2">
+              <FileText className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+              <div>
+                <CardTitle className="font-brand">Extrato</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Movimentações recentes da conta Stark.</p>
+              </div>
+            </div>
             <div className="flex gap-2">
               <Button variant={range === 7 ? 'default' : 'outline'} size="sm" onClick={() => setRange(7)}>7 dias</Button>
               <Button variant={range === 30 ? 'default' : 'outline'} size="sm" onClick={() => setRange(30)}>30 dias</Button>
-              <Button variant="ghost" size="sm" onClick={() => loadTxs(range)} disabled={txsLoading}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => loadTxs(range)}
+                disabled={txsLoading}
+                aria-label="Recarregar extrato"
+                title="Recarregar extrato"
+              >
                 {txsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right w-[140px]">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {txsLoading ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
-                ) : txs.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">Sem movimentações no período.</TableCell></TableRow>
-                ) : txs.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell className="text-xs">{fmtDateTime(t.created)}</TableCell>
-                    <TableCell className="text-sm">{t.description || t.source}</TableCell>
-                    <TableCell className={`text-right tabular-nums font-medium ${t.amount < 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                      {fmtBRL(t.amount)}
-                    </TableCell>
+          {txsError ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <AlertCircle className="h-10 w-10 text-destructive mb-2" aria-hidden="true" />
+              <p className="font-medium text-destructive">Erro ao carregar o extrato</p>
+              <p className="text-xs text-muted-foreground mt-1">{txsError}</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => loadTxs(range)}>
+                <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[160px]">Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead className="text-right w-[140px]">Valor</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {txsLoading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={`sk-${i}`}>
+                        <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-full max-w-[420px]" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : txs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3}>
+                        <div className="flex flex-col items-center justify-center py-10 text-center">
+                          <Inbox className="h-10 w-10 text-muted-foreground mb-2" aria-hidden="true" />
+                          <p className="font-medium">Sem movimentações no período</p>
+                          <p className="text-xs text-muted-foreground mt-1">Tente 30 dias.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : txs.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="text-xs">{fmtDateTime(t.created)}</TableCell>
+                      <TableCell className="text-sm">{t.description || t.source}</TableCell>
+                      <TableCell className={`text-right font-mono-tabular font-medium ${t.amount < 0 ? 'text-destructive' : 'text-success'}`}>
+                        {formatMoneyBR(t.amount)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -279,9 +360,12 @@ export default function StarkBank() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <CardTitle className="text-base">Receber (Cobranças Pix)</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">Gere cobranças com QR Code / Pix Copia e Cola.</p>
+            <div className="flex items-start gap-2">
+              <QrCode className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+              <div>
+                <CardTitle className="font-brand">Receber (Cobranças Pix)</CardTitle>
+                <p className="text-xs text-muted-foreground mt-1">Gere cobranças com QR Code / Pix Copia e Cola.</p>
+              </div>
             </div>
             <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetDialog(); }}>
               <DialogTrigger asChild>
@@ -297,7 +381,7 @@ export default function StarkBank() {
                   <div className="space-y-3">
                     <div className="text-sm">
                       <div className="text-muted-foreground">Valor</div>
-                      <div className="text-xl font-bold tabular-nums">{fmtBRL(createdInvoice.amount)}</div>
+                      <div className="text-xl font-bold font-mono-tabular">{formatMoneyBR(createdInvoice.amount)}</div>
                     </div>
                     <div>
                       <Label className="text-xs">Pix Copia e Cola</Label>
@@ -313,11 +397,25 @@ export default function StarkBank() {
                         <Label className="text-xs">Link</Label>
                         <div className="flex gap-2 mt-1">
                           <Input readOnly value={createdInvoice.link} className="text-xs" />
-                          <Button size="sm" variant="outline" onClick={() => copy(createdInvoice.link, 'Link copiado')}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copy(createdInvoice.link, 'Link copiado')}
+                            aria-label="Copiar link"
+                            title="Copiar link"
+                          >
                             <Copy className="h-4 w-4" />
                           </Button>
                           <Button size="sm" variant="outline" asChild>
-                            <a href={createdInvoice.link} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /></a>
+                            <a
+                              href={createdInvoice.link}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label="Abrir link em nova aba"
+                              title="Abrir link"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
                           </Button>
                         </div>
                       </div>
@@ -363,68 +461,105 @@ export default function StarkBank() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pagador</TableHead>
-                  <TableHead className="w-[140px] text-right">Valor</TableHead>
-                  <TableHead className="w-[140px]">Vencimento</TableHead>
-                  <TableHead className="w-[140px]">Status</TableHead>
-                  <TableHead className="w-[80px] text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoicesLoading ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
-                ) : invoices.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-6 text-muted-foreground">Nenhuma cobrança emitida ainda.</TableCell></TableRow>
-                ) : invoices.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell>
-                      <div className="text-sm">{i.name}</div>
-                      <div className="text-xs text-muted-foreground">{i.taxId}</div>
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtBRL(i.amount)}</TableCell>
-                    <TableCell className="text-xs">{fmtDate(i.due)}</TableCell>
-                    <TableCell>{statusBadge(i.status)}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        {i.brcode && (
-                          <Button variant="ghost" size="sm" onClick={() => copy(i.brcode, 'Pix Copia e Cola copiado')}>
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {i.status?.toLowerCase() === 'created' && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm" disabled={cancelingId === i.id} title="Cancelar cobrança">
-                                {cancelingId === i.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4 text-rose-500" />}
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Cancelar cobrança?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  {i.name} · {fmtBRL(i.amount)}. Essa ação não pode ser desfeita.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Voltar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleCancel(i.id)}>
-                                  Cancelar cobrança
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                      </div>
-                    </TableCell>
+          {invoicesError ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <AlertCircle className="h-10 w-10 text-destructive mb-2" aria-hidden="true" />
+              <p className="font-medium text-destructive">Erro ao carregar cobranças</p>
+              <p className="text-xs text-muted-foreground mt-1">{invoicesError}</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={loadInvoices}>
+                <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Pagador</TableHead>
+                    <TableHead className="w-[140px] text-right">Valor</TableHead>
+                    <TableHead className="w-[140px]">Vencimento</TableHead>
+                    <TableHead className="w-[140px]">Status</TableHead>
+                    <TableHead className="w-[80px] text-right">Ações</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {invoicesLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => (
+                      <TableRow key={`ivsk-${i}`}>
+                        <TableCell colSpan={5}><Skeleton className="h-5 w-full" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : invoices.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <div className="flex flex-col items-center justify-center py-10 text-center">
+                          <QrCode className="h-10 w-10 text-muted-foreground mb-2" aria-hidden="true" />
+                          <p className="font-medium">Nenhuma cobrança emitida ainda</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Clique em "Gerar cobrança Pix" para criar a primeira.
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : invoices.map((i) => (
+                    <TableRow key={i.id}>
+                      <TableCell>
+                        <div className="text-sm">{i.name}</div>
+                        <div className="text-xs text-muted-foreground">{i.taxId}</div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono-tabular">{formatMoneyBR(i.amount)}</TableCell>
+                      <TableCell className="text-xs">{fmtDate(i.due)}</TableCell>
+                      <TableCell>{statusBadge(i.status)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          {i.brcode && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copy(i.brcode, 'Pix Copia e Cola copiado')}
+                              aria-label="Copiar Pix Copia e Cola"
+                              title="Copiar Pix Copia e Cola"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {i.status?.toLowerCase() === 'created' && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={cancelingId === i.id}
+                                  aria-label="Cancelar cobrança"
+                                  title="Cancelar cobrança"
+                                >
+                                  {cancelingId === i.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4 text-destructive" />}
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Cancelar cobrança?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    {i.name} · {formatMoneyBR(i.amount)}. Essa ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleCancel(i.id)}>
+                                    Cancelar cobrança
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -452,16 +587,16 @@ function eventBadge(type: string | null, subscription: string | null) {
   const t = (type || "").toLowerCase();
   const s = (subscription || "").toLowerCase();
   if (t === "invoice" && s === "credited") {
-    return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Pix recebido</Badge>;
+    return <Badge className="bg-success text-success-foreground hover:bg-success">Pix recebido</Badge>;
   }
   if (t === "invoice" && s === "canceled") {
     return <Badge variant="secondary">Cobrança cancelada</Badge>;
   }
   if (t === "deposit" && (s === "created" || s === "credited")) {
-    return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Depósito</Badge>;
+    return <Badge className="bg-success text-success-foreground hover:bg-success">Depósito</Badge>;
   }
   if (t === "boleto-payment" && (s === "success" || s === "paid")) {
-    return <Badge className="bg-sky-600 hover:bg-sky-600 text-white">Boleto pago</Badge>;
+    return <Badge className="bg-info text-info-foreground hover:bg-info">Boleto pago</Badge>;
   }
   return <Badge variant="outline">{[type, subscription].filter(Boolean).join(" · ") || "evento"}</Badge>;
 }
@@ -469,9 +604,11 @@ function eventBadge(type: string | null, subscription: string | null) {
 function StarkWebhookCard() {
   const [events, setEvents] = useState<StarkEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const { data, error } = await (supabase as any)
         .from("stark_events")
@@ -481,7 +618,7 @@ function StarkWebhookCard() {
       if (error) throw error;
       setEvents((data ?? []) as StarkEvent[]);
     } catch (e: any) {
-      toast.error(e?.message ?? "Erro ao carregar avisos");
+      setError(e?.message ?? "Erro ao carregar avisos");
       setEvents([]);
     } finally {
       setLoading(false);
@@ -503,13 +640,23 @@ function StarkWebhookCard() {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <CardTitle className="text-base">Avisos em tempo real (webhook)</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Últimos 20 eventos recebidos do Stark.
-            </p>
+          <div className="flex items-start gap-2">
+            <Bell className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+            <div>
+              <CardTitle className="font-brand">Avisos em tempo real (webhook)</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Últimos 20 eventos recebidos do Stark.
+              </p>
+            </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={load}
+            disabled={loading}
+            aria-label="Atualizar avisos"
+            title="Atualizar avisos"
+          >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             <span className="ml-2">Atualizar</span>
           </Button>
@@ -520,39 +667,67 @@ function StarkWebhookCard() {
           <Label className="text-xs">URL do webhook (cadastre no painel do Stark)</Label>
           <div className="flex gap-2 mt-1">
             <Input readOnly value={WEBHOOK_URL} className="text-xs font-mono" />
-            <Button size="sm" variant="outline" onClick={copyUrl}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={copyUrl}
+              aria-label="Copiar URL do webhook"
+              title="Copiar URL do webhook"
+            >
               <Copy className="h-4 w-4" />
             </Button>
           </div>
         </div>
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[160px]">Recebido</TableHead>
-                <TableHead>Evento</TableHead>
-                <TableHead className="text-right w-[140px]">Valor</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
-              ) : events.length === 0 ? (
-                <TableRow><TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
-                  Nenhum aviso recebido ainda. Cadastre o webhook no painel do Stark apontando para a URL acima.
-                </TableCell></TableRow>
-              ) : events.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell className="text-xs">{fmtDateTime(e.received_at)}</TableCell>
-                  <TableCell>{eventBadge(e.type, e.subscription)}</TableCell>
-                  <TableCell className="text-right tabular-nums font-medium">
-                    {e.amount_reais != null ? fmtBRL(e.amount_reais) : "—"}
-                  </TableCell>
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mb-2" aria-hidden="true" />
+            <p className="text-sm text-destructive">{error}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={load}>
+              <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[160px]">Recebido</TableHead>
+                  <TableHead>Evento</TableHead>
+                  <TableHead className="text-right w-[140px]">Valor</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={`evsk-${i}`}>
+                      <TableCell colSpan={3}><Skeleton className="h-5 w-full" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : events.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3}>
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <Bell className="h-8 w-8 text-muted-foreground mb-2" aria-hidden="true" />
+                        <p className="text-sm font-medium">Nenhum aviso recebido ainda</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Cadastre o webhook no painel do Stark apontando para a URL acima.
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : events.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="text-xs">{fmtDateTime(e.received_at)}</TableCell>
+                    <TableCell>{eventBadge(e.type, e.subscription)}</TableCell>
+                    <TableCell className="text-right font-mono-tabular font-medium">
+                      {e.amount_reais != null ? formatMoneyBR(e.amount_reais) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -575,11 +750,11 @@ type Pagamento = {
 
 function pagStatusBadge(status: string) {
   const s = (status || '').toLowerCase();
-  if (s === 'aguardando_aprovacao') return <Badge className="bg-amber-500 hover:bg-amber-500 text-white">Aguardando aprovação</Badge>;
-  if (s === 'aprovado') return <Badge className="bg-sky-600 hover:bg-sky-600 text-white">Aprovado — na fila</Badge>;
-  if (s === 'processando') return <Badge className="bg-sky-600 hover:bg-sky-600 text-white animate-pulse">Processando…</Badge>;
-  if (s === 'sucesso') return <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white">Pago</Badge>;
-  if (s === 'falha') return <Badge className="bg-rose-600 hover:bg-rose-600 text-white">Falhou</Badge>;
+  if (s === 'aguardando_aprovacao') return <Badge className="bg-warning text-warning-foreground hover:bg-warning">Aguardando aprovação</Badge>;
+  if (s === 'aprovado') return <Badge className="bg-info text-info-foreground hover:bg-info">Aprovado — na fila</Badge>;
+  if (s === 'processando') return <Badge className="bg-info text-info-foreground hover:bg-info animate-pulse">Processando…</Badge>;
+  if (s === 'sucesso') return <Badge className="bg-success text-success-foreground hover:bg-success">Pago</Badge>;
+  if (s === 'falha') return <Badge className="bg-destructive text-destructive-foreground hover:bg-destructive">Falhou</Badge>;
   if (s === 'recusado') return <Badge variant="secondary">Recusado</Badge>;
   return <Badge variant="outline">{status}</Badge>;
 }
@@ -590,6 +765,7 @@ function pagStatusBadge(status: string) {
 function StarkPagamentosCard() {
   const [list, setList] = useState<Pagamento[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [linha, setLinha] = useState('');
   const [desc, setDesc] = useState('');
@@ -610,6 +786,7 @@ function StarkPagamentosCard() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const { data, error } = await (supabase as any)
         .from('stark_pagamentos')
@@ -619,7 +796,7 @@ function StarkPagamentosCard() {
       if (error) throw error;
       setList((data ?? []) as Pagamento[]);
     } catch (e: any) {
-      toast.error(e?.message ?? 'Erro ao carregar pagamentos');
+      setError(e?.message ?? 'Erro ao carregar pagamentos');
     } finally {
       setLoading(false);
     }
@@ -640,7 +817,6 @@ function StarkPagamentosCard() {
     const hasLetters = /[A-Za-z]/.test(raw);
     let payload = '';
     if (hasLetters) {
-      // Pix copia-e-cola: preserva o texto (sem espaços)
       const compact = raw.replace(/\s+/g, '');
       if (compact.length < 30) { toast.error('Pix copia-e-cola inválido'); return; }
       payload = compact;
@@ -717,19 +893,29 @@ function StarkPagamentosCard() {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <CardTitle className="text-base">Pagamentos (com aprovação)</CardTitle>
-            <p className="text-xs text-muted-foreground mt-1">
-              Envie boletos para a fila. A execução acontece após aprovação.
-            </p>
+          <div className="flex items-start gap-2">
+            <Send className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
+            <div>
+              <CardTitle className="font-brand">Pagamentos (com aprovação)</CardTitle>
+              <p className="text-xs text-muted-foreground mt-1">
+                Envie boletos ou Pix copia-e-cola para a fila. A execução acontece após aprovação.
+              </p>
+            </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={load}
+              disabled={loading}
+              aria-label="Atualizar pagamentos"
+              title="Atualizar pagamentos"
+            >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             </Button>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">Pagar conta</Button>
+                <Button size="sm"><Receipt className="h-4 w-4 mr-2" />Pagar conta</Button>
               </DialogTrigger>
               <DialogContent className="max-w-lg">
                 <DialogHeader>
@@ -773,71 +959,95 @@ function StarkPagamentosCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[140px]">Data</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead className="w-[140px]">Linha</TableHead>
-                <TableHead className="text-right w-[120px]">Valor</TableHead>
-                <TableHead className="w-[190px]">Status</TableHead>
-                <TableHead className="w-[170px] text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Carregando…</TableCell></TableRow>
-              ) : list.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-6 text-muted-foreground">Nenhum pagamento ainda.</TableCell></TableRow>
-              ) : list.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="text-xs">{fmtDateTime(p.created_at)}</TableCell>
-                  <TableCell className="text-sm">
-                    <div>{p.description || '—'}</div>
-                    {p.beneficiario && <div className="text-xs text-muted-foreground">{p.beneficiario}</div>}
-                    {p.status === 'falha' && p.erro && <div className="text-xs text-rose-500 mt-1">{p.erro}</div>}
-                  </TableCell>
-                  <TableCell className="text-xs font-mono">…{p.linha.slice(-8)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{p.amount_reais != null ? fmtBRL(Number(p.amount_reais)) : '—'}</TableCell>
-                  <TableCell>{pagStatusBadge(p.status)}</TableCell>
-                  <TableCell className="text-right">
-                    {p.status === 'aguardando_aprovacao' && isAprovador && (
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="bg-emerald-600 hover:bg-emerald-700"
-                          disabled={actingId === p.id}
-                          onClick={() => { setAprovarDialog(p); setSenha(''); }}
-                        >
-                          {actingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aprovar'}
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="sm" variant="outline" disabled={actingId === p.id}>Recusar</Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Recusar pagamento?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                O pagamento ficará marcado como recusado e não será enviado ao porteiro.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Voltar</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => recusar(p.id)}>Recusar</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    )}
-                  </TableCell>
+        {error ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mb-2" aria-hidden="true" />
+            <p className="text-sm text-destructive">{error}</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={load}>
+              <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
+            </Button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[140px]">Data</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead className="w-[140px]">Linha</TableHead>
+                  <TableHead className="text-right w-[120px]">Valor</TableHead>
+                  <TableHead className="w-[190px]">Status</TableHead>
+                  <TableHead className="w-[170px] text-right">Ações</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={`pgsk-${i}`}>
+                      <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : list.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <div className="flex flex-col items-center justify-center py-10 text-center">
+                        <Receipt className="h-10 w-10 text-muted-foreground mb-2" aria-hidden="true" />
+                        <p className="font-medium">Nenhum pagamento ainda</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Clique em "Pagar conta" para enviar o primeiro para aprovação.
+                        </p>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : list.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="text-xs">{fmtDateTime(p.created_at)}</TableCell>
+                    <TableCell className="text-sm">
+                      <div>{p.description || '—'}</div>
+                      {p.beneficiario && <div className="text-xs text-muted-foreground">{p.beneficiario}</div>}
+                      {p.status === 'falha' && p.erro && <div className="text-xs text-destructive mt-1">{p.erro}</div>}
+                    </TableCell>
+                    <TableCell className="text-xs font-mono">…{p.linha.slice(-8)}</TableCell>
+                    <TableCell className="text-right font-mono-tabular">{p.amount_reais != null ? formatMoneyBR(Number(p.amount_reais)) : '—'}</TableCell>
+                    <TableCell>{pagStatusBadge(p.status)}</TableCell>
+                    <TableCell className="text-right">
+                      {p.status === 'aguardando_aprovacao' && isAprovador && (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="bg-success text-success-foreground hover:bg-success/90"
+                            disabled={actingId === p.id}
+                            onClick={() => { setAprovarDialog(p); setSenha(''); }}
+                          >
+                            {actingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Aprovar'}
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="sm" variant="outline" disabled={actingId === p.id}>Recusar</Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Recusar pagamento?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  O pagamento ficará marcado como recusado e não será enviado ao porteiro.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Voltar</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => recusar(p.id)}>Recusar</AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
         <p className="text-xs text-muted-foreground">
           Aprovação exige senha e é registrada (quem/quando). Executado pelo porteiro via Stark Bank.
         </p>
@@ -875,7 +1085,7 @@ function StarkPagamentosCard() {
             <Button
               onClick={confirmarAprovacao}
               disabled={!senha || actingId === aprovarDialog?.id}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              className="bg-success text-success-foreground hover:bg-success/90"
             >
               {actingId === aprovarDialog?.id && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Confirmar aprovação
@@ -886,4 +1096,3 @@ function StarkPagamentosCard() {
     </Card>
   );
 }
-
