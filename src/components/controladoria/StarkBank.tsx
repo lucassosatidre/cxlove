@@ -561,9 +561,6 @@ export default function StarkBank() {
         </CardContent>
       </Card>
 
-      {/* Avisos em tempo real */}
-      <StarkWebhookCard />
-
       {/* Pagamentos com aprovação */}
       <StarkPagamentosCard />
     </div>
