@@ -1,5 +1,6 @@
 // @ts-nocheck
 // inter-pagar-darf — paga DARF via API Inter.
+import { getAuthedUser, isAprovador } from "../_shared/require-user.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
