@@ -318,13 +318,13 @@ export default function SaldoDeHoje() {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-3 pb-2 items-stretch">
           {estrelaAccs.map((a) => (
-            <AccountBubble key={a.id} acc={a} showName={false} />
+            <AccountBubble key={a.id} acc={a} showName={false} hidden={hidden} />
           ))}
           {grupoAccs.map((a) => (
-            <AccountBubble key={a.id} acc={a} showName />
+            <AccountBubble key={a.id} acc={a} showName hidden={hidden} />
           ))}
           {outrosAccs.map((a) => (
-            <AccountBubble key={a.id} acc={a} showName />
+            <AccountBubble key={a.id} acc={a} showName hidden={hidden} />
           ))}
 
           <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full relative">
