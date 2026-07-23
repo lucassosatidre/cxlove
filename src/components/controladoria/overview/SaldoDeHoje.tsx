@@ -292,16 +292,28 @@ export default function SaldoDeHoje() {
             <p className="text-xs text-foreground/80 mt-0.5">Referência: {fmtDate(asOf)}</p>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-          onClick={() => setEditOpen(true)}
-          title="Atualizar saldos manualmente"
-        >
-          <Pencil className="h-3 w-3" />
-          Atualizar saldos
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            onClick={() => setHidden((v) => !v)}
+            aria-label={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+            title={hidden ? 'Mostrar valores' : 'Ocultar valores'}
+          >
+            {hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() => setEditOpen(true)}
+            title="Atualizar saldos manualmente"
+          >
+            <Pencil className="h-3 w-3" />
+            Atualizar saldos
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-3 pb-2 items-stretch">
