@@ -29,7 +29,7 @@ function fmtDDMM(iso: string): string {
 export default function PagamentosDeHoje() {
   const hojeISO = useMemo(() => toISOLocal(new Date()), []);
   const daily = useCtrlUpcomingBillsDaily();
-  const balances = useCashflowBalances();
+  const balances = useCtrlAccountBalances();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
