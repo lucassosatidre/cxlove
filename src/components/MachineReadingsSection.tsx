@@ -161,7 +161,7 @@ export default function MachineReadingsSection({ dailyClosingId, salonClosingId,
     const { data: checkins } = await supabase.from('delivery_checkins').select('driver_id').in('shift_id', shiftIds).in('status', ['confirmado', 'concluido']);
     if (!checkins || checkins.length === 0) return;
     const driverIds = [...new Set(checkins.map(c => c.driver_id))];
-    const { data: drivers } = await supabase.from('delivery_drivers').select('id, nome').in('id', driverIds).order('nome');
+    const { data: drivers } = await supabase.from('delivery_drivers_public' as any).select('id, nome').in('id', driverIds).order('nome');
     if (drivers) {
       const names = [...new Set(drivers.map(d => d.nome.split(' ')[0]))].sort();
       setConfirmedDriverNames(names);

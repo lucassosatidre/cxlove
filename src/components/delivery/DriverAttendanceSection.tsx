@@ -64,7 +64,7 @@ export function useDriverAttendance(closingDate: string) {
     let driversMap: Record<string, string> = {};
     if (driverIds.length > 0) {
       const { data: drivers } = await supabase
-        .from('delivery_drivers')
+        .from('delivery_drivers_public' as any)
         .select('id, nome')
         .in('id', driverIds);
       (drivers || []).forEach(d => { driversMap[d.id] = d.nome; });

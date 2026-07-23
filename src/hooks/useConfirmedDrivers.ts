@@ -42,7 +42,7 @@ export function useConfirmedDrivers(closingDate: string) {
 
       const driverIds = [...new Set(checkins.map(c => c.driver_id))];
       const { data: drivers } = await supabase
-        .from('delivery_drivers')
+        .from('delivery_drivers_public' as any)
         .select('nome, telefone')
         .in('id', driverIds)
         .order('nome');
