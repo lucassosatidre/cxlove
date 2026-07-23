@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       if (!dp) return json({ error: `pagamento ${i + 1}: data_pagamento obrigatória` }, 400);
       const v = Number(p?.valor_pagar ?? p?.valorPagar ?? 0);
       if (!isFinite(v) || v <= 0) return json({ error: `pagamento ${i + 1}: valor_pagar inválido` }, 400);
-      const it: any = { codigoBarras: cb, dataPagamento: dp, valorPagar: v };
+      const it: any = { codBarraLinhaDigitavel: cb, dataVencimento: dp, valorPagar: v };
       if (p?.descricao) it.descricao = String(p.descricao);
       items.push(it);
     }
