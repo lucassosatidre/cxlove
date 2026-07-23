@@ -179,6 +179,9 @@ export default function SaldoDeHoje() {
   const [inter, setInter] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
   const [interLoading, setInterLoading] = useState(false);
   const [interError, setInterError] = useState(false);
+  const [stark, setStark] = useState<{ disponivel: number; atualizado_em: string } | null>(null);
+  const [starkLoading, setStarkLoading] = useState(false);
+  const [starkError, setStarkError] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const fetchInter = useCallback(async () => {
@@ -200,9 +203,29 @@ export default function SaldoDeHoje() {
     }
   }, []);
 
+  const fetchStark = useCallback(async () => {
+    setStarkLoading(true);
+    setStarkError(false);
+    try {
+      const { data: res, error: err } = await supabase.functions.invoke('stark-saldo', { body: {} });
+      if (err) throw err;
+      if (!(res as any)?.ok) throw new Error((res as any)?.error || 'stark error');
+      setStark({
+        disponivel: Number((res as any)?.disponivel ?? 0),
+        atualizado_em: String((res as any)?.atualizado_em ?? new Date().toISOString()),
+      });
+    } catch (e) {
+      console.error('stark-saldo error', e);
+      setStarkError(true);
+    } finally {
+      setStarkLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchInter();
-  }, [fetchInter]);
+    fetchStark();
+  }, [fetchInter, fetchStark]);
 
   const asOf = useMemo(() => {
     if (!data) return undefined;
