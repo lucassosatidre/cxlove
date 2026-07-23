@@ -443,7 +443,7 @@ export default function SaldoDeHoje() {
                   negativo ? 'text-destructive' : 'text-foreground',
                 )}
               >
-                {fmtBRL(ownSum)}
+                {hidden ? 'R$ •••••' : fmtBRL(ownSum)}
               </div>
             </div>
 
