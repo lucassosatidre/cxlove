@@ -248,7 +248,8 @@ export default function SaldoDeHoje() {
   }
 
   const ownAccs = data.filter((a) => !a.is_passthrough);
-  const ownSum = ownAccs.reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
+  const manualSum = ownAccs.reduce((s, a) => s + Number(a.balance?.own_balance ?? 0), 0);
+  const ownSum = manualSum + (inter ? inter.disponivel : 0) + (stark ? stark.disponivel : 0);
   const limitSum = ownAccs.reduce((s, a) => s + Number(a.overdraft_limit ?? 0), 0);
   const folego = ownSum + limitSum;
 
