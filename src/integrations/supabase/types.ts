@@ -2296,6 +2296,27 @@ export type Database = {
           },
         ]
       }
+      ctrl_account_balances: {
+        Row: {
+          account_id: string
+          own_balance: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          account_id: string
+          own_balance?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          account_id?: string
+          own_balance?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       ctrl_contas_pagar: {
         Row: {
           amount: number

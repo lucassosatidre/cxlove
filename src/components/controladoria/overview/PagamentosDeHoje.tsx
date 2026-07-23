@@ -11,7 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { fmtBRL, useCashflowBalances } from '@/hooks/useCashflowBalances';
+import { fmtBRL } from '@/hooks/useCashflowBalances';
+import { useCtrlAccountBalances } from '@/hooks/useCtrlAccountBalances';
 import { useCtrlUpcomingBillsDaily, type CtrlBillRow } from '@/hooks/useCtrlCashflowAnalytics';
 import { cn } from '@/lib/utils';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,7 +29,7 @@ function fmtDDMM(iso: string): string {
 export default function PagamentosDeHoje() {
   const hojeISO = useMemo(() => toISOLocal(new Date()), []);
   const daily = useCtrlUpcomingBillsDaily();
-  const balances = useCashflowBalances();
+  const balances = useCtrlAccountBalances();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
