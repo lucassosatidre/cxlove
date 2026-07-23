@@ -344,6 +344,52 @@ export default function SaldoDeHoje() {
             ) : null}
           </div>
 
+          <div className="rounded-lg border border-border/60 bg-card p-2 flex flex-col items-center gap-2 min-w-0 w-full relative">
+            <button
+              type="button"
+              onClick={fetchStark}
+              disabled={starkLoading}
+              className="absolute top-1 right-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+              aria-label="Atualizar saldo Stark"
+              title="Atualizar saldo Stark"
+            >
+              <RefreshCw className={cn('h-3 w-3', starkLoading && 'animate-spin')} />
+            </button>
+            <div className="flex items-center gap-2 min-w-0 max-w-full">
+              <div
+                className="h-10 w-10 rounded-xl flex items-center justify-center font-bold shrink-0 text-sm"
+                style={{ backgroundColor: '#0B7285', color: '#FFFFFF' }}
+                aria-label="Stark Bank"
+              >
+                St
+              </div>
+              <div className="text-xs font-medium text-center truncate min-w-0" title="Stark">
+                Stark
+              </div>
+            </div>
+            {starkLoading && !stark ? (
+              <Skeleton className="h-4 w-20" />
+            ) : starkError ? (
+              <div className="font-mono text-xs font-semibold text-destructive text-center">Indisponível</div>
+            ) : stark ? (
+              <>
+                <div
+                  className={cn(
+                    'font-mono text-xs sm:text-[11px] font-semibold tabular-nums text-center whitespace-nowrap leading-tight w-full min-w-0 max-w-full overflow-hidden',
+                    stark.disponivel < 0 ? 'text-destructive' : 'text-foreground',
+                  )}
+                >
+                  {fmtBRL(stark.disponivel)}
+                </div>
+                <div className="text-[9px] text-muted-foreground leading-none" title={stark.atualizado_em}>
+                  {new Date(stark.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </>
+            ) : null}
+          </div>
+
+
+
           <div className="flex flex-col gap-2 min-w-0">
             <div className="rounded-lg border border-primary/50 bg-primary/10 p-2 flex flex-col items-center gap-1 min-w-0 w-full">
               <div className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-foreground/80 text-center leading-tight">
