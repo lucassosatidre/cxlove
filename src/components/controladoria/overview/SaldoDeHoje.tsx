@@ -362,7 +362,7 @@ export default function SaldoDeHoje() {
                     inter.disponivel < 0 ? 'text-destructive' : 'text-foreground',
                   )}
                 >
-                  {fmtBRL(inter.disponivel)}
+                  {hidden ? 'R$ •••••' : fmtBRL(inter.disponivel)}
                 </div>
                 <div className="text-[9px] text-muted-foreground leading-none" title={inter.atualizado_em}>
                   {new Date(inter.atualizado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
