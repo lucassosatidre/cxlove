@@ -585,7 +585,7 @@ function pagStatusBadge(status: string) {
 
 // A lista abaixo é SÓ ESTÉTICA (esconde botões pra quem não é aprovador).
 // A segurança real está na edge stark-aprovar: whitelist + senha validadas no servidor.
-const APROVADORES_UI = ['adm@vigia.com', 'lucassosatidre@gmail.com', 'luana@vigia.com'];
+import { isAprovadorUI } from '@/lib/aprovadores';
 
 function StarkPagamentosCard() {
   const [list, setList] = useState<Pagamento[]>([]);
@@ -606,7 +606,7 @@ function StarkPagamentosCard() {
     });
   }, []);
 
-  const isAprovador = !!userEmail && APROVADORES_UI.includes(userEmail);
+  const isAprovador = isAprovadorUI(userEmail);
 
   const load = useCallback(async () => {
     setLoading(true);
