@@ -19,3 +19,12 @@ export function isAprovador(email?: string | null) {
     .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
   return !!email && list.includes(email.toLowerCase());
 }
+
+export async function isFinance(email?: string | null) {
+  if (!email) return false;
+  const url = Deno.env.get("SUPABASE_URL")!;
+  const svc = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const c = createClient(url, svc);
+  const { data } = await c.from("finance_viewers").select("email").ilike("email", email).maybeSingle();
+  return !!data;
+}
