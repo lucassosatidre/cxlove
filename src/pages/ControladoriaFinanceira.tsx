@@ -1,10 +1,10 @@
 // Controladoria Financeira — módulo independente do Caixa.
-// Duas abas: Notas (do Espião) e Contas a Pagar (isoladas em ctrl_contas_pagar).
 import AppLayout from '@/components/AppLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import ControladoriaNotas from '@/components/controladoria/ControladoriaNotas';
 import ControladoriaContasPagar from '@/components/controladoria/ControladoriaContasPagar';
 import StarkBank from '@/components/controladoria/StarkBank';
+import InterBank from '@/components/controladoria/InterBank';
 
 export default function ControladoriaFinanceira() {
   return (
@@ -22,19 +22,13 @@ export default function ControladoriaFinanceira() {
             <TabsTrigger value="notas">Notas</TabsTrigger>
             <TabsTrigger value="contas">Contas a Pagar</TabsTrigger>
             <TabsTrigger value="stark">Stark Bank</TabsTrigger>
+            <TabsTrigger value="inter">Inter</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="notas">
-            <ControladoriaNotas />
-          </TabsContent>
-
-          <TabsContent value="contas">
-            <ControladoriaContasPagar />
-          </TabsContent>
-
-          <TabsContent value="stark">
-            <StarkBank />
-          </TabsContent>
+          <TabsContent value="notas"><ControladoriaNotas /></TabsContent>
+          <TabsContent value="contas"><ControladoriaContasPagar /></TabsContent>
+          <TabsContent value="stark"><StarkBank /></TabsContent>
+          <TabsContent value="inter"><InterBank /></TabsContent>
         </Tabs>
       </div>
     </AppLayout>
