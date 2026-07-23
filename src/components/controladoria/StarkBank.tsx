@@ -13,7 +13,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, RefreshCw, QrCode, Copy, ExternalLink, Ban,
-  Landmark, Wallet, FileText, Send, Receipt, Bell, AlertCircle, Inbox,
+  Landmark, Wallet, FileText, Send, Receipt, AlertCircle, Inbox,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -207,9 +207,7 @@ export default function StarkBank() {
                 <Landmark className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
                 <div>
                   <CardTitle className="font-brand">Stark Bank</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Projeto Vigia API · Permissão Financeiro
-                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Conta digital</p>
                 </div>
               </div>
               {saldoLoading ? (
@@ -563,175 +561,22 @@ export default function StarkBank() {
         </CardContent>
       </Card>
 
-      {/* Avisos em tempo real */}
-      <StarkWebhookCard />
-
       {/* Pagamentos com aprovação */}
       <StarkPagamentosCard />
     </div>
   );
 }
 
-const WEBHOOK_URL = "https://hvpmkkxvvjnefayrlcjy.supabase.co/functions/v1/stark-webhook";
-
-type StarkEvent = {
-  id: string;
-  type: string | null;
-  subscription: string | null;
-  amount_reais: number | null;
-  event_created: string | null;
-  received_at: string;
-};
-
-function eventBadge(type: string | null, subscription: string | null) {
-  const t = (type || "").toLowerCase();
-  const s = (subscription || "").toLowerCase();
-  if (t === "invoice" && s === "credited") {
-    return <Badge className="bg-success text-success-foreground hover:bg-success">Pix recebido</Badge>;
-  }
-  if (t === "invoice" && s === "canceled") {
-    return <Badge variant="secondary">Cobrança cancelada</Badge>;
-  }
-  if (t === "deposit" && (s === "created" || s === "credited")) {
-    return <Badge className="bg-success text-success-foreground hover:bg-success">Depósito</Badge>;
-  }
-  if (t === "boleto-payment" && (s === "success" || s === "paid")) {
-    return <Badge className="bg-info text-info-foreground hover:bg-info">Boleto pago</Badge>;
-  }
-  return <Badge variant="outline">{[type, subscription].filter(Boolean).join(" · ") || "evento"}</Badge>;
+function mapErroPagamento(raw: string | null | undefined): string {
+  const s = (raw || '').toLowerCase();
+  if (!s) return 'Não foi possível pagar. Confira o código e tente novamente.';
+  if (s.includes('invalidbarcode') || s.includes('bar code') || s.includes('barcode')) return 'Código de barras inválido';
+  if (s.includes('insufficientfunds') || s.includes('saldo')) return 'Saldo insuficiente na conta';
+  if (s.includes('invalidjson') || s.includes('taxid')) return 'Dados do boleto incompletos';
+  if (s.includes('expired') || s.includes('overdue')) return 'Boleto vencido';
+  return 'Não foi possível pagar. Confira o código e tente novamente.';
 }
 
-function StarkWebhookCard() {
-  const [events, setEvents] = useState<StarkEvent[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const { data, error } = await (supabase as any)
-        .from("stark_events")
-        .select("id, type, subscription, amount_reais, event_created, received_at")
-        .order("received_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      setEvents((data ?? []) as StarkEvent[]);
-    } catch (e: any) {
-      setError(e?.message ?? "Erro ao carregar avisos");
-      setEvents([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  async function copyUrl() {
-    try {
-      await navigator.clipboard.writeText(WEBHOOK_URL);
-      toast.success("URL copiada");
-    } catch {
-      toast.error("Falha ao copiar");
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-start gap-2">
-            <Bell className="h-4 w-4 mt-0.5 text-accent" aria-hidden="true" />
-            <div>
-              <CardTitle className="font-brand">Avisos em tempo real (webhook)</CardTitle>
-              <p className="text-xs text-muted-foreground mt-1">
-                Últimos 20 eventos recebidos do Stark.
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={load}
-            disabled={loading}
-            aria-label="Atualizar avisos"
-            title="Atualizar avisos"
-          >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            <span className="ml-2">Atualizar</span>
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="text-xs">URL do webhook (cadastre no painel do Stark)</Label>
-          <div className="flex gap-2 mt-1">
-            <Input readOnly value={WEBHOOK_URL} className="text-xs font-mono" />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={copyUrl}
-              aria-label="Copiar URL do webhook"
-              title="Copiar URL do webhook"
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-        {error ? (
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <AlertCircle className="h-8 w-8 text-destructive mb-2" aria-hidden="true" />
-            <p className="text-sm text-destructive">{error}</p>
-            <Button size="sm" variant="outline" className="mt-2" onClick={load}>
-              <RefreshCw className="h-3 w-3 mr-1" />Tentar de novo
-            </Button>
-          </div>
-        ) : (
-          <div className="overflow-x-auto rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[160px]">Recebido</TableHead>
-                  <TableHead>Evento</TableHead>
-                  <TableHead className="text-right w-[140px]">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <TableRow key={`evsk-${i}`}>
-                      <TableCell colSpan={3}><Skeleton className="h-5 w-full" /></TableCell>
-                    </TableRow>
-                  ))
-                ) : events.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={3}>
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <Bell className="h-8 w-8 text-muted-foreground mb-2" aria-hidden="true" />
-                        <p className="text-sm font-medium">Nenhum aviso recebido ainda</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Cadastre o webhook no painel do Stark apontando para a URL acima.
-                        </p>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : events.map((e) => (
-                  <TableRow key={e.id}>
-                    <TableCell className="text-xs">{fmtDateTime(e.received_at)}</TableCell>
-                    <TableCell>{eventBadge(e.type, e.subscription)}</TableCell>
-                    <TableCell className="text-right font-mono-tabular font-medium">
-                      {e.amount_reais != null ? formatMoneyBR(e.amount_reais) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 type Pagamento = {
   id: string;
@@ -974,7 +819,6 @@ function StarkPagamentosCard() {
                 <TableRow>
                   <TableHead className="w-[140px]">Data</TableHead>
                   <TableHead>Descrição</TableHead>
-                  <TableHead className="w-[140px]">Linha</TableHead>
                   <TableHead className="text-right w-[120px]">Valor</TableHead>
                   <TableHead className="w-[190px]">Status</TableHead>
                   <TableHead className="w-[170px] text-right">Ações</TableHead>
@@ -984,12 +828,12 @@ function StarkPagamentosCard() {
                 {loading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={`pgsk-${i}`}>
-                      <TableCell colSpan={6}><Skeleton className="h-5 w-full" /></TableCell>
+                      <TableCell colSpan={5}><Skeleton className="h-5 w-full" /></TableCell>
                     </TableRow>
                   ))
                 ) : list.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6}>
+                    <TableCell colSpan={5}>
                       <div className="flex flex-col items-center justify-center py-10 text-center">
                         <Receipt className="h-10 w-10 text-muted-foreground mb-2" aria-hidden="true" />
                         <p className="font-medium">Nenhum pagamento ainda</p>
@@ -999,15 +843,17 @@ function StarkPagamentosCard() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : list.map((p) => (
+                ) : list.map((p) => {
+                  const titulo = p.beneficiario || p.description || '—';
+                  const subtitulo = p.beneficiario && p.description && p.description !== p.beneficiario ? p.description : null;
+                  return (
                   <TableRow key={p.id}>
                     <TableCell className="text-xs">{fmtDateTime(p.created_at)}</TableCell>
                     <TableCell className="text-sm">
-                      <div>{p.description || '—'}</div>
-                      {p.beneficiario && <div className="text-xs text-muted-foreground">{p.beneficiario}</div>}
-                      {p.status === 'falha' && p.erro && <div className="text-xs text-destructive mt-1">{p.erro}</div>}
+                      <div>{titulo}</div>
+                      {subtitulo && <div className="text-xs text-muted-foreground">{subtitulo}</div>}
+                      {p.status === 'falha' && p.erro && <div className="text-xs text-destructive mt-1">{mapErroPagamento(p.erro)}</div>}
                     </TableCell>
-                    <TableCell className="text-xs font-mono">…{p.linha.slice(-8)}</TableCell>
                     <TableCell className="text-right font-mono-tabular">{p.amount_reais != null ? formatMoneyBR(Number(p.amount_reais)) : '—'}</TableCell>
                     <TableCell>{pagStatusBadge(p.status)}</TableCell>
                     <TableCell className="text-right">
@@ -1043,13 +889,14 @@ function StarkPagamentosCard() {
                       )}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         )}
         <p className="text-xs text-muted-foreground">
-          Aprovação exige senha e é registrada (quem/quando). Executado pelo porteiro via Stark Bank.
+          O pagamento sai só depois de aprovado com senha. Toda aprovação fica registrada.
         </p>
       </CardContent>
 
@@ -1064,8 +911,10 @@ function StarkPagamentosCard() {
           {aprovarDialog && (
             <div className="space-y-3">
               <div className="rounded-md border p-3 text-sm space-y-1">
-                <div><span className="text-muted-foreground">Descrição: </span>{aprovarDialog.description || '—'}</div>
-                <div><span className="text-muted-foreground">Linha: </span><span className="font-mono">…{aprovarDialog.linha.slice(-8)}</span></div>
+                <div><span className="text-muted-foreground">Para: </span>{aprovarDialog.beneficiario || aprovarDialog.description || '—'}</div>
+                {aprovarDialog.amount_reais != null && (
+                  <div><span className="text-muted-foreground">Valor: </span><span className="font-mono-tabular">{formatMoneyBR(Number(aprovarDialog.amount_reais))}</span></div>
+                )}
               </div>
               <div>
                 <Label htmlFor="pag-senha">Senha de aprovação</Label>

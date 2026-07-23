@@ -166,7 +166,7 @@ export default function InterBank() {
                 <div>
                   <CardTitle className="font-brand">Banco Inter</CardTitle>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Banco Inter Empresas · certificado mTLS
+                    Banco Inter Empresas
                   </p>
                 </div>
               </div>
