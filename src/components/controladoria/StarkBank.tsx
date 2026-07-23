@@ -911,8 +911,10 @@ function StarkPagamentosCard() {
           {aprovarDialog && (
             <div className="space-y-3">
               <div className="rounded-md border p-3 text-sm space-y-1">
-                <div><span className="text-muted-foreground">Descrição: </span>{aprovarDialog.description || '—'}</div>
-                <div><span className="text-muted-foreground">Linha: </span><span className="font-mono">…{aprovarDialog.linha.slice(-8)}</span></div>
+                <div><span className="text-muted-foreground">Para: </span>{aprovarDialog.beneficiario || aprovarDialog.description || '—'}</div>
+                {aprovarDialog.amount_reais != null && (
+                  <div><span className="text-muted-foreground">Valor: </span><span className="font-mono-tabular">{formatMoneyBR(Number(aprovarDialog.amount_reais))}</span></div>
+                )}
               </div>
               <div>
                 <Label htmlFor="pag-senha">Senha de aprovação</Label>
