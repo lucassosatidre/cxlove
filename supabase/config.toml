@@ -66,5 +66,25 @@ verify_jwt = false
 [functions.stark-aprovar]
 verify_jwt = true
 
+[functions.inter-saldo]
+verify_jwt = false
+
+[functions.inter-extrato-completo]
+verify_jwt = false
+
+[functions.inter-pix]
+verify_jwt = false
+
+[functions.inter-pagar-boleto]
+verify_jwt = false
+
+[functions.inter-pagar-darf]
+verify_jwt = false
+
+[functions.inter-pagar-lote]
+verify_jwt = false
+
+
+
 
 
