@@ -525,7 +525,8 @@ function BoletoDialog() {
   const [desc, setDesc] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const ok = codigoBarras.replace(/\D/g, '').length >= 44 && !!dataPagamento;
+  const valorNumLive = valor ? parseMoneyBR(valor) : 0;
+  const ok = codigoBarras.replace(/\D/g, '').length >= 44 && !!dataPagamento && isFinite(valorNumLive) && valorNumLive > 0;
 
   async function pagar() {
     setLoading(true);
