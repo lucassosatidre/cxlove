@@ -78,6 +78,20 @@ function SectorGuard({ sector, children }: { sector: 'tele' | 'salon' | 'entrega
   return <>{children}</>;
 }
 
+// Flatten menu tree DFS, in menu order, returning menuKeys that have a route
+function flattenMenuKeysWithRoute(items: MenuItem[]): string[] {
+  const out: string[] = [];
+  const walk = (arr: MenuItem[]) => {
+    for (const it of arr) {
+      if (it.menuKey && MENU_KEY_TO_ROUTE[it.menuKey]) out.push(it.menuKey);
+      if (it.children) walk(it.children);
+    }
+  };
+  walk(items);
+  return out;
+}
+const ORDERED_ROUTED_KEYS = flattenMenuKeysWithRoute(allMenuItems);
+
 function RoleRedirect() {
   const { isEntregador, loading: roleLoading } = useUserRole();
   const { canView, loading: permLoading } = usePermissions();
@@ -90,8 +104,10 @@ function RoleRedirect() {
   }
   if (isEntregador) return <Navigate to="/entregador" replace />;
   if (canView("dashboard")) return <Overview />;
-  const order = ["op.tele","op.salao","op.entregadores","op.maquininhas","audit.importacoes","audit.maquinona","audit.vouchers","audit.brendi","audit.ifood","audit.relatorios","fluxo_caixa","clau.memoria","config.usuarios"];
-  for (const k of order) { if (canView(k)) return <Navigate to={MENU_KEY_TO_ROUTE[k]} replace />; }
+  for (const k of ORDERED_ROUTED_KEYS) {
+    if (k === "dashboard") continue;
+    if (canView(k)) return <Navigate to={MENU_KEY_TO_ROUTE[k]} replace />;
+  }
   return <Overview />;
 }
 
