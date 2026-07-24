@@ -20,6 +20,7 @@ export const allMenuItems: MenuItem[] = [
     icon: LayoutDashboard,
     children: [
       { label: "Painel", icon: LayoutDashboard, path: "/", menuKey: "dashboard", onlyView: true, children: [
+        { label: "Conferências", icon: LayoutDashboard, menuKey: "dashboard.conferencias", onlyView: true },
         { label: "Controle de Caixa", icon: Wallet, menuKey: "dashboard.controle_caixa", onlyView: true },
         { label: "Abrir Caixa", icon: CreditCard, menuKey: "dashboard.abrir_caixa", onlyView: true },
       ] },

@@ -89,6 +89,7 @@ export default function Overview() {
   const { canView } = usePermissions();
   const canViewVault = canView('dashboard.controle_caixa');
   const canViewAbrirCaixa = canView('dashboard.abrir_caixa');
+  const canViewConferencias = canView('dashboard.conferencias');
 
   // ─ Overview state
   const [teleClosings, setTeleClosings] = useState<ClosingRow[]>([]);
@@ -396,12 +397,14 @@ export default function Overview() {
       title="Painel"
       subtitle="Acompanhamento diário — Conferência, Conciliação & Cofre"
     >
-      <Tabs defaultValue="overview" className="w-full">
+      <Tabs defaultValue={canViewConferencias ? "overview" : (canViewVault ? "vault" : "overview")} className="w-full">
         <TabsList className="mb-6">
-          <TabsTrigger value="overview">
-            <CalendarDays className="h-4 w-4 mr-2" />
-            Conferências
-          </TabsTrigger>
+          {canViewConferencias && (
+            <TabsTrigger value="overview">
+              <CalendarDays className="h-4 w-4 mr-2" />
+              Conferências
+            </TabsTrigger>
+          )}
           {canViewVault && (
             <TabsTrigger value="vault">
               <Vault className="h-4 w-4 mr-2" />
@@ -417,9 +420,11 @@ export default function Overview() {
         </TabsList>
 
         {/* ═══ Tab: Overview ═══ */}
-        <TabsContent value="overview">
-          <OverviewConferencias days={days} loading={loading} isAdmin={isAdmin} />
-        </TabsContent>
+        {canViewConferencias && (
+          <TabsContent value="overview">
+            <OverviewConferencias days={days} loading={loading} isAdmin={isAdmin} />
+          </TabsContent>
+        )}
 
         {/* ═══ Tab: Controle de Caixa ═══ */}
         {canViewVault && (
