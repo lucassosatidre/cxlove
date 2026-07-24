@@ -9,6 +9,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { PermissionsProvider, usePermissions } from "@/contexts/PermissionsContext";
 import PermissionGate from "@/components/PermissionGate";
 import { MENU_KEY_TO_ROUTE } from "@/lib/menu-config";
+import { allMenuItems, type MenuItem } from "@/lib/menu-tree";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import Dashboard from "./pages/Dashboard";
