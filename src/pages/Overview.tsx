@@ -89,6 +89,7 @@ export default function Overview() {
   const { canView } = usePermissions();
   const canViewVault = canView('dashboard.controle_caixa');
   const canViewAbrirCaixa = canView('dashboard.abrir_caixa');
+  const canViewConferencias = canView('dashboard.conferencias');
 
   // ─ Overview state
   const [teleClosings, setTeleClosings] = useState<ClosingRow[]>([]);
