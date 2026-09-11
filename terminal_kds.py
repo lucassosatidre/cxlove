@@ -13,7 +13,9 @@
 import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "8"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "9"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v9 (11/09/26): DESCARTE por mesa: pedido cuja "mesa" contem "NAO FAZER ESSA PIZZA" (mesa-lixeira do
+#   cardapio digital) NAO vai pro mana (nem fila, nem contagem). Decisao do Lucas 11/09. Ver descartar_mesa().
 # v8 (27/06/26): robustez (auditoria). (1) RTDB 401/403 forca re-auth no proximo ciclo (antes o robo
 #   ficava CEGO ate ~58min); (2) auto-update e download do cerebro agora ATOMICOS + validados (compile)
 #   -> download truncado nao brica mais o robo; (3) se o GitHub cair, usa o cerebro LOCAL em disco em vez
@@ -311,6 +313,12 @@ def traduzir_item(desc, qty, choices, notes, out, refs):
             if eh_bebida(c): refs.append({"tipo":"bebida","nome":_norm(c),"qty":1,"sabores":[]}); achou=True
         if not achou and desc: refs.append({"tipo":"outro","nome":desc,"qty":qty,"sabores":[]})
 
+DESCARTE_MESAS = ["nao fazer essa pizza", "nao fazer"]
+def descartar_mesa(numero):
+    """Mesa-lixeira: o texto da mesa manda NAO fazer -> o pedido e descartado (nao vai pro mana)."""
+    n = _low(numero)
+    return any(t in n for t in DESCARTE_MESAS)
+
 def montar_comanda(id_sale, grupos):
     """Junta os grupos ativos de um id_sale -> payload pro ingest-comanda.
     ITENS via o CEREBRO da etiqueta (extrair_itens_kds + agrupar_display + IA) = mesma estrutura/regras do papel."""
@@ -453,6 +461,11 @@ def ciclo(primeira):
             continue
         if payload["total_caixas"]<=0: continue
         sig = assinatura(payload)
+        if descartar_mesa(payload["numero_pedido"]):
+            if _enviados.get(ids)!=sig:
+                _enviados[ids]=sig; enviadas+=1
+                log(f"  DESCARTADO (mesa '{str(payload['numero_pedido'])[:40]}'): pedido {ids} NAO vai pro mana.")
+            continue
         if _enviados.get(ids)==sig: continue  # ja mandei igual
         resumo = f"#{payload['numero_pedido']} {payload['order_type']} cli={payload['cliente_nome']} mesa={payload.get('_mesa')} tipoSaipos={payload.get('_tipo_saipos')} | caixas={payload['total_caixas']} | itens=" + str([(d['tipo'][:3], d['nome'][:22], d.get('sabores')) for d in payload['items']][:6])
         if MODO_SOMBRA:
