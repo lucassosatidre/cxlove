@@ -5,6 +5,8 @@ v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (u
 """
 
 VERSION = "198"
+# v198 (18/09/26): payload do Provisao segue o mesmo padrao do Saipos: Pote Dip e item separado,
+#   conta em ITENS e ganha etiqueta propria; refrigerante conta em ITENS sem gerar etiqueta.
 # v197 (18/09/26): etiquetas do Provisao agora imprimem a forma real de pagamento, bandeira e valor
 #   (ex.: VALE ALELO R$123,39), inclusive quando ha mais de uma parcela. Antes a fila reduzia tudo a
 #   COBRAR e o rodape mostrava somente a quantidade de itens.
