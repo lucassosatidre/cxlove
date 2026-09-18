@@ -23,6 +23,21 @@ class EtiquetaPagamentoTest(unittest.TestCase):
         self.assertIn("VALE ALELO", rodape)
         self.assertIn("R$123,39", rodape)
 
+    def test_payload_provisao_conta_dip_e_nao_cria_etiqueta_para_refri(self):
+        display = MOD.sofia_display([
+            {"tipo": "pizza", "nome": "Pizza Grande", "qtd": 1, "sabores": [{"fracao": "1/1", "nome": "Calabresa"}]},
+            {"tipo": "dip", "nome": "Pote Dip Catupiry", "qtd": 1},
+            {"tipo": "bebida", "nome": "Coca Cola 1,5l", "qtd": 1},
+        ])
+        self.assertEqual([item["tipo"] for item in display], ["caixa_salgada", "dip", "bebida"])
+        total_caixas, total_dips, total_bebidas, total_outros, total_entrega, total_etiquetas = MOD.sofia_totais(display)
+        self.assertEqual((total_caixas, total_dips, total_bebidas, total_outros), (1, 1, 1, 0))
+        self.assertEqual(total_entrega, 3)
+        self.assertEqual(total_etiquetas, 2)
+
+        so_refri = MOD.sofia_display([{"tipo": "bebida", "nome": "Coca Cola 1,5l", "qtd": 1}])
+        self.assertEqual(MOD.sofia_totais(so_refri)[-1], 0)
+
 
 if __name__ == "__main__":
     unittest.main()

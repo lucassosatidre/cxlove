@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "197"
+VERSION = "198"
 # v197 (18/09/26): etiquetas do Provisao agora imprimem a forma real de pagamento, bandeira e valor
 #   (ex.: VALE ALELO R$123,39), inclusive quando ha mais de uma parcela. Antes a fila reduzia tudo a
 #   COBRAR e o rodape mostrava somente a quantidade de itens.
@@ -2272,9 +2272,22 @@ def sofia_display(itens):
                 display.append({"tipo": "borda", "nome": str(it["borda"]), "qty": 1, "sabores": []})
         elif tipo == "bebida":
             display.append({"tipo": "bebida", "nome": nome, "qty": qtd, "sabores": []})
+        elif tipo == "dip":
+            display.append({"tipo": "dip", "nome": nome, "qty": qtd, "sabores": []})
         else:
             display.append({"tipo": "outro", "nome": nome, "qty": qtd, "sabores": []})
     return display
+
+def sofia_totais(display):
+    """Mesma contagem operacional usada no Saipos: dip conta como item e etiqueta;
+    bebida conta como item, mas não gera etiqueta."""
+    total_caixas = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada", "caixa_doce"))
+    total_dips = sum(d["qty"] for d in display if d["tipo"] == "dip")
+    total_bebidas = sum(d["qty"] for d in display if d["tipo"] == "bebida")
+    total_outros = sum(d["qty"] for d in display if d["tipo"] == "outro")
+    total_entrega = total_caixas + total_dips + total_bebidas + total_outros
+    total_etiquetas = total_caixas + total_dips
+    return total_caixas, total_dips, total_bebidas, total_outros, total_entrega, total_etiquetas
 
 def gerar_comanda(pedido):
     """Comanda de despacho 80x30mm: Nº/SOFIA/hora, cliente, endereco, pagamento, total."""
@@ -2530,10 +2543,7 @@ def processar_sofia_pedido(pedido, impressora):
     canal = str(pedido.get("canal") or "Sofia").strip() or "Sofia"
     codigo_canal = str(pedido.get("codigo_canal") or canal).strip() or canal
     display = sofia_display(pedido.get("itens"))
-    total_caixas = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada","caixa_doce"))
-    total_bebidas = sum(d["qty"] for d in display if d["tipo"] == "bebida")
-    total_outros = sum(d["qty"] for d in display if d["tipo"] == "outro")
-    total_entrega = total_caixas + total_bebidas + total_outros
+    total_caixas, total_dips, total_bebidas, total_outros, total_entrega, n_et = sofia_totais(display)
     total_valor = float(pedido.get("total") or 0)
     pag_cat, pag_dados = sofia_pag_cat(
         pedido.get("forma_pagamento"), pedido.get("troco_para"), total_valor,
@@ -2544,7 +2554,8 @@ def processar_sofia_pedido(pedido, impressora):
     hora = pedido.get("hora") or ""
 
     # 1) ETIQUETAS das caixas de pizza -> impressora de etiqueta (.14)
-    n_et = max(total_caixas, 1)
+    # Mesmo padrão do Saipos: cada pizza e cada Pote Dip recebem etiqueta;
+    # bebida entra em ITENS, sem criar etiqueta própria.
     for i in range(1, n_et + 1):
         try:
             img = gerar_etiqueta(numero, i, n_et, display, total_entrega,
