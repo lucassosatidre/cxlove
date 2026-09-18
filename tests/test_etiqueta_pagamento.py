@@ -11,6 +11,15 @@ SPEC.loader.exec_module(MOD)
 
 
 class EtiquetaPagamentoTest(unittest.TestCase):
+    def test_pedido_51_dinheiro_com_parcelas_preserva_troco(self):
+        categoria, dados = MOD.sofia_pag_cat(
+            "dinheiro", 140, 135.39,
+            pagamentos=[{"forma": "dinheiro", "valor": 135.39}],
+        )
+        self.assertEqual(categoria, "DINHEIRO_TROCO")
+        self.assertAlmostEqual(dados["valor_troco"], 4.61)
+        self.assertIn("TROCO PARA: R$140,00", MOD.montar_rodape_linha(3, categoria, dados))
+
     def test_vale_alelo_aparece_com_valor_no_rodape(self):
         categoria, dados = MOD.sofia_pag_cat(
             "vale",
@@ -22,6 +31,21 @@ class EtiquetaPagamentoTest(unittest.TestCase):
         rodape = MOD.montar_rodape_linha(3, categoria, dados)
         self.assertIn("VALE ALELO", rodape)
         self.assertIn("R$123,39", rodape)
+
+    def test_misto_preserva_troco_da_parte_em_dinheiro(self):
+        categoria, dados = MOD.sofia_pag_cat("dinheiro", 100, 135.39, pagamentos=[
+            {"forma": "dinheiro", "valor": 85.39}, {"forma": "credito", "valor": 50}])
+        rodape = MOD.montar_rodape_linha(3, categoria, dados)
+        self.assertIn("DINHEIRO: R$85,39", rodape)
+        self.assertIn("CREDITO: R$50,00", rodape)
+        self.assertIn("TROCO PARA: R$100,00", rodape)
+
+    def test_online_nao_pede_troco(self):
+        categoria, dados = MOD.sofia_pag_cat("pago", 140, 135.39, pagamentos=[
+            {"forma": "credito", "valor": 135.39, "online": True}])
+        rodape = MOD.montar_rodape_linha(3, categoria, dados)
+        self.assertIn("PAGO", rodape)
+        self.assertNotIn("TROCO", rodape)
 
     def test_payload_provisao_conta_dip_e_nao_cria_etiqueta_para_refri(self):
         display = MOD.sofia_display([

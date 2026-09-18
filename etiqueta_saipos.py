@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "198"
+VERSION = "199"
 # v198 (18/09/26): payload do Provisao segue o mesmo padrao do Saipos: Pote Dip e item separado,
 #   conta em ITENS e ganha etiqueta propria; refrigerante conta em ITENS sem gerar etiqueta.
 # v197 (18/09/26): etiquetas do Provisao agora imprimem a forma real de pagamento, bandeira e valor
@@ -2219,6 +2219,18 @@ def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira=""):
     """Mapeia forma_pagamento da Sofia pro vocabulario do rodape (PAGO/MAQUINONA/DINHEIRO...)."""
     f = (forma or "").lower()
     parcelas = pagamentos if isinstance(pagamentos, list) else []
+    pendentes = [p for p in parcelas if not p.get("online")]
+    # O Provisao envia parcelas inclusive para dinheiro. Nao deixar o resumo
+    # generico esconder o troco que o render Saipos ja sabe exibir.
+    so_dinheiro = bool(pendentes) and all(str(p.get("forma") or f).lower() == "dinheiro" for p in pendentes)
+    if f != "pago" and (so_dinheiro or (not parcelas and f == "dinheiro")):
+        valor_dinheiro = sum(float(p.get("valor") or 0) for p in pendentes) if pendentes else float(total)
+        try:
+            if troco_para and float(troco_para) > valor_dinheiro:
+                return "DINHEIRO_TROCO", {"valor_pedido": valor_dinheiro, "valor_receber": float(troco_para), "valor_troco": round(float(troco_para)-valor_dinheiro, 2)}
+        except (TypeError, ValueError):
+            pass
+        return "DINHEIRO", {"valor": valor_dinheiro}
     if parcelas or f in ("vale", "voucher", "credito", "crédito", "debito", "débito", "pix"):
         nomes = {
             "vale": "VALE", "voucher": "VALE",
@@ -2238,6 +2250,12 @@ def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira=""):
             try: valor = float(p.get("valor") if p.get("valor") is not None else total)
             except: valor = float(total or 0)
             detalhes.append(f"{nome}: R${formatar_valor(valor)}")
+        dinheiro_pendente = sum(float(p.get("valor") or 0) for p in pendentes if str(p.get("forma") or f).lower() == "dinheiro")
+        try:
+            if f != "pago" and dinheiro_pendente > 0 and troco_para and float(troco_para) > dinheiro_pendente:
+                detalhes.append(f"TROCO PARA: R${formatar_valor(float(troco_para))}")
+        except (TypeError, ValueError):
+            pass
         todos_online = bool(parcelas) and all(bool(p.get("online")) for p in parcelas)
         return ("PAGO_DETALHE" if todos_online or f == "pago" else "COBRAR_DETALHE"), {"resumo": " + ".join(detalhes)}
     if f == "pago": return "PAGO", {}
