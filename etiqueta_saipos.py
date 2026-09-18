@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "196"
+VERSION = "197"
+# v197 (18/09/26): etiquetas do Provisao agora imprimem a forma real de pagamento, bandeira e valor
+#   (ex.: VALE ALELO R$123,39), inclusive quando ha mais de uma parcela. Antes a fila reduzia tudo a
+#   COBRAR e o rodape mostrava somente a quantidade de itens.
 # v196 (18/09/26): FILTRO de tipo/canal (Lucas). So SALAO (tratado acima) + retirada criada DIRETO
 #   no Saipos (canal vazio) imprimem etiqueta e vao pro Mana. ENTREGA e retirada de canal online
 #   (iFood/Brendi/menu proprio) vao pelo Provisao -> BLOQUEIA (sem etiqueta, sem Mana).
@@ -1374,6 +1377,9 @@ def montar_rodape_linha(total_entrega, pag_cat, pag_dados):
         return f"ITENS: {total_entrega} - DINHEIRO: R${formatar_valor(vp)} - TROCO PARA: R${formatar_valor(vr)}"
     if pag_cat == "DIN_MAQUINONA":
         return f"ITENS: {total_entrega} - DIN+MAQUINONA: R${formatar_valor(pag_dados.get('valor',0))}"
+    if pag_cat in ("COBRAR_DETALHE", "PAGO_DETALHE"):
+        prefixo = "PAGO - " if pag_cat == "PAGO_DETALHE" else ""
+        return f"ITENS: {total_entrega} - {prefixo}{pag_dados.get('resumo', 'CONFIRMAR PAGAMENTO')}"
     return f"ITENS: {total_entrega}"
 
 def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
@@ -1396,7 +1402,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # ============================================================
     try: num_padded = f"{int(numero_pedido):04d}"
     except: num_padded = numero_pedido or "0000"
-    status = "PAGO" if pag_cat == "PAGO" else "COBRAR"
+    status = "PAGO" if str(pag_cat).startswith("PAGO") else "COBRAR"
     partes = [f"#{num_padded}", f"{pizza_num}/{total_pizzas}", status]
     if balcao and nome_cliente: partes.append(f"{nome_cliente} BALCAO")
     elif balcao: partes.append("BALCAO")
@@ -2207,9 +2213,31 @@ def _sofia_http(url, method="GET", body=None, secret=""):
     resp = urllib.request.urlopen(req, timeout=15, context=_sofia_ctx())
     return json.loads(resp.read().decode("utf-8"))
 
-def sofia_pag_cat(forma, troco_para, total):
+def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira=""):
     """Mapeia forma_pagamento da Sofia pro vocabulario do rodape (PAGO/MAQUINONA/DINHEIRO...)."""
     f = (forma or "").lower()
+    parcelas = pagamentos if isinstance(pagamentos, list) else []
+    if parcelas or f in ("vale", "voucher", "credito", "crédito", "debito", "débito", "pix"):
+        nomes = {
+            "vale": "VALE", "voucher": "VALE",
+            "credito": "CREDITO", "crédito": "CREDITO",
+            "debito": "DEBITO", "débito": "DEBITO",
+            "pix": "PIX", "dinheiro": "DINHEIRO", "pago": "PAGO",
+        }
+        usar = [p for p in parcelas if not p.get("online")]
+        if not usar: usar = parcelas
+        if not usar: usar = [{"forma": f, "valor": total, "online": False}]
+        detalhes = []
+        for p in usar:
+            pf = str(p.get("forma") or f or "pagamento").lower()
+            nome = nomes.get(pf, pf.upper())
+            if bandeira and pf in ("vale", "voucher", "credito", "crédito", "debito", "débito"):
+                nome = f"{nome} {str(bandeira).upper()}"
+            try: valor = float(p.get("valor") if p.get("valor") is not None else total)
+            except: valor = float(total or 0)
+            detalhes.append(f"{nome}: R${formatar_valor(valor)}")
+        todos_online = bool(parcelas) and all(bool(p.get("online")) for p in parcelas)
+        return ("PAGO_DETALHE" if todos_online or f == "pago" else "COBRAR_DETALHE"), {"resumo": " + ".join(detalhes)}
     if f == "pago": return "PAGO", {}
     if f in ("maquininha","maquinona","cartao","credito","debito","pix"): return "MAQUINONA", {"valor": total}
     if f == "dinheiro":
@@ -2507,7 +2535,10 @@ def processar_sofia_pedido(pedido, impressora):
     total_outros = sum(d["qty"] for d in display if d["tipo"] == "outro")
     total_entrega = total_caixas + total_bebidas + total_outros
     total_valor = float(pedido.get("total") or 0)
-    pag_cat, pag_dados = sofia_pag_cat(pedido.get("forma_pagamento"), pedido.get("troco_para"), total_valor)
+    pag_cat, pag_dados = sofia_pag_cat(
+        pedido.get("forma_pagamento"), pedido.get("troco_para"), total_valor,
+        pedido.get("pagamentos"), pedido.get("bandeira_pagamento")
+    )
     balcao = (pedido.get("tipo") == "retirada")
     nome_cli = (pedido.get("nome_cliente") or "").strip().split(" ")[0].upper() if pedido.get("nome_cliente") else ""
     hora = pedido.get("hora") or ""
