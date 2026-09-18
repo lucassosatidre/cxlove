@@ -13,7 +13,10 @@
 import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "9"             # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "10"            # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v10 (18/09/26): FILTRO de tipo/canal (Lucas). So SALAO + retirada criada DIRETO no Saipos (canal vazio)
+#   vao pro Mana. ENTREGA (toda) e retirada de canal online (iFood/Brendi/menu proprio) ficam BLOQUEADAS
+#   (vao pelo Provisao). Bloqueados NAO sao marcados como enviados (ficam em _bloqueados). Ver deve_bloquear().
 # v9 (11/09/26): DESCARTE por mesa: pedido cuja "mesa" contem "NAO FAZER ESSA PIZZA" (mesa-lixeira do
 #   cardapio digital) NAO vai pro mana (nem fila, nem contagem). Decisao do Lucas 11/09. Ver descartar_mesa().
 # v8 (27/06/26): robustez (auditoria). (1) RTDB 401/403 forca re-auth no proximo ciclo (antes o robo
@@ -319,6 +322,23 @@ def descartar_mesa(numero):
     n = _low(numero)
     return any(t in n for t in DESCARTE_MESAS)
 
+# ---------- FILTRO (Lucas 18/09/26) ----------
+# Canais online = vao pelo Provisao (nao mais pelo robo do Saipos).
+# menu proprio (bgm-site-proprio = menu.brendi.com.br) e tratado como Brendi -> bloqueado tambem.
+CANAIS_ONLINE = ("bgm-ifood", "bgm-brendi", "bgm-site-proprio")
+def deve_bloquear(order_type, canal):
+    """Devolve (bloquear, motivo). So SALAO e retirada com canal VAZIO (criada direto no Saipos) passam.
+    ENTREGA sempre bloqueia; retirada de canal online (iFood/Brendi/menu proprio) bloqueia."""
+    ot = (order_type or "").upper()
+    if ot == "SALAO":
+        return False, ""
+    if ot == "ENTREGA":
+        return True, "ENTREGA (vai pelo Provisao)"
+    c = (canal or "").strip().lower()
+    if c in CANAIS_ONLINE:
+        return True, f"RETIRADA canal '{canal}' (vai pelo Provisao)"
+    return False, ""
+
 def montar_comanda(id_sale, grupos):
     """Junta os grupos ativos de um id_sale -> payload pro ingest-comanda.
     ITENS via o CEREBRO da etiqueta (extrair_itens_kds + agrupar_display + IA) = mesma estrutura/regras do papel."""
@@ -362,6 +382,7 @@ def ativo(g, agora_ms):
     return any(isinstance(it,dict) and str(it.get("deleted","")).upper()!="Y" for it in it_iter)
 
 _enviados = {}  # id_sale -> hash do conteudo ja mandado (evita reenviar igual)
+_bloqueados = {}  # id_sale -> hash do pedido BLOQUEADO (NAO vai pro mana; nao conta como enviado)
 _KDS_SNAP = []  # DIAGNOSTICO: ultimo snapshot das fichas do KDS (vai no payload p/ mapear ficha de broto separada)
 def assinatura(payload):
     base = json.dumps(payload["items"], ensure_ascii=False, sort_keys=True)
@@ -402,7 +423,11 @@ def adotar_estado_atual():
         try:
             payload = montar_comanda(ids, grupos)
             if payload["total_caixas"] > 0:
-                _enviados[ids] = assinatura(payload); n += 1
+                bloquear, _motivo = deve_bloquear(payload["order_type"], payload["canal"])
+                if bloquear:
+                    _bloqueados[ids] = assinatura(payload)
+                else:
+                    _enviados[ids] = assinatura(payload); n += 1
         except Exception: pass
     _salva_enviados()
     log(f"  COLD START: adotei {n} pedido(s) ja na tela como enviados (NAO reenvio). So pedidos novos a partir de agora.")
@@ -460,6 +485,13 @@ def ciclo(primeira):
                 log("  erro montando", ids, e)
             continue
         if payload["total_caixas"]<=0: continue
+        bloquear, motivo = deve_bloquear(payload["order_type"], payload["canal"])
+        if bloquear:
+            sig = assinatura(payload)
+            if _bloqueados.get(ids) != sig:
+                _bloqueados[ids] = sig
+                log(f"  BLOQUEADO ({motivo}): pedido {ids} NAO vai pro mana.")
+            continue
         sig = assinatura(payload)
         if descartar_mesa(payload["numero_pedido"]):
             if _enviados.get(ids)!=sig:

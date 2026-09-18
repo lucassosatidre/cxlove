@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "195"
+VERSION = "196"
+# v196 (18/09/26): FILTRO de tipo/canal (Lucas). So SALAO (tratado acima) + retirada criada DIRETO
+#   no Saipos (canal vazio) imprimem etiqueta e vao pro Mana. ENTREGA e retirada de canal online
+#   (iFood/Brendi/menu proprio) vao pelo Provisao -> BLOQUEIA (sem etiqueta, sem Mana).
 # v195 (17/09/26): fila de etiquetas do Provisão migrou para o Supabase próprio. O helper passa a
 #   usar o destino novo por padrão e também corrige em memória os dois endereços antigos que podem
 #   ter ficado gravados em sofia_caixa.json. O segredo local é preservado e nunca vai para o Git.
@@ -1750,6 +1753,25 @@ def processar_pedido(filepath, filename):
                 log(f"  Cache NFCe: {pag_cat} canal={codigo_canal}")
 
     if id_sale: processados_id_sale[id_sale] = time.time()
+
+    # FILTRO (Lucas 18/09/26): so retirada criada DIRETO no Saipos (canal vazio) segue. ENTREGA e
+    # retirada de canal online (iFood/Brendi/menu proprio) vao pelo Provisao -> bloqueia (sem etiqueta, sem Mana).
+    _bloqueado = False
+    _motivo = ""
+    if not balcao:
+        _bloqueado = True; _motivo = "ENTREGA"
+    else:
+        _txt = " ".join(limpar_tags(r).lower() for r in rows_all)
+        _canal_online = ((canal or "").strip().lower() in ("ifood", "brendi")
+                         or "menu proprio" in _txt or "menu próprio" in _txt
+                         or "site proprio" in _txt or "site próprio" in _txt)
+        if _canal_online:
+            _bloqueado = True; _motivo = "RETIRADA canal " + (canal or "menu proprio")
+    if _bloqueado:
+        log(f"  BLOQUEADO ({_motivo}): #{id_sale} sem etiqueta, sem Mana (vai pelo Provisao).")
+        try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename))
+        except: pass
+        return
 
     # ITENS do CAIXA
     el_itens = el_caixa if el_caixa else el_cozinha
