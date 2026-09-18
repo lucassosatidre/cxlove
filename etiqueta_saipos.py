@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "194"
+VERSION = "195"
+# v195 (17/09/26): fila de etiquetas do Provisão migrou para o Supabase próprio. O helper passa a
+#   usar o destino novo por padrão e também corrige em memória os dois endereços antigos que podem
+#   ter ficado gravados em sofia_caixa.json. O segredo local é preservado e nunca vai para o Git.
+#   A fila agora identifica o canal real (iFood/Brendi/Salao/Luci) na etiqueta, no cupom e no log,
+#   em vez de chamar todo pedido de SOFIA. SALAO também ganha cabeçalho próprio.
 # v194 (25/07/26): BORDA DIP (potinho). A borda recheada virou "Pote Dip X" (Catupiry/Cheddar/Chocolate):
 #   pote plastico A PARTE, nao vai na pizza. Antes ele entrava como FATIA ("1/2 1 Pote Dip Cheddar"),
 #   inflava a ocupacao de slots (split criava pizza fantasma, ex. #0042: "1/2 Frango" sozinho numa 2a
@@ -2135,11 +2140,25 @@ class SaiposHandler(FileSystemEventHandler):
 # ============================================================
 # SOFIA - Pedidos por telefone (comanda + etiquetas via fila online)
 # ============================================================
-SOFIA_SUPABASE_URL = "https://hvpmkkxvvjnefayrlcjy.supabase.co"
+SOFIA_SUPABASE_URL = "https://enlzjbrxzopplmysdhgl.supabase.co"
+SOFIA_SUPABASE_HOSTS_ANTIGOS = {
+    "hvpmkkxvvjnefayrlcjy.supabase.co",
+    "vcauihrxugykkvjoyecs.supabase.co",
+}
 SOFIA_POLL_INTERVAL = 5            # segundos entre consultas
 SOFIA_UPDATE_EVERY = 1800          # checa atualizacao do helper a cada 30min no caixa
 SOFIA_CONFIG = os.path.join(PASTA_DOWNLOADS, "sofia_caixa.json")
 _sofia_impressos = {}              # id -> timestamp (dedup local)
+
+def _sofia_url_atual(url):
+    """Troca apenas hosts antigos conhecidos; mantém caminhos e configurações desconhecidas intactos."""
+    atual = (url or SOFIA_SUPABASE_URL).rstrip("/")
+    try:
+        if urllib.parse.urlsplit(atual).hostname in SOFIA_SUPABASE_HOSTS_ANTIGOS:
+            return SOFIA_SUPABASE_URL
+    except Exception:
+        pass
+    return atual
 
 def _sofia_config():
     """Le {url?, secret?} de ~/Downloads/sofia_caixa.json. Sem arquivo -> poller idle."""
@@ -2148,7 +2167,7 @@ def _sofia_config():
     try:
         with open(SOFIA_CONFIG, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-        url = (cfg.get("url") or SOFIA_SUPABASE_URL).rstrip("/")
+        url = _sofia_url_atual(cfg.get("url"))
         return {"url": url, "secret": cfg.get("secret") or ""}
     except Exception as e:
         log(f"  SOFIA config invalida: {e}")
@@ -2226,7 +2245,8 @@ def gerar_comanda(pedido):
     except: num = str(pedido.get("numero") or "")
     hora = pedido.get("hora") or ""
     tipo = (pedido.get("tipo") or "entrega").lower()
-    header = f"#{num} SOFIA" + (f" {hora}" if hora else "")
+    canal = str(pedido.get("canal") or "Sofia").strip() or "Sofia"
+    header = f"#{num} {canal.upper()}" + (f" {hora}" if hora else "")
 
     def fit1(txt, teto, piso):
         for sz in range(teto, piso-1, -1):
@@ -2242,7 +2262,8 @@ def gerar_comanda(pedido):
     cliente = (pedido.get("nome_cliente") or "Sem nome").strip()
     fone = (pedido.get("telefone") or "").strip()
     linhas = []
-    linhas.append(("RETIRADA NO BALCAO" if tipo == "retirada" else "ENTREGA", True))
+    titulo_tipo = "SALAO" if tipo == "salao" else ("RETIRADA NO BALCAO" if tipo == "retirada" else "ENTREGA")
+    linhas.append((titulo_tipo, True))
     linhas.append((cliente + (f"  {fone}" if fone else ""), True))
     if tipo == "entrega":
         end = ", ".join([x for x in [pedido.get("endereco"), pedido.get("complemento")] if x])
@@ -2362,6 +2383,7 @@ def gerar_comanda_cupom(pedido):
         y += h + gap
 
     tipo = (pedido.get("tipo") or "entrega").lower()
+    canal = str(pedido.get("canal") or "Sofia").strip() or "Sofia"
     try: num = f"{int(pedido.get('numero') or 0):04d}"
     except: num = str(pedido.get("numero") or "")
     hora = (pedido.get("hora") or "").strip()
@@ -2371,10 +2393,11 @@ def gerar_comanda_cupom(pedido):
     if hora: data_str = f"{data_str} - {hora}" if data_str else hora
 
     # Cabecalho
-    center("ENTREGA" if tipo == "entrega" else "RETIRADA NO BALCAO", fb(40), gap=8)
+    titulo_tipo = "SALAO" if tipo == "salao" else ("RETIRADA NO BALCAO" if tipo == "retirada" else "ENTREGA")
+    center(titulo_tipo, fb(40), gap=8)
     dash()
     if data_str: center(data_str, fn(28)); dash()
-    bar(f"PEDIDO Nº {num}  -  SOFIA", fb(32))
+    bar(f"PEDIDO Nº {num}  -  {canal.upper()}", fb(32))
     dash()
 
     # Cliente
@@ -2443,7 +2466,7 @@ def gerar_comanda_cupom(pedido):
     dash()
 
     # Rodape (estilo Saipos)
-    center("Canal: Telefone (Sofia)", fn(24), gap=4)
+    center(f"Canal: {canal}", fn(24), gap=4)
     if data_str: center(f"Data/hora: {data_str}", fn(24))
     bar(f"Nº Pedido: {num}", fb(28))
     center("Pizzaria Estrela da Ilha", fn(22), gap=2)
@@ -2454,6 +2477,8 @@ def gerar_comanda_cupom(pedido):
 
 def processar_sofia_pedido(pedido, impressora):
     numero = str(pedido.get("numero") or "")
+    canal = str(pedido.get("canal") or "Sofia").strip() or "Sofia"
+    codigo_canal = str(pedido.get("codigo_canal") or canal).strip() or canal
     display = sofia_display(pedido.get("itens"))
     total_caixas = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada","caixa_doce"))
     total_bebidas = sum(d["qty"] for d in display if d["tipo"] == "bebida")
@@ -2470,9 +2495,9 @@ def processar_sofia_pedido(pedido, impressora):
     for i in range(1, n_et + 1):
         try:
             img = gerar_etiqueta(numero, i, n_et, display, total_entrega,
-                                 pag_cat, pag_dados, balcao, "SOFIA", "SOFIA", nome_cli, hora)
+                                 pag_cat, pag_dados, balcao, canal.upper(), codigo_canal.upper(), nome_cli, hora)
             imprimir_etiqueta(img, printer_name=impressora)
-            log(f"  SOFIA #{numero}: etiqueta {i}/{n_et}")
+            log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
             if i < n_et: time.sleep(0.4)
         except Exception as e:
             log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
@@ -2483,11 +2508,11 @@ def processar_sofia_pedido(pedido, impressora):
         try:
             cmd = gerar_comanda_cupom(pedido)
             imprimir_etiqueta(cmd, printer_name=imp_comanda, larg=cmd.width, alt=cmd.height)
-            log(f"  SOFIA #{numero}: comanda (cupom) OK")
+            log(f"  {canal.upper()} #{numero}: comanda (cupom) OK")
         except Exception as e:
             log(f"  ERRO comanda #{numero}: {e}")
     else:
-        log(f"  SOFIA #{numero}: impressora de comanda (192.168.1.222) nao encontrada - comanda nao impressa")
+        log(f"  {canal.upper()} #{numero}: impressora de comanda (192.168.1.222) nao encontrada - comanda nao impressa")
 
 def processar_sofia_arquivo(filepath, filename):
     """Pedido da Sofia baixado pelo Caixa Love (.sofiapedido) -> imprime comanda + etiquetas.
