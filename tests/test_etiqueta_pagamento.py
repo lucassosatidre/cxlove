@@ -11,6 +11,30 @@ SPEC.loader.exec_module(MOD)
 
 
 class EtiquetaPagamentoTest(unittest.TestCase):
+    def test_ifood_pago_sem_campo_online_continua_pago(self):
+        categoria, dados = MOD.sofia_pag_cat(
+            "pago",
+            None,
+            50.90,
+            pagamentos=[{"forma": "credito", "valor": 50.90}],
+            bandeira="MASTERCARD",
+        )
+        self.assertEqual(categoria, "PAGO_DETALHE")
+        rodape = MOD.montar_rodape_linha(2, categoria, dados)
+        self.assertTrue(rodape.startswith("ITENS: 2 - PAGO"))
+
+    def test_ifood_pendente_sem_campo_online_continua_cobrar(self):
+        categoria, dados = MOD.sofia_pag_cat(
+            "credito",
+            None,
+            91.40,
+            pagamentos=[{"forma": "credito", "valor": 91.40}],
+            bandeira="VISA",
+        )
+        self.assertEqual(categoria, "COBRAR_DETALHE")
+        rodape = MOD.montar_rodape_linha(1, categoria, dados)
+        self.assertTrue(rodape.startswith("ITENS: 1 - CREDITO VISA"))
+
     def test_pedido_51_dinheiro_com_parcelas_preserva_troco(self):
         categoria, dados = MOD.sofia_pag_cat(
             "dinheiro", 140, 135.39,
