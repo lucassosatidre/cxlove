@@ -13,7 +13,9 @@
 import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "10"            # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "11"            # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v11 (19/09/26): somente fichas identificadas como COZINHA 1..5 entram; COPA/CAIXA são
+#   descartadas. Baixa o catálogo fechado do salão usado pelo parser v200.
 # v10 (18/09/26): FILTRO de tipo/canal (Lucas). So SALAO + retirada criada DIRETO no Saipos (canal vazio)
 #   vao pro Mana. ENTREGA (toda) e retirada de canal online (iFood/Brendi/menu proprio) ficam BLOQUEADAS
 #   (vao pelo Provisao). Bloqueados NAO sao marcados como enviados (ficam em _bloqueados). Ver deve_bloquear().
@@ -37,6 +39,7 @@ VERSION = "10"            # versao do terminal. O auto-update compara este numer
 #   cerebro so era lido ao (re)iniciar; bump so do etiqueta_saipos NAO chegava no robo em execucao.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/terminal_kds.py"
 ETIQUETA_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"  # o CEREBRO (parser+IA)
+CATALOGO_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/catalogo_salao.json"
 UPDATE_EVERY = 300        # checa atualizacao a cada 5 min (e no boot)
 EMAIL   = "terminalimpressoras@saipos.com"
 SENHA   = ""              # NAO cole a senha aqui (este arquivo vai pro GitHub publico).
@@ -144,6 +147,7 @@ _ETQ_VER = None
 def carrega_etiqueta():
     global ETQ, _ETQ_VER
     p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etiqueta_saipos.py")
+    catalogo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalogo_salao.json")
     try:
         # baixa o cerebro do GitHub. Se o GitHub estiver fora/lixo, NAO trava: cai pro arquivo em disco.
         try:
@@ -159,6 +163,19 @@ def carrega_etiqueta():
                 tmp = p + ".new"
                 with open(tmp, "w", encoding="utf-8") as f: f.write(conteudo); f.flush(); os.fsync(f.fileno())
                 os.replace(tmp, p)                            # troca ATOMICA (ou inteiro novo, ou inteiro velho)
+            try:
+                req_cat = urllib.request.Request(CATALOGO_URL, headers={"Cache-Control": "no-cache"})
+                cat = urllib.request.urlopen(req_cat, timeout=25, context=ctx).read().decode("utf-8")
+                parsed = json.loads(cat)
+                if len(parsed.get("por_texto", {})) < 100 or len(parsed.get("por_codigo", {})) < 300:
+                    raise ValueError("catalogo incompleto")
+                tmp_cat = catalogo_path + ".new"
+                with open(tmp_cat, "w", encoding="utf-8") as f: f.write(cat); f.flush(); os.fsync(f.fileno())
+                os.replace(tmp_cat, catalogo_path)
+            except Exception as e:
+                if not os.path.exists(catalogo_path):
+                    log("  ERRO baixando catalogo e SEM copia local:", e); return False
+                log("  catalogo remoto indisponivel; uso copia LOCAL:", e)
         except Exception as e:
             if not os.path.exists(p):
                 log("  ERRO baixando cerebro e SEM copia local:", e); return False
@@ -381,6 +398,25 @@ def ativo(g, agora_ms):
     it_iter = itens.values() if isinstance(itens, dict) else itens
     return any(isinstance(it,dict) and str(it.get("deleted","")).upper()!="Y" for it in it_iter)
 
+def origem_producao(g):
+    """True=COZINHA 1..5; False=COPA/CAIXA; None=Firebase não informou a origem."""
+    vistos = []
+    chaves = ("print", "impress", "production", "produc", "kitchen", "cozinha", "station", "local")
+    def andar(obj, profundidade=0):
+        if profundidade > 5: return
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                nk = re.sub(r'[^a-z0-9]', '', str(k).lower())
+                if isinstance(v, (str, int)) and any(x in nk for x in chaves): vistos.append(str(v))
+                elif isinstance(v, (dict, list)): andar(v, profundidade + 1)
+        elif isinstance(obj, list):
+            for v in obj[:30]: andar(v, profundidade + 1)
+    andar(g)
+    texto = " | ".join(vistos).upper()
+    if re.search(r'\bCOZINHA\s*[1-5]\b', texto): return True
+    if re.search(r'\b(COPA|CAIXA)\b', texto): return False
+    return None
+
 _enviados = {}  # id_sale -> hash do conteudo ja mandado (evita reenviar igual)
 _bloqueados = {}  # id_sale -> hash do pedido BLOQUEADO (NAO vai pro mana; nao conta como enviado)
 _KDS_SNAP = []  # DIAGNOSTICO: ultimo snapshot das fichas do KDS (vai no payload p/ mapear ficha de broto separada)
@@ -439,7 +475,7 @@ def ciclo(primeira):
     agora_ms = time.time()*1000
     # agrupa grupos ativos por id_sale
     por_sale = {}
-    tipos_vistos = {}
+    tipos_vistos = {}; origens = {"cozinha": 0, "bloqueada": 0, "nao_informada": 0}
     global _KDS_SNAP; _snap = []
     for k, g in data.items():
         if not isinstance(g, dict): continue
@@ -451,11 +487,16 @@ def ciclo(primeira):
             _snap.append({"k": str(k)[:18], "s": str(g.get("id_sale") or ""), "t": g.get("id_sale_type"), "a": 1 if ativo(g, agora_ms) else 0, "tbl": _tbl, "d": _d})
         except Exception: pass
         if not ativo(g, agora_ms): continue
+        origem = origem_producao(g)
+        if origem is False:
+            origens["bloqueada"] += 1; continue
+        if origem is True: origens["cozinha"] += 1
+        else: origens["nao_informada"] += 1
         ids = g.get("id_sale")
         if not ids: continue
         por_sale.setdefault(str(ids), []).append(g)
     _KDS_SNAP = _snap[:60]
-    log(f"KDS: {len(data)} grupos no banco | {len(por_sale)} pedidos ativos | tipos id_sale_type vistos: {tipos_vistos}")
+    log(f"KDS: {len(data)} grupos no banco | {len(por_sale)} pedidos ativos | origens: {origens} | tipos: {tipos_vistos}")
     # MODO CONFERENCIA: mostra o "cru" dos pedidos ativos (1x cada), pra mapear os campos (cliente/numero/bairro)
     if not ENVIAR and not MODO_SOMBRA:
         for _ids, _grps in list(por_sale.items()):

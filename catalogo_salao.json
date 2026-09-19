@@ -1,0 +1,3617 @@
+{
+  "versao": 1,
+  "fonte": "cardapio_mestre_mana_provisao_saipos_v2.xlsx",
+  "por_codigo": {
+    "13963971": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "13963972": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "13963973": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "13963974": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "13963975": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "13963976": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "13963977": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "13963978": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "13963980": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "13963982": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "13963983": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "13963985": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "13963986": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "13963988": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "13963992": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "13963993": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "13963999": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "13964000": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "13964001": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "14152919": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "14152920": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "14152921": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "14156814": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "14156815": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "14156816": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "14156817": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "14156818": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "14156819": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "14785261": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "14785315": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "14785316": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "14785317": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "14785318": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "14785319": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "14785320": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "14785321": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "14785322": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "14785326": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "14785327": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "14785328": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "14785329": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "14785330": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "14785331": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "14785333": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "14785334": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "14785335": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "14785336": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "14785338": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "14785341": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "14785342": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "14785344": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "14785428": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "14785429": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "14785430": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "14803510": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "14803511": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "14803512": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "14803517": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "14803518": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "14803519": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "14803520": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "14803521": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "14803522": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "14803523": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "14803524": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "14803528": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "14803529": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "14803530": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "14803531": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "14803532": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "14803533": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "14803535": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "14803536": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "14803537": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "14803538": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "14803539": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "14803541": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "14803542": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "14803543": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "14858687": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "14859813": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "14859814": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "14859815": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "14859816": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "14859817": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "14859818": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "14859819": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "14859820": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "14859829": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "14859830": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "14897609": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "14897610": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "14969322": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "15020260.13963971": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "15020260.13963972": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "15020260.13963973": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "15020260.13963974": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "15020260.13963975": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "15020260.13963976": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "15020260.13963977": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "15020260.13963978": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "15020260.13963980": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "15020260.13963982": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "15020260.13963983": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "15020260.13963985": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "15020260.13963986": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "15020260.13963988": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "15020260.13963992": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "15020260.13963993": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "15020260.13963999": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "15020260.13964000": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "15020260.13964001": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "15020260.14785261": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "15020260.14785315": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "15020260.14785316": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "15020260.14785317": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "15020260.14785318": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "15020260.14785319": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "15020260.14785320": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "15020260.14785321": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "15020260.14785322": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "15020260.14785326": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "15020260.14785327": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "15020260.14785328": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "15020260.14785329": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "15020260.14785330": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "15020260.14785331": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "15020260.14785333": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "15020260.14785334": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "15020260.14785335": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "15020260.14785336": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "15020260.14785338": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "15020260.14785341": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "15020260.14785342": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "15020260.14785344": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "15020260.14969322": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "15020260.15194227": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "15020260.15194228": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "15020260.15194229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "15020260.15194230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "15020260.16070010": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "15020260.16902756": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "15020260.16902759": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "15020260.20352240": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "15020260.20352241": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "15020260.20352242": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "15020260.20352243": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "15020260.20352244": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "15020260.20352245": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "15020260.20352246": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "15020260.20352247": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "15020260.20352248": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "15020260.20352249": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "15020260.20359238": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "15020260.21332057": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "15020260.21332058": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "15020260.21332114": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "15020260.21332123": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "15020260.21332127": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "15020260.21332130": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "15020260.21332132": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "15020260.21332134": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "15020260.21332136": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "15020260.21332137": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "15020260.21332138": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "15020260.21332140": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "15020260.21356848": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "15020260.21356849": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "15020260.21356850": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "15020260.21356851": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "15020260.21356852": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "15020260.21357181": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "15020260.21357182": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "15020260.22291229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "15020260.22291230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "15020260.22292391": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "15020260.23479627": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "15020260.24500250": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    },
+    "15020260.25923365": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "15020260.25923366": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "15020260.26245571": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "15020347.13963971": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "15020347.13963972": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "15020347.13963973": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "15020347.13963974": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "15020347.13963975": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "15020347.13963976": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "15020347.13963977": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "15020347.13963978": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "15020347.13963980": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "15020347.13963982": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "15020347.13963983": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "15020347.13963985": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "15020347.13963986": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "15020347.13963988": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "15020347.13963992": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "15020347.13963993": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "15020347.13963999": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "15020347.13964000": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "15020347.13964001": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "15020347.14785428": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "15020347.14785429": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "15020347.14785430": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "15020347.14969322": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "15020347.15194227": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "15020347.15194228": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "15020347.15194229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "15020347.15194230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "15020347.16052470": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "15020347.16052471": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "15020347.16052472": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "15020347.16052473": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "15020347.16052474": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "15020347.16052476": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "15020347.16052477": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "15020347.16052478": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "15020347.16052479": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "15020347.16052480": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "15020347.16052482": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "15020347.16052484": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "15020347.16052485": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "15020347.16052486": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "15020347.16052487": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "15020347.16052488": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "15020347.16052489": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "15020347.16052490": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "15020347.16052491": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "15020347.16052492": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "15020347.16052493": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "15020347.16052494": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "15020347.16070010": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "15020347.16902756": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "15020347.16902759": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "15020347.20359325": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "15020347.20359326": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "15020347.20359327": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "15020347.20359328": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "15020347.20359329": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "15020347.20359330": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "15020347.20359331": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "15020347.20359332": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "15020347.20359333": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "15020347.20359334": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "15020347.20359335": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "15020347.21332324": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "15020347.21332325": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "15020347.21332326": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "15020347.21332327": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "15020347.21332328": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "15020347.21332329": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "15020347.21332330": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "15020347.21332331": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "15020347.21332332": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "15020347.21332333": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "15020347.21332335": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "15020347.21332336": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "15020347.21357141": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "15020347.21357142": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "15020347.21357143": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "15020347.21357144": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "15020347.21357145": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "15020347.21357187": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "15020347.21357188": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "15020347.22291229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "15020347.22291230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "15020347.22292380": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "15020347.23479627": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "15020347.24500250": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    },
+    "15020347.26245775": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "15032710.13963971": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "15032710.13963972": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "15032710.13963973": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "15032710.13963974": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "15032710.13963975": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "15032710.13963976": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "15032710.13963977": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "15032710.13963978": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "15032710.13963980": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "15032710.13963982": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "15032710.13963983": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "15032710.13963985": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "15032710.13963986": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "15032710.13963988": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "15032710.13963992": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "15032710.13963993": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "15032710.13963999": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "15032710.13964000": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "15032710.13964001": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "15032710.14803510": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "15032710.14803511": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "15032710.14803512": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "15032710.14803517": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "15032710.14803518": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "15032710.14803519": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "15032710.14803520": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "15032710.14803521": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "15032710.14803522": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "15032710.14803523": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "15032710.14803524": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "15032710.14803528": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "15032710.14803529": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "15032710.14803530": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "15032710.14803531": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "15032710.14803532": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "15032710.14803533": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "15032710.14803535": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "15032710.14803536": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "15032710.14803537": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "15032710.14803538": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "15032710.14803539": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "15032710.14803541": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "15032710.14803542": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "15032710.14803543": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "15032710.14969322": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "15032710.16070010": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "15032710.20359586": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "15032710.20359587": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "15032710.20359588": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "15032710.20359589": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "15032710.20359590": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "15032710.20359591": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "15032710.20359592": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "15032710.20359593": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "15032710.20359594": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "15032710.20359595": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "15032710.20359596": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "15032710.21357154": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "15032710.21357155": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "15032710.21357156": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "15032710.21357157": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "15032710.21357158": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "15032710.21357782": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "15032710.21357783": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "15032710.23479627": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "15032710.24500250": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    },
+    "15032710.26245776": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "15076805.14858687": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "15076805.14859813": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "15076805.14859814": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "15076805.14859815": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "15076805.14859816": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "15076805.14859817": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "15076805.14859818": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "15076805.14859819": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "15076805.14859820": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "15076805.14859829": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "15076805.14859830": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "15076805.15194227": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "15076805.15194228": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "15076805.15194229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "15076805.15194230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "15076805.16902756": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "15076805.16902759": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "15076805.22291229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "15076805.22291230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "15076805.23042838": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "15076805.23042839": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "15076805.23042840": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "15194227": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "15194228": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "15194229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "15194230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "16008945": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "16008946": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "16008947": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "16008948": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "16008949": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "16008950": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "16052470": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "16052471": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "16052472": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "16052473": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "16052474": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "16052476": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "16052477": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "16052478": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "16052479": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "16052480": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "16052482": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "16052484": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "16052485": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "16052486": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "16052487": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "16052488": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "16052489": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "16052490": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "16052491": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "16052492": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "16052493": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "16052494": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "16070010": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "16752056": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "16752057": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "16752060": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "16752062": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "16752063": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "16752064": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "16752065": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "16752066": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "16752067": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "16752068": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "16752069": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "16752070": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "16752071": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "16752072": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "16752073": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "16752095": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "16752096": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "16752098": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "16752099": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "16752100": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "16752101": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "16752102": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "16752103": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "16752104": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "16752105": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "16752106": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "16752107": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "16753338": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "16753339": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "16753340": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "16902756": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "16902759": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "19531332": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "19531334": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "19531336": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "19531337": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "19531338": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "19531709": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "19531710": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "19531714": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "19531715": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "19531716": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "20352240": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "20352241": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "20352242": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "20352243": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "20352244": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "20352245": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "20352246": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "20352247": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "20352248": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "20352249": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "20359238": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "20359325": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "20359326": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "20359327": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "20359328": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "20359329": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "20359330": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "20359331": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "20359332": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "20359333": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "20359334": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "20359335": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "20359586": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "20359587": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "20359588": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "20359589": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "20359590": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "20359591": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "20359592": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "20359593": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "20359594": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "20359595": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "20359596": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "21332057": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "21332058": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "21332114": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "21332123": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "21332127": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "21332130": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "21332132": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "21332134": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "21332136": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "21332137": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "21332138": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "21332140": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "21332324": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "21332325": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "21332326": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "21332327": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "21332328": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "21332329": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "21332330": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "21332331": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "21332332": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "21332333": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "21332335": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "21332336": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "21356848": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "21356849": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "21356850": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "21356851": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "21356852": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "21357141": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "21357142": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "21357143": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "21357144": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "21357145": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "21357154": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "21357155": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "21357156": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "21357157": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "21357158": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "21357181": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "21357182": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "21357187": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "21357188": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "21357782": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "21357783": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "21626629": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "21626630": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "21626631": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "21626632": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "21626633": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "21626634": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "21626635": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "21626693": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "21626694": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "21626695": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "21626696": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "21626697": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "21626698": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "21626699": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "22085727": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "22085728": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "22085729": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "22085730": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "22085731": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "22085732": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "22085733": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "22085734": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "22085735": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "22085736": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "22085737": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "22085738": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "22085855": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "22085856": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "22085857": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "22085927": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "22085929": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "22085930": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "22085931": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "22085932": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "22085933": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "22086557": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "22086558": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "22086559": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "22086560": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "22086561": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "22086562": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "22086563": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "22086564": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "22086565": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "22086566": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "22086567": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "22086568": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "22086679": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "22086680": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "22086681": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "22086682": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "22086683": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "22086684": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "22291229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "22291230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "22291415": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "22292049": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "22292152": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "22292309": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "22292380": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "22292391": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "23042838": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "23042839": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "23042840": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "23479627": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "24500250": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    },
+    "25923365": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "25923366": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "26245571": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "26245775": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "26245776": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "31722163.13963971": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "31722163.13963972": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "31722163.13963973": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "31722163.13963974": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "31722163.13963975": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "31722163.13963976": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "31722163.13963977": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "31722163.13963978": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "31722163.13963980": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "31722163.13963982": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "31722163.13963983": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "31722163.13963985": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "31722163.13963986": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "31722163.13963988": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "31722163.13963992": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "31722163.13963993": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "31722163.13963999": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "31722163.13964000": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "31722163.13964001": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "31722163.14785315": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "31722163.14785316": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "31722163.14785317": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "31722163.14785318": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "31722163.14785319": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "31722163.14785320": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "31722163.14785321": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "31722163.14785322": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "31722163.14785326": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "31722163.14785327": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "31722163.14785328": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "31722163.14785329": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "31722163.14785330": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "31722163.14785331": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "31722163.14785333": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "31722163.14785334": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "31722163.14785335": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "31722163.14785336": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "31722163.14785338": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "31722163.14785341": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "31722163.14785342": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "31722163.14785344": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "31722163.14969322": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "31722163.15194227": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "31722163.15194228": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "31722163.15194229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "31722163.15194230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "31722163.16070010": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "31722163.16902756": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "31722163.16902759": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "31722163.20352240": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "31722163.20352241": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "31722163.20352242": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "31722163.20352243": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "31722163.20352244": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "31722163.20352245": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "31722163.20352246": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "31722163.20352247": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "31722163.20352248": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "31722163.20352249": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "31722163.20359238": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "31722163.22085727": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "31722163.22085728": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "31722163.22085729": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "31722163.22085730": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "31722163.22085731": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "31722163.22085732": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "31722163.22085733": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "31722163.22085734": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "31722163.22085735": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "31722163.22085736": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "31722163.22085737": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "31722163.22085738": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "31722163.22085855": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "31722163.22085856": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "31722163.22085857": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "31722163.22085927": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "31722163.22085929": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "31722163.22085930": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "31722163.22085931": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "31722163.22085932": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "31722163.22085933": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "31722163.22291229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "31722163.22291230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "31722163.22291415": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "31722163.22292049": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "31722163.23479627": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "31722163.24500250": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    },
+    "31722163.26245571": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "31722823.13963971": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "31722823.13963972": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "31722823.13963973": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "31722823.13963974": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "31722823.13963975": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "31722823.13963976": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "31722823.13963977": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "31722823.13963978": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "31722823.13963980": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "31722823.13963982": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "31722823.13963983": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "31722823.13963985": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "31722823.13963986": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "31722823.13963988": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "31722823.13963992": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "31722823.13963993": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "31722823.13963999": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "31722823.13964000": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "31722823.13964001": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "31722823.14152919": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "31722823.14152920": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "31722823.14152921": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "31722823.14156814": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "31722823.14156815": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "31722823.14156816": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "31722823.14156817": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "31722823.14156818": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "31722823.14156819": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "31722823.14897609": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "31722823.14897610": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "31722823.14969322": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "31722823.15194227": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "31722823.15194228": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "31722823.15194229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "31722823.15194230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "31722823.16008945": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "31722823.16008946": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "31722823.16008947": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "31722823.16008948": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "31722823.16008949": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "31722823.16008950": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "31722823.16070010": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "31722823.16752056": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "31722823.16752057": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "31722823.16752060": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "31722823.16752062": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "31722823.16752063": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "31722823.16752064": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "31722823.16752065": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "31722823.16752066": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "31722823.16752067": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "31722823.16752068": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "31722823.16752069": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "31722823.16752070": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "31722823.16752071": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "31722823.16752072": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "31722823.16752073": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "31722823.16752095": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "31722823.16752096": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "31722823.16752098": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "31722823.16752099": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "31722823.16752100": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "31722823.16752101": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "31722823.16752102": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "31722823.16752103": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "31722823.16752104": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "31722823.16752105": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "31722823.16752106": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    },
+    "31722823.16752107": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "31722823.16753338": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "31722823.16753339": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "31722823.16753340": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "31722823.16902756": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "31722823.16902759": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "31722823.19531332": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "31722823.19531334": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "31722823.19531336": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "31722823.19531337": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "31722823.19531338": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "31722823.19531709": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "31722823.19531710": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "31722823.19531714": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "31722823.19531715": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "31722823.19531716": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "31722823.21626629": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "31722823.21626630": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "31722823.21626631": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "31722823.21626632": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "31722823.21626633": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "31722823.21626634": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "31722823.21626635": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "31722823.21626693": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "31722823.21626694": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "31722823.21626695": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "31722823.21626696": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "31722823.21626697": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "31722823.21626698": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "31722823.21626699": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "31722823.22086557": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "31722823.22086558": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "31722823.22086559": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "31722823.22086560": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "31722823.22086561": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "31722823.22086562": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "31722823.22086563": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "31722823.22086564": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "31722823.22086565": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "31722823.22086566": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "31722823.22086567": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "31722823.22086568": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "31722823.22086679": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "31722823.22086680": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "31722823.22086681": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "31722823.22086682": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "31722823.22086683": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "31722823.22086684": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "31722823.22291229": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "31722823.22291230": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "31722823.22292152": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "31722823.22292309": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "31722823.23479627": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "31722823.24500250": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    }
+  },
+  "por_texto": {
+    "4 queijos": {
+      "tipo": "sabor",
+      "nome": "4 Queijos"
+    },
+    "5 queijos": {
+      "tipo": "sabor",
+      "nome": "5 Queijos"
+    },
+    "adicional de abacaxi": {
+      "tipo": "adicional",
+      "nome": "Adicional de Abacaxi"
+    },
+    "adicional de alho frito": {
+      "tipo": "adicional",
+      "nome": "Adicional de Alho Frito"
+    },
+    "adicional de bacon": {
+      "tipo": "adicional",
+      "nome": "Adicional de Bacon"
+    },
+    "adicional de batata palha": {
+      "tipo": "adicional",
+      "nome": "Adicional de Batata Palha"
+    },
+    "adicional de brocolis": {
+      "tipo": "adicional",
+      "nome": "Adicional de Brócolis"
+    },
+    "adicional de calabresa": {
+      "tipo": "adicional",
+      "nome": "Adicional de Calabresa"
+    },
+    "adicional de catupiry": {
+      "tipo": "adicional",
+      "nome": "Adicional de Catupiry"
+    },
+    "adicional de cebola": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cebola"
+    },
+    "adicional de cheddar": {
+      "tipo": "adicional",
+      "nome": "Adicional de Cheddar"
+    },
+    "adicional de ervilha": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ervilha"
+    },
+    "adicional de gorgonzola": {
+      "tipo": "adicional",
+      "nome": "Adicional de Gorgonzola"
+    },
+    "adicional de lombo": {
+      "tipo": "adicional",
+      "nome": "Adicional de Lombo"
+    },
+    "adicional de manjericao": {
+      "tipo": "adicional",
+      "nome": "Adicional de Manjericão"
+    },
+    "adicional de milho": {
+      "tipo": "adicional",
+      "nome": "Adicional de Milho"
+    },
+    "adicional de mucarela extra": {
+      "tipo": "adicional",
+      "nome": "Adicional de Muçarela Extra"
+    },
+    "adicional de ovos": {
+      "tipo": "adicional",
+      "nome": "Adicional de Ovos"
+    },
+    "adicional de parmesao": {
+      "tipo": "adicional",
+      "nome": "Adicional de Parmesão"
+    },
+    "adicional de peito de peru": {
+      "tipo": "adicional",
+      "nome": "Adicional de Peito de Peru"
+    },
+    "adicional de pepperoni": {
+      "tipo": "adicional",
+      "nome": "Adicional de Pepperoni"
+    },
+    "adicional de presunto": {
+      "tipo": "adicional",
+      "nome": "Adicional de Presunto"
+    },
+    "adicional de provolone": {
+      "tipo": "adicional",
+      "nome": "Adicional de Provolone"
+    },
+    "adicional de tomate": {
+      "tipo": "adicional",
+      "nome": "Adicional de Tomate"
+    },
+    "alcatra": {
+      "tipo": "sabor",
+      "nome": "Alcatra"
+    },
+    "alcatra com catupiry": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Catupiry"
+    },
+    "alcatra com cebola": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cebola"
+    },
+    "alcatra com cheddar": {
+      "tipo": "sabor",
+      "nome": "Alcatra com Cheddar"
+    },
+    "alho e oleo": {
+      "tipo": "sabor",
+      "nome": "Alho e Óleo"
+    },
+    "americana": {
+      "tipo": "sabor",
+      "nome": "Americana"
+    },
+    "bacon": {
+      "tipo": "sabor",
+      "nome": "Bacon"
+    },
+    "bacon com milho": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "borda dip catupiry®": {
+      "tipo": "borda",
+      "nome": "Borda Dip Catupiry®"
+    },
+    "borda dip cheddar catupiry®": {
+      "tipo": "borda",
+      "nome": "Borda Dip Cheddar Catupiry®"
+    },
+    "borda dip chocolate ao leite harald®": {
+      "tipo": "borda",
+      "nome": "Borda Dip Chocolate ao Leite Harald®"
+    },
+    "brocolis": {
+      "tipo": "sabor",
+      "nome": "Brócolis"
+    },
+    "calabresa": {
+      "tipo": "sabor",
+      "nome": "Calabresa"
+    },
+    "calabresa com catupiry": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "calabresa com catupiry por cima": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Catupiry"
+    },
+    "calabresa com cebola": {
+      "tipo": "sabor",
+      "nome": "Calabresa com Cebola"
+    },
+    "camarao": {
+      "tipo": "sabor",
+      "nome": "Camarão"
+    },
+    "camarao com catupiry": {
+      "tipo": "sabor",
+      "nome": "Camarão com Catupiry"
+    },
+    "caneca individual de brahma duplo malte": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Brahma Duplo Malte"
+    },
+    "caneca individual de budweiser": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Budweiser"
+    },
+    "caneca individual de coca cola": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola"
+    },
+    "caneca individual de coca cola zero": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Coca Cola Zero"
+    },
+    "caneca individual de fanta guarana": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Guaraná"
+    },
+    "caneca individual de fanta laranja": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Fanta Laranja"
+    },
+    "caneca individual de sprite zero": {
+      "tipo": "bebida",
+      "nome": "Caneca Individual de Sprite Zero"
+    },
+    "carne seca": {
+      "tipo": "sabor",
+      "nome": "Carne Seca"
+    },
+    "catuperu": {
+      "tipo": "sabor",
+      "nome": "Catuperu"
+    },
+    "charge": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "chocolate branco": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "chocolate mesclado": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "chocolate preto": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "coconut gold": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "doces - adicional de abacaxi": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Abacaxi"
+    },
+    "doces - adicional de amendoim": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Amendoim"
+    },
+    "doces - adicional de bombom beijinho": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Beijinho"
+    },
+    "doces - adicional de bombom sonho de valsa": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Bombom Sonho de Valsa"
+    },
+    "doces - adicional de coco ralado": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Coco Ralado"
+    },
+    "doces - adicional de leite condensado": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Leite Condensado"
+    },
+    "doces - adicional de morango": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Morango"
+    },
+    "doces - adicional de pacoca": {
+      "tipo": "adicional",
+      "nome": "Doces - Adicional de Paçoca"
+    },
+    "frango c/ catupiry": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "frango c/ cheddar": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "frango com catupiry": {
+      "tipo": "sabor",
+      "nome": "Frango com Catupiry"
+    },
+    "frango com cheddar": {
+      "tipo": "sabor",
+      "nome": "Frango com Cheddar"
+    },
+    "frango com milho": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "frango com mucarela": {
+      "tipo": "sabor",
+      "nome": "Frango com Muçarela"
+    },
+    "frango com mucarela e milho": {
+      "tipo": "sabor",
+      "nome": "Frango com Milho"
+    },
+    "frango especial": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "frango especial 2.0": {
+      "tipo": "sabor",
+      "nome": "Frango Especial"
+    },
+    "fugazzeta": {
+      "tipo": "sabor",
+      "nome": "Fugazzeta"
+    },
+    "havaiana": {
+      "tipo": "sabor",
+      "nome": "Havaiana"
+    },
+    "lombo": {
+      "tipo": "sabor",
+      "nome": "Lombo"
+    },
+    "lombo com catupiry": {
+      "tipo": "sabor",
+      "nome": "Lombo com Catupiry"
+    },
+    "marguerita": {
+      "tipo": "sabor",
+      "nome": "Marguerita"
+    },
+    "milho com bacon": {
+      "tipo": "sabor",
+      "nome": "Bacon com Milho"
+    },
+    "milho com mucarela": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "mucarela": {
+      "tipo": "sabor",
+      "nome": "Muçarela"
+    },
+    "mucarela com milho": {
+      "tipo": "sabor",
+      "nome": "Milho com Muçarela"
+    },
+    "nutella": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "nutella com morango": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "nutella imperial": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "pepperoni": {
+      "tipo": "sabor",
+      "nome": "Pepperoni"
+    },
+    "pepperoni c/ catupiry": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "pepperoni com catupiry": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "pepperoni com catupiry (catuperony)": {
+      "tipo": "sabor",
+      "nome": "Pepperoni com Catupiry"
+    },
+    "pizza broto de charge": {
+      "tipo": "sabor_doce",
+      "nome": "Charge"
+    },
+    "pizza broto de chocolate branco": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Branco"
+    },
+    "pizza broto de chocolate mesclado": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Mesclado"
+    },
+    "pizza broto de chocolate preto": {
+      "tipo": "sabor_doce",
+      "nome": "Chocolate Preto"
+    },
+    "pizza broto de coconut gold": {
+      "tipo": "sabor_doce",
+      "nome": "Coconut Gold"
+    },
+    "pizza broto de nutella": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella"
+    },
+    "pizza broto de nutella com morango": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella com Morango"
+    },
+    "pizza broto de nutella imperial": {
+      "tipo": "sabor_doce",
+      "nome": "Nutella Imperial"
+    },
+    "pizza broto de prestigio": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "pizza broto de sensacao branco": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "pizza broto de sensacao gold": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "pizza broto de sensacao mesclado": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "pizza broto de sensacao preto": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "pizza broto de sensacao preto gold": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "portuguesa": {
+      "tipo": "sabor",
+      "nome": "Portuguesa"
+    },
+    "prestigio": {
+      "tipo": "sabor_doce",
+      "nome": "Prestígio"
+    },
+    "sensacao branco": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Branco"
+    },
+    "sensacao gold": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Gold"
+    },
+    "sensacao mesclado": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Mesclado"
+    },
+    "sensacao preto": {
+      "tipo": "sabor_doce",
+      "nome": "Sensação Preto"
+    },
+    "strogonoff de alcatra": {
+      "tipo": "sabor",
+      "nome": "Strogonoff de Alcatra"
+    }
+  },
+  "textos_ambiguos": {}
+}

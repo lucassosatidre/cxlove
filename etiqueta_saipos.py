@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "199"
+VERSION = "200"
+# v200 (19/09/26): salão usa catálogo fechado e nome canônico. Texto fora do
+#   catálogo vira aviso, nunca sabor/caixa. Remove abreviações "com" -> "c/".
 # v198 (18/09/26): payload do Provisao segue o mesmo padrao do Saipos: Pote Dip e item separado,
 #   conta em ITENS e ganha etiqueta propria; refrigerante conta em ITENS sem gerar etiqueta.
 # v197 (18/09/26): etiquetas do Provisao agora imprimem a forma real de pagamento, bandeira e valor
@@ -307,12 +309,6 @@ def limpar_nome(nome):
 
 def abreviar_sabor(sabor):
     s = corrigir_encoding(sabor.strip())
-    s = re.sub(r'\s+COM\s+', ' c/ ', s, flags=re.IGNORECASE)
-    s = re.sub(r'\s+com\s+', ' c/ ', s)
-    m = re.search(r'\(SEM\s+(\w+)\)', s, re.IGNORECASE)
-    if m:
-        s = re.sub(r'\(SEM\s+\w+\)', '', s, flags=re.IGNORECASE).strip()
-        s += f" s/ {m.group(1).lower()}"
     s = re.sub(r'^[Tt]emx\s+[Pp]izza\s+de\s+', '', s)
     s = s.strip()
     # v172: capitaliza a 1a letra (antes minusculava, obrigando o dicionario a ter 1 regra de
@@ -940,6 +936,36 @@ def _sem_acento(s):
         s = s.replace(a, b)
     return s
 
+_CATALOGO_SALAO = None
+def _carregar_catalogo_salao():
+    global _CATALOGO_SALAO
+    if _CATALOGO_SALAO is not None: return _CATALOGO_SALAO
+    caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalogo_salao.json")
+    try:
+        with open(caminho, "r", encoding="utf-8") as f: _CATALOGO_SALAO = json.load(f)
+    except Exception as e:
+        log(f"  ERRO catalogo_salao.json: {e}")
+        _CATALOGO_SALAO = {"por_codigo": {}, "por_texto": {}}
+    return _CATALOGO_SALAO
+
+def _norm_catalogo(texto):
+    return re.sub(r'\s+', ' ', _sem_acento(corrigir_encoding(str(texto or '')).lower())).strip()
+
+def _catalogo_salao_resolver(texto, codigo=None):
+    cat = _carregar_catalogo_salao()
+    candidatos = codigo if isinstance(codigo, (list, tuple)) else [codigo]
+    for bruto in candidatos:
+        cod = str(bruto or '').strip()
+        if not cod: continue
+        hit = cat.get("por_codigo", {}).get(cod) or cat.get("por_codigo", {}).get(cod.split('.')[-1])
+        if hit: return hit
+    return cat.get("por_texto", {}).get(_norm_catalogo(texto))
+
+def _kds_desconhecido(display, nome, nota=""):
+    aviso = f"⚠ Conferir: {nome}"
+    if nota: aviso += f" ({nota})"
+    display.append({"tipo": "outro", "nome": aviso, "qty": 1, "_fl": [], "_adic": []})
+
 def _salao_eh_bebida(nome):
     # Detector de bebida COMPARTILHADO (salao + delivery/retirada/ficha — eh_bebida delega aqui).
     # Sem acento pra casar sempre. Palavras derivadas dos cardapios reais (Codigos de integracao.xlsx).
@@ -1150,33 +1176,40 @@ def _kds_attach(cur, nome, nota=""):
     if mf: num, den, sab = int(mf.group(1)), int(mf.group(2)), mf.group(3).strip()
     else: num, den, sab = 1, None, nome
     cur["_fl"].append((num, den, abreviar_sabor(sab), nota))
-def _kds_classifica(display, cur, doce_ctx, texto, nota=""):
+def _kds_classifica(display, cur, doce_ctx, texto, nota="", codigo=None):
     """Espelha o tratamento de sub-linha do extrair_itens_salao, lendo a escolha do KDS.
     nota = obs daquela escolha (lapis do Saipos) -> COLADA no item a que pertence (decisao do dono)."""
     nome = (texto or "").strip()
     if not nome: return
+    if nome.startswith("⚠ Conferir:"):
+        display.append({"tipo": "outro", "nome": nome, "qty": 1, "_fl": [], "_adic": []}); return
     low2 = nome.lower()
-    if eh_pote_dip(nome):
-        display.append({"tipo": "dip", "nome": nome_pote_dip(nome), "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
-    elif eh_borda(nome):
+    if "sem borda" in low2: return
+    info = _catalogo_salao_resolver(nome, codigo)
+    if not info:
+        _kds_desconhecido(display, nome, nota); return
+    tipo = info.get("tipo") or "outro"; canon = info.get("nome") or nome
+    if tipo == "dip":
+        display.append({"tipo": "dip", "nome": nome_pote_dip(canon), "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
+    elif tipo == "borda":
         if cur is not None and cur.get("tipo") == "caixa_doce":
-            cur.setdefault("_bordas", []).append((nome, nota))   # borda do PROPRIO broto doce -> fica NELE (senao o split joga na ultima salgada)
+            cur.setdefault("_bordas", []).append((canon, nota))
         else:
-            display.append({"tipo": "borda", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
-    elif "sem borda" in low2:
-        return
-    elif _salao_eh_bebida(nome):
-        display.append({"tipo": "bebida", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
-    elif eh_adicional(nome) or (doce_ctx and _kds_eh_adic_doce(nome)):
-        if cur is not None: cur["_adic"].append([abreviar_sabor(nome), nota])
-        else: display.append({"tipo": "outro", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
-    elif (eh_pizza_broto(nome) or eh_sabor_doce(nome)) and (cur is None or (cur["tipo"] == "caixa_salgada" and not eh_broto_doce(cur["nome"]))):
-        display.append({"tipo": "caixa_doce", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
-    elif eh_sabor_numerado(nome):
-        return
+            display.append({"tipo": "borda", "nome": canon, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
+    elif tipo == "bebida":
+        display.append({"tipo": "bebida", "nome": canon, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
+    elif tipo == "adicional":
+        if cur is not None: cur["_adic"].append([canon, nota])
+        else: display.append({"tipo": "outro", "nome": canon, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
+    elif tipo == "sabor_doce" and (cur is None or cur.get("tipo") != "caixa_doce"):
+        caixa = {"tipo": "caixa_doce", "nome": "Pizza Broto", "qty": 1, "_fl": [], "_adic": [], "_obs": nota}
+        _kds_attach(caixa, canon)
+        display.append(caixa)
+    elif tipo in ("sabor", "sabor_doce"):
+        if cur is not None: _kds_attach(cur, canon, nota)
+        else: _kds_desconhecido(display, canon, nota)
     else:
-        if cur is not None: _kds_attach(cur, nome, nota)
-        else: display.append({"tipo": "outro", "nome": nome, "qty": 1, "_fl": [], "_adic": [], "_obs": nota})
+        _kds_desconhecido(display, canon, nota)
 def _kds_frac(t):
     m = re.match(r'^(\d+)/(\d+)\s', (t or "").strip())
     return (int(m.group(1)), int(m.group(2))) if m else (None, None)
@@ -1194,24 +1227,27 @@ def _kds_combo(display, base, doce, chs, mult, item_nota=""):
     extras = []                # textos -> _kds_classifica como ref (bebida/broto/doce)
     for ch in chs:
         if isinstance(ch, dict):
-            txt = (ch.get("txt") or "").strip(); gk = ch.get("grp"); nota = (ch.get("notes") or "").strip()
+            txt = (ch.get("txt") or "").strip(); gk = ch.get("grp"); nota = (ch.get("notes") or "").strip(); codigos = ch.get("codigos")
         else:
-            txt = str(ch or "").strip(); gk = None; nota = ""
+            txt = str(ch or "").strip(); gk = None; nota = ""; codigos = None
         if not txt: continue
         ordn, resto = _salao_marker_pizza(txt)
         low = txt.lower()
         if "sem borda" in low: continue                             # "Sem Borda Recheada" = SEM borda -> nao e borda NEM sabor, pula (igual papel L793 e _kds_classifica L912)
-        if eh_pote_dip(txt):
-            extras.append((txt, nota)); continue                    # potinho da borda dip: do pedido todo -> ref (rodape), nunca fatia/borda
-        if eh_borda(txt):
-            bordas.append((ordn, gk, txt, nota)); continue          # GRUPO (casa a borda na pizza certa) + nota (obs da borda, colada nela)
-        if _salao_eh_bebida(txt) or _kds_eh_adic_doce(txt) or ((eh_pizza_broto(txt) or eh_sabor_doce(txt)) and not doce):
-            extras.append((txt, nota)); continue                    # bebida / adic doce SEMPRE; broto+sabor doce so se a base NAO e doce
-            # (combo de broto DOCE: o sabor doce e a fatia da PROPRIA caixa -> cai no agrupamento, nao em extras)
-        if eh_adicional(txt):
-            adics.append((ordn, resto if ordn is not None else txt, nota)); continue   # nota = obs do adicional ("na de bacon")
+        info = _catalogo_salao_resolver(txt, codigos) or _catalogo_salao_resolver(resto, codigos)
+        if not info:
+            extras.append((f"⚠ Conferir: {txt}", nota)); continue
+        tipo = info.get("tipo") or "outro"; canon = info.get("nome") or txt
+        if tipo in ("dip", "bebida") or (tipo == "sabor_doce" and not doce):
+            extras.append((canon, nota)); continue
+        if tipo == "borda":
+            bordas.append((ordn, gk, canon, nota)); continue
+        if tipo == "adicional":
+            adics.append((ordn, canon, nota)); continue
+        if tipo not in ("sabor", "sabor_doce"):
+            extras.append((f"⚠ Conferir: {txt}", nota)); continue
         # SABOR: agrupa por grupo (chave = id_store_choice; senao ordinal/posicao)
-        nome_sab = resto if ordn is not None else txt
+        nome_sab = canon
         key = gk if gk is not None else (("ord", ordn) if ordn is not None else ("pos", len(grupos_ordem)))
         if key not in grupo_fl:
             grupos_ordem.append(key); grupo_fl[key] = []
@@ -1288,8 +1324,12 @@ def extrair_itens_kds(grupos):
                 if isinstance(ci, dict) and str(ci.get("deleted", "")).upper() != "Y":
                     txt = (ci.get("desc_sale_item_choice") or "").strip()
                     if txt:
-                        gk = (ci.get("choice_item") or {}).get("id_store_choice")
-                        chs.append({"txt": txt, "grp": gk, "notes": (ci.get("notes") or "").strip()})
+                        obj = ci.get("choice_item") or {}
+                        gk = obj.get("id_store_choice")
+                        codigos = [ci.get("integration_code"), ci.get("codigo_integracao"),
+                                   ci.get("id_store_choice_item"), obj.get("integration_code"),
+                                   obj.get("id_store_choice_item")]
+                        chs.append({"txt": txt, "grp": gk, "notes": (ci.get("notes") or "").strip(), "codigos": codigos})
             notes = (it.get("notes") or "").strip()
             if "pizza" in low:
                 nome_clean = limpar_nome(desc); mult = contar_pizzas_no_nome(nome_clean)
@@ -1316,7 +1356,7 @@ def extrair_itens_kds(grupos):
                         cur = {"tipo": "caixa_doce" if doce else "caixa_salgada", "nome": base, "qty": 1, "_fl": [], "_adic": []}
                         display.append(cur)
                         for ch in chs:
-                            _kds_classifica(display, cur, doce, ch["txt"], (ch.get("notes") or "").strip())   # nota COLADA no item (sabor/borda/adic/broto/bebida)
+                            _kds_classifica(display, cur, doce, ch["txt"], (ch.get("notes") or "").strip(), ch.get("codigos"))
                         if notes:
                             if doce: cur["_obs"] = notes   # broto doce: obs do item fica no broto (nao vira "Obs:" solto que iria pra salgada)
                             else: display.append({"tipo": "outro", "nome": f"Obs: {notes}", "qty": 1, "_fl": [], "_adic": []})
@@ -1328,7 +1368,7 @@ def extrair_itens_kds(grupos):
             else:
                 cur = {"tipo": "outro", "nome": desc, "qty": qty, "_fl": [], "_adic": []}
                 display.append(cur)
-                for ch in chs: _kds_classifica(display, cur, False, ch["txt"])
+                for ch in chs: _kds_classifica(display, cur, False, ch["txt"], (ch.get("notes") or "").strip(), ch.get("codigos"))
     out = []
     for d in display:
         out.append({"tipo": d["tipo"], "nome": d["nome"], "qty": d["qty"], "sabores": _kds_fl_sab(d)})
