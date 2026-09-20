@@ -13,7 +13,9 @@
 import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "11"            # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "12"            # versao do terminal. O auto-update compara este numero com o do GitHub.
+# v12 (19/09/26): catálogo antigo continua operando; catálogo novo só é recusado se cair mais de 30%
+#   frente à cópia válida. Ausência total pausa comandas e cria ALERTA visível no Maná.
 # v11 (19/09/26): somente fichas identificadas como COZINHA 1..5 entram; COPA/CAIXA são
 #   descartadas. Baixa o catálogo fechado do salão usado pelo parser v200.
 # v10 (18/09/26): FILTRO de tipo/canal (Lucas). So SALAO + retirada criada DIRETO no Saipos (canal vazio)
@@ -144,8 +146,53 @@ def ler_kds():
 # ---------- CEREBRO: baixa e importa o etiqueta_saipos.py (parser maduro + IA). Fonte unica. ----------
 ETQ = None
 _ETQ_VER = None
+_CATALOGO_OK = False
+_ULTIMO_ALERTA_CATALOGO = {}
+
+def catalogo_local_disponivel(caminho):
+    try:
+        with open(caminho, "r", encoding="utf-8") as f: cat = json.load(f)
+        return bool(cat.get("por_texto")) and bool(cat.get("por_codigo"))
+    except Exception:
+        return False
+
+def validar_catalogo_novo(novo, anterior=None):
+    if not isinstance(novo, dict) or not isinstance(novo.get("por_texto"), dict) or not isinstance(novo.get("por_codigo"), dict):
+        return False, "estrutura inválida"
+    nt, nc = len(novo["por_texto"]), len(novo["por_codigo"])
+    if nt == 0 or nc == 0: return False, "catálogo vazio"
+    if anterior:
+        at, ac = len(anterior.get("por_texto", {})), len(anterior.get("por_codigo", {}))
+        if at and nt < at * 0.70: return False, f"queda acima de 30% nos textos ({at} -> {nt})"
+        if ac and nc < ac * 0.70: return False, f"queda acima de 30% nos códigos ({ac} -> {nc})"
+    return True, ""
+
+def payload_alerta_catalogo(tipo, motivo=""):
+    critico = tipo == "ausente"
+    nome = "⚠ CATÁLOGO AUSENTE — COMANDAS PAUSADAS" if critico else "⚠ CATÁLOGO NOVO RECUSADO — USANDO CÓPIA ANTERIOR"
+    if motivo: nome += f" — {motivo}"
+    bloco = int(time.time() // 900)
+    return {
+        "version": 1, "id_sale": f"ALERTA-CATALOGO-{tipo}-{bloco}", "numero_pedido": "ALERTA",
+        "order_type": "SALAO", "canal": "Monitor KDS", "codigo_canal": "", "cliente_nome": "MONITOR KDS",
+        "pagamento_cat": "", "hora_pedido": datetime.datetime.now().strftime("%H:%M"),
+        "items": [{"tipo": "outro", "nome": nome, "qty": 1, "sabores": []}],
+        "total_caixas": 1, "total_entrega": 1, "label_printed": True, "source": "terminal",
+    }
+
+def avisar_catalogo_mana(tipo, motivo=""):
+    agora = time.time(); chave = f"{tipo}:{motivo}"
+    if agora - _ULTIMO_ALERTA_CATALOGO.get(chave, 0) < 900: return
+    payload = payload_alerta_catalogo(tipo, motivo)
+    c, body = _http(COMANDA_ENDPOINT, "POST", payload)
+    if 200 <= c < 300:
+        _ULTIMO_ALERTA_CATALOGO[chave] = agora
+        log("  ALERTA DO CATÁLOGO enviado ao Maná:", tipo)
+    else:
+        log("  FALHA enviando alerta do catálogo ao Maná:", c, str(body)[:120])
+
 def carrega_etiqueta():
-    global ETQ, _ETQ_VER
+    global ETQ, _ETQ_VER, _CATALOGO_OK
     p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "etiqueta_saipos.py")
     catalogo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalogo_salao.json")
     try:
@@ -167,19 +214,29 @@ def carrega_etiqueta():
                 req_cat = urllib.request.Request(CATALOGO_URL, headers={"Cache-Control": "no-cache"})
                 cat = urllib.request.urlopen(req_cat, timeout=25, context=ctx).read().decode("utf-8")
                 parsed = json.loads(cat)
-                if len(parsed.get("por_texto", {})) < 100 or len(parsed.get("por_codigo", {})) < 300:
-                    raise ValueError("catalogo incompleto")
+                anterior = None
+                if catalogo_local_disponivel(catalogo_path):
+                    with open(catalogo_path, "r", encoding="utf-8") as f: anterior = json.load(f)
+                valido, motivo = validar_catalogo_novo(parsed, anterior)
+                if not valido: raise ValueError(motivo)
                 tmp_cat = catalogo_path + ".new"
                 with open(tmp_cat, "w", encoding="utf-8") as f: f.write(cat); f.flush(); os.fsync(f.fileno())
                 os.replace(tmp_cat, catalogo_path)
             except Exception as e:
                 if not os.path.exists(catalogo_path):
-                    log("  ERRO baixando catalogo e SEM copia local:", e); return False
+                    _CATALOGO_OK = False
+                    log("  ERRO baixando catalogo e SEM copia local:", e)
+                    avisar_catalogo_mana("ausente", str(e)[:80]); return False
                 log("  catalogo remoto indisponivel; uso copia LOCAL:", e)
+                if isinstance(e, ValueError): avisar_catalogo_mana("recusado", str(e)[:80])
         except Exception as e:
             if not os.path.exists(p):
                 log("  ERRO baixando cerebro e SEM copia local:", e); return False
             log("  GitHub fora; uso o cerebro LOCAL em disco:", e)
+        _CATALOGO_OK = catalogo_local_disponivel(catalogo_path)
+        if not _CATALOGO_OK:
+            avisar_catalogo_mana("ausente", "arquivo local inexistente ou inválido")
+            return False
         import importlib.util
         spec = importlib.util.spec_from_file_location("etiqueta_saipos", p)
         m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
@@ -470,6 +527,9 @@ def adotar_estado_atual():
 
 _falhas_montagem = {}   # id_sale -> nº de polls seguidos em que montar_comanda estourou (alerta no 3º)
 def ciclo(primeira):
+    if not _CATALOGO_OK:
+        avisar_catalogo_mana("ausente", "arquivo local inexistente ou inválido")
+        return
     data = ler_kds()
     if data is None: return
     agora_ms = time.time()*1000
