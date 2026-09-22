@@ -4,7 +4,12 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "200"
+VERSION = "201"
+# v201 (22/09/26): etiqueta do Provisao — (1) HORA saia crua e em UTC ("2026-09-20T21:09:21.376Z") no
+#   cabecalho da etiqueta e do cupom; agora sai "18:09" (horario de Brasilia). O cupom tambem mostrava a
+#   data do DIA DA IMPRESSAO; agora mostra a data do pedido. (2) OBSERVACAO ("Obs: todas sem cebola") saia
+#   como "1x Obs: ..." e CONTAVA em ITENS (pedido #25: 6 itens, etiqueta dizia 8 — o motoboy confere por
+#   esse numero). Agora vira linha propria, sem "1x", fora da contagem, e obs repetida sai uma vez so.
 # v200 (19/09/26): salão usa catálogo fechado e nome canônico. Texto fora do
 #   catálogo vira aviso, nunca sabor/caixa. Remove abreviações "com" -> "c/".
 # v198 (18/09/26): payload do Provisao segue o mesmo padrao do Saipos: Pote Dip e item separado,
@@ -1535,6 +1540,8 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
             fixo_dips.append(("item", f"{item['qty']}x {item['nome']}"))
         elif item["tipo"] == "bebida":
             fixo_bebidas.append(("item", f"{item['qty']}x {item['nome']}"))
+        elif item["tipo"] == "obs":  # v201: observacao em linha propria, sem quantidade
+            fixo_outros.append(("item", item["nome"]))
         else:  # "outro"
             fixo_outros.append(("item", f"{item['qty']}x {item['nome']}"))
 
@@ -2308,6 +2315,25 @@ def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira=""):
         return "DINHEIRO", {"valor": total}
     return "", {}
 
+_ISO_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}')
+
+def sofia_quando(hora):
+    """v201: o Provisao manda a hora em ISO/UTC. Devolve (datetime em Brasilia, "HH:MM").
+    Texto que nao e ISO (ex.: "18:09") passa como esta."""
+    h = str(hora or "").strip()
+    if not _ISO_RE.match(h):
+        return None, h
+    try:
+        dt = datetime.fromisoformat(h.replace("Z", "+00:00"))
+        if dt.tzinfo is None: dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone(_BR_TZ)
+        return dt, dt.strftime("%H:%M")
+    except Exception:
+        return None, h
+
+def sofia_eh_obs(it):
+    return (str(it.get("tipo") or "").lower() in ("outro", "obs")) and re.match(r'^\s*obs\s*:', str(it.get("nome") or ""), re.I) is not None
+
 def sofia_display(itens):
     """Converte itens estruturados (DB) -> display_items do gerar_etiqueta (mesmo render Saipos)."""
     display = []
@@ -2334,6 +2360,11 @@ def sofia_display(itens):
             display.append({"tipo": "bebida", "nome": nome, "qty": qtd, "sabores": []})
         elif tipo == "dip":
             display.append({"tipo": "dip", "nome": nome, "qty": qtd, "sabores": []})
+        elif sofia_eh_obs(it):
+            # v201: observacao nao e item (nao conta em ITENS) e repetida sai uma vez so
+            txt = re.sub(r'\s+', ' ', str(it.get("nome") or "")).strip()
+            if not any(d["tipo"] == "obs" and d["nome"].lower() == txt.lower() for d in display):
+                display.append({"tipo": "obs", "nome": txt, "qty": 1, "sabores": []})
         else:
             display.append({"tipo": "outro", "nome": nome, "qty": qtd, "sabores": []})
     return display
@@ -2408,6 +2439,7 @@ def gerar_comanda(pedido):
 
     n_itens = 0
     for it in (pedido.get("itens") or []):
+        if sofia_eh_obs(it): continue  # v201: observacao nao e item
         try: n_itens += max(1, int(it.get("qty") or it.get("qtd") or 1))
         except: n_itens += 1
     rodape = f"TOTAL R${formatar_valor(total)}  -  {n_itens} item(s)"
@@ -2511,7 +2543,7 @@ def gerar_comanda_cupom(pedido):
     except: num = str(pedido.get("numero") or "")
     hora = (pedido.get("hora") or "").strip()
     try:
-        ag = datetime.now(_BR_TZ); data_str = f"{ag.day:02d}/{_MESES_PT[ag.month-1]}"
+        ag = pedido.get("_quando") or datetime.now(_BR_TZ); data_str = f"{ag.day:02d}/{_MESES_PT[ag.month-1]}"
     except: data_str = ""
     if hora: data_str = f"{data_str} - {hora}" if data_str else hora
 
@@ -2545,7 +2577,13 @@ def gerar_comanda_cupom(pedido):
     left("Qt.Descrição", fn(24), gap=8)
     itens = pedido.get("itens") or []
     n_itens = 0
+    obs_vistas = set()
     for it in itens:
+        if sofia_eh_obs(it):  # v201: observacao nao conta como item e repetida sai uma vez
+            txt = re.sub(r'\s+', ' ', str(it.get("nome") or "")).strip()
+            if txt.lower() not in obs_vistas:
+                obs_vistas.add(txt.lower()); left(txt, fb(26), x=ML+24, gap=3); y += 6
+            continue
         try: q = max(1, int(it.get("qtd") or 1))
         except: q = 1
         n_itens += q
@@ -2611,7 +2649,9 @@ def processar_sofia_pedido(pedido, impressora):
     )
     balcao = (pedido.get("tipo") == "retirada")
     nome_cli = (pedido.get("nome_cliente") or "").strip().split(" ")[0].upper() if pedido.get("nome_cliente") else ""
-    hora = pedido.get("hora") or ""
+    quando, hora = sofia_quando(pedido.get("hora"))
+    # cupom e comanda de despacho recebem a hora ja em HH:MM e a data do pedido (v201)
+    pedido = dict(pedido, hora=hora, _quando=quando)
 
     # 1) ETIQUETAS das caixas de pizza -> impressora de etiqueta (.14)
     # Mesmo padrão do Saipos: cada pizza e cada Pote Dip recebem etiqueta;
