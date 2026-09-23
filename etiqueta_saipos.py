@@ -4,7 +4,16 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "201"
+VERSION = "202"
+# v202 (23/09/26): FROTA INTEIRA vira servidor de etiqueta (Lucas: "nem sempre todos estao ligados, algum
+#   pode estragar"). Antes so o PC do caixa buscava a fila do Provisao; se ele desligasse, as etiquetas de
+#   iFood/Brendi/Atendente ficavam paradas. Agora TODO PC com a chave (Downloads\sofia_caixa.json) e que
+#   enxerga a impressora das caixas (.14) busca a fila. Nao duplica: a nuvem entrega cada etiqueta a UM PC
+#   so (reserva atomica). (1) imprimir_etiqueta passa a devolver True/False — antes engolia o erro e a
+#   etiqueta era marcada "impressa" mesmo sem sair; (2) so o que saiu e marcado; o que falhou volta pra fila
+#   na hora e o PC sai da fila por 1 min (outro assume); cupom so sai junto com as etiquetas (nao repete);
+#   (3) cada reserva grava o nome do PC (claimed_by) — auditoria sabe quem imprimiu; (4) PC sem chave ou sem
+#   impressora avisa no log (1x a cada 30 min) em vez de ficar mudo.
 # v201 (22/09/26): etiqueta do Provisao — (1) HORA saia crua e em UTC ("2026-09-20T21:09:21.376Z") no
 #   cabecalho da etiqueta e do cupom; agora sai "18:09" (horario de Brasilia). O cupom tambem mostrava a
 #   data do DIA DA IMPRESSAO; agora mostra a data do pedido. (2) OBSERVACAO ("Obs: todas sem cebola") saia
@@ -1644,7 +1653,9 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
 
 
 def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
+    """Imprime e devolve True/False (v202). Antes engolia o erro e ninguem sabia que falhou."""
     printer_name = printer_name or NOME_IMPRESSORA
+    ok = False
     larg = larg if larg else LARGURA_PX
     alt = alt if alt else ALTURA_PX
     tmp = tempfile.NamedTemporaryFile(suffix=".bmp", delete=False); tmp_path = tmp.name; tmp.close()
@@ -1656,6 +1667,7 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
             except ImportError:
                 subprocess.run(f'mspaint /pt "{tmp_path}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
                 log("  Impresso OK (mspaint)")
+                ok = True
             else:
                 # Tenta de novo se a impressora 'tropecar' (comum no 1o job apos abrir/instalar).
                 ultimo_erro = None
@@ -1668,6 +1680,7 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
                         hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
                         log(f"  Impresso OK ({printer_name})")
                         ultimo_erro = None
+                        ok = True
                         break
                     except Exception as e:
                         ultimo_erro = e
@@ -1683,6 +1696,7 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
     finally:
         try: time.sleep(2); os.unlink(tmp_path)
         except: pass
+    return ok
 
 def processar_nfce(filepath, filename):
     data = ler_arquivo_saipos(filepath)
@@ -2254,9 +2268,10 @@ def _sofia_ctx():
     ctx = ssl.create_default_context(); ctx.check_hostname = False; ctx.verify_mode = ssl.CERT_NONE
     return ctx
 
-def _sofia_http(url, method="GET", body=None, secret=""):
+def _sofia_http(url, method="GET", body=None, secret="", pc=""):
     headers = {"Content-Type": "application/json"}
     if secret: headers["x-sofia-secret"] = secret
+    if pc: headers["x-etiqueta-pc"] = pc
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     resp = urllib.request.urlopen(req, timeout=15, context=_sofia_ctx())
@@ -2656,17 +2671,27 @@ def processar_sofia_pedido(pedido, impressora):
     # 1) ETIQUETAS das caixas de pizza -> impressora de etiqueta (.14)
     # Mesmo padrão do Saipos: cada pizza e cada Pote Dip recebem etiqueta;
     # bebida entra em ITENS, sem criar etiqueta própria.
+    falhou = False
     for i in range(1, n_et + 1):
         try:
             img = gerar_etiqueta(numero, i, n_et, display, total_entrega,
                                  pag_cat, pag_dados, balcao, canal.upper(), codigo_canal.upper(), nome_cli, hora)
-            imprimir_etiqueta(img, printer_name=impressora)
-            log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
+            if imprimir_etiqueta(img, printer_name=impressora):
+                log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
+            else:
+                falhou = True
+                log(f"  ERRO etiqueta {i}/{n_et} #{numero}: impressora nao imprimiu")
             if i < n_et: time.sleep(0.4)
         except Exception as e:
+            falhou = True
             log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
 
     # 2) COMANDA em cupom estilo Saipos -> impressora de comanda (.222, Elgin i8)
+    # v202: etiqueta falhou -> o pedido volta pra fila e OUTRO PC imprime tudo; o cupom fica pra ele
+    # (senao sairia repetido).
+    if falhou:
+        log(f"  {canal.upper()} #{numero}: etiqueta falhou - pedido volta pra fila, cupom nao impresso aqui")
+        return False
     imp_comanda = _impressora_para(IP_IMPRESSORA_COMANDA, fallback=None, etiqueta="COMANDA")
     if imp_comanda:
         try:
@@ -2677,6 +2702,8 @@ def processar_sofia_pedido(pedido, impressora):
             log(f"  ERRO comanda #{numero}: {e}")
     else:
         log(f"  {canal.upper()} #{numero}: impressora de comanda (192.168.1.222) nao encontrada - comanda nao impressa")
+    # So as etiquetas das caixas decidem: se o cupom falhar, reimprimir tudo duplicaria as etiquetas.
+    return not falhou
 
 def processar_sofia_arquivo(filepath, filename):
     """Pedido da Sofia baixado pelo Caixa Love (.sofiapedido) -> imprime comanda + etiquetas.
@@ -2729,9 +2756,53 @@ def processar_sofia_arquivo(filepath, filename):
         try: os.remove(claim)
         except Exception: pass
 
+SOFIA_PAUSA_APOS_FALHA = 60       # v202: PC cuja impressora falhou sai da fila por 1 min (os outros assumem)
+_sofia_avisos = {}                 # aviso -> ultimo log (nao repetir a mesma mensagem a cada 5s)
+
+def _sofia_avisar(chave, msg, cada=1800):
+    agora = time.time()
+    if agora - _sofia_avisos.get(chave, 0) >= cada:
+        _sofia_avisos[chave] = agora
+        log(msg)
+
+def _nome_deste_pc():
+    """Identifica o PC na fila (claimed_by), pra auditoria saber quem imprimiu cada etiqueta."""
+    try:
+        import socket
+        nome = socket.gethostname()
+    except Exception:
+        nome = ""
+    usuario = os.path.basename(os.path.expanduser("~"))
+    return (f"{nome}/{usuario}" if nome else usuario)[:80]
+
+def _impressora_caixas_deste_pc():
+    """So entra na fila quem ENXERGA a impressora das caixas: pelo IP (.14) ou pelo nome instalado.
+    PC sem ela nao pode reservar etiqueta (reservaria e nao imprimiria)."""
+    nome = _achar_impressora_por_ip(IP_IMPRESSORA_CAIXAS)
+    if nome:
+        _cache_impressora_ip[IP_IMPRESSORA_CAIXAS] = nome
+        return nome
+    try:
+        import win32print
+        flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+        for p in win32print.EnumPrinters(flags, None, 2):
+            if (p.get("pPrinterName") or "").strip().upper() == NOME_IMPRESSORA.upper():
+                return p.get("pPrinterName")
+    except Exception:
+        pass
+    return None
+
 def sofia_poll_loop():
-    log("SOFIA poller iniciado (aguardando sofia_caixa.json em Downloads)")
+    """v202: TODO PC com a chave (sofia_caixa.json) e com a impressora das caixas e servidor de etiqueta.
+    Nao duplica: a nuvem entrega cada etiqueta a UM PC so (reserva atomica). Se este PC nao conseguir
+    imprimir, devolve a etiqueta pra fila na hora e sai da fila por 1 min -> outro PC imprime.
+    Se o PC morrer no meio, a reserva vence em 2 min e outro PC pega sozinho."""
+    log("SOFIA poller iniciado (fila de etiquetas do Provisao - todo PC com a chave participa)")
     last_update = time.time()
+    pc = _nome_deste_pc()
+    pausa_ate = 0
+    impressora = None
+    checou_impressora = 0
     while True:
         try:
             # v190: a auto-atualizacao roda SEMPRE (em TODO PC da frota), nao so no caixa com Sofia.
@@ -2744,36 +2815,58 @@ def sofia_poll_loop():
                 except: pass
             cfg = _sofia_config()
             if not cfg:
+                _sofia_avisar("sem_chave", "  SOFIA: este PC NAO tem a chave (Downloads\\sofia_caixa.json) - nao imprime etiquetas do Provisao")
                 time.sleep(SOFIA_POLL_INTERVAL); continue
+            if time.time() < pausa_ate:
+                time.sleep(SOFIA_POLL_INTERVAL); continue
+            if not impressora and time.time() - checou_impressora > 60:
+                checou_impressora = time.time()
+                impressora = _impressora_caixas_deste_pc()
+                if impressora:
+                    log(f"  SOFIA: este PC ({pc}) entrou na fila de etiquetas - impressora '{impressora}'")
+            if not impressora:
+                _sofia_avisar("sem_impressora", f"  SOFIA: este PC ({pc}) nao enxerga a impressora das caixas (IP {IP_IMPRESSORA_CAIXAS}) - fica fora da fila")
+                time.sleep(SOFIA_POLL_INTERVAL); continue
+
+            secret = cfg.get("secret", "")
             base = f"{cfg['url']}/functions/v1/sofia-print-queue"
-            sep = "&" if "?" in base else "?"
-            url = base + (f"{sep}secret={urllib.parse.quote(cfg['secret'])}" if cfg.get("secret") else "")
-            data = _sofia_http(url, method="GET", secret=cfg.get("secret",""))
+            q = [f"pc={urllib.parse.quote(pc)}"]
+            if secret: q.append(f"secret={urllib.parse.quote(secret)}")
+            url = base + ("&" if "?" in base else "?") + "&".join(q)
+            data = _sofia_http(url, method="GET", secret=secret, pc=pc)
             pedidos = (data or {}).get("pedidos", [])
             if pedidos:
-                impressora = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
-                todos_ids = []
+                ok_ids, falha_ids = [], []
                 for p in pedidos:
                     pid = p.get("id")
                     if not pid: continue
-                    todos_ids.append(pid)
                     last = _sofia_impressos.get(pid)
                     if last and (time.time() - last) < 60:
-                        continue  # impresso há pouco neste ciclo — evita duplicar antes do mark
-                    processar_sofia_pedido(p, impressora)
-                if todos_ids:
-                    # Marca como impresso no servidor; só grava o dedup local se o mark deu certo.
-                    # Se o mark falhar (rede), NÃO trava: o próximo ciclo reimprime e remarca.
-                    marcou = False
+                        ok_ids.append(pid)   # impresso há pouco aqui e o mark falhou — só remarca
+                        continue
+                    if falha_ids:
+                        falha_ids.append(pid)  # impressora ja falhou neste lote: devolve o resto sem tentar
+                        continue
+                    (ok_ids if processar_sofia_pedido(p, impressora) else falha_ids).append(pid)
+                if ok_ids:
+                    # Marca como impresso SO o que saiu. Se o mark falhar (rede), a reserva vence em 2 min
+                    # e o pedido volta; o dedup local de 60s evita reimprimir neste mesmo PC.
+                    agora = time.time()
+                    for pid in ok_ids: _sofia_impressos[pid] = agora
                     try:
-                        resp = _sofia_http(base, method="POST", body={"action": "mark", "ids": todos_ids}, secret=cfg.get("secret", ""))
-                        marcou = bool((resp or {}).get("ok"))
+                        resp = _sofia_http(base, method="POST", body={"action": "mark", "ids": ok_ids}, secret=secret, pc=pc)
+                        if (resp or {}).get("ok"):
+                            log(f"  SOFIA: {len(ok_ids)} pedido(s) impresso(s) e confirmado(s) [{pc}]")
                     except Exception as e:
-                        log(f"  SOFIA mark falhou (vai reimprimir no proximo ciclo): {e}")
-                    if marcou:
-                        agora = time.time()
-                        for pid in todos_ids: _sofia_impressos[pid] = agora
-                        log(f"  SOFIA: {len(todos_ids)} pedido(s) impresso(s) e confirmado(s)")
+                        log(f"  SOFIA mark falhou (vai remarcar no proximo ciclo): {e}")
+                if falha_ids:
+                    try:
+                        _sofia_http(base, method="POST", body={"action": "release", "ids": falha_ids}, secret=secret, pc=pc)
+                        log(f"  SOFIA: {len(falha_ids)} pedido(s) NAO impresso(s) aqui - devolvido(s) pra fila, outro PC imprime")
+                    except Exception as e:
+                        log(f"  SOFIA: devolver pra fila falhou ({e}) - a reserva vence em 2 min e outro PC pega")
+                    pausa_ate = time.time() + SOFIA_PAUSA_APOS_FALHA
+                    impressora = None   # reconfere a impressora quando voltar
         except Exception as e:
             log(f"  SOFIA poll erro: {e}")
         time.sleep(SOFIA_POLL_INTERVAL)
