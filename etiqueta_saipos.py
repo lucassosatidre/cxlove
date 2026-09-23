@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "204"
+VERSION = "205"
+# v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
+#   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
+#   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
 # v204 (23/09/26): UMA ETIQUETA POR PRODUTO + QR (Lucas). Pedido do Provisao: cada pizza (salgada ou doce)
 #   e cada Pote Dip vira UMA etiqueta so com ELE no meio ("#0004 - 2/3" = "1x Pizza Broto: Nutella com
 #   Morango"); cabecalho e rodape iguais (ITENS conta o pedido inteiro). Bebida e observacao do pedido
@@ -1724,6 +1727,8 @@ def qr_imagem(texto, modulo=3, margem=2):
 
 QR_MODULO_PX = 4      # 4 px por quadradinho a 203 dpi = 0,5 mm (a pistola 2D le com folga)
 QR_MARGEM_MOD = 2     # borda clara em volta (em quadradinhos)
+QR_BORDA_DIR_PX = 24  # v205: distancia do QR ate a borda direita (a Elgin corta ~2 mm na direita)
+QR_BORDA_INF_PX = 4   # distancia do QR ate a borda de baixo
 
 def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
                    pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido,
@@ -1744,7 +1749,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         except Exception as e:
             log(f"  QR nao gerado ({qr_texto}): {e}")
             qr_img = None; qr_lado = 0
-    reserva_qr = (qr_lado + 6) if qr_img else 0
+    reserva_qr = (qr_lado + 6 + QR_BORDA_DIR_PX) if qr_img else 0
     LIMIAR_2COL = 16  # fonte minima aceitavel pra preferir 2 colunas
 
     def cf(tamanho):
@@ -1959,8 +1964,8 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # ============================================================
     if qr_img:
         render_barra(linha_rodape, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
-        x_qr = LARGURA_PX - qr_lado - 2
-        y_qr = ALTURA_PX - qr_lado - 2
+        x_qr = LARGURA_PX - qr_lado - QR_BORDA_DIR_PX
+        y_qr = ALTURA_PX - qr_lado - QR_BORDA_INF_PX
         draw.rectangle([(x_qr - 2, y_qr - 2), (LARGURA_PX, ALTURA_PX)], fill="white")
         img.paste(qr_img.convert("RGB"), (x_qr, y_qr))
     else:
