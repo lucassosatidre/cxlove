@@ -4,7 +4,14 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "203"
+VERSION = "204"
+# v204 (23/09/26): UMA ETIQUETA POR PRODUTO + QR (Lucas). Pedido do Provisao: cada pizza (salgada ou doce)
+#   e cada Pote Dip vira UMA etiqueta so com ELE no meio ("#0004 - 2/3" = "1x Pizza Broto: Nutella com
+#   Morango"); cabecalho e rodape iguais (ITENS conta o pedido inteiro). Bebida e observacao do pedido
+#   aparecem em TODAS as etiquetas. Quando o Provisao manda o codigo do produto (itens[].qr, "EQ"+10),
+#   a etiqueta ganha um QR pequeno no canto inferior direito: a pistola 2D no Mana da "Pronta e
+#   conferida" daquela pizza. QR gerado aqui mesmo (sem biblioteca nova nos PCs), conferido modulo a
+#   modulo contra a biblioteca "qrcode". Sem codigo = etiqueta sem QR (igual antes). Salao/Saipos nao muda.
 # v203 (23/09/26): LOG DAS IMPRESSOES NA NUVEM (Lucas: "guardar os logs num lugar que voce acessa facil").
 #   Antes o log vivia so em Downloads\etiqueta_saipos_log.txt de cada PC (ninguem via de fora). Agora cada
 #   etiqueta do Provisao gera um evento (etiqueta_ok/erro, cupom, marcada, devolvida...) com PC, versao,
@@ -1444,13 +1451,300 @@ def montar_rodape_linha(total_entrega, pag_cat, pag_dados):
         return f"ITENS: {total_entrega} - {prefixo}{pag_dados.get('resumo', 'CONFIRMAR PAGAMENTO')}"
     return f"ITENS: {total_entrega}"
 
+# ============================================================
+# QR CODE embutido (v204) — sem biblioteca externa nos PCs.
+# Gera QR modelo 2, versões 1–6, correção M, modo alfanumérico (0-9 A-Z espaço $%*+-./:)
+# ou byte. Conferido módulo a módulo contra a biblioteca "qrcode" (tests/test_qr_mini.py).
+# Conteúdo das etiquetas usa SÓ 0-9 e A-Z: a pistola "digita" como teclado e letras/números
+# saem iguais em layout US e ABNT2 (símbolos como ":" e "/" trocam de tecla).
+# ============================================================
+_QR_ALNUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:"
+# (total de codewords, codewords de correção por bloco, [n blocos grupo1, dados/bloco g1, n g2, dados/bloco g2]) — nível M
+_QR_M = {
+    1: (26, 10, (1, 16, 0, 0)),
+    2: (44, 16, (1, 28, 0, 0)),
+    3: (70, 26, (1, 44, 0, 0)),
+    4: (100, 18, (2, 32, 0, 0)),
+    5: (134, 24, (2, 43, 0, 0)),
+    6: (172, 16, (4, 27, 0, 0)),
+}
+_QR_ALIGN = {1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34]}
+
+_GF_EXP = [0] * 512
+_GF_LOG = [0] * 256
+_x = 1
+for _i in range(255):
+    _GF_EXP[_i] = _x
+    _GF_LOG[_x] = _i
+    _x <<= 1
+    if _x & 0x100:
+        _x ^= 0x11D
+for _i in range(255, 512):
+    _GF_EXP[_i] = _GF_EXP[_i - 255]
+
+
+def _gf_mul(a, b):
+    if a == 0 or b == 0:
+        return 0
+    return _GF_EXP[_GF_LOG[a] + _GF_LOG[b]]
+
+
+def _rs_gerador(n):
+    g = [1]
+    for i in range(n):
+        g2 = [0] * (len(g) + 1)
+        for j, c in enumerate(g):
+            g2[j] ^= c
+            g2[j + 1] ^= _gf_mul(c, _GF_EXP[i])
+        g = g2
+    return g
+
+
+def _rs_resto(dados, n):
+    g = _rs_gerador(n)
+    msg = list(dados) + [0] * n
+    for i in range(len(dados)):
+        coef = msg[i]
+        if coef:
+            for j in range(1, len(g)):
+                msg[i + j] ^= _gf_mul(g[j], coef)
+    return msg[len(dados):]
+
+
+def _qr_bits(texto, versao):
+    alnum = all(c in _QR_ALNUM for c in texto)
+    bits = []
+
+    def put(v, n):
+        for i in range(n - 1, -1, -1):
+            bits.append((v >> i) & 1)
+
+    if alnum:
+        put(0b0010, 4)
+        put(len(texto), 9 if versao <= 9 else 11)
+        for i in range(0, len(texto) - 1, 2):
+            put(_QR_ALNUM.index(texto[i]) * 45 + _QR_ALNUM.index(texto[i + 1]), 11)
+        if len(texto) % 2:
+            put(_QR_ALNUM.index(texto[-1]), 6)
+    else:
+        dados = texto.encode("utf-8")
+        put(0b0100, 4)
+        put(len(dados), 8 if versao <= 9 else 16)
+        for b in dados:
+            put(b, 8)
+    return bits
+
+
+def _qr_capacidade_bits(versao):
+    total, ec, (g1, d1, g2, d2) = _QR_M[versao]
+    return (g1 * d1 + g2 * d2) * 8
+
+
+def _qr_codewords(texto, versao):
+    bits = _qr_bits(texto, versao)
+    cap = _qr_capacidade_bits(versao)
+    if len(bits) > cap:
+        return None
+    bits += [0] * min(4, cap - len(bits))
+    bits += [0] * ((8 - len(bits) % 8) % 8)
+    dados = [int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, len(bits), 8)]
+    pad = [0xEC, 0x11]
+    k = 0
+    while len(dados) * 8 < cap:
+        dados.append(pad[k % 2]); k += 1
+    total, ec, (g1, d1, g2, d2) = _QR_M[versao]
+    blocos, pos = [], 0
+    for n, d in ((g1, d1), (g2, d2)):
+        for _ in range(n):
+            blocos.append(dados[pos:pos + d]); pos += d
+    ecs = [_rs_resto(b, ec) for b in blocos]
+    out = []
+    for i in range(max(len(b) for b in blocos)):
+        for b in blocos:
+            if i < len(b): out.append(b[i])
+    for i in range(ec):
+        for e in ecs:
+            out.append(e[i])
+    return out
+
+
+def _qr_formato(mascara):
+    dados = (0b00 << 3) | mascara          # nível M = 00
+    v = dados << 10
+    for i in range(14, 9, -1):
+        if v & (1 << i):
+            v ^= 0b10100110111 << (i - 10)
+    return ((dados << 10) | v) ^ 0b101010000010010
+
+
+_QR_MASCARAS = [
+    lambda r, c: (r + c) % 2 == 0,
+    lambda r, c: r % 2 == 0,
+    lambda r, c: c % 3 == 0,
+    lambda r, c: (r + c) % 3 == 0,
+    lambda r, c: (r // 2 + c // 3) % 2 == 0,
+    lambda r, c: (r * c) % 2 + (r * c) % 3 == 0,
+    lambda r, c: ((r * c) % 2 + (r * c) % 3) % 2 == 0,
+    lambda r, c: ((r + c) % 2 + (r * c) % 3) % 2 == 0,
+]
+
+
+def _qr_base(versao):
+    n = 17 + 4 * versao
+    m = [[None] * n for _ in range(n)]
+
+    def finder(r0, c0):
+        for r in range(-1, 8):
+            for c in range(-1, 8):
+                rr, cc = r0 + r, c0 + c
+                if 0 <= rr < n and 0 <= cc < n:
+                    borda = r in (0, 6) or c in (0, 6)
+                    miolo = 2 <= r <= 4 and 2 <= c <= 4
+                    m[rr][cc] = 1 if (0 <= r <= 6 and 0 <= c <= 6 and (borda or miolo)) else 0
+    finder(0, 0); finder(0, n - 7); finder(n - 7, 0)
+    for i in range(8, n - 8):
+        m[6][i] = m[i][6] = 1 if i % 2 == 0 else 0
+    pos = _QR_ALIGN[versao]
+    for r in pos:
+        for c in pos:
+            if m[r][c] is not None:
+                continue
+            for dr in range(-2, 3):
+                for dc in range(-2, 3):
+                    m[r + dr][c + dc] = 1 if max(abs(dr), abs(dc)) != 1 else 0
+    m[n - 8][8] = 1                          # módulo escuro fixo
+    for i in range(9):                        # reserva área de formato
+        if m[8][i] is None: m[8][i] = 0
+        if m[i][8] is None: m[i][8] = 0
+    for i in range(8):
+        if m[8][n - 1 - i] is None: m[8][n - 1 - i] = 0
+        if m[n - 1 - i][8] is None: m[n - 1 - i][8] = 0
+    return m
+
+
+def _qr_montar(codewords, versao, mascara):
+    m = _qr_base(versao)
+    n = len(m)
+    livre = [[m[r][c] is None for c in range(n)] for r in range(n)]
+    bits = []
+    for cw in codewords:
+        for i in range(7, -1, -1):
+            bits.append((cw >> i) & 1)
+    k = 0
+    c = n - 1
+    subindo = True
+    while c > 0:
+        if c == 6:
+            c -= 1
+        linhas = range(n - 1, -1, -1) if subindo else range(n)
+        for r in linhas:
+            for cc in (c, c - 1):
+                if livre[r][cc]:
+                    b = bits[k] if k < len(bits) else 0
+                    k += 1
+                    if _QR_MASCARAS[mascara](r, cc):
+                        b ^= 1
+                    m[r][cc] = b
+        subindo = not subindo
+        c -= 2
+    f = _qr_formato(mascara)
+    # grava o formato com a disposição padrão (ISO 18004, 7.9)
+    for i in range(15):
+        b = (f >> i) & 1
+        if i < 6: r, cc = i, 8
+        elif i < 8: r, cc = i + 1, 8
+        elif i == 8: r, cc = 8, 7
+        else: r, cc = 8, 14 - i
+        m[r][cc] = b
+        if i < 8: r2, c2 = 8, n - 1 - i
+        else: r2, c2 = n - 15 + i, 8
+        m[r2][c2] = b
+    m[n - 8][8] = 1
+    return m
+
+
+def _qr_penalidade(m):
+    n = len(m); p = 0
+    for linhas in (m, [list(x) for x in zip(*m)]):
+        for row in linhas:
+            corrida = 1
+            for i in range(1, n):
+                if row[i] == row[i - 1]:
+                    corrida += 1
+                else:
+                    if corrida >= 5: p += corrida - 2
+                    corrida = 1
+            if corrida >= 5: p += corrida - 2
+            for i in range(n - 10):
+                seg = row[i:i + 11]
+                if seg == [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0] or seg == [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1]:
+                    p += 40
+    for r in range(n - 1):
+        for c in range(n - 1):
+            if m[r][c] == m[r][c + 1] == m[r + 1][c] == m[r + 1][c + 1]:
+                p += 3
+    escuros = sum(map(sum, m))
+    p += (abs(escuros * 20 - n * n * 10) // (n * n)) * 10
+    return p
+
+
+def qr_matriz(texto, mascara=None):
+    """Matriz (lista de listas 0/1) do QR de `texto`, menor versão (1–6) que couber, nível M."""
+    for versao in range(1, 7):
+        cws = _qr_codewords(texto, versao)
+        if cws is None:
+            continue
+        if mascara is not None:
+            return _qr_montar(cws, versao, mascara)
+        melhor = None
+        for mk in range(8):
+            mm = _qr_montar(cws, versao, mk)
+            pen = _qr_penalidade(mm)
+            if melhor is None or pen < melhor[0]:
+                melhor = (pen, mm)
+        return melhor[1]
+    raise ValueError("texto grande demais para o QR da etiqueta")
+
+
+def qr_imagem(texto, modulo=3, margem=2):
+    """Imagem PIL (preto no branco) do QR, `modulo` px por quadradinho e `margem` módulos de borda."""
+    m = qr_matriz(texto)
+    n = len(m)
+    lado = (n + 2 * margem) * modulo
+    img = Image.new("1", (lado, lado), 1)
+    px = img.load()
+    for r in range(n):
+        for c in range(n):
+            if m[r][c]:
+                for dy in range(modulo):
+                    for dx in range(modulo):
+                        px[(c + margem) * modulo + dx, (r + margem) * modulo + dy] = 0
+    return img
+
+
+QR_MODULO_PX = 4      # 4 px por quadradinho a 203 dpi = 0,5 mm (a pistola 2D le com folga)
+QR_MARGEM_MOD = 2     # borda clara em volta (em quadradinhos)
+
 def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
-                   pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido):
-    """v14.4 - Rodape simetrico + N colunas adaptativas + distribuicao balanceada"""
+                   pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido,
+                   qr_texto=None, unitario=False):
+    """v14.4 - Rodape simetrico + N colunas adaptativas + distribuicao balanceada.
+    v204: unitario=True -> o produto (pizza doce/salgada ou Pote Dip) ocupa o bloco principal;
+    qr_texto -> QR no canto inferior direito (a faixa do rodape e o meio encolhem pra ele)."""
     img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
     draw = ImageDraw.Draw(img)
     margem_e = 16
     margem_d = 16
+    qr_img = None
+    qr_lado = 0
+    if qr_texto:
+        try:
+            qr_img = qr_imagem(qr_texto, modulo=QR_MODULO_PX, margem=QR_MARGEM_MOD)
+            qr_lado = qr_img.size[0]
+        except Exception as e:
+            log(f"  QR nao gerado ({qr_texto}): {e}")
+            qr_img = None; qr_lado = 0
+    reserva_qr = (qr_lado + 6) if qr_img else 0
     LIMIAR_2COL = 16  # fonte minima aceitavel pra preferir 2 colunas
 
     def cf(tamanho):
@@ -1475,13 +1769,14 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     max_barra_w = LARGURA_PX - margem_e - 16
 
     # Auto-fit granular do header (1pt por vez)
-    def auto_fit_1linha(texto, teto, piso=10):
+    def auto_fit_1linha(texto, teto, piso=10, max_w=None):
         fs = piso
+        lim = max_barra_w if max_w is None else max_w
         for sz in range(teto, piso - 1, -1):
             fh = cf(sz)
             try:
                 bb = draw.textbbox((0,0), texto, font=fh)
-                if (bb[2]-bb[0]) <= max_barra_w: fs = sz; break
+                if (bb[2]-bb[0]) <= lim: fs = sz; break
             except: pass
         return fs
 
@@ -1500,14 +1795,14 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # 2. Monta texto do RODAPE (simetria: teto = fs_header)
     # ============================================================
     linha_rodape = montar_rodape_linha(total_entrega, pag_cat, pag_dados)
-    fs_rodape = auto_fit_1linha(linha_rodape, teto=fs_header, piso=10)
+    fs_rodape = auto_fit_1linha(linha_rodape, teto=fs_header, piso=10, max_w=max_barra_w - reserva_qr)
     h_rodape = calc_h_barra(linha_rodape, fs_rodape)
 
     # ============================================================
     # 3. Renderiza HEADER (faixa preta em cima)
     # ============================================================
-    def render_barra(texto, y_start, h, fs):
-        draw.rectangle([(0, y_start), (LARGURA_PX, y_start + h)], fill="black")
+    def render_barra(texto, y_start, h, fs, x_fim=LARGURA_PX):
+        draw.rectangle([(0, y_start), (x_fim, y_start + h)], fill="black")
         fh = cf(fs)
         try:
             bb = draw.textbbox((0,0), texto, font=fh)
@@ -1544,6 +1839,12 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
             else:
                 bloco.append(("item", f"{item['qty']}x {item['nome']}"))
             blocos_salgadas.append(bloco)
+        elif unitario and item["tipo"] in ("caixa_doce", "dip"):
+            # v204: etiqueta de UM produto -> o doce/pote e o bloco principal (esquerda, fonte grande)
+            sabores = item.get("sabores", [])
+            bloco = [("item", f"{item['qty']}x {item['nome']}:" if sabores else f"{item['qty']}x {item['nome']}")]
+            for s in sabores: bloco.append(("sabores", f"  {s}"))
+            blocos_salgadas.append(bloco)
         elif item["tipo"] == "caixa_doce":
             sabores = item.get("sabores", [])
             if sabores:
@@ -1569,7 +1870,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # ============================================================
     y_meio = h_header + 4
     altura_meio = ALTURA_PX - h_rodape - y_meio - 4
-    largura_total = LARGURA_PX - margem_e - margem_d
+    largura_total = LARGURA_PX - margem_e - margem_d - reserva_qr
 
     def wrap_col(col_raw, col_w, fi, fs, fb):
         out = []
@@ -1615,9 +1916,13 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
                 }
         return 0, None
 
+    # v204: etiqueta de um produto sem bebida/obs -> uma coluna so (fonte maior)
+    sz1, dados1 = (testar_n_colunas(1) if (unitario and not fixo_dir) else (0, None))
     # Prefere 2 col se fonte >= LIMIAR; senao busca o N que da fonte maior
     sz2, dados2 = testar_n_colunas(2)
-    if sz2 >= LIMIAR_2COL:
+    if sz1 > 0:
+        sz_itens, dados = sz1, dados1
+    elif sz2 >= LIMIAR_2COL:
         sz_itens, dados = sz2, dados2
     else:
         melhor = (sz2, dados2) if sz2 > 0 else (0, None)
@@ -1652,7 +1957,14 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # ============================================================
     # 7. Renderiza RODAPE (faixa preta embaixo)
     # ============================================================
-    render_barra(linha_rodape, ALTURA_PX - h_rodape, h_rodape, fs_rodape)
+    if qr_img:
+        render_barra(linha_rodape, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
+        x_qr = LARGURA_PX - qr_lado - 2
+        y_qr = ALTURA_PX - qr_lado - 2
+        draw.rectangle([(x_qr - 2, y_qr - 2), (LARGURA_PX, ALTURA_PX)], fill="white")
+        img.paste(qr_img.convert("RGB"), (x_qr, y_qr))
+    else:
+        render_barra(linha_rodape, ALTURA_PX - h_rodape, h_rodape, fs_rodape)
 
     return img
 
@@ -2355,6 +2667,29 @@ def sofia_quando(hora):
 def sofia_eh_obs(it):
     return (str(it.get("tipo") or "").lower() in ("outro", "obs")) and re.match(r'^\s*obs\s*:', str(it.get("nome") or ""), re.I) is not None
 
+def _sofia_qrs(it):
+    """v204: codigos do QR (1 por unidade) que o Provisao manda em itens[].qr. So aceita o formato certo."""
+    out = []
+    for c in (it.get("qr") or []):
+        c = str(c or "").strip().upper()
+        out.append(c if re.fullmatch(r"EQ[0-9A-Z]{10}", c) else None)
+    return out
+
+def sofia_etiquetas_unitarias(display):
+    """v204: uma etiqueta por PRODUTO (cada pizza salgada/doce e cada Pote Dip, unidade por unidade).
+    Bebida, observacao e "outro" do pedido vao em TODAS. Borda antiga fica com a pizza dela.
+    Devolve [(display_da_etiqueta, codigo_qr_ou_None), ...] na ordem do pedido."""
+    extras = [d for d in display if d["tipo"] in ("bebida", "obs", "outro")]
+    unidades = []
+    for d in display:
+        if d["tipo"] in ("caixa_salgada", "caixa_doce", "dip"):
+            qrs = d.get("qr") or []
+            for k in range(max(1, int(d.get("qty") or 1))):
+                unidades.append({"item": dict(d, qty=1), "bordas": [], "qr": qrs[k] if k < len(qrs) else None})
+        elif d["tipo"] == "borda" and unidades:
+            unidades[-1]["bordas"].append(d)
+    return [([u["item"]] + u["bordas"] + extras, u["qr"]) for u in unidades]
+
 def sofia_display(itens):
     """Converte itens estruturados (DB) -> display_items do gerar_etiqueta (mesmo render Saipos)."""
     display = []
@@ -2374,13 +2709,13 @@ def sofia_display(itens):
                     sabores.append(f"{fr} {snome}")
                 else:
                     sabores.append(snome)
-            display.append({"tipo": cat, "nome": nome, "qty": qtd, "sabores": sabores})
+            display.append({"tipo": cat, "nome": nome, "qty": qtd, "sabores": sabores, "qr": _sofia_qrs(it)})
             if it.get("borda"):
                 display.append({"tipo": "borda", "nome": str(it["borda"]), "qty": 1, "sabores": []})
         elif tipo == "bebida":
             display.append({"tipo": "bebida", "nome": nome, "qty": qtd, "sabores": []})
         elif tipo == "dip":
-            display.append({"tipo": "dip", "nome": nome, "qty": qtd, "sabores": []})
+            display.append({"tipo": "dip", "nome": nome, "qty": qtd, "sabores": [], "qr": _sofia_qrs(it)})
         elif sofia_eh_obs(it):
             # v201: observacao nao e item (nao conta em ITENS) e repetida sai uma vez so
             txt = re.sub(r'\s+', ' ', str(it.get("nome") or "")).strip()
@@ -2678,10 +3013,14 @@ def processar_sofia_pedido(pedido, impressora):
     # Mesmo padrão do Saipos: cada pizza e cada Pote Dip recebem etiqueta;
     # bebida entra em ITENS, sem criar etiqueta própria.
     falhou = False
-    for i in range(1, n_et + 1):
+    # v204: uma etiqueta por produto (o meio mostra so ele; bebida/obs em todas) + QR do produto
+    unidades = sofia_etiquetas_unitarias(display)
+    n_et = len(unidades)
+    for i, (display_i, qr_i) in enumerate(unidades, start=1):
         try:
-            img = gerar_etiqueta(numero, i, n_et, display, total_entrega,
-                                 pag_cat, pag_dados, balcao, canal.upper(), codigo_canal.upper(), nome_cli, hora)
+            img = gerar_etiqueta(numero, i, n_et, display_i, total_entrega,
+                                 pag_cat, pag_dados, balcao, canal.upper(), codigo_canal.upper(), nome_cli, hora,
+                                 qr_texto=qr_i, unitario=True)
             if imprimir_etiqueta(img, printer_name=impressora):
                 log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
                 sofia_evento("etiqueta_ok", pedido, etiqueta=i, total=n_et, impressora=impressora)
