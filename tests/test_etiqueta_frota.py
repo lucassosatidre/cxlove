@@ -26,6 +26,9 @@ class FilaFalsa:
     def __init__(self, n):
         self.lock = threading.Lock()
         self.itens = {}
+        self.eventos = []
+        self.pings = {}
+        self.nuvem_fora = False
         for i in range(1, n + 1):
             pid = str(uuid.uuid4())
             self.itens[pid] = {"status": "pending", "claimed_at": 0, "claimed_by": None, "pedido": {
@@ -54,6 +57,15 @@ class FilaFalsa:
                         self.itens[pid]["status"] = "printed"
                         self.itens[pid]["printed_by"] = pc
                     return {"ok": True}
+                if body.get("action") == "log":
+                    if self.nuvem_fora:
+                        raise OSError("sem internet")
+                    for e in body.get("eventos", []):
+                        self.eventos.append(dict(e, pc=pc))
+                    return {"ok": True, "gravados": len(body.get("eventos", []))}
+                if body.get("action") == "ping":
+                    self.pings.setdefault(pc, []).append(body)
+                    return {"ok": True}
                 if body.get("action") == "release":
                     for pid in ids:
                         if self.itens[pid]["status"] == "printing":
@@ -81,9 +93,10 @@ class Frota:
         mod._impressora_caixas_deste_pc = (lambda: "ELGIN") if impressora else (lambda: None)
         http = self.fila.http(pc)
 
-        def contar_http(*a, **k):
-            self.chamadas_fila[pc] = self.chamadas_fila.get(pc, 0) + 1
-            return http(*a, **k)
+        def contar_http(url, method="GET", **k):
+            if method == "GET":   # so reserva conta (log e ping sobem mesmo sem impressora)
+                self.chamadas_fila[pc] = self.chamadas_fila.get(pc, 0) + 1
+            return http(url, method=method, **k)
         mod._sofia_http = contar_http
 
         def imprimir(img, printer_name=None, larg=None, alt=None):
@@ -109,6 +122,10 @@ class Frota:
 
 
 class FrotaEtiquetaTest(unittest.TestCase):
+    def fila_pings(self, fila, pc):
+        with fila.lock:
+            return list(fila.pings.get(pc, []))
+
     def conferir_uma_vez_cada(self, fila, frota):
         with fila.lock:
             self.assertTrue(all(it["status"] == "printed" for it in fila.itens.values()))
@@ -147,11 +164,59 @@ class FrotaEtiquetaTest(unittest.TestCase):
         time.sleep(0.5)
         self.assertEqual(frota.chamadas_fila.get("SEM-CHAVE", 0), 0)
         self.assertEqual(frota.chamadas_fila.get("SEM-IMPRESSORA", 0), 0)
+        self.assertTrue(self.fila_pings(fila, "SEM-IMPRESSORA"), "PC sem impressora deve avisar que existe")
+        self.assertFalse(self.fila_pings(fila, "SEM-CHAVE"), "sem chave nao fala com a nuvem")
         with fila.lock:
             self.assertTrue(all(it["status"] == "pending" for it in fila.itens.values()))
         frota.ligar("BOM")
         self.assertTrue(frota.esperar())
         self.conferir_uma_vez_cada(fila, frota)
+
+
+class LogNaNuvemTest(unittest.TestCase):
+    """v203: cada impressao vira evento na nuvem (etiqueta_impressao_log) + ping do PC."""
+
+    def eventos(self, fila, pc=None, evento=None):
+        with fila.lock:
+            return [e for e in fila.eventos
+                    if (pc is None or e["pc"] == pc) and (evento is None or e["evento"] == evento)]
+
+    def esperar_eventos(self, fila, evento, n, segundos=4):
+        fim = time.time() + segundos
+        while time.time() < fim and len(self.eventos(fila, evento=evento)) < n:
+            time.sleep(0.05)
+
+    def test_cada_etiqueta_vira_evento_com_pc_e_pedido(self):
+        fila = FilaFalsa(6); frota = Frota(fila)
+        frota.ligar("CAIXA")
+        self.assertTrue(frota.esperar())
+        self.esperar_eventos(fila, "marcada", 6)
+        ok = self.eventos(fila, evento="etiqueta_ok")
+        self.assertEqual(len(ok), 6)
+        self.assertEqual({e["numero"] for e in ok}, {str(i) for i in range(1, 7)})
+        self.assertTrue(all(e["pc"] == "CAIXA" and e["versao"] and e["fila_id"] for e in ok))
+        self.assertEqual(len(self.eventos(fila, evento="marcada")), 6)
+        self.assertTrue(self.eventos(fila, evento="iniciou"))
+        self.assertTrue(fila.pings.get("CAIXA"), "PC nao mandou o 'estou vivo'")
+
+    def test_impressora_quebrada_aparece_no_log(self):
+        fila = FilaFalsa(3); frota = Frota(fila)
+        frota.ligar("QUEBRADO", modo="quebrada")
+        self.esperar_eventos(fila, "devolvida", 3)
+        self.assertTrue(self.eventos(fila, "QUEBRADO", "etiqueta_erro"))
+        self.assertGreaterEqual(len(self.eventos(fila, "QUEBRADO", "devolvida")), 3)
+        self.assertFalse(self.eventos(fila, "QUEBRADO", "etiqueta_ok"))
+
+    def test_sem_internet_eventos_esperam_e_sobem_depois(self):
+        fila = FilaFalsa(4); frota = Frota(fila)
+        fila.nuvem_fora = True
+        frota.ligar("CAIXA")
+        self.assertTrue(frota.esperar())          # a impressao nao depende do log
+        time.sleep(0.2)
+        self.assertEqual(self.eventos(fila, evento="etiqueta_ok"), [])
+        fila.nuvem_fora = False
+        self.esperar_eventos(fila, "etiqueta_ok", 4)
+        self.assertEqual(len(self.eventos(fila, evento="etiqueta_ok")), 4)
 
 
 if __name__ == "__main__":

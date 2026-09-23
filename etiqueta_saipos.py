@@ -4,7 +4,13 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "202"
+VERSION = "203"
+# v203 (23/09/26): LOG DAS IMPRESSOES NA NUVEM (Lucas: "guardar os logs num lugar que voce acessa facil").
+#   Antes o log vivia so em Downloads\etiqueta_saipos_log.txt de cada PC (ninguem via de fora). Agora cada
+#   etiqueta do Provisao gera um evento (etiqueta_ok/erro, cupom, marcada, devolvida...) com PC, versao,
+#   pedido e impressora, enviado pela mesma fila (mesma chave) pra tabela etiqueta_impressao_log do Provisao.
+#   E um "estou vivo" a cada 5 min (tabela etiqueta_pcs) mostra quais PCs estao ligados e prontos.
+#   Sem internet os eventos esperam na memoria (ate 500) e vao no proximo ciclo. O log local continua.
 # v202 (23/09/26): FROTA INTEIRA vira servidor de etiqueta (Lucas: "nem sempre todos estao ligados, algum
 #   pode estragar"). Antes so o PC do caixa buscava a fila do Provisao; se ele desligasse, as etiquetas de
 #   iFood/Brendi/Atendente ficavam paradas. Agora TODO PC com a chave (Downloads\sofia_caixa.json) e que
@@ -2678,13 +2684,17 @@ def processar_sofia_pedido(pedido, impressora):
                                  pag_cat, pag_dados, balcao, canal.upper(), codigo_canal.upper(), nome_cli, hora)
             if imprimir_etiqueta(img, printer_name=impressora):
                 log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
+                sofia_evento("etiqueta_ok", pedido, etiqueta=i, total=n_et, impressora=impressora)
             else:
                 falhou = True
                 log(f"  ERRO etiqueta {i}/{n_et} #{numero}: impressora nao imprimiu")
+                sofia_evento("etiqueta_erro", pedido, etiqueta=i, total=n_et, impressora=impressora,
+                             detalhe="impressora nao imprimiu")
             if i < n_et: time.sleep(0.4)
         except Exception as e:
             falhou = True
             log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
+            sofia_evento("etiqueta_erro", pedido, etiqueta=i, total=n_et, impressora=impressora, detalhe=e)
 
     # 2) COMANDA em cupom estilo Saipos -> impressora de comanda (.222, Elgin i8)
     # v202: etiqueta falhou -> o pedido volta pra fila e OUTRO PC imprime tudo; o cupom fica pra ele
@@ -2696,12 +2706,18 @@ def processar_sofia_pedido(pedido, impressora):
     if imp_comanda:
         try:
             cmd = gerar_comanda_cupom(pedido)
-            imprimir_etiqueta(cmd, printer_name=imp_comanda, larg=cmd.width, alt=cmd.height)
-            log(f"  {canal.upper()} #{numero}: comanda (cupom) OK")
+            if imprimir_etiqueta(cmd, printer_name=imp_comanda, larg=cmd.width, alt=cmd.height):
+                log(f"  {canal.upper()} #{numero}: comanda (cupom) OK")
+                sofia_evento("cupom_ok", pedido, impressora=imp_comanda)
+            else:
+                log(f"  ERRO comanda #{numero}: impressora nao imprimiu")
+                sofia_evento("cupom_erro", pedido, impressora=imp_comanda, detalhe="impressora nao imprimiu")
         except Exception as e:
             log(f"  ERRO comanda #{numero}: {e}")
+            sofia_evento("cupom_erro", pedido, impressora=imp_comanda, detalhe=e)
     else:
         log(f"  {canal.upper()} #{numero}: impressora de comanda (192.168.1.222) nao encontrada - comanda nao impressa")
+        sofia_evento("cupom_sem_impressora", pedido, detalhe=IP_IMPRESSORA_COMANDA)
     # So as etiquetas das caixas decidem: se o cupom falhar, reimprimir tudo duplicaria as etiquetas.
     return not falhou
 
@@ -2756,6 +2772,41 @@ def processar_sofia_arquivo(filepath, filename):
         try: os.remove(claim)
         except Exception: pass
 
+SOFIA_PING_EVERY = 300            # v203: "estou vivo" deste PC a cada 5 min (tabela etiqueta_pcs)
+_sofia_eventos = []                # v203: eventos esperando ir pra nuvem (etiqueta_impressao_log)
+_sofia_eventos_lock = threading.Lock()
+
+def sofia_evento(evento, pedido=None, **extra):
+    """Registra um evento de impressao pra subir pra nuvem. Nunca atrapalha a impressao."""
+    try:
+        e = {"em": datetime.now(timezone.utc).isoformat(), "versao": VERSION, "evento": evento}
+        if pedido:
+            e["fila_id"] = pedido.get("id")
+            e["numero"] = str(pedido.get("numero") or "")
+            e["canal"] = str(pedido.get("canal") or "")
+        for k, v in extra.items():
+            if v is not None: e[k] = v if isinstance(v, (int, float)) else str(v)[:500]
+        with _sofia_eventos_lock:
+            _sofia_eventos.append(e)
+            del _sofia_eventos[:-500]   # sem internet por muito tempo: guarda os 500 mais novos
+    except Exception:
+        pass
+
+def _sofia_enviar_eventos(base, secret, pc):
+    """Sobe os eventos pendentes. Se falhar, devolve pra fila local e tenta no proximo ciclo."""
+    with _sofia_eventos_lock:
+        lote = _sofia_eventos[:300]
+        del _sofia_eventos[:len(lote)]
+    if not lote: return
+    try:
+        resp = _sofia_http(base, method="POST", body={"action": "log", "eventos": lote}, secret=secret, pc=pc)
+        if (resp or {}).get("ok"): return
+    except Exception:
+        pass
+    with _sofia_eventos_lock:
+        _sofia_eventos[:0] = lote
+        del _sofia_eventos[:-500]
+
 SOFIA_PAUSA_APOS_FALHA = 60       # v202: PC cuja impressora falhou sai da fila por 1 min (os outros assumem)
 _sofia_avisos = {}                 # aviso -> ultimo log (nao repetir a mesma mensagem a cada 5s)
 
@@ -2763,7 +2814,9 @@ def _sofia_avisar(chave, msg, cada=1800):
     agora = time.time()
     if agora - _sofia_avisos.get(chave, 0) >= cada:
         _sofia_avisos[chave] = agora
-        log(msg)
+        if msg: log(msg)
+        return True
+    return False
 
 def _nome_deste_pc():
     """Identifica o PC na fila (claimed_by), pra auditoria saber quem imprimiu cada etiqueta."""
@@ -2803,6 +2856,8 @@ def sofia_poll_loop():
     pausa_ate = 0
     impressora = None
     checou_impressora = 0
+    ultimo_ping = 0
+    sofia_evento("iniciou", detalhe=f"python {sys.version.split()[0]}")
     while True:
         try:
             # v190: a auto-atualizacao roda SEMPRE (em TODO PC da frota), nao so no caixa com Sofia.
@@ -2817,6 +2872,14 @@ def sofia_poll_loop():
             if not cfg:
                 _sofia_avisar("sem_chave", "  SOFIA: este PC NAO tem a chave (Downloads\\sofia_caixa.json) - nao imprime etiquetas do Provisao")
                 time.sleep(SOFIA_POLL_INTERVAL); continue
+            secret = cfg.get("secret", "")
+            base = f"{cfg['url']}/functions/v1/sofia-print-queue"
+            # v203: log e "estou vivo" sobem sempre que ha chave (mesmo em pausa ou sem impressora)
+            _sofia_enviar_eventos(base, secret, pc)
+            if time.time() - ultimo_ping > SOFIA_PING_EVERY:
+                ultimo_ping = time.time()
+                try: _sofia_http(base, method="POST", body={"action": "ping", "versao": VERSION, "impressora": impressora or ""}, secret=secret, pc=pc)
+                except Exception: pass
             if time.time() < pausa_ate:
                 time.sleep(SOFIA_POLL_INTERVAL); continue
             if not impressora and time.time() - checou_impressora > 60:
@@ -2824,12 +2887,13 @@ def sofia_poll_loop():
                 impressora = _impressora_caixas_deste_pc()
                 if impressora:
                     log(f"  SOFIA: este PC ({pc}) entrou na fila de etiquetas - impressora '{impressora}'")
+                    sofia_evento("entrou_fila", impressora=impressora)
+                    ultimo_ping = 0   # avisa a nuvem ja no proximo ciclo
             if not impressora:
-                _sofia_avisar("sem_impressora", f"  SOFIA: este PC ({pc}) nao enxerga a impressora das caixas (IP {IP_IMPRESSORA_CAIXAS}) - fica fora da fila")
+                if _sofia_avisar("sem_impressora", f"  SOFIA: este PC ({pc}) nao enxerga a impressora das caixas (IP {IP_IMPRESSORA_CAIXAS}) - fica fora da fila"):
+                    sofia_evento("sem_impressora", detalhe=IP_IMPRESSORA_CAIXAS)
                 time.sleep(SOFIA_POLL_INTERVAL); continue
 
-            secret = cfg.get("secret", "")
-            base = f"{cfg['url']}/functions/v1/sofia-print-queue"
             q = [f"pc={urllib.parse.quote(pc)}"]
             if secret: q.append(f"secret={urllib.parse.quote(secret)}")
             url = base + ("&" if "?" in base else "?") + "&".join(q)
@@ -2837,6 +2901,8 @@ def sofia_poll_loop():
             pedidos = (data or {}).get("pedidos", [])
             if pedidos:
                 ok_ids, falha_ids = [], []
+                numeros = {p.get("id"): str(p.get("numero") or "") for p in pedidos}
+                canais = {p.get("id"): str(p.get("canal") or "") for p in pedidos}
                 for p in pedidos:
                     pid = p.get("id")
                     if not pid: continue
@@ -2857,18 +2923,22 @@ def sofia_poll_loop():
                         resp = _sofia_http(base, method="POST", body={"action": "mark", "ids": ok_ids}, secret=secret, pc=pc)
                         if (resp or {}).get("ok"):
                             log(f"  SOFIA: {len(ok_ids)} pedido(s) impresso(s) e confirmado(s) [{pc}]")
+                            for pid in ok_ids: sofia_evento("marcada", {"id": pid, "numero": numeros.get(pid), "canal": canais.get(pid)})
                     except Exception as e:
                         log(f"  SOFIA mark falhou (vai remarcar no proximo ciclo): {e}")
                 if falha_ids:
                     try:
                         _sofia_http(base, method="POST", body={"action": "release", "ids": falha_ids}, secret=secret, pc=pc)
                         log(f"  SOFIA: {len(falha_ids)} pedido(s) NAO impresso(s) aqui - devolvido(s) pra fila, outro PC imprime")
+                        for pid in falha_ids: sofia_evento("devolvida", {"id": pid, "numero": numeros.get(pid), "canal": canais.get(pid)})
                     except Exception as e:
                         log(f"  SOFIA: devolver pra fila falhou ({e}) - a reserva vence em 2 min e outro PC pega")
                     pausa_ate = time.time() + SOFIA_PAUSA_APOS_FALHA
                     impressora = None   # reconfere a impressora quando voltar
         except Exception as e:
             log(f"  SOFIA poll erro: {e}")
+            if _sofia_avisar("poll_erro", "", cada=300):
+                sofia_evento("poll_erro", detalhe=e)
         time.sleep(SOFIA_POLL_INTERVAL)
 
 # ============================================================
