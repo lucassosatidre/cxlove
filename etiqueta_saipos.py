@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "205"
+VERSION = "206"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -1998,6 +1998,13 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
                     hdc = None
                     try:
                         hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
+                        if _eh_impressora_producao(printer_name):
+                            # v206: a .24 tem o driver em 50x25 (CO LOVE); a caixa e' 80x30
+                            dm = _devmode_papel(printer_name, LARGURA_MM, ALTURA_MM)
+                            if dm is not None:
+                                try:
+                                    import win32gui; win32gui.ResetDC(hdc.GetSafeHdc(), dm)
+                                except Exception as e: log(f"  ResetDC 80x30 ignorado: {e}")
                         hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
                         ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
                         hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
@@ -2192,7 +2199,7 @@ def processar_pedido(filepath, filename):
         except: pass
         return
 
-    impressora_cx = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
+    impressora_cx = _impressora_caixas()
     display_etiqueta = aplicar_regras_display(all_display, "etiqueta")  # no-op se o dicionario estiver desligado
     # potinho da borda dip conta ETIQUETA propria (cola na embalagem do pote), igual pizza.
     # total_caixas continua so pizzas (o servidor/comanda usa como nº de pizzas).
@@ -2287,6 +2294,60 @@ def _impressora_para(ip, fallback=None, etiqueta=""):
         return nome
     log(f"  {etiqueta}: nenhuma impressora no IP {ip} -> usando '{fallback}'")
     return fallback
+
+# v206: .14 (caixas) parada -> etiquetas das caixas vao pra impressora de PRODUCAO (.24),
+# com o papel FORCADO em 80x30 (o rolo da .24 foi trocado pra 80x30). Temporario e automatico:
+# quando a .14 voltar a responder na rede, as etiquetas voltam sozinhas pra ela.
+# O spooler do Windows aceita o job mesmo com a impressora desligada ("printed" != papel saiu),
+# por isso a vida da impressora e' testada direto na porta de impressao (9100).
+# "auto" = .14 se responde, senao .24 | "sempre" = sempre .24 | "nunca" = comportamento antigo
+CAIXAS_NA_PRODUCAO = "auto"
+_vida_ip = {}   # ip -> (quando_testou, respondeu)
+
+def _ip_responde(ip, porta=9100, timeout=1.5, cache_s=60):
+    agora = time.time()
+    c = _vida_ip.get(ip)
+    if c and agora - c[0] < cache_s:
+        return c[1]
+    try:
+        import socket
+        with socket.create_connection((ip, porta), timeout=timeout):
+            vivo = True
+    except Exception:
+        vivo = False
+    _vida_ip[ip] = (agora, vivo)
+    return vivo
+
+def _nome_por_ip(ip):
+    """Igual _impressora_para, mas quieto quando nao acha (roda a cada pedido/minuto)."""
+    nome = _cache_impressora_ip.get(ip)
+    if not nome:
+        nome = _achar_impressora_por_ip(ip)
+        if nome: _cache_impressora_ip[ip] = nome
+    return nome
+
+_caixas_ultima = None
+def _impressora_caixas(fallback=NOME_IMPRESSORA):
+    """Nome da impressora das etiquetas das caixas (ver CAIXAS_NA_PRODUCAO)."""
+    global _caixas_ultima
+    nome14 = _nome_por_ip(IP_IMPRESSORA_CAIXAS)
+    escolha = nome14 or fallback
+    if CAIXAS_NA_PRODUCAO != "nunca":
+        usar_24 = CAIXAS_NA_PRODUCAO == "sempre" or not _ip_responde(IP_IMPRESSORA_CAIXAS)
+        if usar_24:
+            nome24 = _nome_por_ip(IP_IMPRESSORA_PRODUCAO)
+            if nome24 and (CAIXAS_NA_PRODUCAO == "sempre" or _ip_responde(IP_IMPRESSORA_PRODUCAO)):
+                escolha = nome24
+    if escolha != _caixas_ultima:
+        onde = "PRODUCAO .24 (papel 80x30)" if escolha and escolha == _cache_impressora_ip.get(IP_IMPRESSORA_PRODUCAO) else "CAIXAS .14"
+        log(f"  CAIXAS: etiquetas das caixas indo pra '{escolha}' -> {onde}")
+        try: sofia_evento("caixas_impressora", impressora=escolha, detalhe=onde)
+        except Exception: pass
+        _caixas_ultima = escolha
+    return escolha
+
+def _eh_impressora_producao(printer_name):
+    return bool(printer_name) and printer_name == _cache_impressora_ip.get(IP_IMPRESSORA_PRODUCAO)
 
 def _prod_fonte_bold(tamanho):
     for p in ("arialbd.ttf", "C:\\Windows\\Fonts\\arialbd.ttf",
@@ -3103,7 +3164,7 @@ def processar_sofia_arquivo(filepath, filename):
 
     numero = pedido.get("numero", "?")
     log(f"  SOFIA arquivo: pedido #{numero}")
-    impressora = _impressora_para(IP_IMPRESSORA_CAIXAS, fallback=NOME_IMPRESSORA, etiqueta="CAIXAS")
+    impressora = _impressora_caixas()
     try:
         processar_sofia_pedido(pedido, impressora)
         log(f"  SOFIA #{numero}: comanda + etiquetas OK")
@@ -3175,10 +3236,12 @@ def _nome_deste_pc():
 def _impressora_caixas_deste_pc():
     """So entra na fila quem ENXERGA a impressora das caixas: pelo IP (.14) ou pelo nome instalado.
     PC sem ela nao pode reservar etiqueta (reservaria e nao imprimiria)."""
-    nome = _achar_impressora_por_ip(IP_IMPRESSORA_CAIXAS)
+    nome = _nome_por_ip(IP_IMPRESSORA_CAIXAS)
     if nome:
-        _cache_impressora_ip[IP_IMPRESSORA_CAIXAS] = nome
-        return nome
+        return _impressora_caixas(fallback=nome)
+    # v206: sem a .14 neste PC, a impressora de producao (.24) tambem serve pras caixas
+    if CAIXAS_NA_PRODUCAO != "nunca" and _nome_por_ip(IP_IMPRESSORA_PRODUCAO):
+        return _impressora_caixas(fallback=None)
     try:
         import win32print
         flags = win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
@@ -3244,6 +3307,7 @@ def sofia_poll_loop():
             data = _sofia_http(url, method="GET", secret=secret, pc=pc)
             pedidos = (data or {}).get("pedidos", [])
             if pedidos:
+                impressora = _impressora_caixas_deste_pc() or impressora   # v206: .14 caiu -> .24
                 ok_ids, falha_ids = [], []
                 numeros = {p.get("id"): str(p.get("numero") or "") for p in pedidos}
                 canais = {p.get("id"): str(p.get("canal") or "") for p in pedidos}
