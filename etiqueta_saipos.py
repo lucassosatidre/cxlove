@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "207"
+VERSION = "208"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -2335,7 +2335,7 @@ def _impressora_caixas(fallback=NOME_IMPRESSORA):
     if CAIXAS_NA_PRODUCAO != "nunca":
         usar_24 = CAIXAS_NA_PRODUCAO == "sempre" or not _ip_responde(IP_IMPRESSORA_CAIXAS)
         if usar_24:
-            nome24 = _nome_por_ip(IP_IMPRESSORA_PRODUCAO)
+            nome24 = _nome_por_ip(IP_IMPRESSORA_PRODUCAO) or _instalar_impressora_24()
             if nome24 and (CAIXAS_NA_PRODUCAO == "sempre" or _ip_responde(IP_IMPRESSORA_PRODUCAO)):
                 escolha = nome24
     if escolha != _caixas_ultima:
@@ -2345,6 +2345,52 @@ def _impressora_caixas(fallback=NOME_IMPRESSORA):
         except Exception: pass
         _caixas_ultima = escolha
     return escolha
+
+NOME_PRODUCAO_AUTO = "producao 24 (etiquetas)"
+_instalou_24 = [0]
+def _instalar_impressora_24():
+    """v208: PC sem a .24 no Windows -> cria a porta TCP 192.168.1.24 e a impressora,
+    com o MESMO driver da impressora das caixas (Elgin L42PRO). Tenta no max 1x a cada 10 min."""
+    if time.time() - _instalou_24[0] < 600: return None
+    _instalou_24[0] = time.time()
+    try:
+        import win32print
+        driver = None
+        for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS, None, 2):
+            if _ip_da_porta(p.get("pPortName", "")) == IP_IMPRESSORA_CAIXAS or "L42" in (p.get("pDriverName") or "").upper():
+                driver = p.get("pDriverName"); break
+        if not driver:
+            sofia_evento("instalar_24", detalhe="sem driver Elgin neste PC"); return None
+        ip = IP_IMPRESSORA_PRODUCAO; porta = f"IP_{ip}"
+        ps = (f"$ErrorActionPreference='Stop';"
+              f"if(-not (Get-PrinterPort -Name '{porta}' -EA SilentlyContinue)){{Add-PrinterPort -Name '{porta}' -PrinterHostAddress '{ip}'}};"
+              f"if(-not (Get-Printer -Name '{NOME_PRODUCAO_AUTO}' -EA SilentlyContinue)){{Add-Printer -Name '{NOME_PRODUCAO_AUTO}' -DriverName '{driver}' -PortName '{porta}'}}")
+        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, timeout=60)
+        msg = (r.stderr or r.stdout or "").strip()[:300]
+        log(f"  PRODUCAO: instalando impressora na .24 (driver '{driver}') -> {'OK' if r.returncode == 0 else 'FALHOU: ' + msg}")
+        sofia_evento("instalar_24", detalhe=("ok " + driver) if r.returncode == 0 else ("falhou: " + msg))
+        _cache_impressora_ip.pop(ip, None)
+        return _nome_por_ip(ip) if r.returncode == 0 else None
+    except Exception as e:
+        log(f"  PRODUCAO: instalar .24 falhou: {e}")
+        sofia_evento("instalar_24", detalhe=f"erro: {e}")
+        return None
+
+_diag_feito = [False]
+def _diagnostico_impressoras():
+    """v208: sobe pra nuvem as impressoras do PC (nome, porta/IP, driver, status). 1x por boot."""
+    if _diag_feito[0]: return
+    _diag_feito[0] = True
+    try:
+        import win32print
+        for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS, None, 2):
+            sofia_evento("impressora_pc", impressora=p.get("pPrinterName"),
+                         detalhe=f"porta={p.get('pPortName')} ip={_ip_da_porta(p.get('pPortName',''))} driver={p.get('pDriverName')} status={p.get('Status')} attr={p.get('Attributes')} jobs={p.get('cJobs')}")
+    except Exception as e:
+        sofia_evento("impressora_pc", detalhe=f"erro: {e}")
+    for ip in (IP_IMPRESSORA_CAIXAS, IP_IMPRESSORA_PRODUCAO, IP_IMPRESSORA_COMANDA):
+        _vida_ip.pop(ip, None)
+        sofia_evento("impressora_rede", detalhe=f"{ip}:9100 {'responde' if _ip_responde(ip) else 'NAO responde'}")
 
 def _eh_impressora_producao(printer_name):
     return bool(printer_name) and printer_name == _cache_impressora_ip.get(IP_IMPRESSORA_PRODUCAO)
@@ -3240,7 +3286,7 @@ def _impressora_caixas_deste_pc():
     if nome:
         return _impressora_caixas(fallback=nome)
     # v206: sem a .14 neste PC, a impressora de producao (.24) tambem serve pras caixas
-    if CAIXAS_NA_PRODUCAO != "nunca" and _nome_por_ip(IP_IMPRESSORA_PRODUCAO):
+    if CAIXAS_NA_PRODUCAO != "nunca" and (_nome_por_ip(IP_IMPRESSORA_PRODUCAO) or _instalar_impressora_24()):
         return _impressora_caixas(fallback=None)
     try:
         import win32print
@@ -3289,6 +3335,7 @@ def sofia_poll_loop():
                 except Exception: pass
             if time.time() < pausa_ate:
                 time.sleep(SOFIA_POLL_INTERVAL); continue
+            _diagnostico_impressoras()   # v208
             if not impressora and time.time() - checou_impressora > 60:
                 checou_impressora = time.time()
                 impressora = _impressora_caixas_deste_pc()

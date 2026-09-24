@@ -64,3 +64,16 @@ class CaixasNaProducao(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InstalaA24(unittest.TestCase):
+    def test_sem_24_instalada_instala_e_usa(self):
+        inst = {C: "caixas tele"}
+        m = carregar(inst, {C, P}, "sempre")
+        def fake():
+            inst[P] = "producao 24 (etiquetas)"
+            return m._nome_por_ip(P)
+        m._instalar_impressora_24 = fake
+        nome = m._impressora_caixas()
+        self.assertEqual(nome, "producao 24 (etiquetas)")
+        self.assertTrue(m._eh_impressora_producao(nome))
