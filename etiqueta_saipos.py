@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "216"
+VERSION = "217"
+# v217 (25/09/26): etiqueta de MESA com contraste invertido (fundo preto, letra branca mais grossa) e
+#   REIMPRESSAO de uma etiqueta pedida no Mana (botao da impressora no Forno -> Provisao -> fila):
+#   tele/retirada = so a etiqueta do QR pedido (pedido.so_qr), sem cupom; salao = etiqueta de mesa na .24.
 # v215 (25/09/26): ETIQUETA DE MESA agora PUXA DO MANA (Lucas: "puxar o pedido como esta no Mana, 1 item por
 #   etiqueta"). O papel do Saipos embaralha combo (mesa 64: "Gigante + Broto" saiu com os sabores misturados);
 #   o Mana ja tem cada pizza/pote de mesa numa comanda propria, com nome canonico. Uma thread (mesa_poll_loop)
@@ -2738,6 +2741,8 @@ def processar_lovelabel(filepath, filename):
 # Uma por produto (pizza salgada/doce ou Pote Dip). So MESA + produto. Sem pagamento, sem QR.
 # ============================================================
 ETIQUETA_MESA = "sim"   # "sim" = imprime | "nao" = desliga (so o log)
+# v217: contraste invertido (pedido do Lucas 25/09): fundo preto, letra branca com contorno de 1 px (mais grossa)
+MESA_FUNDO, MESA_TINTA, MESA_TRACO = "black", "white", 1
 
 def _mesa_txt(v):
     """'50' -> 'MESA 50'; '18.01' -> 'MESA 18'; texto vazio -> 'MESA'."""
@@ -2774,7 +2779,8 @@ def _mesa_nome_produto(item):
     return nome.upper() or "PIZZA"
 
 def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", larg=None, alt=None):
-    """Etiqueta 50x25 pra assadeira/pote do salao. FUNDO BRANCO + preto (nitido na termica).
+    """Etiqueta 50x25 pra assadeira/pote do salao. v217: CONTRASTE INVERTIDO - fundo PRETO, letra BRANCA
+    e mais grossa (contorno de MESA_TRACO px), pra destacar na assadeira.
         MESA 50 · ANA                    2/3 19:00
         PIZZA GRANDE
         1/2 Frango c/ Catupiry
@@ -2783,12 +2789,13 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
     """
     larg = larg if larg else CO_LOVE_LARGURA_PX
     alt = alt if alt else CO_LOVE_ALTURA_PX
-    img = Image.new("RGB", (larg, alt), "white")
+    img = Image.new("RGB", (larg, alt), MESA_FUNDO)
     draw = ImageDraw.Draw(img)
+    tinta, traco = MESA_TINTA, MESA_TRACO
     margem_e, margem_d, margem_t, margem_b = 12, 30, 4, 4
     x0 = margem_e; x1 = larg - margem_d; util_w = x1 - x0
-    def w(t, f): bb = draw.textbbox((0, 0), t, font=f); return bb[2] - bb[0]
-    def h(t, f): bb = draw.textbbox((0, 0), t, font=f); return bb[3] - bb[1]
+    def w(t, f): bb = draw.textbbox((0, 0), t, font=f, stroke_width=traco); return bb[2] - bb[0]
+    def h(t, f): bb = draw.textbbox((0, 0), t, font=f, stroke_width=traco); return bb[3] - bb[1]
 
     item = next((d for d in display_i if d["tipo"] in ("caixa_salgada", "caixa_doce", "dip")), display_i[0])
     produto = _mesa_nome_produto(item)
@@ -2808,20 +2815,20 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
     cab_h = int((alt - margem_t - margem_b) * 0.30)
     conta = (nome_conta or "").strip().split(" ")[0].upper()   # so o 1o nome (cabe ao lado da mesa)
     direita = " ".join(x for x in ((f"{idx}/{total}" if total and total > 1 else ""), (hora or "")) if x)
-    f_dir = _prod_fonte_bold(18)
-    dir_w = (w(direita, f_dir) + 8) if direita else 0
+    f_dir = _prod_fonte_bold(20)   # v217: pequeno = sem contorno (senao os numeros empapam)
+    dir_w = (draw.textbbox((0, 0), direita, font=f_dir)[2] + 8) if direita else 0
     mesa_txt = _mesa_txt(mesa)
     f_mesa = _prod_fit(draw, mesa_txt, util_w - dir_w, cab_h, bold=True, tam_max=48, tam_min=14)
-    draw.text((x0, margem_t + cab_h // 2), mesa_txt, fill="black", font=f_mesa, anchor="lm")
+    draw.text((x0, margem_t + cab_h // 2), mesa_txt, fill=tinta, font=f_mesa, anchor="lm", stroke_width=traco, stroke_fill=tinta)
     xm = x0 + w(mesa_txt, f_mesa) + 8
     if conta:
         f_conta = _prod_fit(draw, conta, max(10, x1 - dir_w - xm), cab_h, bold=True, tam_max=22, tam_min=10)
         if w(conta, f_conta) <= max(10, x1 - dir_w - xm):
-            draw.text((xm, margem_t + cab_h // 2 + 2), conta, fill="black", font=f_conta, anchor="lm")
+            draw.text((xm, margem_t + cab_h // 2 + 2), conta, fill=tinta, font=f_conta, anchor="lm", stroke_width=traco, stroke_fill=tinta)
     if direita:
-        draw.text((x1, margem_t + cab_h // 2), direita, fill="black", font=f_dir, anchor="rm")
+        draw.text((x1, margem_t + cab_h // 2), direita, fill=tinta, font=f_dir, anchor="rm")
     y = margem_t + cab_h
-    draw.line([(x0, y), (x1, y)], fill="black", width=2)
+    draw.line([(x0, y), (x1, y)], fill=tinta, width=3)
     y += 3
 
     # --- corpo: produto + linhas, maior fonte onde tudo cabe (produto 1 ponto acima) ---
@@ -2848,11 +2855,12 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
         for l in linhas: ls.extend(_prod_wrap(draw, l, fl, util_w))
     else:
         fp, fl, ls = escolha
-    draw.text((x0, y), produto, fill="black", font=fp, anchor="la"); y += _lh(fp) + 1
+    draw.text((x0, y), produto, fill=tinta, font=fp, anchor="la", stroke_width=traco, stroke_fill=tinta); y += _lh(fp) + 1
     for l in ls:
         if y + _lh(fl) > alt - margem_b + 4: break   # nao cabe: corta (ja tentamos a menor fonte)
-        draw.text((x0, y), l, fill="black", font=fl, anchor="la"); y += _lh(fl)
-    img = img.convert("L").point(lambda p: 0 if p < 190 else 255).convert("RGB")
+        draw.text((x0, y), l, fill=tinta, font=fl, anchor="la", stroke_width=traco, stroke_fill=tinta); y += _lh(fl)
+    # 1 bit: na letra branca sobre preto, o cinza da borda da letra vira BRANCO (engrossa, nao afina)
+    img = img.convert("L").point(lambda p: 255 if p > 70 else 0).convert("RGB")
     return img
 
 def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA", pedido=None, seq=None, total=None):
@@ -3444,9 +3452,28 @@ def _sofia_eh_mesa(pedido):
 
 def processar_sofia_mesa(pedido):
     """v215: pedido de SALAO que por acaso caia na fila do Provisao: marca como feito SEM imprimir.
-    A etiqueta de mesa sai pela mesa_poll_loop (fonte unica = comandas do Mana)."""
+    A etiqueta de mesa sai pela mesa_poll_loop (fonte unica = comandas do Mana).
+    v217: EXCECAO = reimpressao pedida no Mana (botao da impressora no Forno): imprime a etiqueta de
+    mesa daquela comanda na .24. Falhou -> False (volta pra fila; outro PC que enxerga a .24 imprime)."""
+    if pedido.get("reimpressao"):
+        mesa = pedido.get("mesa") or pedido.get("numero") or ""
+        display = mesa_display_do_mana(pedido.get("itens"))
+        ok, n = imprimir_etiquetas_mesa(mesa, display, hora=_mesa_hora(pedido.get("received_at")),
+                                        origem="MANA/REIMP", pedido=pedido,
+                                        seq=pedido.get("pizza_seq"), total=pedido.get("pizza_total"))
+        log(f"  MESA {mesa}: reimpressao pedida no Mana - {ok}/{n} etiqueta(s)")
+        return n == 0 or ok == n
     log(f"  PROVISAO salao #{pedido.get('numero')}: etiqueta de mesa sai pelo Mana - marcado sem imprimir aqui")
     return True
+
+def sofia_filtrar_so_qr(unidades, so_qr):
+    """v217: reimpressao de UMA etiqueta (botao no Mana): fica so a unidade cujo QR foi pedido,
+    mantendo a numeracao original (2/3 continua 2/3). Sem so_qr (ou nenhum bate) = todas."""
+    pedidos = {str(x).strip().upper() for x in (so_qr or []) if str(x).strip()}
+    numeradas = list(enumerate(unidades, start=1))
+    if not pedidos: return numeradas
+    sel = [(i, u) for i, u in numeradas if u[1] and str(u[1]).upper() in pedidos]
+    return sel or numeradas
 
 def processar_sofia_pedido(pedido, impressora):
     if _sofia_eh_mesa(pedido):
@@ -3480,7 +3507,10 @@ def processar_sofia_pedido(pedido, impressora):
     # v204: uma etiqueta por produto (o meio mostra so ele; bebida/obs em todas) + QR do produto
     unidades = sofia_etiquetas_unitarias(display)
     n_et = len(unidades)
-    for i, (display_i, qr_i) in enumerate(unidades, start=1):
+    selecionadas = sofia_filtrar_so_qr(unidades, pedido.get("so_qr")) if pedido.get("reimpressao") else list(enumerate(unidades, start=1))
+    if len(selecionadas) < n_et:
+        log(f"  {canal.upper()} #{numero}: reimpressao de {len(selecionadas)} de {n_et} etiqueta(s) (pedida no Mana)")
+    for k, (i, (display_i, qr_i)) in enumerate(selecionadas, start=1):
         try:
             img = gerar_etiqueta(numero, i, n_et, display_i, total_entrega,
                                  pag_cat, pag_dados, balcao, canal.upper(), codigo_etiqueta.upper(), nome_cli, hora_etiqueta,
@@ -3494,7 +3524,7 @@ def processar_sofia_pedido(pedido, impressora):
                 log(f"  ERRO etiqueta {i}/{n_et} #{numero}: impressora nao imprimiu")
                 sofia_evento("etiqueta_erro", pedido, etiqueta=i, total=n_et, impressora=impressora,
                              detalhe="impressora nao imprimiu")
-            if i < n_et: time.sleep(0.4)
+            if k < len(selecionadas): time.sleep(0.4)
         except Exception as e:
             falhou = True
             log(f"  ERRO etiqueta {i}/{n_et} #{numero}: {e}")
@@ -3716,7 +3746,7 @@ def sofia_poll_loop():
             pedidos = (data or {}).get("pedidos", [])
             if pedidos:
                 impressora = _impressora_caixas_deste_pc() or impressora   # v206: .14 caiu -> .24
-                ok_ids, falha_ids = [], []
+                ok_ids, falha_ids, mesa_devolver = [], [], []
                 numeros = {p.get("id"): str(p.get("numero") or "") for p in pedidos}
                 canais = {p.get("id"): str(p.get("canal") or "") for p in pedidos}
                 for p in pedidos:
@@ -3729,7 +3759,18 @@ def sofia_poll_loop():
                     if falha_ids:
                         falha_ids.append(pid)  # impressora ja falhou neste lote: devolve o resto sem tentar
                         continue
+                    if _sofia_eh_mesa(p) and p.get("reimpressao"):
+                        # v217: reimpressao de MESA sai na .24, nao na impressora das caixas: se falhar aqui
+                        # (PC sem a .24), so devolve - nao pausa este PC nem segura as caixas da tele.
+                        (ok_ids if processar_sofia_pedido(p, impressora) else mesa_devolver).append(pid)
+                        continue
                     (ok_ids if processar_sofia_pedido(p, impressora) else falha_ids).append(pid)
+                if mesa_devolver:
+                    try:
+                        _sofia_http(base, method="POST", body={"action": "release", "ids": mesa_devolver}, secret=secret, pc=pc)
+                        log(f"  SOFIA: {len(mesa_devolver)} reimpressao(oes) de mesa devolvida(s) - outro PC com a {IP_IMPRESSORA_PRODUCAO} imprime")
+                    except Exception as e:
+                        log(f"  SOFIA: devolver reimpressao de mesa falhou ({e}) - a reserva vence em 2 min")
                 if ok_ids:
                     # Marca como impresso SO o que saiu. Se o mark falhar (rede), a reserva vence em 2 min
                     # e o pedido volta; o dedup local de 60s evita reimprimir neste mesmo PC.
