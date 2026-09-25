@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "211"
+VERSION = "212"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -1728,6 +1728,7 @@ def qr_imagem(texto, modulo=3, margem=2):
 QR_MODULO_PX = 4      # 4 px por quadradinho a 203 dpi = 0,5 mm (a pistola 2D le com folga)
 QR_MARGEM_MOD = 2     # borda clara em volta (em quadradinhos)
 QR_BORDA_DIR_PX = 0   # v210: QR colado na borda direita (cabeca da .14 tem pontos queimados no meio)
+HORA_BORDA_DIR_PX = 6  # v212: hora do cabecalho a <1 mm da borda direita
 ETIQ_DESLOC_X_PX = 16 # v210: a .14 imprime ~2 mm pra esquerda; empurra a etiqueta da caixa pra direita
 QR_BORDA_INF_PX = 4   # distancia do QR ate a borda de baixo
 
@@ -1816,7 +1817,19 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         except: y = y_start + 2
         draw.text((margem_e, y), texto, fill="white", font=fh)
 
-    render_barra(header_texto, 0, h_header, fs_header)
+    if hora_pedido and header_texto.endswith(" - " + hora_pedido):
+        # v212: hora encostada na borda direita (foge das linhas queimadas da cabeca da .14)
+        render_barra(header_texto[:-len(" - " + hora_pedido)], 0, h_header, fs_header)
+        fh = cf(fs_header)
+        try:
+            bb = draw.textbbox((0, 0), hora_pedido, font=fh)
+            y = (h_header - (bb[3]-bb[1]))//2 - 2
+            x = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
+        except Exception:
+            y = 2; x = LARGURA_PX - HORA_BORDA_DIR_PX - 60
+        draw.text((x, y), hora_pedido, fill="white", font=fh)
+    else:
+        render_barra(header_texto, 0, h_header, fs_header)
 
     # ============================================================
     # 4. Separa itens em blocos: pizzas salgadas (com sabores e bordas juntas)
