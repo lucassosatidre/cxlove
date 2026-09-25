@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "210"
+VERSION = "211"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -3163,6 +3163,10 @@ def processar_sofia_pedido(pedido, impressora):
     if falhou:
         log(f"  {canal.upper()} #{numero}: etiqueta falhou - pedido volta pra fila, cupom nao impresso aqui")
         return False
+    if pedido.get("reimpressao"):
+        # v211: reimpressao pela Central = so as etiquetas; a comanda ja saiu no pedido original
+        log(f"  {canal.upper()} #{numero}: reimpressao - so etiqueta, comanda nao reimpressa")
+        return True
     imp_comanda = _impressora_para(IP_IMPRESSORA_COMANDA, fallback=None, etiqueta="COMANDA")
     if imp_comanda and not _ip_responde(IP_IMPRESSORA_COMANDA):
         # v210: i8 da cozinha fora da rede -> nao trava o pedido tentando 4x (~6 s por pedido)
