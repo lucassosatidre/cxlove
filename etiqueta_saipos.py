@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "215"
+VERSION = "216"
 # v215 (25/09/26): ETIQUETA DE MESA agora PUXA DO MANA (Lucas: "puxar o pedido como esta no Mana, 1 item por
 #   etiqueta"). O papel do Saipos embaralha combo (mesa 64: "Gigante + Broto" saiu com os sabores misturados);
 #   o Mana ja tem cada pizza/pote de mesa numa comanda propria, com nome canonico. Uma thread (mesa_poll_loop)
@@ -1747,7 +1747,13 @@ QR_BORDA_DIR_PX = 0   # v210: QR colado na borda direita (cabeca da .14 tem pont
 RODAPE_MIN_1LINHA = 22  # v213: abaixo disso o rodape quebra em 2 linhas
 HORA_BORDA_DIR_PX = 6  # v212: hora do cabecalho a <1 mm da borda direita
 ETIQ_DESLOC_X_PX = 16 # v210: a .14 imprime ~2 mm pra esquerda; empurra a etiqueta da caixa pra direita
+# v216: o empurrao so vale na fila calibrada ("IP 192.168.1.14", PC do caixa). Nos PCs com a fila
+# "ELGIN L42PRO FULL" o driver ja imprime mais a direita e os 2 mm a mais cortavam a hora e o QR (25/09).
+ETIQ_DESLOC_FILAS = ("IP 192.168.1.14",)
+QR_LADO_ESQ = True     # v216: QR no canto de baixo a ESQUERDA (a direita cortava em alguns PCs)
+_area_impressao = {}   # fila -> "area Npx, offset Npx, desloc Npx" (vai no log da nuvem)
 QR_BORDA_INF_PX = 4   # distancia do QR ate a borda de baixo
+QR_BORDA_ESQ_PX = 8   # v216: QR a 1 mm da borda esquerda
 
 def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
                    pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido,
@@ -1850,25 +1856,25 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # ============================================================
     # 3. Renderiza HEADER (faixa preta em cima)
     # ============================================================
-    def render_barra(texto, y_start, h, fs, x_fim=LARGURA_PX):
-        draw.rectangle([(0, y_start), (x_fim, y_start + h)], fill="black")
+    def render_barra(texto, y_start, h, fs, x_fim=LARGURA_PX, x_ini=0):
+        draw.rectangle([(x_ini, y_start), (x_fim, y_start + h)], fill="black")
         fh = cf(fs)
         try:
             bb = draw.textbbox((0,0), texto, font=fh)
             y = y_start + (h - (bb[3]-bb[1]))//2 - 2
         except: y = y_start + 2
-        draw.text((margem_e, y), texto, fill="white", font=fh)
+        draw.text((x_ini + margem_e, y), texto, fill="white", font=fh)
 
-    def render_rodape(linhas, y_start, h, fs, x_fim=LARGURA_PX):
+    def render_rodape(linhas, y_start, h, fs, x_fim=LARGURA_PX, x_ini=0):
         if len(linhas) == 1:
-            return render_barra(linhas[0], y_start, h, fs, x_fim=x_fim)
-        draw.rectangle([(0, y_start), (x_fim, y_start + h)], fill="black")
+            return render_barra(linhas[0], y_start, h, fs, x_fim=x_fim, x_ini=x_ini)
+        draw.rectangle([(x_ini, y_start), (x_fim, y_start + h)], fill="black")
         fh = cf(fs); passo = (h - 6) // len(linhas)
         for n, t in enumerate(linhas):
             try:
                 bb = draw.textbbox((0, 0), t, font=fh); dy = (passo - (bb[3] - bb[1])) // 2 - bb[1]
             except Exception: dy = 0
-            draw.text((margem_e, y_start + 3 + n * passo + dy), t, fill="white", font=fh)
+            draw.text((x_ini + margem_e, y_start + 3 + n * passo + dy), t, fill="white", font=fh)
 
     if hora_pedido and header_texto.endswith(" - " + hora_pedido):
         # v212: hora encostada na borda direita (foge das linhas queimadas da cabeca da .14)
@@ -2012,14 +2018,15 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         fi = dados["fi"]; fsab = dados["fsab"]; fb = dados["fb"]
 
         # Divisorias pontilhadas entre colunas
+        x0 = reserva_qr if (qr_img and QR_LADO_ESQ) else 0
         for c in range(1, n):
-            x_div = margem_e + col_w * c
+            x_div = x0 + margem_e + col_w * c
             for dy in range(0, altura_meio, 6):
                 draw.line([(x_div, y_meio+dy), (x_div, y_meio+dy+3)], fill="black", width=1)
 
         # Texto de cada coluna
         for i, col in enumerate(dados["cols_w"]):
-            x_col = margem_e + col_w * i + (4 if i > 0 else 0)
+            x_col = x0 + margem_e + col_w * i + (4 if i > 0 else 0)
             y = y_meio
             for tipo, txt in col:
                 fu = fi if tipo == "item" else (fb if tipo == "borda" else fsab)
@@ -2030,10 +2037,15 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # 7. Renderiza RODAPE (faixa preta embaixo)
     # ============================================================
     if qr_img:
-        render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
-        x_qr = LARGURA_PX - qr_lado - QR_BORDA_DIR_PX
         y_qr = ALTURA_PX - qr_lado - QR_BORDA_INF_PX
-        draw.rectangle([(x_qr - 2, y_qr - 2), (LARGURA_PX, ALTURA_PX)], fill="white")
+        if QR_LADO_ESQ:
+            render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_ini=reserva_qr)
+            x_qr = QR_BORDA_ESQ_PX
+            draw.rectangle([(0, y_qr - 2), (x_qr + qr_lado + 2, ALTURA_PX)], fill="white")
+        else:
+            render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
+            x_qr = LARGURA_PX - qr_lado - QR_BORDA_DIR_PX
+            draw.rectangle([(x_qr - 2, y_qr - 2), (LARGURA_PX, ALTURA_PX)], fill="white")
         img.paste(qr_img.convert("RGB"), (x_qr, y_qr))
     else:
         render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape)
@@ -2074,13 +2086,16 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
                                 except Exception as e: log(f"  ResetDC 80x30 ignorado: {e}")
                         hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
                         dx = 0
-                        if img.size == (LARGURA_PX, ALTURA_PX) and ETIQ_DESLOC_X_PX:
+                        if img.size == (LARGURA_PX, ALTURA_PX):
                             # v210: so a etiqueta da caixa; nunca empurra alem da area que o driver imprime
                             try:
                                 import win32con
                                 area = hdc.GetDeviceCaps(win32con.HORZRES)
-                                dx = max(0, min(ETIQ_DESLOC_X_PX, area - larg))
-                                if tentativa == 0: log(f"  area impressao {area}px, etiqueta {larg}px, desloc {dx}px")
+                                offx = hdc.GetDeviceCaps(112)   # PHYSICALOFFSETX
+                                if str(printer_name) in ETIQ_DESLOC_FILAS:
+                                    dx = max(0, min(ETIQ_DESLOC_X_PX, area - larg))
+                                _area_impressao[str(printer_name)] = f"area {area}px, offset {offx}px, desloc {dx}px"
+                                if tentativa == 0: log(f"  area impressao {area}px, offset {offx}px, etiqueta {larg}px, desloc {dx}px")
                             except Exception: dx = 0
                         ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (dx, 0, larg + dx, alt))
                         hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
@@ -3472,7 +3487,8 @@ def processar_sofia_pedido(pedido, impressora):
                                  qr_texto=qr_i, unitario=True)
             if imprimir_etiqueta(img, printer_name=impressora):
                 log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
-                sofia_evento("etiqueta_ok", pedido, etiqueta=i, total=n_et, impressora=impressora)
+                sofia_evento("etiqueta_ok", pedido, etiqueta=i, total=n_et, impressora=impressora,
+                             detalhe=_area_impressao.get(str(impressora)))
             else:
                 falhou = True
                 log(f"  ERRO etiqueta {i}/{n_et} #{numero}: impressora nao imprimiu")
