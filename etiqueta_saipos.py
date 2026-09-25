@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "208"
+VERSION = "209"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -2301,7 +2301,7 @@ def _impressora_para(ip, fallback=None, etiqueta=""):
 # O spooler do Windows aceita o job mesmo com a impressora desligada ("printed" != papel saiu),
 # por isso a vida da impressora e' testada direto na porta de impressao (9100).
 # "auto" = .14 se responde, senao .24 | "sempre" = sempre .24 | "nunca" = comportamento antigo
-CAIXAS_NA_PRODUCAO = "sempre"   # v207: a .14 responde na rede mas nao imprime
+CAIXAS_NA_PRODUCAO = "nunca"    # v209: .14 consertada (25/09) — caixas de volta na .14
 _vida_ip = {}   # ip -> (quando_testou, respondeu)
 
 def _ip_responde(ip, porta=9100, timeout=1.5, cache_s=60):
