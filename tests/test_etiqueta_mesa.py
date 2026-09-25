@@ -1,6 +1,7 @@
-"""v214: etiqueta de MESA (salao) — uma por pizza/pote, 50x25, sem pagamento."""
+"""v214/v215: etiqueta de MESA (salao) — 1 comanda do Mana = 1 etiqueta 50x25, sem pagamento."""
 import importlib.util
 import pathlib
+import time
 import unittest
 
 ARQUIVO = pathlib.Path(__file__).resolve().parents[1] / "etiqueta_saipos.py"
@@ -8,102 +9,82 @@ SPEC = importlib.util.spec_from_file_location("etiqueta_saipos_mesa", ARQUIVO)
 MOD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MOD)
 
-ELEMENTO_SAIPOS = """MESA MESA
-25/set - 19:00
-Garçom: Cleber
-Mesa: 50
-Comanda: 4
-Identificação: 18.01Ana Paula - 2/3
-Qt.Descrição
-1  Pizza Grande
--1/2 Frango com Catupiry
--1/2 Portuguesa
--1 Coca Cola 2l
-** massa bem assada **
-1  Pote Dip Cheddar
-Quantidade de itens:               2
-Mesa: 50""".split("\n")
-
-PEDIDO_PROVISAO = {
-    "id": "x", "numero": "12", "tipo": "salao", "formato": "mesa", "canal": "Salao",
-    "mesa": 12, "nome_cliente": "Mesa 12 · João", "salao_cliente": "João",
-    "hora": "2026-09-25T22:00:00+00:00",
-    "itens": [
-        {"qtd": 2, "nome": "Pizza Gigante", "tipo": "pizza", "categoria": "salgada",
-         "sabores": [{"nome": "Calabresa", "fracao": "2/3"}, {"nome": "Portuguesa", "fracao": "1/3"}]},
-        {"qtd": 1, "nome": "Pote Dip Cheddar", "tipo": "dip"},
-        {"qtd": 3, "nome": "Coca Cola 2l", "tipo": "bebida"},
-    ],
-}
+# linhas REAIS de comandas do Mana (mesa 64 de 25/09: combo "Gigante + Broto" que o papel embaralhava)
+PENDENTES = [
+    {"comanda_id": "16dc9fe9-b5a8-4b12-b0f7-2681ff9f7878", "id_sale": "881612263", "mesa": "64", "cliente_nome": "Consumidor",
+     "hora_pedido": "", "pizza_seq": 1, "pizza_total": 2, "received_at": "2026-09-25T22:22:56.053665+00:00",
+     "items": [{"nome": "Pizza Gigante", "qty": 1, "sabores": ["3/3 Americana"], "tipo": "caixa_salgada"}]},
+    {"comanda_id": "261dbb82-1ebb-4a3e-bd44-1d06e0fbedb9", "id_sale": "881612263", "mesa": "64", "cliente_nome": "Consumidor",
+     "hora_pedido": "", "pizza_seq": 2, "pizza_total": 2, "received_at": "2026-09-25T22:22:56.053665+00:00",
+     "items": [{"nome": "Pizza Broto", "qty": 1, "sabores": ["Chocolate Preto"], "tipo": "caixa_doce"}]},
+    {"comanda_id": "ff675d75-51b1-497e-8cae-90dae5f375c4", "id_sale": "881584777", "mesa": "43", "cliente_nome": "Consumidor",
+     "hora_pedido": "", "pizza_seq": 1, "pizza_total": 1, "received_at": "2026-09-25T22:15:51.786772+00:00",
+     "items": [{"nome": "Pizza Gigante", "qty": 1, "sabores": ["1/3 Calabresa com Catupiry", "1/3 Calabresa com Cebola", "1/3 4 Queijos"], "tipo": "caixa_salgada"},
+               {"nome": "Água com Gás 500ml", "qty": 1, "sabores": [], "tipo": "bebida"}]},
+]
 
 
 class EtiquetaMesaTest(unittest.TestCase):
-    def test_saipos_elemento_vira_uma_etiqueta_por_produto_sem_bebida(self):
-        disp = MOD.agrupar_display(MOD.extrair_itens_salao(ELEMENTO_SAIPOS))
-        uni = MOD.etiquetas_mesa_unidades(disp)
-        self.assertEqual(len(uni), 2)                                  # pizza + pote
-        tipos = [d[0]["tipo"] for d, _ in uni]
-        self.assertEqual(tipos, ["caixa_salgada", "dip"])
-        for d, _ in uni:
-            self.assertFalse(any(x["tipo"] == "bebida" for x in d))     # bebida nao vai na assadeira
-        self.assertEqual(MOD.extrair_mesa(ELEMENTO_SAIPOS), "50")
-        self.assertEqual(MOD._mesa_nome_conta(MOD.extrair_identificacao(ELEMENTO_SAIPOS)), "Ana Paula")
-
-    def test_texto_da_mesa(self):
-        self.assertEqual(MOD._mesa_txt("50"), "MESA 50")
-        self.assertEqual(MOD._mesa_txt("Mesa: 18.01"), "MESA 18")
-        self.assertEqual(MOD._mesa_txt(12), "MESA 12")
-        self.assertEqual(MOD._mesa_txt(""), "MESA")
-        self.assertEqual(MOD._mesa_nome_conta("Marcio - 1/2"), "Marcio")
-        self.assertEqual(MOD._mesa_nome_conta(""), "")
-
-    def test_desenho_50x25_sem_pagamento(self):
-        disp = MOD.agrupar_display(MOD.extrair_itens_salao(ELEMENTO_SAIPOS))
-        uni = MOD.etiquetas_mesa_unidades(disp)
-        img = MOD.gerar_etiqueta_mesa("50", uni[0][0], 1, 2, nome_conta="Ana", hora="19:00")
-        self.assertEqual(img.size, (MOD.CO_LOVE_LARGURA_PX, MOD.CO_LOVE_ALTURA_PX))
-        self.assertEqual(MOD._mesa_nome_produto(uni[1][0][0]), "POTE DIP CHEDDAR")
-
-    def test_provisao_pedido_de_salao_e_mesa(self):
-        self.assertTrue(MOD._sofia_eh_mesa(PEDIDO_PROVISAO))
-        self.assertTrue(MOD._sofia_eh_mesa({"tipo": "salao"}))
-        self.assertFalse(MOD._sofia_eh_mesa({"tipo": "entrega"}))
-        uni = MOD.etiquetas_mesa_unidades(MOD.sofia_display(PEDIDO_PROVISAO["itens"]))
-        self.assertEqual(len(uni), 3)                                  # 2 gigantes + 1 pote
-        self.assertTrue(all(d[0]["qty"] == 1 for d, _ in uni))
-
-    def test_provisao_sem_pizza_marca_impresso_e_nao_imprime(self):
-        chamadas = []
-        orig = MOD.imprimir_etiqueta_producao
-        MOD.imprimir_etiqueta_producao = lambda *a, **k: chamadas.append(a)
-        try:
-            p = dict(PEDIDO_PROVISAO, itens=[{"qtd": 1, "nome": "Coca", "tipo": "bebida"}])
-            self.assertTrue(MOD.processar_sofia_mesa(p))
-            self.assertEqual(chamadas, [])
-        finally:
-            MOD.imprimir_etiqueta_producao = orig
-
-    def test_provisao_sem_impressora_24_volta_pra_fila(self):
-        orig_nome, orig_inst = MOD._nome_por_ip, MOD._instalar_impressora_24
-        MOD._nome_por_ip = lambda ip: None
-        MOD._instalar_impressora_24 = lambda: None
-        try:
-            self.assertFalse(MOD.processar_sofia_mesa(PEDIDO_PROVISAO))
-        finally:
-            MOD._nome_por_ip, MOD._instalar_impressora_24 = orig_nome, orig_inst
-
-    def test_provisao_imprime_uma_por_unidade_na_24(self):
-        chamadas = []
-        orig = (MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep)
+    def setUp(self):
+        self.chamadas = []; self.rpcs = []
+        self._orig = (MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep, MOD._mana_rpc, MOD._instalar_impressora_24)
         MOD._nome_por_ip = lambda ip: "producao 24 (etiquetas)" if ip == MOD.IP_IMPRESSORA_PRODUCAO else None
-        MOD.imprimir_etiqueta_producao = lambda img, imp, copias=1: chamadas.append((imp, copias, img.size))
+        MOD.imprimir_etiqueta_producao = lambda img, imp, copias=1: self.chamadas.append((imp, img.size))
         MOD.time.sleep = lambda s: None
-        try:
-            self.assertTrue(MOD.processar_sofia_mesa(PEDIDO_PROVISAO))
-            self.assertEqual(len(chamadas), 3)
-            self.assertTrue(all(c[0] == "producao 24 (etiquetas)" and c[1] == 1 for c in chamadas))
-        finally:
-            MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep = orig
+        MOD._instalar_impressora_24 = lambda: None
+        def rpc(nome, body=None, timeout=8):
+            self.rpcs.append((nome, body))
+            if nome == "etiqueta_mesa_reivindicar": return body["p_comanda"] != "ja-pego"
+            return None
+        MOD._mana_rpc = rpc
+
+    def tearDown(self):
+        MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep, MOD._mana_rpc, MOD._instalar_impressora_24 = self._orig
+
+    def test_uma_comanda_do_mana_uma_etiqueta_na_24(self):
+        imp, ado = MOD.mesa_processar_pendentes(PENDENTES, "PC-TESTE", inicio=0)
+        self.assertEqual((imp, ado), (3, 0))
+        self.assertEqual(len(self.chamadas), 3)                       # gigante 64, broto 64, gigante 43 (bebida nao vira etiqueta)
+        self.assertTrue(all(c[0] == "producao 24 (etiquetas)" and c[1] == (MOD.CO_LOVE_LARGURA_PX, MOD.CO_LOVE_ALTURA_PX) for c in self.chamadas))
+        reiv = [b["p_comanda"] for n, b in self.rpcs if n == "etiqueta_mesa_reivindicar"]
+        self.assertEqual(reiv, [p["comanda_id"] for p in PENDENTES])  # reivindica ANTES de imprimir, cada uma
+        self.assertFalse(any(n == "etiqueta_mesa_devolver" for n, _ in self.rpcs))
+
+    def test_comanda_de_antes_do_boot_e_adotada_sem_imprimir(self):
+        imp, ado = MOD.mesa_processar_pendentes(PENDENTES, "PC-TESTE", inicio=time.time())
+        self.assertEqual((imp, ado), (0, 3))
+        self.assertEqual(self.chamadas, [])
+        self.assertTrue(all(b["p_pc"].endswith("/adotada") for n, b in self.rpcs if n == "etiqueta_mesa_reivindicar"))
+
+    def test_outro_pc_ja_pegou_nao_imprime(self):
+        p = [dict(PENDENTES[0], comanda_id="ja-pego")]
+        self.assertEqual(MOD.mesa_processar_pendentes(p, "PC-TESTE", inicio=0), (0, 0))
+        self.assertEqual(self.chamadas, [])
+
+    def test_sem_impressora_devolve_pra_fila(self):
+        MOD._nome_por_ip = lambda ip: None
+        imp, ado = MOD.mesa_processar_pendentes(PENDENTES[:1], "PC-TESTE", inicio=0)
+        self.assertEqual((imp, ado), (0, 0))
+        self.assertEqual([b["p_comanda"] for n, b in self.rpcs if n == "etiqueta_mesa_devolver"], [PENDENTES[0]["comanda_id"]])
+
+    def test_desenho_usa_seq_total_do_mana(self):
+        d = MOD.mesa_display_do_mana(PENDENTES[1]["items"])
+        uni = MOD.etiquetas_mesa_unidades(d)
+        self.assertEqual(len(uni), 1)
+        self.assertEqual(MOD._mesa_nome_produto(uni[0][0][0]), "PIZZA BROTO")
+        img = MOD.gerar_etiqueta_mesa("64", uni[0][0], 2, 2, hora="19:22")
+        self.assertEqual(img.size, (MOD.CO_LOVE_LARGURA_PX, MOD.CO_LOVE_ALTURA_PX))
+
+    def test_texto_da_mesa_e_pote(self):
+        self.assertEqual(MOD._mesa_txt("64"), "MESA 64")
+        self.assertEqual(MOD._mesa_txt("Mesa: 18.01"), "MESA 18")
+        self.assertEqual(MOD._mesa_nome_produto({"tipo": "dip", "nome": "Borda Dip Catupiry"}), "POTE DIP CATUPIRY")
+        self.assertEqual(MOD._mesa_hora("2026-09-25T22:22:56.053665+00:00"), "19:22")
+
+    def test_saipos_e_provisao_nao_imprimem_mais_mesa(self):
+        self.assertTrue(MOD.processar_sofia_mesa({"numero": "1", "tipo": "salao", "itens": [{"qtd": 1, "nome": "Pizza Grande", "tipo": "pizza"}]}))
+        self.assertEqual(self.chamadas, [])
+        self.assertTrue(MOD._sofia_eh_mesa({"tipo": "salao"}))
 
 
 if __name__ == "__main__":

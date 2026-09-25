@@ -4,7 +4,14 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "214"
+VERSION = "215"
+# v215 (25/09/26): ETIQUETA DE MESA agora PUXA DO MANA (Lucas: "puxar o pedido como esta no Mana, 1 item por
+#   etiqueta"). O papel do Saipos embaralha combo (mesa 64: "Gigante + Broto" saiu com os sabores misturados);
+#   o Mana ja tem cada pizza/pote de mesa numa comanda propria, com nome canonico. Uma thread (mesa_poll_loop)
+#   pergunta ao Mana a cada 10 s (RPC etiqueta_mesa_pendentes), REIVINDICA a comanda (etiqueta_mesa_reivindicar,
+#   atomica: varios PCs podem perguntar, so um imprime) e imprime 50x25 na .24. Comandas anteriores ao boot do
+#   programa sao adotadas sem imprimir (nao cospe etiqueta de mesa ja servida). A impressao pelo arquivo do
+#   Saipos (v214) e pela fila do Provisao foi DESLIGADA: fonte unica = Mana.
 # v214 (25/09/26): ETIQUETA DE MESA (Lucas). O salao passa a ter etiqueta: UMA por produto (pizza salgada,
 #   pizza doce ou Pote Dip), no tamanho da etiqueta de PRODUCAO (50x25, impressora .24), SEM pagamento —
 #   so MESA + produto (+ sabores/borda/adicional/obs da propria pizza). Vai colada na assadeira e no pote
@@ -236,6 +243,7 @@ VERSION = "214"
 #   Se o driver ignorar o tamanho, avisa no log pra calibrar a impressora. Fallback seguro.
 UPDATE_URL = "https://raw.githubusercontent.com/lucassosatidre/cxlove/main/etiqueta_saipos.py"
 
+import hashlib
 import os, sys, json, re, time, subprocess, tempfile, base64, shutil, urllib.parse, urllib.request, urllib.error, threading, ssl
 from datetime import datetime, timezone, timedelta
 try:
@@ -2145,17 +2153,7 @@ def processar_pedido(filepath, filename):
         tcx = sum(d["qty"] for d in display if d["tipo"] in ("caixa_salgada", "caixa_doce"))
         tent = sum(d["qty"] for d in display)
         log(f"  SALAO Mesa {str(mesa)[:24]}: {tcx}cx {tent}itens")
-        # v214: etiqueta de MESA (50x25 na .24), uma por pizza/pote. No papel do Saipos cada ELEMENTO
-        # do arquivo e' uma pizza ("Identificacao: Ana - 2/3"), entao le elemento a elemento — a leitura
-        # acima (rows_all) so enxerga o 1o elemento e continua igual pra alimentar o Mana.
-        try:
-            for el in data:
-                rows_el = el.get("printRows", [])
-                disp_el = agrupar_display(extrair_itens_salao(rows_el))
-                conta = _mesa_nome_conta(extrair_identificacao(rows_el))
-                imprimir_etiquetas_mesa(extrair_mesa(rows_el) or mesa, disp_el, hora=hora, nome_conta=conta, origem="SAIPOS")
-        except Exception as e:
-            log(f"  ERRO etiqueta de mesa (salao): {e}")
+        # v215: a etiqueta de MESA sai pela thread mesa_poll_loop (le do Mana), nao daqui.
         if id_sale: processados_id_sale[id_sale] = time.time()
         try: os.makedirs(PASTA_SAIPOS, exist_ok=True); shutil.move(filepath, os.path.join(PASTA_SAIPOS, filename)); log("  Movido (salao)")
         except: pass
@@ -2756,7 +2754,7 @@ def etiquetas_mesa_unidades(display):
 def _mesa_nome_produto(item):
     nome = limpar_nome(str(item.get("nome") or "")).strip()
     if item.get("tipo") == "dip":
-        nome = re.sub(r'(?i)^pote\s+dip\s*', '', nome).strip()
+        nome = re.sub(r'(?i)^(?:pote|borda)\s+dip\s*', '', nome).strip()
         return ("POTE DIP " + nome.upper()).strip()
     return nome.upper() or "PIZZA"
 
@@ -2842,7 +2840,7 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
     img = img.convert("L").point(lambda p: 0 if p < 190 else 255).convert("RGB")
     return img
 
-def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="SAIPOS", pedido=None):
+def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA", pedido=None, seq=None, total=None):
     """Imprime as etiquetas de mesa de um display (uma por pizza/pote) na impressora de PRODUCAO.
     Devolve (impressas, total). total=0 quando nao ha pizza/pote. impressas<total = falhou."""
     unidades = etiquetas_mesa_unidades(display)
@@ -2859,7 +2857,9 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="SAIPO
     ok = 0
     for i, (display_i, _qr) in enumerate(unidades, start=1):
         try:
-            img = gerar_etiqueta_mesa(mesa, display_i, i, n, nome_conta=nome_conta, hora=hora)
+            # seq/total vindos do Mana (pizza_seq/pizza_total da comanda) valem mais que a contagem local
+            idx, tot = (seq, total) if (seq and total and n == 1) else (i, n)
+            img = gerar_etiqueta_mesa(mesa, display_i, idx, tot, nome_conta=nome_conta, hora=hora)
             imprimir_etiqueta_producao(img, impressora, copias=1)
             ok += 1
             log(f"  {origem} MESA {mesa}: etiqueta {i}/{n} ({_mesa_nome_produto(display_i[0])})")
@@ -2869,6 +2869,92 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="SAIPO
             sofia_evento("mesa_etiqueta_erro", pedido, etiqueta=i, total=n, impressora=impressora, origem=origem, mesa=str(mesa), detalhe=e)
         if i < n: time.sleep(0.3)
     return ok, n
+
+
+# ---- v215: fila de etiquetas de MESA no MANA (fonte unica) ----
+MANA_URL = "https://vqlfrbugmdnlyxzrlrzt.supabase.co"
+# chave PUBLICA (anon) do Mana: a mesma que o navegador usa; so enxerga o que as RPCs abaixo deixam.
+MANA_ANON = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxbGZyYnVnbWRubHl4enJscnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTQwODIsImV4cCI6MjA5MDQ3MDA4Mn0.Y4pOCo0cNKebJkjTHOv7SlxsH5R2-o_wM58r0v_ZvBM")
+MESA_POLL_INTERVAL = 10
+
+def _mana_rpc(nome, body=None, timeout=8):
+    req = urllib.request.Request(f"{MANA_URL}/rest/v1/rpc/{nome}", data=json.dumps(body or {}).encode("utf-8"),
+                                 headers={"apikey": MANA_ANON, "Authorization": f"Bearer {MANA_ANON}",
+                                          "Content-Type": "application/json"}, method="POST")
+    resp = urllib.request.urlopen(req, timeout=timeout, context=_sofia_ctx())
+    txt = resp.read().decode("utf-8", "replace")
+    return json.loads(txt) if txt.strip() else None
+
+def mesa_display_do_mana(items):
+    """items da comanda do Mana ja vem no formato display (tipo/nome/qty/sabores). So limpa e garante campos."""
+    out = []
+    for it in (items or []):
+        if not isinstance(it, dict): continue
+        tipo = str(it.get("tipo") or "outro").lower()
+        try: qty = max(1, int(it.get("qty") or 1))
+        except Exception: qty = 1
+        out.append({"tipo": tipo, "nome": str(it.get("nome") or ""), "qty": qty,
+                    "sabores": [str(x) for x in (it.get("sabores") or [])]})
+    return out
+
+def _mesa_hora(iso):
+    return _prod_hora_br(iso) if iso else ""
+
+_mesa_poll_inicio = [None]
+def mesa_processar_pendentes(pendentes, pc, inicio):
+    """Reivindica e imprime cada comanda de mesa pendente. Comandas recebidas ANTES de `inicio` (boot deste
+    programa) sao adotadas sem imprimir. Devolve (impressas, adotadas)."""
+    impressas = adotadas = 0
+    for c in (pendentes or []):
+        cid = c.get("comanda_id")
+        if not cid: continue
+        try:
+            rec = datetime.fromisoformat(str(c.get("received_at") or "").replace("Z", "+00:00"))
+            if rec.tzinfo is None: rec = rec.replace(tzinfo=timezone.utc)
+            antiga = rec.timestamp() < inicio
+        except Exception:
+            antiga = False
+        try:
+            if not _mana_rpc("etiqueta_mesa_reivindicar", {"p_comanda": cid, "p_pc": (pc + ("/adotada" if antiga else ""))[:80]}):
+                continue   # outro PC pegou
+        except Exception as e:
+            log(f"  MESA: reivindicar falhou ({e})"); continue
+        if antiga:
+            adotadas += 1; continue
+        mesa = c.get("mesa") or ""
+        display = mesa_display_do_mana(c.get("items"))
+        try:
+            ok, n = imprimir_etiquetas_mesa(mesa, display, hora=_mesa_hora(c.get("received_at")), origem="MANA",
+                                            seq=c.get("pizza_seq"), total=c.get("pizza_total"))
+        except Exception as e:
+            ok, n = 0, 1; log(f"  ERRO etiqueta de mesa {mesa}: {e}")
+        if n and ok < n:
+            try: _mana_rpc("etiqueta_mesa_devolver", {"p_comanda": cid})   # volta pra fila: outro PC/ciclo imprime
+            except Exception: pass
+        else:
+            impressas += ok
+    return impressas, adotadas
+
+def mesa_poll_loop():
+    """v215: todo PC que enxerga a impressora de PRODUCAO (.24) pergunta ao Mana pelas pizzas de mesa e imprime."""
+    inicio = time.time(); _mesa_poll_inicio[0] = inicio
+    pc = _nome_deste_pc()
+    avisou = 0
+    while True:
+        try:
+            time.sleep(MESA_POLL_INTERVAL)
+            if ETIQUETA_MESA != "sim": continue
+            if not (_nome_por_ip(IP_IMPRESSORA_PRODUCAO) or _instalar_impressora_24()):
+                if time.time() - avisou > 1800:
+                    avisou = time.time(); log(f"  MESA: este PC nao enxerga a impressora de producao ({IP_IMPRESSORA_PRODUCAO}) - fora da fila de mesa")
+                continue
+            pendentes = _mana_rpc("etiqueta_mesa_pendentes")
+            if not pendentes: continue
+            imp, ado = mesa_processar_pendentes(pendentes, pc, inicio)
+            if ado: log(f"  MESA: {ado} comanda(s) de antes do boot adotadas sem imprimir")
+        except Exception as e:
+            if time.time() - avisou > 600:
+                avisou = time.time(); log(f"  MESA: fila do Mana indisponivel ({e})")
 
 
 class SaiposHandler(FileSystemEventHandler):
@@ -3342,24 +3428,10 @@ def _sofia_eh_mesa(pedido):
     return str(pedido.get("formato") or "").lower() == "mesa" or str(pedido.get("tipo") or "").lower() == "salao"
 
 def processar_sofia_mesa(pedido):
-    """v214: pedido do SALAO vindo do Provisao -> etiquetas de MESA (50x25 na .24), sem cupom e sem QR.
-    Devolve True se todas sairam (o pedido e' marcado impresso); False volta pro fila pra outro PC."""
-    if ETIQUETA_MESA != "sim":
-        log(f"  PROVISAO salao #{pedido.get('numero')}: etiqueta de mesa desligada (ETIQUETA_MESA) - marcado sem imprimir")
-        return True
-    display = sofia_display(pedido.get("itens"))
-    mesa = pedido.get("mesa")
-    nome_cli = str(pedido.get("nome_cliente") or "")
-    if not mesa:
-        m = re.match(r'(?i)^\s*mesa\s*(\d+)', nome_cli); mesa = m.group(1) if m else nome_cli
-    conta = str(pedido.get("salao_cliente") or "")
-    if not conta and "·" in nome_cli: conta = nome_cli.split("·", 1)[1].strip()
-    _, hora = sofia_quando(pedido.get("hora"))
-    ok, n = imprimir_etiquetas_mesa(mesa, display, hora=hora, nome_conta=conta, origem="PROVISAO", pedido=pedido)
-    if n == 0:
-        log(f"  PROVISAO MESA {mesa}: sem pizza/pote neste envio - nada a imprimir")
-        return True
-    return ok == n
+    """v215: pedido de SALAO que por acaso caia na fila do Provisao: marca como feito SEM imprimir.
+    A etiqueta de mesa sai pela mesa_poll_loop (fonte unica = comandas do Mana)."""
+    log(f"  PROVISAO salao #{pedido.get('numero')}: etiqueta de mesa sai pelo Mana - marcado sem imprimir aqui")
+    return True
 
 def processar_sofia_pedido(pedido, impressora):
     if _sofia_eh_mesa(pedido):
@@ -3993,6 +4065,7 @@ def main():
     observer.schedule(handler, PASTA_DOWNLOADS, recursive=False); observer.start()
     # SOFIA: poller de pedidos por telefone (so atua se existir sofia_caixa.json em Downloads)
     threading.Thread(target=sofia_poll_loop, daemon=True).start()
+    threading.Thread(target=mesa_poll_loop, daemon=True).start()   # v215: etiquetas de mesa (le do Mana)
     # CO LOVE: reenvio da fila de comandas (so age se existir comanda_config.json ligado)
     threading.Thread(target=comanda_retry_loop, daemon=True).start()
     # CO LOVE: reenvio dos logs de debug pra IA (so cria dado se ligado no servidor)
