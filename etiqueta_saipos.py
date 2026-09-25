@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "212"
+VERSION = "213"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -1728,6 +1728,7 @@ def qr_imagem(texto, modulo=3, margem=2):
 QR_MODULO_PX = 4      # 4 px por quadradinho a 203 dpi = 0,5 mm (a pistola 2D le com folga)
 QR_MARGEM_MOD = 2     # borda clara em volta (em quadradinhos)
 QR_BORDA_DIR_PX = 0   # v210: QR colado na borda direita (cabeca da .14 tem pontos queimados no meio)
+RODAPE_MIN_1LINHA = 22  # v213: abaixo disso o rodape quebra em 2 linhas
 HORA_BORDA_DIR_PX = 6  # v212: hora do cabecalho a <1 mm da borda direita
 ETIQ_DESLOC_X_PX = 16 # v210: a .14 imprime ~2 mm pra esquerda; empurra a etiqueta da caixa pra direita
 QR_BORDA_INF_PX = 4   # distancia do QR ate a borda de baixo
@@ -1804,6 +1805,31 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     linha_rodape = montar_rodape_linha(total_entrega, pag_cat, pag_dados)
     fs_rodape = auto_fit_1linha(linha_rodape, teto=fs_header, piso=10, max_w=max_barra_w - reserva_qr)
     h_rodape = calc_h_barra(linha_rodape, fs_rodape)
+    # v213: texto longo (pagamento misto, estrelas + diferenca) -> rodape em 2 linhas com letra maior
+    rodape_linhas = [linha_rodape]
+    if fs_rodape < RODAPE_MIN_1LINHA and " " in linha_rodape:
+        lim = max_barra_w - reserva_qr
+        def larg(t):
+            try:
+                bb = draw.textbbox((0, 0), t, font=cf(20)); return bb[2] - bb[0]
+            except Exception: return len(t)
+        pal = linha_rodape.split(" ")
+        melhor = None
+        for k in range(1, len(pal)):
+            a, b = " ".join(pal[:k]), " ".join(pal[k:])
+            w = max(larg(a), larg(b))
+            if melhor is None or w < melhor[0]: melhor = (w, a, b)
+        a, b = melhor[1], melhor[2]
+        if " + " in linha_rodape:   # "RECOLHER 10 ESTRELAS" inteiro na 1a linha, "+ diferenca" na 2a
+            a, b = linha_rodape.split(" + ", 1); b = "+ " + b
+        fs2 = min(auto_fit_1linha(a, teto=fs_header, piso=10, max_w=lim),
+                  auto_fit_1linha(b, teto=fs_header, piso=10, max_w=lim))
+        if fs2 > fs_rodape:
+            fh2 = cf(fs2)
+            try:
+                bb = draw.textbbox((0, 0), "Ag", font=fh2); lh2 = (bb[3] - bb[1]) + 3
+            except Exception: lh2 = fs2 + 3
+            rodape_linhas, fs_rodape, h_rodape = [a, b], fs2, lh2 * 2 + 6
 
     # ============================================================
     # 3. Renderiza HEADER (faixa preta em cima)
@@ -1816,6 +1842,17 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
             y = y_start + (h - (bb[3]-bb[1]))//2 - 2
         except: y = y_start + 2
         draw.text((margem_e, y), texto, fill="white", font=fh)
+
+    def render_rodape(linhas, y_start, h, fs, x_fim=LARGURA_PX):
+        if len(linhas) == 1:
+            return render_barra(linhas[0], y_start, h, fs, x_fim=x_fim)
+        draw.rectangle([(0, y_start), (x_fim, y_start + h)], fill="black")
+        fh = cf(fs); passo = (h - 6) // len(linhas)
+        for n, t in enumerate(linhas):
+            try:
+                bb = draw.textbbox((0, 0), t, font=fh); dy = (passo - (bb[3] - bb[1])) // 2 - bb[1]
+            except Exception: dy = 0
+            draw.text((margem_e, y_start + 3 + n * passo + dy), t, fill="white", font=fh)
 
     if hora_pedido and header_texto.endswith(" - " + hora_pedido):
         # v212: hora encostada na borda direita (foge das linhas queimadas da cabeca da .14)
@@ -1977,13 +2014,13 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # 7. Renderiza RODAPE (faixa preta embaixo)
     # ============================================================
     if qr_img:
-        render_barra(linha_rodape, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
+        render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
         x_qr = LARGURA_PX - qr_lado - QR_BORDA_DIR_PX
         y_qr = ALTURA_PX - qr_lado - QR_BORDA_INF_PX
         draw.rectangle([(x_qr - 2, y_qr - 2), (LARGURA_PX, ALTURA_PX)], fill="white")
         img.paste(qr_img.convert("RGB"), (x_qr, y_qr))
     else:
-        render_barra(linha_rodape, ALTURA_PX - h_rodape, h_rodape, fs_rodape)
+        render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape)
 
     return img
 
@@ -2730,58 +2767,47 @@ def _sofia_http(url, method="GET", body=None, secret="", pc=""):
     resp = urllib.request.urlopen(req, timeout=15, context=_sofia_ctx())
     return json.loads(resp.read().decode("utf-8"))
 
-def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira=""):
-    """Mapeia forma_pagamento da Sofia pro vocabulario do rodape (PAGO/MAQUINONA/DINHEIRO...)."""
-    f = (forma or "").lower()
+CUPOM_ESTRELAS = "JUNTE10TELE"   # v213: promocao junte 10 estrelas (so pedido do Atendente)
+
+def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira="", estrelas=False):
+    """v213 (regras do Lucas 25/09/26), igual pra todo canal:
+    - pago no app ou pedido de R$ 0,00 -> PAGO em cima e embaixo, sem forma nem valor;
+    - credito/debito/pix/vale a cobrar na entrega -> COBRAR + "MAQ CARTAO R$ x" (a maquina cobre todos);
+    - dinheiro -> COBRAR + "DIN R$ x" (+ "TROCO P/ R$ y" quando o troco e' maior);
+    - misto -> "MAQ CARTAO R$ x DIN R$ y ...";
+    - estrelas (cupom JUNTE10TELE do Atendente) -> COBRAR + "RECOLHER 10 ESTRELAS" (+ a diferenca)."""
+    f = (forma or "").lower().strip()
     parcelas = pagamentos if isinstance(pagamentos, list) else []
-    pendentes = [p for p in parcelas if not p.get("online")]
-    # O Provisao envia parcelas inclusive para dinheiro. Nao deixar o resumo
-    # generico esconder o troco que o render Saipos ja sabe exibir.
-    so_dinheiro = bool(pendentes) and all(str(p.get("forma") or f).lower() == "dinheiro" for p in pendentes)
-    if f != "pago" and (so_dinheiro or (not parcelas and f == "dinheiro")):
-        valor_dinheiro = sum(float(p.get("valor") or 0) for p in pendentes) if pendentes else float(total)
+    try: total = float(total or 0)
+    except (TypeError, ValueError): total = 0.0
+    if parcelas:
+        pendentes = [p for p in parcelas if not p.get("online")]
+    elif f in ("", "pago"):
+        pendentes = []
+    else:
+        pendentes = [{"forma": f, "valor": total}]
+    if f == "pago" or total <= 0:
+        pendentes = []
+    def val(p):
+        try: return float(p.get("valor") if p.get("valor") is not None else total)
+        except (TypeError, ValueError): return 0.0
+    din = sum(val(p) for p in pendentes if str(p.get("forma") or f).lower() == "dinheiro")
+    car = sum(val(p) for p in pendentes if str(p.get("forma") or f).lower() != "dinheiro")
+    partes = []
+    if car > 0: partes.append(f"MAQ CARTAO R${formatar_valor(car)}")
+    if din > 0:
+        partes.append(f"DIN R${formatar_valor(din)}")
         try:
-            if troco_para and float(troco_para) > valor_dinheiro:
-                return "DINHEIRO_TROCO", {"valor_pedido": valor_dinheiro, "valor_receber": float(troco_para), "valor_troco": round(float(troco_para)-valor_dinheiro, 2)}
+            if troco_para and float(troco_para) > din:
+                partes.append(f"TROCO P/ R${formatar_valor(float(troco_para))}")
         except (TypeError, ValueError):
             pass
-        return "DINHEIRO", {"valor": valor_dinheiro}
-    if parcelas or f in ("vale", "voucher", "credito", "crédito", "debito", "débito", "pix"):
-        nomes = {
-            "vale": "VALE", "voucher": "VALE",
-            "credito": "CREDITO", "crédito": "CREDITO",
-            "debito": "DEBITO", "débito": "DEBITO",
-            "pix": "PIX", "dinheiro": "DINHEIRO", "pago": "PAGO",
-        }
-        usar = [p for p in parcelas if not p.get("online")]
-        if not usar: usar = parcelas
-        if not usar: usar = [{"forma": f, "valor": total, "online": False}]
-        detalhes = []
-        for p in usar:
-            pf = str(p.get("forma") or f or "pagamento").lower()
-            nome = nomes.get(pf, pf.upper())
-            if bandeira and pf in ("vale", "voucher", "credito", "crédito", "debito", "débito"):
-                nome = f"{nome} {str(bandeira).upper()}"
-            try: valor = float(p.get("valor") if p.get("valor") is not None else total)
-            except: valor = float(total or 0)
-            detalhes.append(f"{nome}: R${formatar_valor(valor)}")
-        dinheiro_pendente = sum(float(p.get("valor") or 0) for p in pendentes if str(p.get("forma") or f).lower() == "dinheiro")
-        try:
-            if f != "pago" and dinheiro_pendente > 0 and troco_para and float(troco_para) > dinheiro_pendente:
-                detalhes.append(f"TROCO PARA: R${formatar_valor(float(troco_para))}")
-        except (TypeError, ValueError):
-            pass
-        todos_online = bool(parcelas) and all(bool(p.get("online")) for p in parcelas)
-        return ("PAGO_DETALHE" if todos_online or f == "pago" else "COBRAR_DETALHE"), {"resumo": " + ".join(detalhes)}
-    if f == "pago": return "PAGO", {}
-    if f in ("maquininha","maquinona","cartao","credito","debito","pix"): return "MAQUINONA", {"valor": total}
-    if f == "dinheiro":
-        try:
-            if troco_para and float(troco_para) > float(total):
-                return "DINHEIRO_TROCO", {"valor_pedido": total, "valor_receber": float(troco_para), "valor_troco": float(troco_para)-float(total)}
-        except: pass
-        return "DINHEIRO", {"valor": total}
-    return "", {}
+    if estrelas:
+        resumo = "RECOLHER 10 ESTRELAS" + ((" + " + " ".join(partes)) if partes else "")
+        return "COBRAR_DETALHE", {"resumo": resumo}
+    if not partes:
+        return "PAGO", {}
+    return "COBRAR_DETALHE", {"resumo": " ".join(partes)}
 
 _ISO_RE = re.compile(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}')
 
@@ -2815,6 +2841,10 @@ def sofia_etiquetas_unitarias(display):
     Bebida, observacao e "outro" do pedido vao em TODAS. Borda antiga fica com a pizza dela.
     Devolve [(display_da_etiqueta, codigo_qr_ou_None), ...] na ordem do pedido."""
     extras = [d for d in display if d["tipo"] in ("bebida", "obs", "outro")]
+    def _tamanho_da_obs(d):
+        # v213: "Obs: Gigante · 1/3 Portuguesa: sem presunto" -> "gigante"
+        m = re.match(r"^\s*obs\s*:\s*([^\s·]+)\s*·", str(d.get("nome") or ""), re.I)
+        return m.group(1).lower() if m else None
     unidades = []
     for d in display:
         if d["tipo"] in ("caixa_salgada", "caixa_doce", "dip"):
@@ -2823,7 +2853,18 @@ def sofia_etiquetas_unitarias(display):
                 unidades.append({"item": dict(d, qty=1), "bordas": [], "qr": qrs[k] if k < len(qrs) else None})
         elif d["tipo"] == "borda" and unidades:
             unidades[-1]["bordas"].append(d)
-    return [([u["item"]] + u["bordas"] + extras, u["qr"]) for u in unidades]
+    tamanhos = {str(u["item"].get("nome") or "").lower() for u in unidades}
+    def _extras_da(u):
+        nome = str(u["item"].get("nome") or "").lower()
+        out = []
+        for d in extras:
+            t = _tamanho_da_obs(d) if d["tipo"] in ("obs", "outro") else None
+            # so filtra quando alguma pizza do pedido tem esse tamanho; senao vai em todas (como antes)
+            if t and any(t in n for n in tamanhos) and t not in nome:
+                continue
+            out.append(d)
+        return out
+    return [([u["item"]] + u["bordas"] + _extras_da(u), u["qr"]) for u in unidades]
 
 def sofia_display(itens):
     """Converte itens estruturados (DB) -> display_items do gerar_etiqueta (mesmo render Saipos)."""
@@ -3134,13 +3175,19 @@ def processar_sofia_pedido(pedido, impressora):
     display = sofia_display(pedido.get("itens"))
     total_caixas, total_dips, total_bebidas, total_outros, total_entrega, n_et = sofia_totais(display)
     total_valor = float(pedido.get("total") or 0)
+    estrelas = canal.lower() == "atendente" and str(pedido.get("cupom") or "").strip().upper() == CUPOM_ESTRELAS
     pag_cat, pag_dados = sofia_pag_cat(
         pedido.get("forma_pagamento"), pedido.get("troco_para"), total_valor,
-        pedido.get("pagamentos"), pedido.get("bandeira_pagamento")
+        pedido.get("pagamentos"), pedido.get("bandeira_pagamento"), estrelas=estrelas
     )
+    # v213: codigo do canal so no iFood (Brendi/Atendente/Luci nao servem pra operacao)
+    codigo_etiqueta = codigo_canal if canal.lower() == "ifood" else ""
     balcao = (pedido.get("tipo") == "retirada")
     nome_cli = (pedido.get("nome_cliente") or "").strip().split(" ")[0].upper() if pedido.get("nome_cliente") else ""
     quando, hora = sofia_quando(pedido.get("hora"))
+    # v213: a etiqueta mostra a hora PROMETIDA (hora do pedido + prazo); sem prazo, a do pedido
+    _, hora_prevista = sofia_quando(pedido.get("hora_prevista")) if pedido.get("hora_prevista") else (None, "")
+    hora_etiqueta = hora_prevista if re.fullmatch(r"\d{2}:\d{2}", hora_prevista or "") else hora
     # cupom e comanda de despacho recebem a hora ja em HH:MM e a data do pedido (v201)
     pedido = dict(pedido, hora=hora, _quando=quando)
 
@@ -3154,7 +3201,7 @@ def processar_sofia_pedido(pedido, impressora):
     for i, (display_i, qr_i) in enumerate(unidades, start=1):
         try:
             img = gerar_etiqueta(numero, i, n_et, display_i, total_entrega,
-                                 pag_cat, pag_dados, balcao, canal.upper(), codigo_canal.upper(), nome_cli, hora,
+                                 pag_cat, pag_dados, balcao, canal.upper(), codigo_etiqueta.upper(), nome_cli, hora_etiqueta,
                                  qr_texto=qr_i, unitario=True)
             if imprimir_etiqueta(img, printer_name=impressora):
                 log(f"  {canal.upper()} #{numero}: etiqueta {i}/{n_et}")
