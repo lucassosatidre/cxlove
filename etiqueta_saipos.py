@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "209"
+VERSION = "210"
 # v205 (23/09/26): QR saia CORTADO na direita (foto do Lucas, pedido #0008): ficava a 2 px da borda e a
 #   Elgin nao imprime os ultimos milimetros do papel. Agora fica QR_BORDA_DIR_PX (3 mm) pra dentro, e o
 #   rodape/meio encolhem junto. Log da nuvem confirmou: impressao ok, so o desenho encostava na borda.
@@ -1727,7 +1727,8 @@ def qr_imagem(texto, modulo=3, margem=2):
 
 QR_MODULO_PX = 4      # 4 px por quadradinho a 203 dpi = 0,5 mm (a pistola 2D le com folga)
 QR_MARGEM_MOD = 2     # borda clara em volta (em quadradinhos)
-QR_BORDA_DIR_PX = 24  # v205: distancia do QR ate a borda direita (a Elgin corta ~2 mm na direita)
+QR_BORDA_DIR_PX = 0   # v210: QR colado na borda direita (cabeca da .14 tem pontos queimados no meio)
+ETIQ_DESLOC_X_PX = 16 # v210: a .14 imprime ~2 mm pra esquerda; empurra a etiqueta da caixa pra direita
 QR_BORDA_INF_PX = 4   # distancia do QR ate a borda de baixo
 
 def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
@@ -2006,7 +2007,16 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
                                     import win32gui; win32gui.ResetDC(hdc.GetSafeHdc(), dm)
                                 except Exception as e: log(f"  ResetDC 80x30 ignorado: {e}")
                         hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
-                        ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (0, 0, larg, alt))
+                        dx = 0
+                        if img.size == (LARGURA_PX, ALTURA_PX) and ETIQ_DESLOC_X_PX:
+                            # v210: so a etiqueta da caixa; nunca empurra alem da area que o driver imprime
+                            try:
+                                import win32con
+                                area = hdc.GetDeviceCaps(win32con.HORZRES)
+                                dx = max(0, min(ETIQ_DESLOC_X_PX, area - larg))
+                                if tentativa == 0: log(f"  area impressao {area}px, etiqueta {larg}px, desloc {dx}px")
+                            except Exception: dx = 0
+                        ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (dx, 0, larg + dx, alt))
                         hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
                         log(f"  Impresso OK ({printer_name})")
                         ultimo_erro = None
@@ -3154,7 +3164,11 @@ def processar_sofia_pedido(pedido, impressora):
         log(f"  {canal.upper()} #{numero}: etiqueta falhou - pedido volta pra fila, cupom nao impresso aqui")
         return False
     imp_comanda = _impressora_para(IP_IMPRESSORA_COMANDA, fallback=None, etiqueta="COMANDA")
-    if imp_comanda:
+    if imp_comanda and not _ip_responde(IP_IMPRESSORA_COMANDA):
+        # v210: i8 da cozinha fora da rede -> nao trava o pedido tentando 4x (~6 s por pedido)
+        log(f"  {canal.upper()} #{numero}: comanda pulada - {IP_IMPRESSORA_COMANDA} fora da rede")
+        sofia_evento("cupom_erro", pedido, impressora=imp_comanda, detalhe="fora da rede (9100)")
+    elif imp_comanda:
         try:
             cmd = gerar_comanda_cupom(pedido)
             if imprimir_etiqueta(cmd, printer_name=imp_comanda, larg=cmd.width, alt=cmd.height):
