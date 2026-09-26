@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "217"
+VERSION = "218"
+# v218 (26/09/26): etiqueta de MESA com QR (mesmo leitor da tele: "EQ"+md5 do id da comanda, carimbado no
+#   Mana ao reivindicar), cabecalho numa fonte so (MESA, n/total e hora do mesmo tamanho) e sabores na maior
+#   fonte que cabe (1o sem quebrar linha). QR ~1 mm mais alto (MESA_QR_BORDA_INF_PX).
 # v217 (25/09/26): etiqueta de MESA com contraste invertido (fundo preto, letra branca mais grossa) e
 #   REIMPRESSAO de uma etiqueta pedida no Mana (botao da impressora no Forno -> Provisao -> fila):
 #   tele/retirada = so a etiqueta do QR pedido (pedido.so_qr), sem cupom; salao = etiqueta de mesa na .24.
@@ -2778,14 +2781,18 @@ def _mesa_nome_produto(item):
         return ("POTE DIP " + nome.upper()).strip()
     return nome.upper() or "PIZZA"
 
-def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", larg=None, alt=None):
-    """Etiqueta 50x25 pra assadeira/pote do salao. v217: CONTRASTE INVERTIDO - fundo PRETO, letra BRANCA
-    e mais grossa (contorno de MESA_TRACO px), pra destacar na assadeira.
-        MESA 50 · ANA                    2/3 19:00
-        PIZZA GRANDE
-        1/2 Frango c/ Catupiry
-        1/2 Portuguesa
-        + Cebola | Borda Catupiry | Obs: ...
+def etiqueta_mesa_qr(comanda_id):
+    """Codigo do QR da etiqueta de mesa: "EQ" + 10 hex do md5 do id da comanda (igual a etiqueta_mesa_qr do Mana)."""
+    if not comanda_id: return None
+    return "EQ" + hashlib.md5(str(comanda_id).encode()).hexdigest()[:10].upper()
+
+MESA_QR_BORDA_INF_PX = 14   # v218: QR ~1 mm mais alto que o da caixa (sobrava margem, evita cortar embaixo)
+
+def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", larg=None, alt=None, qr=None):
+    """Etiqueta 50x25 pra assadeira/pote do salao. Fundo PRETO, letra BRANCA (v217).
+    v218: cabecalho numa fonte so (MESA 64  1/2  19:22, tudo do mesmo tamanho); QR embaixo a esquerda em
+    quadro branco (mesmo codigo EQ.. que a pistola le no Mana); produto e sabores na MAIOR fonte que cabe,
+    1o sem quebrar linha (mesma logica da etiqueta do delivery). Sem QR = texto na largura toda.
     """
     larg = larg if larg else CO_LOVE_LARGURA_PX
     alt = alt if alt else CO_LOVE_ALTURA_PX
@@ -2793,7 +2800,7 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
     draw = ImageDraw.Draw(img)
     tinta, traco = MESA_TINTA, MESA_TRACO
     margem_e, margem_d, margem_t, margem_b = 12, 30, 4, 4
-    x0 = margem_e; x1 = larg - margem_d; util_w = x1 - x0
+    x0 = margem_e; x1 = larg - margem_d
     def w(t, f): bb = draw.textbbox((0, 0), t, font=f, stroke_width=traco); return bb[2] - bb[0]
     def h(t, f): bb = draw.textbbox((0, 0), t, font=f, stroke_width=traco); return bb[3] - bb[1]
 
@@ -2811,59 +2818,71 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
             linhas.append(re.sub(r'\s+', ' ', str(d.get("nome") or "")).strip())
     linhas = [l for l in linhas if l]
 
-    # --- cabecalho: MESA grande a esquerda; "idx/total hora" pequeno a direita ---
-    cab_h = int((alt - margem_t - margem_b) * 0.30)
-    conta = (nome_conta or "").strip().split(" ")[0].upper()   # so o 1o nome (cabe ao lado da mesa)
-    direita = " ".join(x for x in ((f"{idx}/{total}" if total and total > 1 else ""), (hora or "")) if x)
-    f_dir = _prod_fonte_bold(20)   # v217: pequeno = sem contorno (senao os numeros empapam)
-    dir_w = (draw.textbbox((0, 0), direita, font=f_dir)[2] + 8) if direita else 0
+    # --- cabecalho: MESA, n/total e hora na MESMA fonte (a maior que cabe na linha) ---
+    cab_h = int((alt - margem_t - margem_b) * 0.32)
     mesa_txt = _mesa_txt(mesa)
-    f_mesa = _prod_fit(draw, mesa_txt, util_w - dir_w, cab_h, bold=True, tam_max=48, tam_min=14)
-    draw.text((x0, margem_t + cab_h // 2), mesa_txt, fill=tinta, font=f_mesa, anchor="lm", stroke_width=traco, stroke_fill=tinta)
-    xm = x0 + w(mesa_txt, f_mesa) + 8
-    if conta:
-        f_conta = _prod_fit(draw, conta, max(10, x1 - dir_w - xm), cab_h, bold=True, tam_max=22, tam_min=10)
-        if w(conta, f_conta) <= max(10, x1 - dir_w - xm):
-            draw.text((xm, margem_t + cab_h // 2 + 2), conta, fill=tinta, font=f_conta, anchor="lm", stroke_width=traco, stroke_fill=tinta)
-    if direita:
-        draw.text((x1, margem_t + cab_h // 2), direita, fill=tinta, font=f_dir, anchor="rm")
+    partes = [mesa_txt] + ([f"{idx}/{total}"] if total and total > 1 else []) + ([hora] if hora else [])
+    gap = 14
+    f_cab = _prod_fonte_bold(13)
+    for tam in range(56, 12, -1):
+        f = _prod_fonte_bold(tam)
+        if sum(w(p_, f) for p_ in partes) + gap * (len(partes) - 1) <= x1 - x0 and max(h(p_, f) for p_ in partes) <= cab_h:
+            f_cab = f; break
+    ym = margem_t + cab_h // 2
+    draw.text((x0, ym), mesa_txt, fill=tinta, font=f_cab, anchor="lm", stroke_width=traco, stroke_fill=tinta)
+    if hora:
+        draw.text((x1, ym), hora, fill=tinta, font=f_cab, anchor="rm", stroke_width=traco, stroke_fill=tinta)
+    if total and total > 1:
+        dir_ = x1 - (w(hora, f_cab) if hora else 0)
+        meio = (x0 + w(mesa_txt, f_cab) + dir_) // 2
+        draw.text((meio, ym), f"{idx}/{total}", fill=tinta, font=f_cab, anchor="mm", stroke_width=traco, stroke_fill=tinta)
     y = margem_t + cab_h
     draw.line([(x0, y), (x1, y)], fill=tinta, width=3)
-    y += 3
+    y += 4
 
-    # --- corpo: produto + linhas, maior fonte onde tudo cabe (produto 1 ponto acima) ---
+    # --- QR embaixo a esquerda, preto no BRANCO (a pistola nao le QR invertido com seguranca) ---
+    tx = x0
+    if qr:
+        try:
+            q = qr_imagem(qr, modulo=QR_MODULO_PX, margem=QR_MARGEM_MOD).convert("RGB")
+            img.paste(q, (QR_BORDA_ESQ_PX, alt - q.height - MESA_QR_BORDA_INF_PX))
+            tx = QR_BORDA_ESQ_PX + q.width + 10
+        except Exception as e:
+            log(f"  MESA {mesa}: QR nao gerado ({e})")
+    util_w = x1 - tx
+
+    # --- corpo: produto + linhas na MAIOR fonte onde tudo cabe (1o sem quebrar linha) ---
     corpo_h = alt - margem_b - y
-    def _lh(f): return h("Ág", f) + 2          # altura de linha fixa (com descendente), pra nao colar
+    def _lh(f): return h("Ág", f)
     def _cabe(tam, quebrar):
-        fp = _prod_fonte_bold(tam + 2); fl = _prod_fonte_bold(tam)
-        if w(produto, fp) > util_w: return None
+        fl = _prod_fonte_bold(tam)
+        if w(produto, fl) > util_w: return None
         ls = []
         for l in linhas:
             if w(l, fl) <= util_w: ls.append(l)
             elif quebrar: ls.extend(_prod_wrap(draw, l, fl, util_w))
             else: return None
-        tot = _lh(fp) + 1 + len(ls) * _lh(fl)
-        return (fp, fl, ls) if tot <= corpo_h else None
+        return (fl, ls) if (1 + len(ls)) * _lh(fl) <= corpo_h else None
     escolha = None
-    for quebrar in (False, True):               # 1o tenta sem quebrar linha; so depois aceita quebra
-        for tam in range(34, 9, -1):
+    for quebrar in (False, True):
+        for tam in range(60, 9, -1):
             escolha = _cabe(tam, quebrar)
             if escolha: break
         if escolha: break
     if not escolha:
-        fp, fl = _prod_fonte_bold(12), _prod_fonte_bold(10); ls = []
+        fl = _prod_fonte_bold(10); ls = []
         for l in linhas: ls.extend(_prod_wrap(draw, l, fl, util_w))
     else:
-        fp, fl, ls = escolha
-    draw.text((x0, y), produto, fill=tinta, font=fp, anchor="la", stroke_width=traco, stroke_fill=tinta); y += _lh(fp) + 1
+        fl, ls = escolha
+    draw.text((tx, y), produto, fill=tinta, font=fl, anchor="la", stroke_width=traco, stroke_fill=tinta); y += _lh(fl)
     for l in ls:
-        if y + _lh(fl) > alt - margem_b + 4: break   # nao cabe: corta (ja tentamos a menor fonte)
-        draw.text((x0, y), l, fill=tinta, font=fl, anchor="la", stroke_width=traco, stroke_fill=tinta); y += _lh(fl)
+        if y + _lh(fl) > alt - margem_b + 4: break
+        draw.text((tx, y), l, fill=tinta, font=fl, anchor="la", stroke_width=traco, stroke_fill=tinta); y += _lh(fl)
     # 1 bit: na letra branca sobre preto, o cinza da borda da letra vira BRANCO (engrossa, nao afina)
     img = img.convert("L").point(lambda p: 255 if p > 70 else 0).convert("RGB")
     return img
 
-def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA", pedido=None, seq=None, total=None):
+def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA", pedido=None, seq=None, total=None, qr=None):
     """Imprime as etiquetas de mesa de um display (uma por pizza/pote) na impressora de PRODUCAO.
     Devolve (impressas, total). total=0 quando nao ha pizza/pote. impressas<total = falhou."""
     unidades = etiquetas_mesa_unidades(display)
@@ -2882,7 +2901,7 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA"
         try:
             # seq/total vindos do Mana (pizza_seq/pizza_total da comanda) valem mais que a contagem local
             idx, tot = (seq, total) if (seq and total and n == 1) else (i, n)
-            img = gerar_etiqueta_mesa(mesa, display_i, idx, tot, nome_conta=nome_conta, hora=hora)
+            img = gerar_etiqueta_mesa(mesa, display_i, idx, tot, nome_conta=nome_conta, hora=hora, qr=(qr if n == 1 else None))
             imprimir_etiqueta_producao(img, impressora, copias=1)
             ok += 1
             log(f"  {origem} MESA {mesa}: etiqueta {i}/{n} ({_mesa_nome_produto(display_i[0])})")
@@ -2948,7 +2967,8 @@ def mesa_processar_pendentes(pendentes, pc, inicio):
         display = mesa_display_do_mana(c.get("items"))
         try:
             ok, n = imprimir_etiquetas_mesa(mesa, display, hora=_mesa_hora(c.get("received_at")), origem="MANA",
-                                            seq=c.get("pizza_seq"), total=c.get("pizza_total"))
+                                            seq=c.get("pizza_seq"), total=c.get("pizza_total"),
+                                            qr=c.get("etiqueta_qr") or etiqueta_mesa_qr(cid))
         except Exception as e:
             ok, n = 0, 1; log(f"  ERRO etiqueta de mesa {mesa}: {e}")
         if n and ok < n:
@@ -3460,7 +3480,8 @@ def processar_sofia_mesa(pedido):
         display = mesa_display_do_mana(pedido.get("itens"))
         ok, n = imprimir_etiquetas_mesa(mesa, display, hora=_mesa_hora(pedido.get("received_at")),
                                         origem="MANA/REIMP", pedido=pedido,
-                                        seq=pedido.get("pizza_seq"), total=pedido.get("pizza_total"))
+                                        seq=pedido.get("pizza_seq"), total=pedido.get("pizza_total"),
+                                        qr=etiqueta_mesa_qr(pedido.get("reimpressao_comanda")))
         log(f"  MESA {mesa}: reimpressao pedida no Mana - {ok}/{n} etiqueta(s)")
         return n == 0 or ok == n
     log(f"  PROVISAO salao #{pedido.get('numero')}: etiqueta de mesa sai pelo Mana - marcado sem imprimir aqui")

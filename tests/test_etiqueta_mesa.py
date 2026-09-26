@@ -89,3 +89,23 @@ class EtiquetaMesaTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestEtiquetaMesaQR(unittest.TestCase):
+    """v218: QR da mesa = mesmo codigo que o Mana calcula (etiqueta_mesa_qr) e desenho com QR."""
+
+    def test_codigo_igual_ao_do_mana(self):
+        # valor conferido no banco do Mana em 26/09: etiqueta_mesa_qr('cc407c4b-...') = EQ12ECF6B9AC
+        self.assertEqual(MOD.etiqueta_mesa_qr("cc407c4b-01ad-4d1b-ad41-20667ae65062"), "EQ12ECF6B9AC")
+        self.assertIsNone(MOD.etiqueta_mesa_qr(None))
+
+    def test_desenha_com_e_sem_qr(self):
+        item = [{"nome": "Pizza Gigante", "qty": 1, "tipo": "caixa_salgada",
+                 "sabores": ["1/3 Calabresa c/ Catupiry", "1/3 Calabresa c/ Cebola", "1/3 4 Queijos"]}]
+        com = MOD.gerar_etiqueta_mesa("64", item, 1, 2, hora="19:22", qr="EQ12ECF6B9AC")
+        sem = MOD.gerar_etiqueta_mesa("64", item, 1, 2, hora="19:22")
+        self.assertEqual(com.size, (MOD.CO_LOVE_LARGURA_PX, MOD.CO_LOVE_ALTURA_PX))
+        # canto de baixo a esquerda: branco (quadro do QR) so quando tem QR
+        px = (MOD.QR_BORDA_ESQ_PX + 2, MOD.CO_LOVE_ALTURA_PX - MOD.MESA_QR_BORDA_INF_PX - 2)
+        self.assertEqual(com.getpixel(px), (255, 255, 255))
+        self.assertEqual(sem.getpixel(px), (0, 0, 0))
