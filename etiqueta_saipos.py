@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "218"
+VERSION = "219"
 # v218 (26/09/26): etiqueta de MESA com QR (mesmo leitor da tele: "EQ"+md5 do id da comanda, carimbado no
 #   Mana ao reivindicar), cabecalho numa fonte so (MESA, n/total e hora do mesmo tamanho) e sabores na maior
 #   fonte que cabe (1o sem quebrar linha). QR ~1 mm mais alto (MESA_QR_BORDA_INF_PX).
@@ -2914,7 +2914,7 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA"
 
 
 # ---- v215: fila de etiquetas de MESA no MANA (fonte unica) ----
-MANA_URL = "https://vqlfrbugmdnlyxzrlrzt.supabase.co"
+MANA_URL = "https://gwehsrlwhessgpdyoogu.supabase.co"
 # chave PUBLICA (anon) do Mana: a mesma que o navegador usa; so enxerga o que as RPCs abaixo deixam.
 MANA_ANON = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxbGZyYnVnbWRubHl4enJscnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTQwODIsImV4cCI6MjA5MDQ3MDA4Mn0.Y4pOCo0cNKebJkjTHOv7SlxsH5R2-o_wM58r0v_ZvBM")
 MESA_POLL_INTERVAL = 10
@@ -3066,7 +3066,12 @@ def _sofia_http(url, method="GET", body=None, secret="", pc=""):
     resp = urllib.request.urlopen(req, timeout=15, context=_sofia_ctx())
     return json.loads(resp.read().decode("utf-8"))
 
-CUPOM_ESTRELAS = "JUNTE10TELE"   # v213: promocao junte 10 estrelas (so pedido do Atendente)
+CUPOM_ESTRELAS = "JUNTE10TELE"   # v213: promocao junte 10 estrelas
+# v219: vale na tele propria (Atendente e Luci). Brendi/iFood ficam de fora (ESTRELA10 da Brendi nao entra).
+CANAIS_ESTRELAS = ("atendente", "luci")
+
+def sofia_tem_estrelas(canal, cupom):
+    return str(canal or "").strip().lower() in CANAIS_ESTRELAS and str(cupom or "").strip().upper() == CUPOM_ESTRELAS
 
 def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira="", estrelas=False):
     """v213 (regras do Lucas 25/09/26), igual pra todo canal:
@@ -3505,7 +3510,7 @@ def processar_sofia_pedido(pedido, impressora):
     display = sofia_display(pedido.get("itens"))
     total_caixas, total_dips, total_bebidas, total_outros, total_entrega, n_et = sofia_totais(display)
     total_valor = float(pedido.get("total") or 0)
-    estrelas = canal.lower() == "atendente" and str(pedido.get("cupom") or "").strip().upper() == CUPOM_ESTRELAS
+    estrelas = sofia_tem_estrelas(canal, pedido.get("cupom"))
     pag_cat, pag_dados = sofia_pag_cat(
         pedido.get("forma_pagamento"), pedido.get("troco_para"), total_valor,
         pedido.get("pagamentos"), pedido.get("bandeira_pagamento"), estrelas=estrelas
@@ -3826,7 +3831,7 @@ def sofia_poll_loop():
 # Best-effort: a impressao SEMPRE acontece antes e NUNCA e afetada por isto.
 # Opt-out local opcional: ~/Downloads/comanda_config.json com {"enabled": false} silencia ESTE PC.
 # ============================================================
-COMANDA_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-comanda"
+COMANDA_ENDPOINT = "https://gwehsrlwhessgpdyoogu.supabase.co/functions/v1/ingest-comanda"
 COMANDA_TYPES    = ["ENTREGA", "RETIRADA", "SALAO"]
 COMANDA_CONFIG   = os.path.join(PASTA_DOWNLOADS, "comanda_config.json")  # opt-out local opcional
 COMANDA_OUTBOX   = os.path.join(PASTA_FILA, "comanda_outbox")
@@ -3943,7 +3948,7 @@ def comanda_retry_loop():
 # entendeu) pra IA diaria do CO LOVE melhorar escrita/exibicao. Best-effort, NUNCA afeta a
 # impressao. Gated no servidor por debug_capture_enabled. Mesmo opt-out local da comanda.
 # ============================================================
-DEBUG_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-debug"
+DEBUG_ENDPOINT = "https://gwehsrlwhessgpdyoogu.supabase.co/functions/v1/ingest-debug"
 DEBUG_OUTBOX   = os.path.join(PASTA_FILA, "debug_outbox")
 DEBUG_SENT     = os.path.join(PASTA_FILA, "debug_sent")
 DEBUG_FAILED   = os.path.join(PASTA_FILA, "debug_failed")
@@ -4058,7 +4063,7 @@ def _migrar_filas_antigas():
 # REGRAS (dicionario da IA) -> aplica na escrita dos itens. So vem regra do servidor se
 # debug_apply_rules=true (senao a edge devolve vazio = comportamento de hoje, byte a byte).
 # ============================================================
-RULES_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/get-etiqueta-rules"
+RULES_ENDPOINT = "https://gwehsrlwhessgpdyoogu.supabase.co/functions/v1/get-etiqueta-rules"
 RULES_REFRESH_INTERVAL = 600  # 10 min
 _REGRAS = {"rules": []}
 _REGRAS_LOCK = threading.Lock()
