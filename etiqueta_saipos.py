@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "219"
+VERSION = "220"
+# v220 (27/09/26): a fila de mesa ainda vive no Maná legado. Corrige o endereço para
+#   combinar com a chave pública e imprime pendências anteriores ao reinício do helper;
+#   a RPC já exclui comandas reivindicadas e limita a janela a 20 minutos.
 # v218 (26/09/26): etiqueta de MESA com QR (mesmo leitor da tele: "EQ"+md5 do id da comanda, carimbado no
 #   Mana ao reivindicar), cabecalho numa fonte so (MESA, n/total e hora do mesmo tamanho) e sabores na maior
 #   fonte que cabe (1o sem quebrar linha). QR ~1 mm mais alto (MESA_QR_BORDA_INF_PX).
@@ -2914,7 +2917,7 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA"
 
 
 # ---- v215: fila de etiquetas de MESA no MANA (fonte unica) ----
-MANA_URL = "https://gwehsrlwhessgpdyoogu.supabase.co"
+MANA_URL = "https://vqlfrbugmdnlyxzrlrzt.supabase.co"
 # chave PUBLICA (anon) do Mana: a mesma que o navegador usa; so enxerga o que as RPCs abaixo deixam.
 MANA_ANON = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxbGZyYnVnbWRubHl4enJscnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTQwODIsImV4cCI6MjA5MDQ3MDA4Mn0.Y4pOCo0cNKebJkjTHOv7SlxsH5R2-o_wM58r0v_ZvBM")
 MESA_POLL_INTERVAL = 10
@@ -2942,27 +2945,18 @@ def mesa_display_do_mana(items):
 def _mesa_hora(iso):
     return _prod_hora_br(iso) if iso else ""
 
-_mesa_poll_inicio = [None]
-def mesa_processar_pendentes(pendentes, pc, inicio):
-    """Reivindica e imprime cada comanda de mesa pendente. Comandas recebidas ANTES de `inicio` (boot deste
-    programa) sao adotadas sem imprimir. Devolve (impressas, adotadas)."""
-    impressas = adotadas = 0
+def mesa_processar_pendentes(pendentes, pc):
+    """Reivindica e imprime comandas pendentes, inclusive as criadas antes do boot.
+    A RPC só retorna comandas recentes ainda não reivindicadas."""
+    impressas = 0
     for c in (pendentes or []):
         cid = c.get("comanda_id")
         if not cid: continue
         try:
-            rec = datetime.fromisoformat(str(c.get("received_at") or "").replace("Z", "+00:00"))
-            if rec.tzinfo is None: rec = rec.replace(tzinfo=timezone.utc)
-            antiga = rec.timestamp() < inicio
-        except Exception:
-            antiga = False
-        try:
-            if not _mana_rpc("etiqueta_mesa_reivindicar", {"p_comanda": cid, "p_pc": (pc + ("/adotada" if antiga else ""))[:80]}):
+            if not _mana_rpc("etiqueta_mesa_reivindicar", {"p_comanda": cid, "p_pc": pc[:80]}):
                 continue   # outro PC pegou
         except Exception as e:
             log(f"  MESA: reivindicar falhou ({e})"); continue
-        if antiga:
-            adotadas += 1; continue
         mesa = c.get("mesa") or ""
         display = mesa_display_do_mana(c.get("items"))
         try:
@@ -2976,11 +2970,10 @@ def mesa_processar_pendentes(pendentes, pc, inicio):
             except Exception: pass
         else:
             impressas += ok
-    return impressas, adotadas
+    return impressas
 
 def mesa_poll_loop():
     """v215: todo PC que enxerga a impressora de PRODUCAO (.24) pergunta ao Mana pelas pizzas de mesa e imprime."""
-    inicio = time.time(); _mesa_poll_inicio[0] = inicio
     pc = _nome_deste_pc()
     avisou = 0
     while True:
@@ -2993,8 +2986,7 @@ def mesa_poll_loop():
                 continue
             pendentes = _mana_rpc("etiqueta_mesa_pendentes")
             if not pendentes: continue
-            imp, ado = mesa_processar_pendentes(pendentes, pc, inicio)
-            if ado: log(f"  MESA: {ado} comanda(s) de antes do boot adotadas sem imprimir")
+            mesa_processar_pendentes(pendentes, pc)
         except Exception as e:
             if time.time() - avisou > 600:
                 avisou = time.time(); log(f"  MESA: fila do Mana indisponivel ({e})")
