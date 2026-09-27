@@ -1,8 +1,10 @@
 """v214/v215: etiqueta de MESA (salao) — 1 comanda do Mana = 1 etiqueta 50x25, sem pagamento."""
 import importlib.util
+import base64
+import json
 import pathlib
-import time
 import unittest
+from urllib.parse import urlparse
 
 ARQUIVO = pathlib.Path(__file__).resolve().parents[1] / "etiqueta_saipos.py"
 SPEC = importlib.util.spec_from_file_location("etiqueta_saipos_mesa", ARQUIVO)
@@ -42,29 +44,34 @@ class EtiquetaMesaTest(unittest.TestCase):
         MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep, MOD._mana_rpc, MOD._instalar_impressora_24 = self._orig
 
     def test_uma_comanda_do_mana_uma_etiqueta_na_24(self):
-        imp, ado = MOD.mesa_processar_pendentes(PENDENTES, "PC-TESTE", inicio=0)
-        self.assertEqual((imp, ado), (3, 0))
+        imp = MOD.mesa_processar_pendentes(PENDENTES, "PC-TESTE")
+        self.assertEqual(imp, 3)
         self.assertEqual(len(self.chamadas), 3)                       # gigante 64, broto 64, gigante 43 (bebida nao vira etiqueta)
         self.assertTrue(all(c[0] == "producao 24 (etiquetas)" and c[1] == (MOD.CO_LOVE_LARGURA_PX, MOD.CO_LOVE_ALTURA_PX) for c in self.chamadas))
         reiv = [b["p_comanda"] for n, b in self.rpcs if n == "etiqueta_mesa_reivindicar"]
         self.assertEqual(reiv, [p["comanda_id"] for p in PENDENTES])  # reivindica ANTES de imprimir, cada uma
         self.assertFalse(any(n == "etiqueta_mesa_devolver" for n, _ in self.rpcs))
 
-    def test_comanda_de_antes_do_boot_e_adotada_sem_imprimir(self):
-        imp, ado = MOD.mesa_processar_pendentes(PENDENTES, "PC-TESTE", inicio=time.time())
-        self.assertEqual((imp, ado), (0, 3))
-        self.assertEqual(self.chamadas, [])
-        self.assertTrue(all(b["p_pc"].endswith("/adotada") for n, b in self.rpcs if n == "etiqueta_mesa_reivindicar"))
+    def test_comanda_pendente_de_antes_do_boot_tambem_imprime(self):
+        imp = MOD.mesa_processar_pendentes(PENDENTES[:1], "PC-TESTE")
+        self.assertEqual(imp, 1)
+        self.assertEqual(len(self.chamadas), 1)
+        self.assertFalse(any(b["p_pc"].endswith("/adotada") for n, b in self.rpcs if n == "etiqueta_mesa_reivindicar"))
+
+    def test_chave_publica_pertence_ao_projeto_consultado(self):
+        payload = MOD.MANA_ANON.split(".")[1]
+        dados = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+        self.assertEqual(urlparse(MOD.MANA_URL).hostname.split(".")[0], dados["ref"])
 
     def test_outro_pc_ja_pegou_nao_imprime(self):
         p = [dict(PENDENTES[0], comanda_id="ja-pego")]
-        self.assertEqual(MOD.mesa_processar_pendentes(p, "PC-TESTE", inicio=0), (0, 0))
+        self.assertEqual(MOD.mesa_processar_pendentes(p, "PC-TESTE"), 0)
         self.assertEqual(self.chamadas, [])
 
     def test_sem_impressora_devolve_pra_fila(self):
         MOD._nome_por_ip = lambda ip: None
-        imp, ado = MOD.mesa_processar_pendentes(PENDENTES[:1], "PC-TESTE", inicio=0)
-        self.assertEqual((imp, ado), (0, 0))
+        imp = MOD.mesa_processar_pendentes(PENDENTES[:1], "PC-TESTE")
+        self.assertEqual(imp, 0)
         self.assertEqual([b["p_comanda"] for n, b in self.rpcs if n == "etiqueta_mesa_devolver"], [PENDENTES[0]["comanda_id"]])
 
     def test_desenho_usa_seq_total_do_mana(self):
