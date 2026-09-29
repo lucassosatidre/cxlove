@@ -4,7 +4,13 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "221"
+VERSION = "222"
+# v222 (29/09/26): etiqueta de MESA POR ITEM, igual ao delivery (Lucas): cada pizza salgada, pizza doce e pote
+#   dip tem a SUA etiqueta com o SEU QR, numeradas na mesa inteira (mesa 10: Gigante 1/3, Pote Dip 2/3,
+#   Broto 3/3). Os codigos e a numeracao vem do Mana nos itens (etiqueta_qr / etiqueta_tokens / etiqueta_n /
+#   etiqueta_de); a reivindicacao pede p_por_item=true pro Mana gravar os codigos do pote. Antes o QR so saia
+#   em comanda de UMA etiqueta: pizza + pote saiam os dois sem QR e o pote repetia o numero da outra pizza.
+#   Comanda antiga (sem numeracao nos itens) segue o jeito da v221.
 # v221 (29/09/26): Maná saiu do Lovable. Fila de etiqueta de MESA passa pro Maná NOVO
 #   (gwehsrlw) — endereço E chave pública trocados juntos (a v219 trocou só o endereço).
 # v220 (27/09/26): a fila de mesa ainda vive no Maná legado. Corrige o endereço para
@@ -2904,9 +2910,15 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA"
     ok = 0
     for i, (display_i, _qr) in enumerate(unidades, start=1):
         try:
-            # seq/total vindos do Mana (pizza_seq/pizza_total da comanda) valem mais que a contagem local
-            idx, tot = (seq, total) if (seq and total and n == 1) else (i, n)
-            img = gerar_etiqueta_mesa(mesa, display_i, idx, tot, nome_conta=nome_conta, hora=hora, qr=(qr if n == 1 else None))
+            item_i = display_i[0] if display_i else {}
+            if item_i.get("etiqueta_n") and item_i.get("etiqueta_de"):
+                # v222: numero e QR proprios de cada item, vindos do Mana (numeracao da mesa inteira)
+                idx, tot, qr_i = item_i["etiqueta_n"], item_i["etiqueta_de"], _qr
+            else:
+                # comanda antiga (v221): seq/total da comanda; QR so quando ela da UMA etiqueta
+                idx, tot = (seq, total) if (seq and total and n == 1) else (i, n)
+                qr_i = qr if n == 1 else None
+            img = gerar_etiqueta_mesa(mesa, display_i, idx, tot, nome_conta=nome_conta, hora=hora, qr=qr_i)
             imprimir_etiqueta_producao(img, impressora, copias=1)
             ok += 1
             log(f"  {origem} MESA {mesa}: etiqueta {i}/{n} ({_mesa_nome_produto(display_i[0])})")
@@ -2933,15 +2945,28 @@ def _mana_rpc(nome, body=None, timeout=8):
     return json.loads(txt) if txt.strip() else None
 
 def mesa_display_do_mana(items):
-    """items da comanda do Mana ja vem no formato display (tipo/nome/qty/sabores). So limpa e garante campos."""
+    """items da comanda do Mana ja vem no formato display (tipo/nome/qty/sabores). So limpa e garante campos.
+    v222: item com numeracao do Mana (etiqueta_n) vira UMA linha por unidade, cada uma com o seu QR
+    (etiqueta_qr = 1a unidade da pizza principal; etiqueta_tokens = as demais, em ordem) e o seu numero."""
     out = []
     for it in (items or []):
         if not isinstance(it, dict): continue
         tipo = str(it.get("tipo") or "outro").lower()
         try: qty = max(1, int(it.get("qty") or 1))
         except Exception: qty = 1
-        out.append({"tipo": tipo, "nome": str(it.get("nome") or ""), "qty": qty,
-                    "sabores": [str(x) for x in (it.get("sabores") or [])]})
+        base = {"tipo": tipo, "nome": str(it.get("nome") or ""), "qty": qty,
+                "sabores": [str(x) for x in (it.get("sabores") or [])]}
+        nums = it.get("etiqueta_n")
+        if tipo in ("caixa_salgada", "caixa_doce", "dip") and isinstance(nums, list) and nums:
+            qrs = ([it["etiqueta_qr"]] if it.get("etiqueta_qr") else []) + [t for t in (it.get("etiqueta_tokens") or []) if t]
+            try: de = int(it.get("etiqueta_de") or 0)
+            except Exception: de = 0
+            for k in range(qty):
+                try: n = int(nums[k]) if k < len(nums) else None
+                except Exception: n = None
+                out.append(dict(base, qty=1, qr=[qrs[k]] if k < len(qrs) else [], etiqueta_n=n, etiqueta_de=de))
+            continue
+        out.append(base)
     return out
 
 def _mesa_hora(iso):
@@ -2955,7 +2980,7 @@ def mesa_processar_pendentes(pendentes, pc):
         cid = c.get("comanda_id")
         if not cid: continue
         try:
-            if not _mana_rpc("etiqueta_mesa_reivindicar", {"p_comanda": cid, "p_pc": pc[:80]}):
+            if not _mana_rpc("etiqueta_mesa_reivindicar", {"p_comanda": cid, "p_pc": pc[:80], "p_por_item": True}):
                 continue   # outro PC pegou
         except Exception as e:
             log(f"  MESA: reivindicar falhou ({e})"); continue

@@ -116,3 +116,72 @@ class TestEtiquetaMesaQR(unittest.TestCase):
         px = (MOD.QR_BORDA_ESQ_PX + 2, MOD.CO_LOVE_ALTURA_PX - MOD.MESA_QR_BORDA_INF_PX - 2)
         self.assertEqual(com.getpixel(px), (255, 255, 255))
         self.assertEqual(sem.getpixel(px), (0, 0, 0))
+
+
+# v222: mesa 10 de 29/09/26 15:17, itens REAIS como o Maná devolve em etiqueta_mesa_pendentes
+# (etiqueta_mesa_decorar conferida no banco numa transação desfeita). Antes: Gigante e Pote sem QR,
+# e o Pote saiu "2/2" igual à Broto.
+MESA10 = [
+    {"comanda_id": "da804acb-0963-48a9-91ee-bb0d52310238", "id_sale": "x", "mesa": "10", "pizza_seq": 1, "pizza_total": 2,
+     "received_at": "2026-09-29T18:17:40.01185+00:00", "etiqueta_qr": "EQ859739EEC9",
+     "items": [{"qty": 1, "nome": "Pizza Gigante", "tipo": "caixa_salgada", "sabores": ["Americana", "+ Adicional de Catupiry"],
+                "etiqueta_n": [1], "etiqueta_de": 3, "etiqueta_qr": "EQ859739EEC9"},
+               {"qty": 1, "nome": "Borda Dip Catupiry", "tipo": "dip", "sabores": [],
+                "etiqueta_n": [2], "etiqueta_de": 3, "etiqueta_tokens": ["EQ15CED7534D"]}]},
+    {"comanda_id": "da5821e0-4c46-4018-88ed-ed4837c197fc", "id_sale": "x", "mesa": "10", "pizza_seq": 2, "pizza_total": 2,
+     "received_at": "2026-09-29T18:17:40.01185+00:00", "etiqueta_qr": "EQ9CBB0209D5",
+     "items": [{"qty": 1, "nome": "Pizza Broto", "tipo": "caixa_doce", "sabores": ["Chocolate Preto", "+ Adicional de Amendoim"],
+                "etiqueta_n": [3], "etiqueta_de": 3, "etiqueta_qr": "EQ9CBB0209D5"}]},
+]
+
+
+class TestEtiquetaMesaPorItem(unittest.TestCase):
+    def setUp(self):
+        self.desenhos = []; self.rpcs = []
+        self._orig = (MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep, MOD._mana_rpc,
+                      MOD._instalar_impressora_24, MOD.gerar_etiqueta_mesa)
+        MOD._nome_por_ip = lambda ip: "producao 24 (etiquetas)" if ip == MOD.IP_IMPRESSORA_PRODUCAO else None
+        MOD.imprimir_etiqueta_producao = lambda img, imp, copias=1: None
+        MOD.time.sleep = lambda s: None
+        MOD._instalar_impressora_24 = lambda: None
+        orig = MOD.gerar_etiqueta_mesa
+        def desenha(mesa, display_i, idx, total, **kw):
+            self.desenhos.append((MOD._mesa_nome_produto(display_i[0]), idx, total, kw.get("qr")))
+            return orig(mesa, display_i, idx, total, **kw)
+        MOD.gerar_etiqueta_mesa = desenha
+        def rpc(nome, body=None, timeout=8):
+            self.rpcs.append((nome, body)); return True if nome == "etiqueta_mesa_reivindicar" else None
+        MOD._mana_rpc = rpc
+
+    def tearDown(self):
+        (MOD._nome_por_ip, MOD.imprimir_etiqueta_producao, MOD.time.sleep, MOD._mana_rpc,
+         MOD._instalar_impressora_24, MOD.gerar_etiqueta_mesa) = self._orig
+
+    def test_mesa10_cada_item_com_seu_qr_e_numero_da_mesa(self):
+        self.assertEqual(MOD.mesa_processar_pendentes(MESA10, "PC-TESTE"), 3)
+        self.assertEqual(self.desenhos, [
+            ("PIZZA GIGANTE", 1, 3, "EQ859739EEC9"),
+            ("POTE DIP CATUPIRY", 2, 3, "EQ15CED7534D"),
+            ("PIZZA BROTO", 3, 3, "EQ9CBB0209D5"),
+        ])
+        reiv = [b for n, b in self.rpcs if n == "etiqueta_mesa_reivindicar"]
+        self.assertTrue(all(b.get("p_por_item") is True for b in reiv))
+
+    def test_qty_2_vira_duas_etiquetas_com_codigos_diferentes(self):
+        itens = [{"qty": 2, "nome": "Borda Dip Cheddar", "tipo": "dip", "sabores": [],
+                  "etiqueta_n": [4, 5], "etiqueta_de": 5, "etiqueta_tokens": ["EQAAAAAAAAA1", "EQAAAAAAAAA2"]}]
+        MOD.imprimir_etiquetas_mesa("10", MOD.mesa_display_do_mana(itens))
+        self.assertEqual([(d[1], d[2], d[3]) for d in self.desenhos], [(4, 5, "EQAAAAAAAAA1"), (5, 5, "EQAAAAAAAAA2")])
+
+    def test_reimpressao_usa_os_codigos_gravados_na_comanda(self):
+        ped = {"reimpressao": True, "mesa": "10", "itens": MESA10[0]["items"], "pizza_seq": 1, "pizza_total": 2,
+               "received_at": MESA10[0]["received_at"], "reimpressao_comanda": MESA10[0]["comanda_id"]}
+        self.assertTrue(MOD.processar_sofia_mesa(ped))
+        self.assertEqual([(d[0], d[1], d[2], d[3]) for d in self.desenhos],
+                         [("PIZZA GIGANTE", 1, 3, "EQ859739EEC9"), ("POTE DIP CATUPIRY", 2, 3, "EQ15CED7534D")])
+
+    def test_comanda_antiga_sem_numeracao_segue_v221(self):
+        itens = [{"qty": 1, "nome": "Pizza Gigante", "tipo": "caixa_salgada", "sabores": ["Americana"]},
+                 {"qty": 1, "nome": "Borda Dip Catupiry", "tipo": "dip", "sabores": []}]
+        MOD.imprimir_etiquetas_mesa("10", MOD.mesa_display_do_mana(itens), seq=1, total=2, qr="EQ859739EEC9")
+        self.assertEqual([(d[1], d[2], d[3]) for d in self.desenhos], [(1, 2, None), (2, 2, None)])
