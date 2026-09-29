@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "220"
+VERSION = "221"
+# v221 (29/09/26): Maná saiu do Lovable. Fila de etiqueta de MESA passa pro Maná NOVO
+#   (gwehsrlw) — endereço E chave pública trocados juntos (a v219 trocou só o endereço).
 # v220 (27/09/26): a fila de mesa ainda vive no Maná legado. Corrige o endereço para
 #   combinar com a chave pública e imprime pendências anteriores ao reinício do helper;
 #   a RPC já exclui comandas reivindicadas e limita a janela a 20 minutos.
@@ -2917,9 +2919,9 @@ def imprimir_etiquetas_mesa(mesa, display, hora="", nome_conta="", origem="MANA"
 
 
 # ---- v215: fila de etiquetas de MESA no MANA (fonte unica) ----
-MANA_URL = "https://vqlfrbugmdnlyxzrlrzt.supabase.co"
+MANA_URL = "https://gwehsrlwhessgpdyoogu.supabase.co"
 # chave PUBLICA (anon) do Mana: a mesma que o navegador usa; so enxerga o que as RPCs abaixo deixam.
-MANA_ANON = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZxbGZyYnVnbWRubHl4enJscnp0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTQwODIsImV4cCI6MjA5MDQ3MDA4Mn0.Y4pOCo0cNKebJkjTHOv7SlxsH5R2-o_wM58r0v_ZvBM")
+MANA_ANON = ("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd3ZWhzcmx3aGVzc2dwZHlvb2d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg5NDkxNTksImV4cCI6MjEwNDUyNTE1OX0.23ps196GQU8-fzNOJepI3JJ5nHOZq2fR5VgSShuZ3k0")
 MESA_POLL_INTERVAL = 10
 
 def _mana_rpc(nome, body=None, timeout=8):
