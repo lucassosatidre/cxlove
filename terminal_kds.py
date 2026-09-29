@@ -13,7 +13,7 @@
 import json, ssl, sys, os, time, codecs, hashlib, datetime, re, urllib.request, urllib.parse, urllib.error
 
 # ---------- CONFIG ----------
-VERSION = "12"            # versao do terminal. O auto-update compara este numero com o do GitHub.
+VERSION = "13"            # versao do terminal. O auto-update compara este numero com o do GitHub.
 # v12 (19/09/26): catálogo antigo continua operando; catálogo novo só é recusado se cair mais de 30%
 #   frente à cópia válida. Ausência total pausa comandas e cria ALERTA visível no Maná.
 # v11 (19/09/26): somente fichas identificadas como COZINHA 1..5 entram; COPA/CAIXA são
@@ -62,8 +62,8 @@ ID_STORE     = "42566"
 STORE_HASH   = "6087dc9cb1c079a45944d7490ef67ea2"
 FIREBASE_KEY = "AIzaSyDNVhVFnFQHNMZRgFscXtfWKoGZ2vkLQ6Q"
 RTDB         = "https://saipos-67ffe-kds.firebaseio.com"
-COMANDA_ENDPOINT = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-comanda"
-SHADOW_ENDPOINT  = "https://vqlfrbugmdnlyxzrlrzt.supabase.co/functions/v1/ingest-terminal-shadow"
+COMANDA_ENDPOINT = "https://gwehsrlwhessgpdyoogu.supabase.co/functions/v1/ingest-comanda"
+SHADOW_ENDPOINT  = "https://gwehsrlwhessgpdyoogu.supabase.co/functions/v1/ingest-terminal-shadow"
 
 CTX = ssl.create_default_context()
 
