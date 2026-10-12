@@ -4,7 +4,8 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "229"
+VERSION = "230"
+# v230 (12/10/26): identifica explicitamente o bloco inferior como REFRIGERANTES no novo desenho.
 # v229 (12/10/26): novo desenho 100x100 aprovado pelo Lucas. Repete a linha do pedido em cima e embaixo;
 #   move o unico QR + a antiga linha do rodape para logo abaixo do cabecalho; item principal fica no meio;
 #   refrigerantes ganham bloco horizontal separado abaixo. Remove as colunas lado a lado que podiam sobrepor
@@ -1988,7 +1989,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     principal_raw.extend(fixo_outros)
     principal_raw.extend(fixo_brotos)
     principal_raw.extend(fixo_dips)
-    bebidas_raw = list(fixo_bebidas)
+    bebidas_raw = ([("item", "REFRIGERANTES:")] + list(fixo_bebidas)) if fixo_bebidas else []
 
     y_meta = h_header + 4
     x_qr = QR_BORDA_ESQ_PX
