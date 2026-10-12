@@ -4,7 +4,11 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "228"
+VERSION = "229"
+# v229 (12/10/26): novo desenho 100x100 aprovado pelo Lucas. Repete a linha do pedido em cima e embaixo;
+#   move o unico QR + a antiga linha do rodape para logo abaixo do cabecalho; item principal fica no meio;
+#   refrigerantes ganham bloco horizontal separado abaixo. Remove as colunas lado a lado que podiam sobrepor
+#   textos grandes. Mantem contagem, sabores, observacoes, Borda Dip/potinhos, QR e CO LOVE 50x25.
 # v228 (12/10/26): aproveita o papel 100x100 nas CAIXAS. O miolo agora testa fontes ate 96 px e escolhe
 #   automaticamente a maior que cabe depois de quebrar as linhas reais: texto curto fica bem grande;
 #   texto longo diminui so o necessario, sem cortar. Cabecalho, QR, rodape e CO LOVE 50x25 nao mudam.
@@ -1973,116 +1977,112 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
 
 
     # ============================================================
-    # 5. Escolhe N colunas (2-5) - prefere 2, sobe se fonte < LIMIAR
+    # 5. Layout 100x100 (v229): QR/resumo no alto, produto no meio,
+    #    bebidas separadas embaixo e pedido repetido no rodape.
     # ============================================================
-    y_meio = h_header + 4
-    altura_meio = ALTURA_PX - h_rodape - y_meio - 4
-    largura_total = LARGURA_PX - margem_e - margem_d - reserva_qr
+    principal_raw = []
+    for bloco in blocos_salgadas:
+        principal_raw.extend(bloco)
+    # Observacoes, doces e dips que nao forem o produto unitario continuam no
+    # bloco principal; refrigerantes ficam exclusivamente no bloco inferior.
+    principal_raw.extend(fixo_outros)
+    principal_raw.extend(fixo_brotos)
+    principal_raw.extend(fixo_dips)
+    bebidas_raw = list(fixo_bebidas)
 
-    def wrap_col(col_raw, col_w, fi, fs, fb):
-        out = []
-        for tipo, txt in col_raw:
-            fu = fi if tipo == "item" else (fb if tipo == "borda" else fs)
-            for l in word_wrap(txt, draw, fu, col_w): out.append((tipo, l))
-        return out
-
-    def distribuir_balanceado(blocos, fixo, n):
-        """Distribui blocos de pizzas salgadas em n colunas via greedy.
-        Fixo (outros+brotos+bebidas) vai NO FINAL da ultima coluna, garantindo
-        que a bebida seja sempre o ultimo item. O greedy considera o peso do
-        fixo ao decidir pra onde cada pizza vai (pra manter balanceamento)."""
-        if n <= 0: return []
-        cols = [[] for _ in range(n)]
-        fixo_len = len(fixo)
-        for b in blocos:
-            def custo(i):
-                return len(cols[i]) + (fixo_len if i == n - 1 else 0)
-            idx = min(range(n), key=custo)
-            cols[idx].extend(b)
-        cols[-1].extend(fixo)
-        return cols
-
-    def testar_n_colunas(n, max_fonte=96):
-        # v228: no papel antigo 80x30 o teto 42 fazia sentido. Em 100x100 ele deixava
-        # muito espaco vazio. Testamos do maior para o menor usando a largura medida
-        # de cada texto e a quantidade real de linhas; assim cada etiqueta usa o maior
-        # tamanho que cabe sem cortar nem depender de uma estimativa por caracteres.
-        if n <= 0: return 0, None
-        col_w_n = largura_total // n
-        col_max_w = col_w_n - 8
-        cols = distribuir_balanceado(blocos_salgadas, fixo_dir, n)
-        if any(len(c) == 0 for c in cols) and n > 2:
-            return 0, None  # coluna vazia em 3+ eh desperdicio
-        for sz in range(max_fonte, 9, -1):
-            fi = cf(sz); fsab = cf(max(sz-1, 8)); fb = cf(max(sz-2, 8))
-            try:
-                bb = draw.textbbox((0,0), "Ag", font=fi); lh = (bb[3]-bb[1]) + 4
-            except: lh = sz + 4
-            cols_w = [wrap_col(c, col_max_w, fi, fsab, fb) for c in cols]
-            max_linhas = max([len(c) for c in cols_w] + [1])
-            if max_linhas * lh <= altura_meio:
-                return sz, {
-                    "n": n, "col_w": col_w_n, "cols_w": cols_w,
-                    "lh": lh, "fi": fi, "fsab": fsab, "fb": fb
-                }
-        return 0, None
-
-    # v204: etiqueta de um produto sem bebida/obs -> uma coluna so (fonte maior)
-    sz1, dados1 = (testar_n_colunas(1) if (unitario and not fixo_dir) else (0, None))
-    # Prefere 2 col se fonte >= LIMIAR; senao busca o N que da fonte maior
-    sz2, dados2 = testar_n_colunas(2)
-    if sz1 > 0:
-        sz_itens, dados = sz1, dados1
-    elif sz2 >= LIMIAR_2COL:
-        sz_itens, dados = sz2, dados2
-    else:
-        melhor = (sz2, dados2) if sz2 > 0 else (0, None)
-        for n in range(3, 6):
-            sz, d = testar_n_colunas(n)
-            if sz > melhor[0]:
-                melhor = (sz, d)
-        sz_itens, dados = melhor
-
-    # ============================================================
-    # 6. Renderiza o MEIO (colunas) e divisorias
-    # ============================================================
-    if dados:
-        n = dados["n"]; col_w = dados["col_w"]; lh = dados["lh"]
-        fi = dados["fi"]; fsab = dados["fsab"]; fb = dados["fb"]
-
-        # Divisorias pontilhadas entre colunas
-        x0 = reserva_qr if (qr_img and QR_LADO_ESQ) else 0
-        for c in range(1, n):
-            x_div = x0 + margem_e + col_w * c
-            for dy in range(0, altura_meio, 6):
-                draw.line([(x_div, y_meio+dy), (x_div, y_meio+dy+3)], fill="black", width=1)
-
-        # Texto de cada coluna
-        for i, col in enumerate(dados["cols_w"]):
-            x_col = x0 + margem_e + col_w * i + (4 if i > 0 else 0)
-            # v225: no papel quadrado, centraliza cada coluna na altura util.
-            y = y_meio + max(0, (altura_meio - len(col) * lh) // 2)
-            for tipo, txt in col:
-                fu = fi if tipo == "item" else (fb if tipo == "borda" else fsab)
-                draw.text((x_col, y), txt, fill="black", font=fu)
-                y += lh
-
-    # ============================================================
-    # 7. Renderiza RODAPE (faixa preta embaixo)
-    # ============================================================
+    y_meta = h_header + 4
+    x_qr = QR_BORDA_ESQ_PX
     if qr_img:
-        y_qr = ALTURA_PX - qr_lado - QR_BORDA_INF_PX
-        if QR_LADO_ESQ:
-            render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_ini=reserva_qr)
-            x_qr = QR_BORDA_ESQ_PX
-            draw.rectangle([(0, y_qr - 2), (x_qr + qr_lado + 2, ALTURA_PX)], fill="white")
-        else:
-            render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape, x_fim=LARGURA_PX - reserva_qr)
-            x_qr = LARGURA_PX - qr_lado - QR_BORDA_DIR_PX
-            draw.rectangle([(x_qr - 2, y_qr - 2), (LARGURA_PX, ALTURA_PX)], fill="white")
-        img.paste(qr_img.convert("RGB"), (x_qr, y_qr))
+        img.paste(qr_img.convert("RGB"), (x_qr, y_meta))
+        x_resumo = x_qr + qr_lado + 8
     else:
-        render_rodape(rodape_linhas, ALTURA_PX - h_rodape, h_rodape, fs_rodape)
+        x_resumo = 0
+
+    # A antiga linha do rodape (ITENS + pagamento) agora fica logo abaixo
+    # da linha superior, ao lado do unico QR.
+    render_rodape(rodape_linhas, y_meta, h_rodape, fs_rodape,
+                  x_ini=x_resumo, x_fim=LARGURA_PX)
+
+    altura_meta = max(qr_lado if qr_img else 0, h_rodape)
+    y_conteudo = y_meta + altura_meta + 6
+    y_header_inferior = ALTURA_PX - h_header
+    altura_util = max(1, y_header_inferior - y_conteudo - 4)
+    largura_conteudo = LARGURA_PX - margem_e - margem_d
+
+    def preparar_texto(bloco_raw, max_w, max_h, teto):
+        """Maior fonte que cabe no retangulo, medindo e quebrando as linhas reais."""
+        if not bloco_raw or max_w <= 0 or max_h <= 0:
+            return None
+        for sz in range(teto, 9, -1):
+            fi = cf(sz); fsab = cf(max(sz - 2, 8)); fb = cf(max(sz - 3, 8))
+            linhas = wrap_col(bloco_raw, max_w, fi, fsab, fb)
+            try:
+                bb = draw.textbbox((0, 0), "Ag", font=fi)
+                lh = (bb[3] - bb[1]) + max(4, sz // 10)
+            except Exception:
+                lh = sz + max(4, sz // 10)
+            if len(linhas) * lh <= max_h:
+                return {"linhas": linhas, "lh": lh, "fi": fi, "fsab": fsab, "fb": fb}
+        return None
+
+    def desenhar_bloco(preparado, x, y, w, h):
+        if not preparado:
+            return
+        linhas = preparado["linhas"]; lh = preparado["lh"]
+        yy = y + max(0, (h - len(linhas) * lh) // 2)
+        for tipo, txt in linhas:
+            fonte = preparado["fi"] if tipo == "item" else (
+                preparado["fb"] if tipo == "borda" else preparado["fsab"])
+            draw.text((x, yy), txt, fill="black", font=fonte)
+            yy += lh
+
+    if bebidas_raw:
+        # A faixa de bebidas cresce quando houver muitas linhas, mas nunca toma
+        # mais de 42% da area util. O produto continua sendo a informacao principal.
+        f_estimativa = cf(30)
+        linhas_principal = wrap_col(principal_raw, largura_conteudo, f_estimativa, f_estimativa, f_estimativa)
+        linhas_bebidas = wrap_col(bebidas_raw, largura_conteudo, f_estimativa, f_estimativa, f_estimativa)
+        peso_principal = max(2, len(linhas_principal))
+        peso_bebidas = max(2, len(linhas_bebidas))
+        fracao_bebidas = peso_bebidas / float(peso_principal + peso_bebidas)
+        fracao_bebidas = max(0.24, min(0.42, fracao_bebidas))
+        altura_bebidas = max(80, int(altura_util * fracao_bebidas))
+        altura_principal = max(1, altura_util - altura_bebidas - 6)
+        y_bebidas = y_conteudo + altura_principal + 6
+
+        # Linha simples separa claramente pizza/pote das bebidas.
+        draw.line([(margem_e, y_bebidas), (LARGURA_PX - margem_d, y_bebidas)],
+                  fill="black", width=2)
+
+        prep_principal = preparar_texto(principal_raw, largura_conteudo,
+                                        altura_principal, teto=82)
+        prep_bebidas = preparar_texto(bebidas_raw, largura_conteudo,
+                                      altura_bebidas - 4, teto=58)
+        desenhar_bloco(prep_principal, margem_e, y_conteudo,
+                       largura_conteudo, altura_principal)
+        desenhar_bloco(prep_bebidas, margem_e, y_bebidas + 4,
+                       largura_conteudo, altura_bebidas - 4)
+    else:
+        prep_principal = preparar_texto(principal_raw, largura_conteudo,
+                                        altura_util, teto=88)
+        desenhar_bloco(prep_principal, margem_e, y_conteudo,
+                       largura_conteudo, altura_util)
+
+    # Repete exatamente a linha do pedido no final, sem criar outro QR.
+    if hora_pedido and header_texto.endswith(" - " + hora_pedido):
+        render_barra(header_texto[:-len(" - " + hora_pedido)],
+                     y_header_inferior, h_header, fs_header)
+        fh = cf(fs_header)
+        try:
+            bb = draw.textbbox((0, 0), hora_pedido, font=fh)
+            yy = y_header_inferior + (h_header - (bb[3] - bb[1])) // 2 - 2
+            xx = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
+        except Exception:
+            yy = y_header_inferior + 2
+            xx = LARGURA_PX - HORA_BORDA_DIR_PX - 60
+        draw.text((xx, yy), hora_pedido, fill="white", font=fh)
+    else:
+        render_barra(header_texto, y_header_inferior, h_header, fs_header)
 
     return img
 
