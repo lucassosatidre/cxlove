@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "231"
+VERSION = "232"
+# v232 (12/10/26): remove o titulo REFRIGERANTES; repete ITENS/pagamento na parte inferior e
+#   aumenta discretamente a altura e a fonte das duas faixas inferiores para facilitar a leitura do motoboy.
+#   Mantem um unico QR no alto e todas as regras de contagem, produtos, Borda Dip e CO LOVE.
 # v231 (12/10/26): corrige erro da v230: restaura a quebra de linhas local usada pelo novo layout.
 #   O pedido que falhou volta automaticamente para a fila; nenhuma etiqueta e marcada como impressa.
 # v230 (12/10/26): identifica explicitamente o bloco inferior como REFRIGERANTES no novo desenho.
@@ -1991,7 +1994,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     principal_raw.extend(fixo_outros)
     principal_raw.extend(fixo_brotos)
     principal_raw.extend(fixo_dips)
-    bebidas_raw = ([("item", "REFRIGERANTES:")] + list(fixo_bebidas)) if fixo_bebidas else []
+    bebidas_raw = list(fixo_bebidas)
 
     y_meta = h_header + 4
     x_qr = QR_BORDA_ESQ_PX
@@ -2008,8 +2011,16 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
 
     altura_meta = max(qr_lado if qr_img else 0, h_rodape)
     y_conteudo = y_meta + altura_meta + 6
-    y_header_inferior = ALTURA_PX - h_header
-    altura_util = max(1, y_header_inferior - y_conteudo - 4)
+
+    # Duas faixas inferiores mais altas e com fonte um pouco maior:
+    # resumo de itens/pagamento + repeticao do cabecalho do pedido.
+    h_resumo_inferior = h_rodape + 10
+    fs_resumo_inferior = fs_rodape + 3
+    h_header_inferior = h_header + 12
+    fs_header_inferior = fs_header + 2
+    y_header_inferior = ALTURA_PX - h_header_inferior
+    y_resumo_inferior = y_header_inferior - h_resumo_inferior - 3
+    altura_util = max(1, y_resumo_inferior - y_conteudo - 4)
     largura_conteudo = LARGURA_PX - margem_e - margem_d
 
     def wrap_col(col_raw, col_w, fi, fs, fb):
@@ -2080,21 +2091,26 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         desenhar_bloco(prep_principal, margem_e, y_conteudo,
                        largura_conteudo, altura_util)
 
-    # Repete exatamente a linha do pedido no final, sem criar outro QR.
+    # Repete a faixa de ITENS/pagamento embaixo, sem repetir o QR.
+    render_rodape(rodape_linhas, y_resumo_inferior, h_resumo_inferior,
+                  fs_resumo_inferior, x_ini=0, x_fim=LARGURA_PX)
+
+    # Repete exatamente a linha do pedido no final.
     if hora_pedido and header_texto.endswith(" - " + hora_pedido):
         render_barra(header_texto[:-len(" - " + hora_pedido)],
-                     y_header_inferior, h_header, fs_header)
-        fh = cf(fs_header)
+                     y_header_inferior, h_header_inferior, fs_header_inferior)
+        fh = cf(fs_header_inferior)
         try:
             bb = draw.textbbox((0, 0), hora_pedido, font=fh)
-            yy = y_header_inferior + (h_header - (bb[3] - bb[1])) // 2 - 2
+            yy = y_header_inferior + (h_header_inferior - (bb[3] - bb[1])) // 2 - 2
             xx = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
         except Exception:
             yy = y_header_inferior + 2
             xx = LARGURA_PX - HORA_BORDA_DIR_PX - 60
         draw.text((xx, yy), hora_pedido, fill="white", font=fh)
     else:
-        render_barra(header_texto, y_header_inferior, h_header, fs_header)
+        render_barra(header_texto, y_header_inferior,
+                     h_header_inferior, fs_header_inferior)
 
     return img
 
