@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "230"
+VERSION = "231"
+# v231 (12/10/26): corrige erro da v230: restaura a quebra de linhas local usada pelo novo layout.
+#   O pedido que falhou volta automaticamente para a fila; nenhuma etiqueta e marcada como impressa.
 # v230 (12/10/26): identifica explicitamente o bloco inferior como REFRIGERANTES no novo desenho.
 # v229 (12/10/26): novo desenho 100x100 aprovado pelo Lucas. Repete a linha do pedido em cima e embaixo;
 #   move o unico QR + a antiga linha do rodape para logo abaixo do cabecalho; item principal fica no meio;
@@ -2009,6 +2011,15 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     y_header_inferior = ALTURA_PX - h_header
     altura_util = max(1, y_header_inferior - y_conteudo - 4)
     largura_conteudo = LARGURA_PX - margem_e - margem_d
+
+    def wrap_col(col_raw, col_w, fi, fs, fb):
+        """Quebra as linhas respeitando a fonte de item, sabor e borda."""
+        out = []
+        for tipo, txt in col_raw:
+            fonte = fi if tipo == "item" else (fb if tipo == "borda" else fs)
+            for linha in word_wrap(txt, draw, fonte, col_w):
+                out.append((tipo, linha))
+        return out
 
     def preparar_texto(bloco_raw, max_w, max_h, teto):
         """Maior fonte que cabe no retangulo, medindo e quebrando as linhas reais."""
