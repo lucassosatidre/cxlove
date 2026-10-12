@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "226"
+VERSION = "227"
+# v227 (12/10/26): CAIXAS 100x100 passam direto para a ELGIN L42PRO FULL pela rede (ZPL/porta 9100).
+#   O driver Seagull reconhecia o papel inteiro, mas recortava o bitmap e deixava so QR/rodape. A impressao
+#   direta ignora esse caminho defeituoso. CO LOVE/mesa 50x25 continuam exatamente no driver antigo.
 # v226 (12/10/26): corrige a area cortada no papel 100x100. O DC do Windows era criado primeiro com
 #   o tamanho antigo e so depois recebia ResetDC; o driver Seagull mantinha a faixa 80x30 e imprimia apenas
 #   QR/rodape. Agora o trabalho de CAIXA nasce com o DEVMODE 100x100 e desenha na area real HORZRES x VERTRES.
@@ -2078,12 +2081,58 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
 
 
 
+def _imprimir_caixa_direto(img, ip):
+    """v227: envia o bitmap 100x100 em ZPL direto para a L42PRO (sem rasterizacao do driver Windows)."""
+    import socket
+    w, h = img.size
+    bytes_linha = (w + 7) // 8
+
+    # ^GFA usa bit 1 para PRETO. No modo 1 do Pillow, bit 1 normalmente e branco;
+    # por isso a limiarizacao ja sai invertida: desenho escuro -> bit 1.
+    mono_invertido = img.convert("L").point(lambda p: 255 if p < 180 else 0, mode="1")
+    dados = mono_invertido.tobytes()
+    esperado = bytes_linha * h
+    if len(dados) != esperado:
+        raise RuntimeError(f"bitmap ZPL inesperado: {len(dados)} bytes (esperado {esperado})")
+
+    hexadecimal = dados.hex().upper()
+    zpl = (
+        f"^XA\n"
+        f"^PW{w}\n"
+        f"^LL{h}\n"
+        f"^LH0,0\n"
+        f"^FO0,0^GFA,{len(dados)},{len(dados)},{bytes_linha},{hexadecimal}^FS\n"
+        f"^XZ\n"
+    ).encode("ascii")
+
+    with socket.create_connection((ip, 9100), timeout=8) as conexao:
+        conexao.settimeout(8)
+        conexao.sendall(zpl)
+        try:
+            conexao.shutdown(socket.SHUT_WR)
+        except Exception:
+            pass
+    log(f"  Impresso DIRETO OK ({ip}:9100, ZPL {w}x{h}px, {len(dados)} bytes)")
+    return True
+
+
 def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
     """Imprime e devolve True/False (v202). Antes engolia o erro e ninguem sabia que falhou."""
     printer_name = printer_name or NOME_IMPRESSORA
     ok = False
     larg = larg if larg else LARGURA_PX
     alt = alt if alt else ALTURA_PX
+
+    # v227: somente CAIXAS 100x100. Nao faz fallback automatico para o driver:
+    # se a rede falhar, devolve False para o pedido voltar a fila sem imprimir uma etiqueta cortada.
+    if img.size == (LARGURA_PX, ALTURA_PX):
+        with _print_lock:
+            try:
+                return _imprimir_caixa_direto(img, IP_IMPRESSORA_CAIXAS)
+            except Exception as e:
+                log(f"  ERRO impressao direta caixas ({IP_IMPRESSORA_CAIXAS}:9100): {e}")
+                return False
+
     tmp = tempfile.NamedTemporaryFile(suffix=".bmp", delete=False); tmp_path = tmp.name; tmp.close()
     try:
         img.save(tmp_path, "BMP")
