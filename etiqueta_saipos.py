@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "227"
+VERSION = "228"
+# v228 (12/10/26): aproveita o papel 100x100 nas CAIXAS. O miolo agora testa fontes ate 96 px e escolhe
+#   automaticamente a maior que cabe depois de quebrar as linhas reais: texto curto fica bem grande;
+#   texto longo diminui so o necessario, sem cortar. Cabecalho, QR, rodape e CO LOVE 50x25 nao mudam.
 # v227 (12/10/26): CAIXAS 100x100 passam direto para a ELGIN L42PRO FULL pela rede (ZPL/porta 9100).
 #   O driver Seagull reconhecia o papel inteiro, mas recortava o bitmap e deixava so QR/rodape. A impressao
 #   direta ignora esse caminho defeituoso. CO LOVE/mesa 50x25 continuam exatamente no driver antigo.
@@ -1999,7 +2002,11 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         cols[-1].extend(fixo)
         return cols
 
-    def testar_n_colunas(n, max_fonte=42):
+    def testar_n_colunas(n, max_fonte=96):
+        # v228: no papel antigo 80x30 o teto 42 fazia sentido. Em 100x100 ele deixava
+        # muito espaco vazio. Testamos do maior para o menor usando a largura medida
+        # de cada texto e a quantidade real de linhas; assim cada etiqueta usa o maior
+        # tamanho que cabe sem cortar nem depender de uma estimativa por caracteres.
         if n <= 0: return 0, None
         col_w_n = largura_total // n
         col_max_w = col_w_n - 8
