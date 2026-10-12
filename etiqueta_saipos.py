@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "225"
+VERSION = "226"
+# v226 (12/10/26): corrige a area cortada no papel 100x100. O DC do Windows era criado primeiro com
+#   o tamanho antigo e so depois recebia ResetDC; o driver Seagull mantinha a faixa 80x30 e imprimia apenas
+#   QR/rodape. Agora o trabalho de CAIXA nasce com o DEVMODE 100x100 e desenha na area real HORZRES x VERTRES.
 # v225 (12/10/26): etiquetas das CAIXAS em 100x100mm depois da configuracao do driver e confirmacao do
 #   sensor (gap 3mm; alimentacao avanca exatamente uma etiqueta). Forca 100x100 no job e centraliza o
 #   conteudo na nova area. CO LOVE e etiquetas de mesa permanecem em 50x25mm.
@@ -2097,29 +2100,40 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
                 for tentativa in range(4):
                     hdc = None
                     try:
-                        hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
-                        if img.size == (LARGURA_PX, ALTURA_PX):
-                            # v225: toda etiqueta de CAIXA forca 100x100 no driver ja configurado.
-                            # CO LOVE e mesa usam imprimir_etiqueta_producao e continuam em 50x25.
+                        eh_caixa = img.size == (LARGURA_PX, ALTURA_PX)
+                        if eh_caixa:
+                            # v226: o driver Seagull precisa receber o DEVMODE na CRIACAO do DC.
+                            # ResetDC depois de CreatePrinterDC mantinha internamente a area antiga 80x30.
+                            import win32gui
                             dm = _devmode_papel(printer_name, LARGURA_MM, ALTURA_MM)
                             if dm is not None:
-                                try:
-                                    import win32gui; win32gui.ResetDC(hdc.GetSafeHdc(), dm)
-                                except Exception as e: log(f"  ResetDC {LARGURA_MM}x{ALTURA_MM} ignorado: {e}")
+                                raw_hdc = win32gui.CreateDC("WINSPOOL", printer_name, dm)
+                                hdc = win32ui.CreateDCFromHandle(raw_hdc)
+                            else:
+                                hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
+                        else:
+                            hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
                         hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
-                        dx = 0
-                        if img.size == (LARGURA_PX, ALTURA_PX):
-                            # v210: so a etiqueta da caixa; nunca empurra alem da area que o driver imprime
+                        dx = 0; draw_w = larg; draw_h = alt
+                        if eh_caixa:
+                            # Usa a area REAL que o DC criado em 100x100 informou.
                             try:
                                 import win32con
-                                area = hdc.GetDeviceCaps(win32con.HORZRES)
+                                area_w = hdc.GetDeviceCaps(win32con.HORZRES)
+                                area_h = hdc.GetDeviceCaps(win32con.VERTRES)
                                 offx = hdc.GetDeviceCaps(112)   # PHYSICALOFFSETX
+                                offy = hdc.GetDeviceCaps(113)   # PHYSICALOFFSETY
+                                if area_w > 0: draw_w = area_w
+                                if area_h > 0: draw_h = area_h
                                 if str(printer_name) in ETIQ_DESLOC_FILAS:
-                                    dx = max(0, min(ETIQ_DESLOC_X_PX, area - larg))
-                                _area_impressao[str(printer_name)] = f"area {area}px, offset {offx}px, desloc {dx}px"
-                                if tentativa == 0: log(f"  area impressao {area}px, offset {offx}px, etiqueta {larg}px, desloc {dx}px")
-                            except Exception: dx = 0
-                        ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (dx, 0, larg + dx, alt))
+                                    dx = max(0, min(ETIQ_DESLOC_X_PX, draw_w - larg))
+                                detalhe = (f"area {area_w}x{area_h}px, offset {offx},{offy}px, "
+                                           f"etiqueta {larg}x{alt}px, destino {draw_w}x{draw_h}px, desloc {dx}px")
+                                _area_impressao[str(printer_name)] = detalhe
+                                if tentativa == 0: log(f"  area impressao {detalhe}")
+                            except Exception as e:
+                                if tentativa == 0: log(f"  area impressao nao lida: {e}")
+                        ImageWin.Dib(img).draw(hdc.GetHandleOutput(), (dx, 0, draw_w + dx, draw_h))
                         hdc.EndPage(); hdc.EndDoc(); hdc.DeleteDC()
                         log(f"  Impresso OK ({printer_name})")
                         ultimo_erro = None
