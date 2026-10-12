@@ -4,10 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "223"
-# v223 (12/10/26): SOMENTE as etiquetas das CAIXAS passam de 80x30 para 100x100mm. O desenho usa a
-#   nova area quadrada, centraliza o conteudo verticalmente e forca o tamanho personalizado no driver da
-#   impressora de caixas. CO LOVE e etiquetas de mesa continuam exatamente em 50x25mm.
+VERSION = "224"
+# v224 (12/10/26): restaurado o modelo anterior das etiquetas de CAIXA em 80x30mm a pedido do Lucas.
+#   Remove a centralizacao vertical e a imposicao de 100x100 no driver. CO LOVE/mesa seguem em 50x25mm.
 # v222 (29/09/26): etiqueta de MESA POR ITEM, igual ao delivery (Lucas): cada pizza salgada, pizza doce e pote
 #   dip tem a SUA etiqueta com o SEU QR, numeradas na mesa inteira (mesa 10: Gigante 1/3, Pote Dip 2/3,
 #   Broto 3/3). Os codigos e a numeracao vem do Mana nos itens (etiqueta_qr / etiqueta_tokens / etiqueta_n /
@@ -290,7 +289,7 @@ PASTA_SAIPOS = os.path.join(PASTA_DOWNLOADS, "saipos")  # ENTRADA do Saipos Prin
 # NOSSOS arquivos de dados (filas pro CO LOVE) ficam FORA da pasta do Saipos Printer, pra nao poluir a entrada dele:
 PASTA_FILA = os.path.join(os.path.expanduser("~"), "colove_fila")
 NOME_IMPRESSORA = "ELGIN L42PRO FULL"
-LARGURA_MM = 100; ALTURA_MM = 100; DPI = 203
+LARGURA_MM = 80; ALTURA_MM = 30; DPI = 203
 LARGURA_PX = int(LARGURA_MM * DPI / 25.4)
 ALTURA_PX = int(ALTURA_MM * DPI / 25.4)
 LOG_FILE = os.path.join(PASTA_DOWNLOADS, "etiqueta_saipos_log.txt")
@@ -2047,8 +2046,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         # Texto de cada coluna
         for i, col in enumerate(dados["cols_w"]):
             x_col = x0 + margem_e + col_w * i + (4 if i > 0 else 0)
-            # v223: no papel quadrado, centraliza cada coluna na altura util.
-            y = y_meio + max(0, (altura_meio - len(col) * lh) // 2)
+            y = y_meio
             for tipo, txt in col:
                 fu = fi if tipo == "item" else (fb if tipo == "borda" else fsab)
                 draw.text((x_col, y), txt, fill="black", font=fu)
@@ -2098,15 +2096,13 @@ def imprimir_etiqueta(img, printer_name=None, larg=None, alt=None):
                     hdc = None
                     try:
                         hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
-                        if img.size == (LARGURA_PX, ALTURA_PX):
-                            # v223: toda etiqueta de CAIXA forca 100x100 no driver. Isto vale tanto
-                            # para a .14 quanto para o fallback temporario na .24. CO LOVE/mesa usam
-                            # imprimir_etiqueta_producao e permanecem em 50x25.
+                        if _eh_impressora_producao(printer_name):
+                            # v206: a .24 tem o driver em 50x25 (CO LOVE); a caixa e' 80x30
                             dm = _devmode_papel(printer_name, LARGURA_MM, ALTURA_MM)
                             if dm is not None:
                                 try:
                                     import win32gui; win32gui.ResetDC(hdc.GetSafeHdc(), dm)
-                                except Exception as e: log(f"  ResetDC {LARGURA_MM}x{ALTURA_MM} ignorado: {e}")
+                                except Exception as e: log(f"  ResetDC 80x30 ignorado: {e}")
                         hdc.StartDoc("Etiqueta Saipos"); hdc.StartPage()
                         dx = 0
                         if img.size == (LARGURA_PX, ALTURA_PX):
@@ -2350,8 +2346,8 @@ _LOVELABEL_SEEN = {}
 _LOVELABEL_DEDUP_S = 5
 
 # --- Impressoras achadas pelo IP FIXO na rede (o nome no Windows varia por PC) ---
-# Caixas (comandas) 100x100mm  e  Producao do CO LOVE 50x25mm sao 2 impressoras de rede.
-IP_IMPRESSORA_CAIXAS   = "192.168.1.14"   # etiquetas das caixas de pizza (100x100)
+# Caixas (comandas) 80x30mm  e  Producao do CO LOVE 50x25mm sao 2 impressoras de rede.
+IP_IMPRESSORA_CAIXAS   = "192.168.1.14"   # etiquetas das caixas de pizza (80x30)
 IP_IMPRESSORA_PRODUCAO = "192.168.1.24"   # etiquetas de validade CO LOVE (50x25)
 IP_IMPRESSORA_COMANDA  = "192.168.1.222"  # comanda em cupom estilo Saipos (Elgin i8, 80mm)
 
@@ -2411,7 +2407,7 @@ def _impressora_para(ip, fallback=None, etiqueta=""):
     return fallback
 
 # v206: .14 (caixas) parada -> etiquetas das caixas vao pra impressora de PRODUCAO (.24),
-# com o papel FORCADO em 100x100 (se a .24 estiver com esse rolo). Temporario e automatico:
+# com o papel FORCADO em 80x30 (o rolo da .24 foi trocado pra 80x30). Temporario e automatico:
 # quando a .14 voltar a responder na rede, as etiquetas voltam sozinhas pra ela.
 # O spooler do Windows aceita o job mesmo com a impressora desligada ("printed" != papel saiu),
 # por isso a vida da impressora e' testada direto na porta de impressao (9100).
@@ -2454,7 +2450,7 @@ def _impressora_caixas(fallback=NOME_IMPRESSORA):
             if nome24 and (CAIXAS_NA_PRODUCAO == "sempre" or _ip_responde(IP_IMPRESSORA_PRODUCAO)):
                 escolha = nome24
     if escolha != _caixas_ultima:
-        onde = "PRODUCAO .24 (papel 100x100)" if escolha and escolha == _cache_impressora_ip.get(IP_IMPRESSORA_PRODUCAO) else "CAIXAS .14"
+        onde = "PRODUCAO .24 (papel 80x30)" if escolha and escolha == _cache_impressora_ip.get(IP_IMPRESSORA_PRODUCAO) else "CAIXAS .14"
         log(f"  CAIXAS: etiquetas das caixas indo pra '{escolha}' -> {onde}")
         try: sofia_evento("caixas_impressora", impressora=escolha, detalhe=onde)
         except Exception: pass
@@ -3242,7 +3238,7 @@ def sofia_totais(display):
     return total_caixas, total_dips, total_bebidas, total_outros, total_entrega, total_etiquetas
 
 def gerar_comanda(pedido):
-    """Comanda de despacho 100x100mm: Nº/SOFIA/hora, cliente, endereco, pagamento, total."""
+    """Comanda de despacho 80x30mm: Nº/SOFIA/hora, cliente, endereco, pagamento, total."""
     img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
     draw = ImageDraw.Draw(img)
     me = 14; md = 14
@@ -4154,7 +4150,7 @@ def aplicar_regras_display(display, alvo):
 def main():
     print("=" * 60)
     print(f"  ETIQUETA SAIPOS -> ELGIN L42PRO FULL  (v{VERSION})")
-    print(f"  Pizzaria Estrela da Ilha - BOPP {LARGURA_MM}x{ALTURA_MM}mm")
+    print("  Pizzaria Estrela da Ilha - BOPP 80x30mm")
     print("=" * 60 + "\n")
     print(f"  Usuario:     {os.path.expanduser('~')}")
     print(f"  Monitorando: {PASTA_DOWNLOADS}")
