@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "232"
+VERSION = "233"
 # v232 (12/10/26): remove o titulo REFRIGERANTES; repete ITENS/pagamento na parte inferior e
 #   aumenta discretamente a altura e a fonte das duas faixas inferiores para facilitar a leitura do motoboy.
 #   Mantem um unico QR no alto e todas as regras de contagem, produtos, Borda Dip e CO LOVE.
@@ -3837,6 +3837,131 @@ def _impressora_caixas_deste_pc():
         pass
     return None
 
+# v233: recibos separados da fila de etiquetas; destinos fixos autorizados.
+SALAO_DESTINOS = {"copa": "192.168.1.250", "caixa_salao": "192.168.1.168"}
+
+def salao_bitmap(img):
+    """MP-4200 TH: GS v 0 em blocos <=512 linhas, seguido de avanço e corte parcial."""
+    from PIL import ImageOps
+    img = img.convert("L")
+    if img.width != 576:
+        img = img.resize((576, round(img.height * 576 / img.width)))
+    out = bytearray()
+    for y in range(0, img.height, 512):
+        bloco = img.crop((0,y,576,min(y+512,img.height)))
+        mono = ImageOps.invert(bloco).point(lambda p: 255 if p > 100 else 0,mode="1")
+        h = mono.height
+        out.extend(b"\x1dv0\x00" + bytes((72,0,h % 256,h // 256)) + mono.tobytes())
+    out.extend(b"\n\n\n\x1bm")
+    return bytes(out)
+
+def salao_resumo_img(pedido):
+    """Conteúdo do envio ou resumo com itens pagos visíveis, sem cobrá-los novamente."""
+    import textwrap
+    try: fonte = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf",24)
+    except Exception:
+        try: fonte = ImageFont.truetype("Arial.ttf",24)
+        except Exception: fonte = ImageFont.load_default(size=24)
+    linhas = [pedido.get("titulo") or "SALAO", str(pedido.get("cliente") or ""), _mesa_hora(pedido.get("hora"))]
+    for it in pedido.get("itens") or []:
+        if it.get("cancelado"): continue
+        prefixo = "PAGO - " if it.get("pago") else ""
+        linhas.extend(textwrap.wrap(f"{prefixo}{it.get('qty',1)}x {it.get('nome','')}", width=36))
+        sabores = it.get("sabores") or []
+        for sabor in sabores: linhas.extend(textwrap.wrap(str(sabor),width=36))
+        if pedido.get("tipo") == "resumo" and it.get("tipo") != "obs":
+            valor = float(it.get("preco_total",float(it.get("preco") or 0)*float(it.get("qty") or 1)) or 0)
+            linhas.append(f"R$ {valor:.2f}".replace('.',','))
+    if pedido.get("tipo") == "resumo":
+        saldo = float(pedido.get("total") or 0); taxa = round(saldo*.10,2) if pedido.get("servico") else 0
+        linhas += ["--------------------------------",f"Pendente: R$ {saldo:.2f}",f"Servico: R$ {taxa:.2f}",f"A pagar: R$ {saldo+taxa:.2f}","NAO E DOCUMENTO FISCAL"]
+    img = Image.new("RGB",(576,len(linhas)*34+40),"white"); d = ImageDraw.Draw(img)
+    for n,linha in enumerate(linhas): d.text((16,16+n*34),linha,font=fonte,fill="black")
+    return img
+
+def salao_fiscal_img(url):
+    """Renderiza o DANFE oficial; nunca reconstrói ou inventa dados fiscais."""
+    from PIL import ImageChops
+    if not re.fullmatch(r"https://(?:api|homologacao)\.focusnfe\.com\.br/notas_fiscais_consumidor/NFe\d{44}\.html",url or ""):
+        raise ValueError("URL fiscal fora da Focus")
+    candidatos = [os.path.join(os.environ.get(k,""),"Microsoft","Edge","Application","msedge.exe") for k in ("PROGRAMFILES(X86)","PROGRAMFILES","LOCALAPPDATA")]
+    edge = next((p for p in candidatos if os.path.isfile(p)),None)
+    if not edge: raise RuntimeError("Microsoft Edge nao encontrado para renderizar o DANFE")
+    with urllib.request.urlopen(url,timeout=20) as r:
+        if not re.fullmatch(r"https://(?:api|homologacao)\.focusnfe\.com\.br/notas_fiscais_consumidor/NFe\d{44}\.html",r.url):
+            raise ValueError("Redirecionamento fiscal inválido")
+        html = r.read(2_000_001).decode("utf-8")
+    if len(html)>2_000_000: raise ValueError("DANFE maior que o limite")
+    base = urllib.parse.urlsplit(url); origem = f"{base.scheme}://{base.netloc}"
+    import uuid
+    nonce = uuid.uuid4().hex
+    html = re.sub(r"<script\b", f'<script nonce="{nonce}"', html, flags=re.I)
+    html = re.sub(r"<base\b[^>]*>","",html,flags=re.I)
+    cdn = "https://df0b2gxkwzojk.cloudfront.net"
+    cabeca = f'<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'nonce-{nonce}\' {origem} {cdn}; img-src {origem} {cdn} data:; style-src \'unsafe-inline\' {origem} {cdn}; font-src {origem} {cdn} data:;"><base href="{origem}/">'
+    with tempfile.TemporaryDirectory(prefix="salao-danfe-") as pasta:
+        arquivo = os.path.join(pasta,"danfe.html"); png = os.path.join(pasta,"danfe.png")
+        with open(arquivo,"w",encoding="utf-8") as f: f.write(cabeca+html)
+        from pathlib import Path
+        resultado = subprocess.run([edge,"--headless","--disable-gpu","--no-first-run",f"--user-data-dir={pasta}/perfil",f"--screenshot={png}","--window-size=576,12000","--dump-dom","--hide-scrollbars","--virtual-time-budget=8000",Path(arquivo).as_uri()],check=True,timeout=45,capture_output=True)
+        dom = resultado.stdout.decode("utf-8",errors="replace")
+        if "data:image/png;base64," not in dom or not re.search(r"<canvas[^>]*width=[\"'](?:[1-9][0-9]{2,})",dom,re.I):
+            raise RuntimeError("QR fiscal nao foi renderizado; recibo continua pendente")
+        with Image.open(png) as im:
+            img = im.convert("RGB")
+        box = ImageChops.difference(img,Image.new("RGB",img.size,"white")).getbbox()
+        if not box or box[3]>=11900: raise RuntimeError("DANFE vazio ou excede a area; nao foi impresso")
+        return img.crop((max(0,box[0]-8),0,min(576,box[2]+8),min(12000,box[3]+20)))
+
+def salao_processar_recibo(pedido):
+    import socket
+    destino = pedido.get("destino"); ip = SALAO_DESTINOS.get(destino)
+    if not ip: raise ValueError("Destino de impressao inválido")
+    if pedido.get("tipo") == "bebidas" and destino != "copa": raise ValueError("Bebida fora da copa")
+    if pedido.get("tipo") in ("resumo","fiscal") and destino != "caixa_salao": raise ValueError("Conta fora do caixa")
+    if pedido.get("tipo") not in ("bebidas","resumo","fiscal"): raise ValueError("Tipo inválido")
+    img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
+    dados = salao_bitmap(img)
+    with _print_lock, socket.create_connection((ip,9100),timeout=8) as sock:
+        sock.settimeout(30); sock.sendall(dados)
+    log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip})")
+
+def salao_recibos_poll_loop():
+    """Reserva só destinos acessíveis; dedup local durável protege falha no ACK/reinício."""
+    pc = _nome_deste_pc(); dedup = os.path.join(PASTA_FILA,"salao_recibos_impressos.json")
+    try:
+        with open(dedup,encoding="utf-8") as f: impressos = json.load(f)
+    except Exception: impressos = {}
+    while True:
+        try:
+            cfg = _sofia_config()
+            destinos = [d for d,ip in SALAO_DESTINOS.items() if _ip_responde(ip,cache_s=10)] if cfg else []
+            if destinos:
+                base = f"{cfg['url']}/functions/v1/sofia-print-queue?fila=salao"
+                segredo = cfg.get("secret","")
+                dados = _sofia_http(base+"&"+urllib.parse.urlencode({"destinos":','.join(destinos)}),secret=segredo,pc=pc)
+                for p in (dados or {}).get("pedidos",[]):
+                    pid = p.get("id")
+                    if not pid: continue
+                    try:
+                        if pid not in impressos:
+                            salao_processar_recibo(p)
+                            impressos[pid] = time.time()
+                            impressos = {k:v for k,v in impressos.items() if v>time.time()-30*86400}
+                            os.makedirs(PASTA_FILA,exist_ok=True)
+                            tmp = dedup+".tmp"
+                            with open(tmp,"w",encoding="utf-8") as f: json.dump(impressos,f)
+                            os.replace(tmp,dedup)
+                        _sofia_http(base,method="POST",body={"action":"mark","ids":[pid]},secret=segredo,pc=pc)
+                    except Exception as e:
+                        log(f"  SALAO: falha #{pid}, mantém para retentativa: {e}")
+                        if pid not in impressos:
+                            try: _sofia_http(base,method="POST",body={"action":"release","ids":[pid]},secret=segredo,pc=pc)
+                            except Exception: pass
+        except Exception as e: log(f"  SALAO fila: {e}")
+        time.sleep(10)
+
+
 def sofia_poll_loop():
     """v202: TODO PC com a chave (sofia_caixa.json) e com a impressora das caixas e servidor de etiqueta.
     Nao duplica: a nuvem entrega cada etiqueta a UM PC so (reserva atomica). Se este PC nao conseguir
@@ -4270,6 +4395,7 @@ def main():
     observer.schedule(handler, PASTA_DOWNLOADS, recursive=False); observer.start()
     # SOFIA: poller de pedidos por telefone (so atua se existir sofia_caixa.json em Downloads)
     threading.Thread(target=sofia_poll_loop, daemon=True).start()
+    threading.Thread(target=salao_recibos_poll_loop, daemon=True).start()
     threading.Thread(target=mesa_poll_loop, daemon=True).start()   # v215: etiquetas de mesa (le do Mana)
     # CO LOVE: reenvio da fila de comandas (so age se existir comanda_config.json ligado)
     threading.Thread(target=comanda_retry_loop, daemon=True).start()

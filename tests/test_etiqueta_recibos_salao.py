@@ -1,0 +1,39 @@
+import importlib.util
+from pathlib import Path
+import unittest
+from unittest.mock import patch, MagicMock
+
+spec = importlib.util.spec_from_file_location('ponte_salao',Path(__file__).resolve().parents[1]/'etiqueta_saipos.py')
+mod = importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+
+class Recibos(unittest.TestCase):
+ def test_destinos_exatos(self):
+  self.assertEqual(mod.SALAO_DESTINOS,{'copa':'192.168.1.250','caixa_salao':'192.168.1.168'})
+ def test_nao_manda_bebida_caixa(self):
+  with self.assertRaises(ValueError): mod.salao_processar_recibo({'tipo':'bebidas','destino':'caixa_salao'})
+ def test_nao_manda_fiscal_copa(self):
+  with self.assertRaises(ValueError): mod.salao_processar_recibo({'tipo':'fiscal','destino':'copa'})
+ def test_bebida_envia_para_copa(self):
+  with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
+   mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[{'nome':'Coca-Cola','qty':2}]})
+   conexao.assert_called_once_with(('192.168.1.250',9100),timeout=8)
+   self.assertTrue(conexao.return_value.__enter__.return_value.sendall.called)
+ def test_resumo_caixa(self):
+  with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
+   mod.salao_processar_recibo({'tipo':'resumo','destino':'caixa_salao','total':100,'servico':True})
+   conexao.assert_called_once_with(('192.168.1.168',9100),timeout=8)
+ def test_raster_largo_em_blocos(self):
+  img = mod.Image.new('RGB',(576,600),'black');d=mod.salao_bitmap(img)
+  self.assertEqual(d[:8],b'\x1dv0\x00\x48\x00\x00\x02')
+  self.assertEqual(d[8],255)
+  self.assertEqual(d[8+72*512:16+72*512],b'\x1dv0\x00\x48\x00\x58\x00')
+  self.assertTrue(d.endswith(b'\n\n\n\x1bm'))
+ def test_nao_fetch_url_arbitraria(self):
+  with patch('urllib.request.urlopen') as fetch:
+   with self.assertRaises(ValueError): mod.salao_fiscal_img('http://127.0.0.1/segredo')
+   fetch.assert_not_called()
+ def test_falha_na_rede_nao_marcada_sucesso(self):
+  with patch('socket.create_connection',side_effect=OSError('offline')):
+   with self.assertRaises(OSError):mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[]})
+
+if __name__=='__main__': unittest.main()
