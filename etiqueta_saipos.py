@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "233"
+VERSION = "234"
 # v232 (12/10/26): remove o titulo REFRIGERANTES; repete ITENS/pagamento na parte inferior e
 #   aumenta discretamente a altura e a fonte das duas faixas inferiores para facilitar a leitura do motoboy.
 #   Mantem um unico QR no alto e todas as regras de contagem, produtos, Borda Dip e CO LOVE.
@@ -2866,7 +2866,18 @@ def _mesa_txt(v):
     t = re.sub(r'\s+', ' ', str(v or "")).strip()
     t = re.sub(r'(?i)^mesa\s*:?\s*', '', t)
     m = re.match(r'^(\d+)', t)
-    return f"MESA {m.group(1)}" if m else ("MESA " + t.upper() if t else "MESA")
+    return f"MESA {m.group(1)}" if m else "MESA"
+
+def mesa_real(pedido):
+    """Número de mesa operacional: nunca usa senha S4 como mesa."""
+    for texto, padrao in ((pedido.get("id_sale"), r"^MESA-(\d+)(?:-|$)"),
+                          (pedido.get("cliente_nome"), r"\bmesa[ :]+(\d+)")):
+        m = re.search(padrao, str(texto or ""), re.I)
+        if m: return m.group(1)
+    for chave in ("mesa", "numero"):
+        t = re.sub(r"(?i)^mesa[ :]*", "", str(pedido.get(chave) or "").strip())
+        if re.match(r"^\d+(?:[.,]\d+)?$", t): return t.split(".")[0].split(",")[0]
+    return ""
 
 def _mesa_nome_conta(identificacao):
     """'Ana - 2/3' -> 'Ana'; '18.01Marcio - 1/2' -> 'Marcio'; '' -> ''."""
@@ -2932,24 +2943,19 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
             linhas.append(re.sub(r'\s+', ' ', str(d.get("nome") or "")).strip())
     linhas = [l for l in linhas if l]
 
-    # --- cabecalho: MESA, n/total e hora na MESMA fonte (a maior que cabe na linha) ---
-    cab_h = int((alt - margem_t - margem_b) * 0.32)
+    # Mesa em fonte própria: horário/ordem não reduzem sua legibilidade.
+    cab_h = int((alt - margem_t - margem_b) * 0.28)
     mesa_txt = _mesa_txt(mesa)
-    partes = [mesa_txt] + ([f"{idx}/{total}"] if total and total > 1 else []) + ([hora] if hora else [])
-    gap = 14
-    f_cab = _prod_fonte_bold(13)
-    for tam in range(56, 12, -1):
+    f_cab = _prod_fonte_bold(36)
+    for tam in range(48, 24, -1):
         f = _prod_fonte_bold(tam)
-        if sum(w(p_, f) for p_ in partes) + gap * (len(partes) - 1) <= x1 - x0 and max(h(p_, f) for p_ in partes) <= cab_h:
-            f_cab = f; break
+        if w(mesa_txt,f) <= (x1-x0)*.68 and h(mesa_txt,f)<=cab_h-4:
+            f_cab=f;break
     ym = margem_t + cab_h // 2
     draw.text((x0, ym), mesa_txt, fill=tinta, font=f_cab, anchor="lm", stroke_width=traco, stroke_fill=tinta)
-    if hora:
-        draw.text((x1, ym), hora, fill=tinta, font=f_cab, anchor="rm", stroke_width=traco, stroke_fill=tinta)
-    if total and total > 1:
-        dir_ = x1 - (w(hora, f_cab) if hora else 0)
-        meio = (x0 + w(mesa_txt, f_cab) + dir_) // 2
-        draw.text((meio, ym), f"{idx}/{total}", fill=tinta, font=f_cab, anchor="mm", stroke_width=traco, stroke_fill=tinta)
+    f_meta = _prod_fonte_bold(19)
+    if hora: draw.text((x1,margem_t+12),hora,fill=tinta,font=f_meta,anchor="rm",stroke_width=traco,stroke_fill=tinta)
+    if total and total>1: draw.text((x1,margem_t+cab_h-12),f"{idx}/{total}",fill=tinta,font=f_meta,anchor="rm",stroke_width=traco,stroke_fill=tinta)
     y = margem_t + cab_h
     draw.line([(x0, y), (x1, y)], fill=tinta, width=3)
     y += 4
@@ -2978,7 +2984,7 @@ def gerar_etiqueta_mesa(mesa, display_i, idx, total, nome_conta="", hora="", lar
             else: return None
         return (fl, ls) if (1 + len(ls)) * _lh(fl) <= corpo_h else None
     escolha = None
-    for quebrar in (False, True):
+    for quebrar in (True, False):
         for tam in range(60, 9, -1):
             escolha = _cabe(tam, quebrar)
             if escolha: break
@@ -3087,7 +3093,7 @@ def mesa_processar_pendentes(pendentes, pc):
                 continue   # outro PC pegou
         except Exception as e:
             log(f"  MESA: reivindicar falhou ({e})"); continue
-        mesa = c.get("mesa") or ""
+        mesa = mesa_real(c)
         display = mesa_display_do_mana(c.get("items"))
         try:
             ok, n = imprimir_etiquetas_mesa(mesa, display, hora=_mesa_hora(c.get("received_at")), origem="MANA",
@@ -3603,7 +3609,7 @@ def processar_sofia_mesa(pedido):
     v217: EXCECAO = reimpressao pedida no Mana (botao da impressora no Forno): imprime a etiqueta de
     mesa daquela comanda na .24. Falhou -> False (volta pra fila; outro PC que enxerga a .24 imprime)."""
     if pedido.get("reimpressao"):
-        mesa = pedido.get("mesa") or pedido.get("numero") or ""
+        mesa = mesa_real(pedido)
         display = mesa_display_do_mana(pedido.get("itens"))
         ok, n = imprimir_etiquetas_mesa(mesa, display, hora=_mesa_hora(pedido.get("received_at")),
                                         origem="MANA/REIMP", pedido=pedido,
@@ -3855,28 +3861,41 @@ def salao_bitmap(img):
     out.extend(b"\n\n\n\x1bm")
     return bytes(out)
 
-def salao_resumo_img(pedido):
-    """Conteúdo do envio ou resumo com itens pagos visíveis, sem cobrá-los novamente."""
+def salao_recibo_linhas(pedido):
+    """Observações subordinadas não são novas unidades de produto."""
     import textwrap
+    linhas=[pedido.get("titulo") or "SALAO",str(pedido.get("cliente") or ""),_mesa_hora(pedido.get("hora"))]
+    for it in pedido.get("itens") or []:
+        if it.get("cancelado"): continue
+        nome=str(it.get("nome") or "")
+        if it.get("tipo")=="obs" or (it.get("tipo")=="outro" and re.match(r"(?i)^obs:",nome)):
+            nota=re.sub(r"(?i)^obs:\s*","",nome)
+            if pedido.get("tipo")=="bebidas" and ":" in nota: nota=nota.split(":",1)[1].strip()
+            nota=re.sub(r"(?i)(\d+)\s+copo(?:\(s\)|s)?(?!\w)",r"Copos: \1",nota)
+            linhas.extend("  "+t for t in textwrap.wrap(nota,width=34))
+            continue
+        prefixo="PAGO - " if it.get("pago") else ""
+        linhas.extend(textwrap.wrap(f"{prefixo}{it.get('qty',1)}x {nome}",width=36))
+        for sabor in it.get("sabores") or []: linhas.extend(textwrap.wrap(str(sabor),width=36))
+        if pedido.get("tipo")=="resumo":
+            valor=float(it.get("preco_total",float(it.get("preco") or 0)*float(it.get("qty") or 1)) or 0)
+            linhas.append(f"R$ {valor:.2f}".replace('.',','))
+    if pedido.get("tipo")=="resumo":
+        saldo=float(pedido.get("total") or 0);taxa=round(saldo*.10,2) if pedido.get("servico") else 0
+        if "consumo" in pedido: linhas.append(f"Consumo enviado: R$ {float(pedido['consumo']):.2f}")
+        if "consumo_pago" in pedido: linhas.append(f"Consumo quitado: R$ {float(pedido['consumo_pago']):.2f}")
+        linhas += ["--------------------------------",f"Pendente: R$ {saldo:.2f}",f"Servico: R$ {taxa:.2f}",f"A pagar: R$ {saldo+taxa:.2f}","NAO E DOCUMENTO FISCAL"]
+    return linhas
+
+def salao_resumo_img(pedido):
+    """Renderiza o envio/resumo a partir de linhas testáveis sem impressora."""
     try: fonte = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf",24)
     except Exception:
         try: fonte = ImageFont.truetype("Arial.ttf",24)
         except Exception: fonte = ImageFont.load_default(size=24)
-    linhas = [pedido.get("titulo") or "SALAO", str(pedido.get("cliente") or ""), _mesa_hora(pedido.get("hora"))]
-    for it in pedido.get("itens") or []:
-        if it.get("cancelado"): continue
-        prefixo = "PAGO - " if it.get("pago") else ""
-        linhas.extend(textwrap.wrap(f"{prefixo}{it.get('qty',1)}x {it.get('nome','')}", width=36))
-        sabores = it.get("sabores") or []
-        for sabor in sabores: linhas.extend(textwrap.wrap(str(sabor),width=36))
-        if pedido.get("tipo") == "resumo" and it.get("tipo") != "obs":
-            valor = float(it.get("preco_total",float(it.get("preco") or 0)*float(it.get("qty") or 1)) or 0)
-            linhas.append(f"R$ {valor:.2f}".replace('.',','))
-    if pedido.get("tipo") == "resumo":
-        saldo = float(pedido.get("total") or 0); taxa = round(saldo*.10,2) if pedido.get("servico") else 0
-        linhas += ["--------------------------------",f"Pendente: R$ {saldo:.2f}",f"Servico: R$ {taxa:.2f}",f"A pagar: R$ {saldo+taxa:.2f}","NAO E DOCUMENTO FISCAL"]
-    img = Image.new("RGB",(576,len(linhas)*34+40),"white"); d = ImageDraw.Draw(img)
-    for n,linha in enumerate(linhas): d.text((16,16+n*34),linha,font=fonte,fill="black")
+    linhas=salao_recibo_linhas(pedido)
+    img=Image.new("RGB",(576,len(linhas)*34+40),"white");d=ImageDraw.Draw(img)
+    for n,linha in enumerate(linhas):d.text((16,16+n*34),linha,font=fonte,fill="black")
     return img
 
 def salao_fiscal_img(url):
