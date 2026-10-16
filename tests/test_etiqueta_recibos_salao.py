@@ -32,6 +32,14 @@ class Recibos(unittest.TestCase):
   with patch('urllib.request.urlopen') as fetch:
    with self.assertRaises(ValueError): mod.salao_fiscal_img('http://127.0.0.1/segredo')
    fetch.assert_not_called()
+ def test_danfe_legivel_preserva_conteudo_e_qr(self):
+  html='<html><head><style>body{font-size:8px}</style></head><body><div class="content"><canvas width="220"></canvas><span style="font-size: 10px;">Protocolo fiscal</span></div></body></html>'
+  legivel=mod.salao_fiscal_html_legivel(html)
+  self.assertEqual(legivel.count('id="provisao-danfe-legibilidade"'),1)
+  self.assertLess(legivel.index('body{font-size:8px}'),legivel.index('id="provisao-danfe-legibilidade"'))
+  self.assertIn('<canvas width="220"></canvas>',legivel)
+  self.assertIn('Protocolo fiscal',legivel)
+  self.assertIn('font-size: 15px !important',legivel)
  def test_falha_na_rede_nao_marcada_sucesso(self):
   with patch('socket.create_connection',side_effect=OSError('offline')):
    with self.assertRaises(OSError):mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[]})

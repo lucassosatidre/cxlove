@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "234"
+VERSION = "235"
+# v235 (16/10/26): aumenta a fonte do DANFE oficial no caixa Salão, com
+# quebra de linha nos itens e totais destacados. Não altera XML, QR ou destino.
 # v232 (12/10/26): remove o titulo REFRIGERANTES; repete ITENS/pagamento na parte inferior e
 #   aumenta discretamente a altura e a fonte das duas faixas inferiores para facilitar a leitura do motoboy.
 #   Mantem um unico QR no alto e todas as regras de contagem, produtos, Borda Dip e CO LOVE.
@@ -3898,6 +3900,24 @@ def salao_resumo_img(pedido):
     for n,linha in enumerate(linhas):d.text((16,16+n*34),linha,font=fonte,fill="black")
     return img
 
+DANFE_LEGIBILIDADE = """<style id="provisao-danfe-legibilidade">
+  body { margin: 4px !important; font-size: 13px !important; line-height: 1.3 !important; color: #000 !important; }
+  .content { box-sizing: border-box !important; width: 100% !important; max-width: 560px !important; margin: 0 auto !important; padding: 2px !important; border: 0 !important; }
+  .content table { width: 100% !important; font-size: 13px !important; border-collapse: collapse !important; }
+  .content td, .content th { font-size: inherit !important; line-height: 1.25 !important; padding: 3px 2px !important; vertical-align: top !important; white-space: normal !important; overflow-wrap: anywhere !important; }
+  .content .lista-produtos table { font-size: 12px !important; }
+  .content .valor-total table { font-size: 15px !important; font-weight: 600 !important; }
+  .content .tributacao table, .content .info-adicionais table { font-size: 12px !important; }
+  .content span[style*="font-size: 10px"] { font-size: 12px !important; }
+  @media print { @page { margin: 0; } }
+</style>"""
+
+def salao_fiscal_html_legivel(html):
+    """Insere somente CSS no DANFE recebido da Focus, depois das regras originais."""
+    if re.search(r"</head\s*>", html, re.I):
+        return re.sub(r"</head\s*>", lambda m: DANFE_LEGIBILIDADE + m.group(0), html, count=1, flags=re.I)
+    return DANFE_LEGIBILIDADE + html
+
 def salao_fiscal_img(url):
     """Renderiza o DANFE oficial; nunca reconstrói ou inventa dados fiscais."""
     from PIL import ImageChops
@@ -3911,6 +3931,7 @@ def salao_fiscal_img(url):
             raise ValueError("Redirecionamento fiscal inválido")
         html = r.read(2_000_001).decode("utf-8")
     if len(html)>2_000_000: raise ValueError("DANFE maior que o limite")
+    html = salao_fiscal_html_legivel(html)
     base = urllib.parse.urlsplit(url); origem = f"{base.scheme}://{base.netloc}"
     import uuid
     nonce = uuid.uuid4().hex
