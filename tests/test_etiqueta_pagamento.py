@@ -18,7 +18,7 @@ class EtiquetaPagamentoTest(unittest.TestCase):
 
     def test_ifood_pago_sai_so_pago(self):
         cat, r = self.rod("pago", None, 50.90, pagamentos=[{"forma": "credito", "valor": 50.90}], bandeira="MASTERCARD")
-        self.assertEqual(cat, "PAGO"); self.assertEqual(r, "ITENS: 1 - PAGO")
+        self.assertEqual(cat, "PAGO_ONLINE"); self.assertEqual(r, "ITENS: 1 - PAGO ON-LINE")
 
     def test_cartao_pix_vale_na_entrega_viram_maq_cartao(self):
         for forma in ("credito", "debito", "pix", "vale"):
@@ -27,7 +27,24 @@ class EtiquetaPagamentoTest(unittest.TestCase):
 
     def test_brendi_pix_pago_no_app_e_pago(self):
         cat, r = self.rod("pix", None, 66.30, pagamentos=[{"forma": "pix", "valor": 66.30, "online": True}])
-        self.assertEqual(r, "ITENS: 1 - PAGO")
+        self.assertEqual(cat, "PAGO_ONLINE"); self.assertEqual(r, "ITENS: 1 - PAGO ON-LINE")
+
+    def test_pix_online_confirmado_com_estrelas_nao_manda_cobrar(self):
+        cat, r = self.rod("pago", None, 25, pagamentos=[], estrelas=True)
+        self.assertEqual(cat, "PAGO_ONLINE_DETALHE")
+        self.assertEqual(r, "ITENS: 1 - PAGO ON-LINE - RECOLHER 10 ESTRELAS")
+        self.assertNotIn("R$", r)
+        self.assertNotIn("COBRAR", r)
+
+    def test_pix_online_sem_confirmacao_ainda_exige_cobranca(self):
+        cat, r = self.rod("pix_online", None, 25, pagamentos=[])
+        self.assertEqual(cat, "COBRAR_DETALHE")
+        self.assertIn("R$25,00", r)
+
+    def test_pix_online_parcial_so_cobra_saldo(self):
+        cat, r = self.rod("pix", None, 100, pagamentos=[{"forma": "pix", "valor": 40, "online": True}])
+        self.assertEqual(cat, "COBRAR_DETALHE")
+        self.assertEqual(r, "ITENS: 1 - MAQ CARTAO R$60,00")
 
     def test_brendi_pix_na_entrega_e_maq_cartao(self):
         cat, r = self.rod("pix", None, 66.30, pagamentos=[{"forma": "pix", "valor": 66.30, "online": False}])

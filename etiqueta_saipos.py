@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "236"
+VERSION = "237"
+# v237 (16/10/26): pedido delivery pago online nunca vira COBRAR por causa do
+# cupom de estrelas; destaque PAGO ON-LINE sem valor e preserve o recolhimento.
 # v236 (16/10/26): copa amplia mesa, bebida e copos; cada trabalho unitario
 # da fila vira uma comanda cortada separadamente na impressora da copa.
 # v235 (16/10/26): aumenta a fonte do DANFE oficial no caixa Salão, com
@@ -1496,6 +1498,11 @@ def formatar_valor(v):
 
 def montar_rodape_linha(total_entrega, pag_cat, pag_dados):
     """Retorna UMA linha pro rodape: ITENS + pagamento (sem LEVAR em troco)"""
+    if pag_cat == "PAGO_ONLINE":
+        return f"ITENS: {total_entrega} - PAGO ON-LINE"
+    if pag_cat == "PAGO_ONLINE_DETALHE":
+        resumo = str(pag_dados.get("resumo") or "").strip()
+        return f"ITENS: {total_entrega} - PAGO ON-LINE" + (f" - {resumo}" if resumo else "")
     if pag_cat == "PAGO":
         return f"ITENS: {total_entrega} - PAGO"
     if pag_cat == "MAQUINONA":
@@ -1831,7 +1838,8 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # ============================================================
     try: num_padded = f"{int(numero_pedido):04d}"
     except: num_padded = numero_pedido or "0000"
-    status = "PAGO" if str(pag_cat).startswith("PAGO") else "COBRAR"
+    status = ("PAGO ON-LINE" if str(pag_cat).startswith("PAGO_ONLINE") else
+              "PAGO" if str(pag_cat).startswith("PAGO") else "COBRAR")
     partes = [f"#{num_padded}", f"{pizza_num}/{total_pizzas}", status]
     if balcao and nome_cliente: partes.append(f"{nome_cliente} BALCAO")
     elif balcao: partes.append("BALCAO")
@@ -3207,15 +3215,21 @@ def sofia_tem_estrelas(canal, cupom):
 
 def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira="", estrelas=False):
     """v213 (regras do Lucas 25/09/26), igual pra todo canal:
-    - pago no app ou pedido de R$ 0,00 -> PAGO em cima e embaixo, sem forma nem valor;
+    - pagamento online confirmado -> PAGO ON-LINE, sem valor; zero sem online -> PAGO;
     - credito/debito/pix/vale a cobrar na entrega -> COBRAR + "MAQ CARTAO R$ x" (a maquina cobre todos);
     - dinheiro -> COBRAR + "DIN R$ x" (+ "TROCO P/ R$ y" quando o troco e' maior);
     - misto -> "MAQ CARTAO R$ x DIN R$ y ...";
-    - estrelas (cupom JUNTE10TELE do Atendente) -> COBRAR + "RECOLHER 10 ESTRELAS" (+ a diferenca)."""
+    - estrelas -> RECOLHER 10 ESTRELAS, sem converter pagamento online em COBRAR."""
     f = (forma or "").lower().strip()
     parcelas = pagamentos if isinstance(pagamentos, list) else []
     try: total = float(total or 0)
     except (TypeError, ValueError): total = 0.0
+    def val(p):
+        try: return float(p.get("valor") if p.get("valor") is not None else total)
+        except (TypeError, ValueError): return 0.0
+    total_online = sum(val(p) for p in parcelas if p.get("online") is True)
+    pago_online = f == "pago" or (bool(parcelas) and all(p.get("online") is True for p in parcelas)
+                                     and total_online >= total - 0.01)
     if parcelas:
         pendentes = [p for p in parcelas if not p.get("online")]
     elif f in ("", "pago"):
@@ -3224,9 +3238,12 @@ def sofia_pag_cat(forma, troco_para, total, pagamentos=None, bandeira="", estrel
         pendentes = [{"forma": f, "valor": total}]
     if f == "pago" or total <= 0:
         pendentes = []
-    def val(p):
-        try: return float(p.get("valor") if p.get("valor") is not None else total)
-        except (TypeError, ValueError): return 0.0
+    elif parcelas and not pendentes and not pago_online and total - total_online > 0.01:
+        pendentes = [{"forma": f, "valor": total - total_online}]
+    if pago_online:
+        if estrelas:
+            return "PAGO_ONLINE_DETALHE", {"resumo": "RECOLHER 10 ESTRELAS"}
+        return "PAGO_ONLINE", {}
     din = sum(val(p) for p in pendentes if str(p.get("forma") or f).lower() == "dinheiro")
     car = sum(val(p) for p in pendentes if str(p.get("forma") or f).lower() != "dinheiro")
     partes = []
