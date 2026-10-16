@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 from unittest.mock import patch, MagicMock
+from PIL import ImageChops
 
 spec = importlib.util.spec_from_file_location('ponte_salao',Path(__file__).resolve().parents[1]/'etiqueta_saipos.py')
 mod = importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
@@ -15,9 +16,17 @@ class Recibos(unittest.TestCase):
   with self.assertRaises(ValueError): mod.salao_processar_recibo({'tipo':'fiscal','destino':'copa'})
  def test_bebida_envia_para_copa(self):
   with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
-   mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[{'nome':'Coca-Cola','qty':2}]})
+   mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[{'nome':'Coca-Cola','qty':1}]})
    conexao.assert_called_once_with(('192.168.1.250',9100),timeout=8)
    self.assertTrue(conexao.return_value.__enter__.return_value.sendall.called)
+ def test_copa_destaca_mesa_produto_e_copos_sem_cortar(self):
+  pedido={'tipo':'bebidas','titulo':'COPA — Menezes','cliente':'Mesa 1 · LC','hora':'2026-10-16T16:20:00',
+   'itens':[{'tipo':'bebida','nome':'Kombucha Abacaxi com Hibisco 350ml','qty':1},
+            {'tipo':'obs','nome':'Kombucha Abacaxi com Hibisco 350ml: 1 copo'}]}
+  img=mod.salao_resumo_img(pedido)
+  self.assertEqual(img.width,576)
+  self.assertGreater(img.height,210)
+  self.assertLessEqual(ImageChops.invert(img.convert('L')).getbbox()[2],560)
  def test_resumo_caixa(self):
   with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
    mod.salao_processar_recibo({'tipo':'resumo','destino':'caixa_salao','total':100,'servico':True})
