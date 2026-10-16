@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "235"
+VERSION = "236"
+# v236 (16/10/26): copa amplia mesa, bebida e copos; cada trabalho unitario
+# da fila vira uma comanda cortada separadamente na impressora da copa.
 # v235 (16/10/26): aumenta a fonte do DANFE oficial no caixa Salão, com
 # quebra de linha nos itens e totais destacados. Não altera XML, QR ou destino.
 # v232 (12/10/26): remove o titulo REFRIGERANTES; repete ITENS/pagamento na parte inferior e
@@ -3891,11 +3893,50 @@ def salao_recibo_linhas(pedido):
 
 def salao_resumo_img(pedido):
     """Renderiza o envio/resumo a partir de linhas testáveis sem impressora."""
+    linhas=salao_recibo_linhas(pedido)
+    if pedido.get("tipo") == "bebidas":
+        def fonte(tamanho, negrito=False):
+            arquivo = "arialbd.ttf" if negrito else "arial.ttf"
+            try: return ImageFont.truetype(os.path.join("C:\\Windows\\Fonts", arquivo), tamanho)
+            except Exception:
+                try: return ImageFont.truetype(arquivo, tamanho)
+                except Exception: return ImageFont.load_default(size=tamanho)
+
+        fontes = {
+            "cabecalho": fonte(28), "mesa": fonte(36, True),
+            "hora": fonte(26), "produto": fonte(36, True),
+            "copos": fonte(32, True), "observacao": fonte(28),
+        }
+        medida = ImageDraw.Draw(Image.new("RGB", (576, 1), "white"))
+        blocos = []
+        for n, linha in enumerate(linhas):
+            tipo = ("cabecalho" if n == 0 else "mesa" if n == 1 else "hora" if n == 2
+                    else "copos" if linha.strip().lower().startswith("copos:")
+                    else "observacao" if linha.startswith("  ") else "produto")
+            estilo = fontes[tipo]
+            recuo = "  " if linha.startswith("  ") else ""
+            palavras = linha.strip().split()
+            atual = recuo
+            for palavra in palavras:
+                tentativa = (atual.rstrip() + " " + palavra).strip() if atual.strip() else recuo + palavra
+                if atual.strip() and medida.textlength(tentativa, font=estilo) > 544:
+                    blocos.append((atual, estilo))
+                    atual = recuo + palavra
+                else:
+                    atual = tentativa
+            blocos.append((atual or recuo, estilo))
+        altura = 32 + sum(getattr(estilo, "size", 28) + 12 for _, estilo in blocos)
+        img = Image.new("RGB", (576, altura), "white")
+        desenho = ImageDraw.Draw(img)
+        y = 16
+        for linha, estilo in blocos:
+            desenho.text((16, y), linha, font=estilo, fill="black")
+            y += getattr(estilo, "size", 28) + 12
+        return img
     try: fonte = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf",24)
     except Exception:
         try: fonte = ImageFont.truetype("Arial.ttf",24)
         except Exception: fonte = ImageFont.load_default(size=24)
-    linhas=salao_recibo_linhas(pedido)
     img=Image.new("RGB",(576,len(linhas)*34+40),"white");d=ImageDraw.Draw(img)
     for n,linha in enumerate(linhas):d.text((16,16+n*34),linha,font=fonte,fill="black")
     return img
