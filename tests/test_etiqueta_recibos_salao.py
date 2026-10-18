@@ -16,11 +16,18 @@ class Recibos(unittest.TestCase):
   with self.assertRaises(ValueError): mod.salao_processar_recibo({'tipo':'fiscal','destino':'copa'})
  def test_bebida_envia_para_copa(self):
   with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
-   mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[{'nome':'Coca-Cola','qty':1}]})
+   mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','cliente':'Mesa 1 · LC',
+    'itens':[{'nome':'Coca-Cola','qty':1},{'tipo':'obs','nome':'Coca-Cola: 1 copo'}]})
    conexao.assert_called_once_with(('192.168.1.250',9100),timeout=8)
    dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
-   self.assertTrue(dados.startswith(b'\x1d\xf9\x20\x01\x1dv0\x00'))
-   self.assertTrue(dados.endswith(b'\n\n\n\x1bm\x1d\xf9\x1f\x31'))
+   self.assertTrue(dados.startswith(b'\x1b@'))
+   self.assertIn(b'Mesa 1 - LC',dados)
+   self.assertIn(b'1x Coca-Cola',dados)
+   self.assertIn(b'Copos: 1',dados)
+   self.assertIn(b'\x1b\x21\x38',dados)
+   self.assertNotIn(b'\x1dv0',dados)
+   self.assertNotIn(b'\x1d\xf9',dados)
+   self.assertTrue(dados.endswith(b'\n\n\n\x1bm'))
  def test_copa_destaca_mesa_produto_e_copos_sem_cortar(self):
   pedido={'tipo':'bebidas','titulo':'COPA — Menezes','cliente':'Mesa 1 · LC','hora':'2026-10-16T16:20:00',
    'itens':[{'tipo':'bebida','nome':'Kombucha Abacaxi com Hibisco 350ml','qty':1},

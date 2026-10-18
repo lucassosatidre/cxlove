@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "238"
+VERSION = "239"
+# v239 (17/10/26): copa usa texto curto em vez de bitmap; evita que bytes
+# de imagem sejam impressos como caracteres e remove troca de modo da v238.
 # v238 (17/10/26): força ESC/POS temporariamente em cada comanda da copa;
 # a MP-4200 TH pode imprimir os bytes do bitmap como texto em modo ESC/Bema.
 # v237 (16/10/26): pedido delivery pago online nunca vira COBRAR por causa do
@@ -3960,6 +3962,26 @@ def salao_resumo_img(pedido):
     for n,linha in enumerate(linhas):d.text((16,16+n*34),linha,font=fonte,fill="black")
     return img
 
+def salao_copa_texto(pedido):
+    """Comanda legível na MP-4200 TH sem transmitir bitmap raster."""
+    import textwrap
+    import unicodedata
+
+    def ascii_seguro(valor):
+        texto = str(valor).replace("—", "-").replace("·", "-")
+        return unicodedata.normalize("NFKD", texto).encode("ascii", "replace")
+
+    linhas = salao_recibo_linhas(pedido)
+    saida = bytearray(b"\x1b@")
+    for n, linha in enumerate(linhas):
+        destaque = n == 1 or n >= 3 and (not linha.startswith("  ") or linha.strip().lower().startswith("copos:"))
+        largura = 22 if destaque else 42
+        modo = b"\x1b\x21\x38" if destaque else b"\x1b\x21\x00"
+        for trecho in textwrap.wrap(linha.strip(), width=largura, break_long_words=True) or [""]:
+            saida.extend(modo + ascii_seguro(trecho) + b"\n")
+    saida.extend(b"\x1b\x21\x00\n\n\n\x1bm")
+    return bytes(saida)
+
 DANFE_LEGIBILIDADE = """<style id="provisao-danfe-legibilidade">
   body { margin: 4px !important; font-size: 13px !important; line-height: 1.3 !important; color: #000 !important; }
   .content { box-sizing: border-box !important; width: 100% !important; max-width: 560px !important; margin: 0 auto !important; padding: 2px !important; border: 0 !important; }
@@ -4020,12 +4042,11 @@ def salao_processar_recibo(pedido):
     if pedido.get("tipo") == "bebidas" and destino != "copa": raise ValueError("Bebida fora da copa")
     if pedido.get("tipo") in ("resumo","fiscal") and destino != "caixa_salao": raise ValueError("Conta fora do caixa")
     if pedido.get("tipo") not in ("bebidas","resumo","fiscal"): raise ValueError("Tipo inválido")
-    img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
-    dados = salao_bitmap(img)
     if destino == "copa":
-        # MP-4200 TH: GS F9 SP 1 seleciona ESC/POS sem gravar na memoria;
-        # GS F9 1F 1 restaura o modo anterior apos o corte.
-        dados = b"\x1d\xf9\x20\x01" + dados + b"\x1d\xf9\x1f\x31"
+        dados = salao_copa_texto(pedido)
+    else:
+        img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
+        dados = salao_bitmap(img)
     with _print_lock, socket.create_connection((ip,9100),timeout=8) as sock:
         sock.settimeout(30); sock.sendall(dados)
     log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip})")
