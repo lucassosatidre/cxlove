@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "239"
+VERSION = "240"
+# v240 (17/10/26): copa preserva acentos em CP850 e usa margem interna;
+# fonte alta sem largura dupla mantém o nome completo dentro do papel.
 # v239 (17/10/26): copa usa texto curto em vez de bitmap; evita que bytes
 # de imagem sejam impressos como caracteres e remove troca de modo da v238.
 # v238 (17/10/26): força ESC/POS temporariamente em cada comanda da copa;
@@ -3965,20 +3967,19 @@ def salao_resumo_img(pedido):
 def salao_copa_texto(pedido):
     """Comanda legível na MP-4200 TH sem transmitir bitmap raster."""
     import textwrap
-    import unicodedata
 
-    def ascii_seguro(valor):
+    def cp850_seguro(valor):
         texto = str(valor).replace("—", "-").replace("·", "-")
-        return unicodedata.normalize("NFKD", texto).encode("ascii", "replace")
+        return texto.encode("cp850", "replace")
 
     linhas = salao_recibo_linhas(pedido)
-    saida = bytearray(b"\x1b@")
+    saida = bytearray(b"\x1b@\x1bt\x02")
     for n, linha in enumerate(linhas):
         destaque = n == 1 or n >= 3 and (not linha.startswith("  ") or linha.strip().lower().startswith("copos:"))
-        largura = 22 if destaque else 42
-        modo = b"\x1b\x21\x38" if destaque else b"\x1b\x21\x00"
+        largura = 36 if destaque else 40
+        modo = b"\x1b\x21\x18" if destaque else b"\x1b\x21\x00"
         for trecho in textwrap.wrap(linha.strip(), width=largura, break_long_words=True) or [""]:
-            saida.extend(modo + ascii_seguro(trecho) + b"\n")
+            saida.extend(modo + b"  " + cp850_seguro(trecho) + b"\n")
     saida.extend(b"\x1b\x21\x00\n\n\n\x1bm")
     return bytes(saida)
 
