@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "239"
+VERSION = "240"
+# v240 (17/10/26): restaura o recibo em imagem da copa; a fila no Supabase
+# serializa os envios para impedir imagens simultâneas na mesma impressora.
 # v239 (17/10/26): copa usa texto curto em vez de bitmap; evita que bytes
 # de imagem sejam impressos como caracteres e remove troca de modo da v238.
 # v238 (17/10/26): força ESC/POS temporariamente em cada comanda da copa;
@@ -4042,11 +4044,8 @@ def salao_processar_recibo(pedido):
     if pedido.get("tipo") == "bebidas" and destino != "copa": raise ValueError("Bebida fora da copa")
     if pedido.get("tipo") in ("resumo","fiscal") and destino != "caixa_salao": raise ValueError("Conta fora do caixa")
     if pedido.get("tipo") not in ("bebidas","resumo","fiscal"): raise ValueError("Tipo inválido")
-    if destino == "copa":
-        dados = salao_copa_texto(pedido)
-    else:
-        img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
-        dados = salao_bitmap(img)
+    img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
+    dados = salao_bitmap(img)
     with _print_lock, socket.create_connection((ip,9100),timeout=8) as sock:
         sock.settimeout(30); sock.sendall(dados)
     log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip})")

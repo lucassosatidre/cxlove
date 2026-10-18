@@ -20,12 +20,10 @@ class Recibos(unittest.TestCase):
     'itens':[{'nome':'Coca-Cola','qty':1},{'tipo':'obs','nome':'Coca-Cola: 1 copo'}]})
    conexao.assert_called_once_with(('192.168.1.250',9100),timeout=8)
    dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
-   self.assertTrue(dados.startswith(b'\x1b@'))
-   self.assertIn(b'Mesa 1 - LC',dados)
-   self.assertIn(b'1x Coca-Cola',dados)
-   self.assertIn(b'Copos: 1',dados)
-   self.assertIn(b'\x1b\x21\x38',dados)
-   self.assertNotIn(b'\x1dv0',dados)
+   self.assertTrue(dados.startswith(b'\x1dv0\x00'))
+   self.assertEqual(dados[4:6],b'\x48\x00')
+   self.assertGreater(len(dados),10000)
+   self.assertNotIn(b'\x1b\x21\x38',dados)
    self.assertNotIn(b'\x1d\xf9',dados)
    self.assertTrue(dados.endswith(b'\n\n\n\x1bm'))
  def test_copa_destaca_mesa_produto_e_copos_sem_cortar(self):
