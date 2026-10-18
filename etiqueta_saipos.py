@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "241"
+VERSION = "242"
+# v242 (18/10/26): consulta a fila da copa a cada 1s por 15s apos imprimir,
+# evitando espera extra entre unidades do mesmo lote; ocioso permanece a 5s.
 # v241 (18/10/26): consulta recibos do salão a cada 5s, reduzindo a espera
 # entre comandas da copa sem alterar o intervalo seguro no banco.
 # v240 (17/10/26): restaura o recibo em imagem da copa; a fila no Supabase
@@ -4058,6 +4060,7 @@ def salao_recibos_poll_loop():
     try:
         with open(dedup,encoding="utf-8") as f: impressos = json.load(f)
     except Exception: impressos = {}
+    poll_rapido_ate = 0
     while True:
         try:
             cfg = _sofia_config()
@@ -4079,13 +4082,16 @@ def salao_recibos_poll_loop():
                             with open(tmp,"w",encoding="utf-8") as f: json.dump(impressos,f)
                             os.replace(tmp,dedup)
                         _sofia_http(base,method="POST",body={"action":"mark","ids":[pid]},secret=segredo,pc=pc)
+                        if p.get("destino") == "copa":
+                            # Durante um lote, consulte logo após o cooldown da impressora.
+                            poll_rapido_ate = time.monotonic() + 15
                     except Exception as e:
                         log(f"  SALAO: falha #{pid}, mantém para retentativa: {e}")
                         if pid not in impressos:
                             try: _sofia_http(base,method="POST",body={"action":"release","ids":[pid]},secret=segredo,pc=pc)
                             except Exception: pass
         except Exception as e: log(f"  SALAO fila: {e}")
-        time.sleep(5)
+        time.sleep(1 if time.monotonic() < poll_rapido_ate else 5)
 
 
 def sofia_poll_loop():
