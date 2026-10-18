@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "240"
+VERSION = "241"
+# v241 (18/10/26): consulta recibos do salão a cada 5s, reduzindo a espera
+# entre comandas da copa sem alterar o intervalo seguro no banco.
 # v240 (17/10/26): restaura o recibo em imagem da copa; a fila no Supabase
 # serializa os envios para impedir imagens simultâneas na mesma impressora.
 # v239 (17/10/26): copa usa texto curto em vez de bitmap; evita que bytes
@@ -4083,7 +4085,7 @@ def salao_recibos_poll_loop():
                             try: _sofia_http(base,method="POST",body={"action":"release","ids":[pid]},secret=segredo,pc=pc)
                             except Exception: pass
         except Exception as e: log(f"  SALAO fila: {e}")
-        time.sleep(10)
+        time.sleep(5)
 
 
 def sofia_poll_loop():
