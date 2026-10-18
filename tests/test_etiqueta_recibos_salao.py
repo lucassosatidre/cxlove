@@ -18,7 +18,9 @@ class Recibos(unittest.TestCase):
   with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
    mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[{'nome':'Coca-Cola','qty':1}]})
    conexao.assert_called_once_with(('192.168.1.250',9100),timeout=8)
-   self.assertTrue(conexao.return_value.__enter__.return_value.sendall.called)
+   dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
+   self.assertTrue(dados.startswith(b'\x1d\xf9\x20\x01\x1dv0\x00'))
+   self.assertTrue(dados.endswith(b'\n\n\n\x1bm\x1d\xf9\x1f\x31'))
  def test_copa_destaca_mesa_produto_e_copos_sem_cortar(self):
   pedido={'tipo':'bebidas','titulo':'COPA — Menezes','cliente':'Mesa 1 · LC','hora':'2026-10-16T16:20:00',
    'itens':[{'tipo':'bebida','nome':'Kombucha Abacaxi com Hibisco 350ml','qty':1},
@@ -31,6 +33,8 @@ class Recibos(unittest.TestCase):
   with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
    mod.salao_processar_recibo({'tipo':'resumo','destino':'caixa_salao','total':100,'servico':True})
    conexao.assert_called_once_with(('192.168.1.168',9100),timeout=8)
+   dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
+   self.assertTrue(dados.startswith(b'\x1dv0\x00'))
  def test_raster_largo_em_blocos(self):
   img = mod.Image.new('RGB',(576,600),'black');d=mod.salao_bitmap(img)
   self.assertEqual(d[:8],b'\x1dv0\x00\x48\x00\x00\x02')

@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "237"
+VERSION = "238"
+# v238 (17/10/26): força ESC/POS temporariamente em cada comanda da copa;
+# a MP-4200 TH pode imprimir os bytes do bitmap como texto em modo ESC/Bema.
 # v237 (16/10/26): pedido delivery pago online nunca vira COBRAR por causa do
 # cupom de estrelas; destaque PAGO ON-LINE sem valor e preserve o recolhimento.
 # v236 (16/10/26): copa amplia mesa, bebida e copos; cada trabalho unitario
@@ -4020,6 +4022,10 @@ def salao_processar_recibo(pedido):
     if pedido.get("tipo") not in ("bebidas","resumo","fiscal"): raise ValueError("Tipo inválido")
     img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
     dados = salao_bitmap(img)
+    if destino == "copa":
+        # MP-4200 TH: GS F9 SP 1 seleciona ESC/POS sem gravar na memoria;
+        # GS F9 1F 1 restaura o modo anterior apos o corte.
+        dados = b"\x1d\xf9\x20\x01" + dados + b"\x1d\xf9\x1f\x31"
     with _print_lock, socket.create_connection((ip,9100),timeout=8) as sock:
         sock.settimeout(30); sock.sendall(dados)
     log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip})")
