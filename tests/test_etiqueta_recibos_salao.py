@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch, MagicMock
 from PIL import ImageChops
@@ -61,5 +62,25 @@ class Recibos(unittest.TestCase):
  def test_falha_na_rede_nao_marcada_sucesso(self):
   with patch('socket.create_connection',side_effect=OSError('offline')):
    with self.assertRaises(OSError):mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[]})
+ def test_poll_rapido_apos_comanda_da_copa(self):
+  with TemporaryDirectory() as pasta, patch.object(mod,'PASTA_FILA',pasta), \
+       patch.object(mod,'_sofia_config',return_value={'url':'https://exemplo.invalid','secret':'teste'}), \
+       patch.object(mod,'_ip_responde',return_value=True), \
+       patch.object(mod,'_sofia_http',side_effect=[{'pedidos':[{'id':'teste','destino':'copa','tipo':'bebidas'}]},{}]) as http, \
+       patch.object(mod,'salao_processar_recibo') as imprimir, \
+       patch.object(mod.time,'sleep',side_effect=StopIteration) as dormir:
+   with self.assertRaises(StopIteration):mod.salao_recibos_poll_loop()
+   imprimir.assert_called_once()
+   self.assertEqual(http.call_count,2)
+   self.assertEqual(http.call_args.kwargs['body'],{'action':'mark','ids':['teste']})
+   dormir.assert_called_once_with(1)
+ def test_poll_ocioso_mantem_intervalo_normal(self):
+  with TemporaryDirectory() as pasta, patch.object(mod,'PASTA_FILA',pasta), \
+       patch.object(mod,'_sofia_config',return_value={'url':'https://exemplo.invalid','secret':'teste'}), \
+       patch.object(mod,'_ip_responde',return_value=True), \
+       patch.object(mod,'_sofia_http',return_value={'pedidos':[]}), \
+       patch.object(mod.time,'sleep',side_effect=StopIteration) as dormir:
+   with self.assertRaises(StopIteration):mod.salao_recibos_poll_loop()
+   dormir.assert_called_once_with(5)
 
 if __name__=='__main__': unittest.main()
