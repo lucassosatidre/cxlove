@@ -4,7 +4,10 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "242"
+VERSION = "243"
+# v243 (20/10/26): copa usa imagem GS * / GS / em faixas de 24 pontos,
+# compativeis com ESC/Bema e ESC/POS, inicializadas e enviadas com cadencia.
+# Evita raster GS v 0 dependente do modo/buffer; preserva desenho e corte unitario.
 # v242 (18/10/26): consulta a fila da copa a cada 1s por 15s apos imprimir,
 # evitando espera extra entre unidades do mesmo lote; ocioso permanece a 5s.
 # v241 (18/10/26): consulta recibos do salão a cada 5s, reduzindo a espera
@@ -3892,6 +3895,37 @@ def salao_bitmap(img):
     out.extend(b"\n\n\n\x1bm")
     return bytes(out)
 
+def salao_copa_blocos(img):
+    """MP-4200: imagem em RAM comum a ESC/Bema e ESC/POS (GS * e GS /).
+
+    Cada faixa de 24 pontos tem 1728 bytes de pixels: fica abaixo de 2 KB.
+    O bitmap raster GS v 0 exige buffer de texto vazio e depende da emulacao.
+    Aqui inicializamos uma vez, carregamos/imprimimos faixas completas e cortamos
+    uma vez. Nada e gravado na memoria permanente ou na configuracao da impressora.
+    """
+    img = img.convert("L")
+    if img.width != 576:
+        img = img.resize((576, round(img.height * 576 / img.width)))
+    pixels = img.load()
+    yield b"\x1b@"
+    for inicio in range(0, img.height, 24):
+        altura = min(24, img.height - inicio)
+        grupos = (altura + 7) // 8
+        bloco = bytearray(b"\x1d*" + bytes((72, grupos)))
+        # GS * organiza bytes por coluna, do bit superior para o inferior.
+        for x in range(576):
+            for grupo in range(grupos):
+                byte = 0
+                for bit in range(8):
+                    y = inicio + grupo * 8 + bit
+                    if y < img.height and pixels[x, y] < 155:
+                        byte |= 0x80 >> bit
+                bloco.append(byte)
+        bloco.extend(b"\x1d/\x00")
+        yield bytes(bloco)
+    yield b"\n\n\n\x1bm"
+
+
 def salao_recibo_linhas(pedido):
     """Observações subordinadas não são novas unidades de produto."""
     import textwrap
@@ -4049,10 +4083,21 @@ def salao_processar_recibo(pedido):
     if pedido.get("tipo") in ("resumo","fiscal") and destino != "caixa_salao": raise ValueError("Conta fora do caixa")
     if pedido.get("tipo") not in ("bebidas","resumo","fiscal"): raise ValueError("Tipo inválido")
     img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
-    dados = salao_bitmap(img)
+    blocos = list(salao_copa_blocos(img)) if destino == "copa" else [salao_bitmap(img)]
     with _print_lock, socket.create_connection((ip,9100),timeout=8) as sock:
-        sock.settimeout(30); sock.sendall(dados)
-    log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip})")
+        sock.settimeout(30)
+        for n, bloco in enumerate(blocos):
+            sock.sendall(bloco)
+            if destino == "copa" and n < len(blocos) - 1:
+                time.sleep(0.04)
+        if destino == "copa":
+            # Finaliza o envio sem abandonar bytes ainda na camada TCP.
+            try: sock.shutdown(socket.SHUT_WR)
+            except OSError: pass
+    protocolo = "gs-star-24" if destino == "copa" else "raster"
+    sofia_evento("salao_enviado", fila_id=pedido.get("id"), impressora=ip,
+                 detalhe=f"{destino}; protocolo={protocolo}; blocos={len(blocos)}; bytes={sum(map(len,blocos))}")
+    log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip}); {protocolo}")
 
 def salao_recibos_poll_loop():
     """Reserva só destinos acessíveis; dedup local durável protege falha no ACK/reinício."""

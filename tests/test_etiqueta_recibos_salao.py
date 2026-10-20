@@ -16,17 +16,54 @@ class Recibos(unittest.TestCase):
  def test_nao_manda_fiscal_copa(self):
   with self.assertRaises(ValueError): mod.salao_processar_recibo({'tipo':'fiscal','destino':'copa'})
  def test_bebida_envia_para_copa(self):
-  with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
+  with patch('socket.create_connection') as conexao,patch.object(mod,'log'),patch.object(mod.time,'sleep'):
    mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','cliente':'Mesa 1 · LC',
     'itens':[{'nome':'Coca-Cola','qty':1},{'tipo':'obs','nome':'Coca-Cola: 1 copo'}]})
    conexao.assert_called_once_with(('192.168.1.250',9100),timeout=8)
-   dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
-   self.assertTrue(dados.startswith(b'\x1dv0\x00'))
-   self.assertEqual(dados[4:6],b'\x48\x00')
-   self.assertGreater(len(dados),10000)
-   self.assertNotIn(b'\x1b\x21\x38',dados)
-   self.assertNotIn(b'\x1d\xf9',dados)
-   self.assertTrue(dados.endswith(b'\n\n\n\x1bm'))
+   sock=conexao.return_value.__enter__.return_value
+   blocos=[c.args[0] for c in sock.sendall.call_args_list]
+   self.assertEqual(blocos[0],b'\x1b@')
+   self.assertEqual(blocos[-1],b'\n\n\n\x1bm')
+   self.assertTrue(all(b.startswith(b'\x1d*') and b.endswith(b'\x1d/\x00') for b in blocos[1:-1]))
+   self.assertTrue(all(len(b) < 2048 for b in blocos))
+   self.assertEqual(sum(b.count(b'\x1bm') for b in (blocos[0],blocos[-1])),1)
+   sock.shutdown.assert_called_once()
+ def test_copa_blocos_preservam_todos_os_pixels_e_acentos(self):
+  # Decodificador independente do protocolo compara a imagem inteira, incluindo
+  # passagem entre faixas e os ultimos pontos de uma altura nao multipla de oito.
+  pedido={'tipo':'bebidas','titulo':'COPA — Menezes','cliente':'Mesa 47 · LC',
+    'itens':[{'tipo':'bebida','nome':'Guaraná Antárctica 350ml','qty':1},
+             {'tipo':'obs','nome':'Guaraná: 2 copos · com gelo · sem limão'}]}
+  original=mod.salao_resumo_img(pedido).convert('L')
+  reconstruida=mod.Image.new('1',(576,((original.height+7)//8)*8),255)
+  y=0
+  for bloco in list(mod.salao_copa_blocos(original))[1:-1]:
+   self.assertEqual(bloco[:2],b'\x1d*')
+   largura,grupos=bloco[2:4]
+   self.assertEqual(largura,72)
+   self.assertLessEqual(largura*grupos,1536)
+   self.assertEqual(len(bloco),4+largura*grupos*8+3)
+   self.assertEqual(bloco[-3:],b'\x1d/\x00')
+   for i,valor in enumerate(bloco[4:-3]):
+    x=i//grupos
+    for bit in range(8):
+     reconstruida.putpixel((x,y+(i%grupos)*8+bit),0 if valor & (128>>bit) else 255)
+   y+=grupos*8
+  alvo=original.point(lambda p:255 if p>=155 else 0,mode='1')
+  self.assertIsNone(ImageChops.difference(alvo,reconstruida.crop((0,0,576,original.height))).getbbox())
+ def test_copa_bits_em_ordem_vertical_e_padding_branco(self):
+  img=mod.Image.new('L',(576,25),255)
+  for ponto in [(0,0),(0,7),(0,8),(575,23),(3,24)]: img.putpixel(ponto,0)
+  blocos=list(mod.salao_copa_blocos(img))
+  self.assertEqual(blocos[1][4:7],bytes((129,128,0)))
+  self.assertEqual(blocos[1][4+575*3:7+575*3],bytes((0,0,1)))
+  self.assertEqual(blocos[2][2:4],bytes((72,1)))
+  self.assertEqual(blocos[2][4+3],128)
+ def test_copa_falha_no_envio_nao_registra_sucesso(self):
+  with patch('socket.create_connection') as conexao,patch.object(mod,'sofia_evento') as evento,patch.object(mod.time,'sleep'):
+   conexao.return_value.__enter__.return_value.sendall.side_effect=[None,OSError('conexao interrompida')]
+   with self.assertRaises(OSError): mod.salao_processar_recibo({'tipo':'bebidas','destino':'copa','itens':[]})
+   evento.assert_not_called()
  def test_copa_destaca_mesa_produto_e_copos_sem_cortar(self):
   pedido={'tipo':'bebidas','titulo':'COPA — Menezes','cliente':'Mesa 1 · LC','hora':'2026-10-16T16:20:00',
    'itens':[{'tipo':'bebida','nome':'Kombucha Abacaxi com Hibisco 350ml','qty':1},
@@ -36,7 +73,7 @@ class Recibos(unittest.TestCase):
   self.assertGreater(img.height,210)
   self.assertLessEqual(ImageChops.invert(img.convert('L')).getbbox()[2],560)
  def test_resumo_caixa(self):
-  with patch('socket.create_connection') as conexao,patch.object(mod,'log'):
+  with patch('socket.create_connection') as conexao,patch.object(mod,'log'),patch.object(mod.time,'sleep'):
    mod.salao_processar_recibo({'tipo':'resumo','destino':'caixa_salao','total':100,'servico':True})
    conexao.assert_called_once_with(('192.168.1.168',9100),timeout=8)
    dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
