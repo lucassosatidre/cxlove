@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "243"
+VERSION = "244"
+# v244 (22/10/26): recibos e DANFE do caixa salao tambem usam imagem em blocos
+# pequenos, com inicializacao e cadencia; evita raster grande interpretado como texto.
 # v243 (20/10/26): copa usa imagem GS * / GS / em faixas de 24 pontos,
 # compativeis com ESC/Bema e ESC/POS, inicializadas e enviadas com cadencia.
 # Evita raster GS v 0 dependente do modo/buffer; preserva desenho e corte unitario.
@@ -3895,7 +3897,7 @@ def salao_bitmap(img):
     out.extend(b"\n\n\n\x1bm")
     return bytes(out)
 
-def salao_copa_blocos(img):
+def salao_imagem_blocos(img):
     """MP-4200: imagem em RAM comum a ESC/Bema e ESC/POS (GS * e GS /).
 
     Cada faixa de 24 pontos tem 1728 bytes de pixels: fica abaixo de 2 KB.
@@ -3924,6 +3926,11 @@ def salao_copa_blocos(img):
         bloco.extend(b"\x1d/\x00")
         yield bytes(bloco)
     yield b"\n\n\n\x1bm"
+
+
+def salao_copa_blocos(img):
+    """Compatibilidade com testes/integrações anteriores: mesmo protocolo de imagem."""
+    yield from salao_imagem_blocos(img)
 
 
 def salao_recibo_linhas(pedido):
@@ -4083,20 +4090,19 @@ def salao_processar_recibo(pedido):
     if pedido.get("tipo") in ("resumo","fiscal") and destino != "caixa_salao": raise ValueError("Conta fora do caixa")
     if pedido.get("tipo") not in ("bebidas","resumo","fiscal"): raise ValueError("Tipo inválido")
     img = salao_fiscal_img(pedido.get("url")) if pedido.get("tipo") == "fiscal" else salao_resumo_img(pedido)
-    blocos = list(salao_copa_blocos(img)) if destino == "copa" else [salao_bitmap(img)]
+    blocos = list(salao_imagem_blocos(img))
     with _print_lock, socket.create_connection((ip,9100),timeout=8) as sock:
         sock.settimeout(30)
         for n, bloco in enumerate(blocos):
             sock.sendall(bloco)
-            if destino == "copa" and n < len(blocos) - 1:
+            if n < len(blocos) - 1:
                 time.sleep(0.04)
-        if destino == "copa":
-            # Finaliza o envio sem abandonar bytes ainda na camada TCP.
-            try: sock.shutdown(socket.SHUT_WR)
-            except OSError: pass
-    protocolo = "gs-star-24" if destino == "copa" else "raster"
+        # Finaliza o envio sem abandonar bytes ainda na camada TCP.
+        try: sock.shutdown(socket.SHUT_WR)
+        except OSError: pass
+    protocolo = "gs-star-24"
     sofia_evento("salao_enviado", fila_id=pedido.get("id"), impressora=ip,
-                 detalhe=f"{destino}; protocolo={protocolo}; blocos={len(blocos)}; bytes={sum(map(len,blocos))}")
+                 detalhe=f"{destino}; protocolo={protocolo}; blocos={len(blocos)}; bytes={sum(map(len,blocos))}; imagem={img.width}x{img.height}")
     log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip}); {protocolo}")
 
 def salao_recibos_poll_loop():

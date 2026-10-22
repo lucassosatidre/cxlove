@@ -20,3 +20,15 @@ Testes de recibos verificam a imagem pixel a pixel após decodificar o protocolo
 limites dos blocos, bordas entre faixas, corte único, destino fiscal e falha durante
 o envio. O evento `salao_enviado` registra protocolo, blocos e quantidade de bytes.
 Esse evento confirma transporte concluído, não leitura física do papel.
+
+## Cupons do salão: versão 244
+
+O mesmo envio em faixas pequenas passa a ser usado também nos resumos e DANFE do
+caixa do salão. A imagem continua sendo renderizada do DANFE oficial e o transporte
+não emite nem cancela notas. O evento de envio inclui também largura e altura.
+
+A reserva do Provisão deve serializar todos os trabalhos por destino físico:
+`caixa_salao` não pode ser reservado por outro PC enquanto houver um envio ativo.
+A copa mantém seu intervalo de cinco segundos; o caixa aguarda dois segundos após
+o reconhecimento de envio. A atualização do banco é publicada pelo repositório do
+Provisão; a versão do helper é distribuída por esta URL pública.
