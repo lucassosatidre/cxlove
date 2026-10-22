@@ -76,8 +76,29 @@ class Recibos(unittest.TestCase):
   with patch('socket.create_connection') as conexao,patch.object(mod,'log'),patch.object(mod.time,'sleep'):
    mod.salao_processar_recibo({'tipo':'resumo','destino':'caixa_salao','total':100,'servico':True})
    conexao.assert_called_once_with(('192.168.1.168',9100),timeout=8)
-   dados=conexao.return_value.__enter__.return_value.sendall.call_args.args[0]
-   self.assertTrue(dados.startswith(b'\x1dv0\x00'))
+   blocos=[c.args[0] for c in conexao.return_value.__enter__.return_value.sendall.call_args_list]
+   self.assertEqual(blocos[0],b'\x1b@')
+   self.assertTrue(all(len(b)<2048 for b in blocos))
+   self.assertEqual(blocos[-1],b'\n\n\n\x1bm')
+ def test_fiscal_do_salao_usa_destino_certo_blocos_pequenos_e_um_corte(self):
+  img=mod.Image.new('RGB',(576,1450),'white')
+  d=mod.ImageDraw.Draw(img);d.text((16,16),'DANFE NFC-e',fill='black');d.rectangle((200,1100,400,1300),fill='black')
+  with patch('socket.create_connection') as conexao,patch.object(mod,'salao_fiscal_img',return_value=img),patch.object(mod.time,'sleep') as dormir,patch.object(mod,'log'):
+   mod.salao_processar_recibo({'tipo':'fiscal','destino':'caixa_salao','id':'teste-fiscal','url':'fixture'})
+   conexao.assert_called_once_with(('192.168.1.168',9100),timeout=8)
+   sock=conexao.return_value.__enter__.return_value
+   blocos=[c.args[0] for c in sock.sendall.call_args_list]
+   self.assertEqual(blocos[0],b'\x1b@')
+   self.assertTrue(all(len(b)<2048 for b in blocos))
+   self.assertEqual(blocos[-1],b'\n\n\n\x1bm')
+   self.assertEqual(len(blocos),((1450+23)//24)+2)
+   self.assertEqual(dormir.call_count,len(blocos)-1)
+   sock.shutdown.assert_called_once()
+ def test_fiscal_falha_de_transporte_nao_registra_sucesso(self):
+  with patch('socket.create_connection') as conexao,patch.object(mod,'salao_fiscal_img',return_value=mod.Image.new('RGB',(576,1500),'white')),patch.object(mod,'sofia_evento') as evento,patch.object(mod.time,'sleep'):
+   conexao.return_value.__enter__.return_value.sendall.side_effect=[None,OSError('offline')]
+   with self.assertRaises(OSError):mod.salao_processar_recibo({'tipo':'fiscal','destino':'caixa_salao','url':'fixture'})
+   evento.assert_not_called()
  def test_raster_largo_em_blocos(self):
   img = mod.Image.new('RGB',(576,600),'black');d=mod.salao_bitmap(img)
   self.assertEqual(d[:8],b'\x1dv0\x00\x48\x00\x00\x02')
