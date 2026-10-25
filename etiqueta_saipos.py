@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "244"
+VERSION = "245"
+# v245: reaproveita DANFE ja validado em cache local limitado; renderizacao curta
+# com reserva completa se o QR ainda nao estiver pronto; consulta ociosa a cada 2s.
 # v244 (22/10/26): recibos e DANFE do caixa salao tambem usam imagem em blocos
 # pequenos, com inicializacao e cadencia; evita raster grande interpretado como texto.
 # v243 (20/10/26): copa usa imagem GS * / GS / em faixas de 24 pontos,
@@ -4048,6 +4050,35 @@ def salao_fiscal_html_legivel(html):
     return DANFE_LEGIBILIDADE + html
 
 def salao_fiscal_img(url):
+    """Cache privado por URL e layout; somente imagens oficiais já validadas."""
+    if not re.fullmatch(r"https://(?:api|homologacao)\.focusnfe\.com\.br/notas_fiscais_consumidor/NFe\d{44}\.html",url or ""):
+        raise ValueError("URL fiscal fora da Focus")
+    pasta = os.path.join(PASTA_FILA, "danfe_cache")
+    chave = hashlib.sha256((DANFE_LEGIBILIDADE + url).encode("utf-8")).hexdigest()
+    caminho = os.path.join(pasta, chave + ".png")
+    try:
+        if 0 <= time.time() - os.path.getmtime(caminho) < 86400:
+            with Image.open(caminho) as im:
+                im.load()
+                if 0 < im.width <= 576 and 0 < im.height < 12000:
+                    return im.convert("RGB")
+    except (OSError, ValueError):
+        pass
+    img = _salao_fiscal_renderizar(url)
+    try:
+        os.makedirs(pasta, exist_ok=True)
+        tmp = caminho + ".tmp"
+        img.save(tmp, format="PNG")
+        os.replace(tmp, caminho)
+        arquivos = sorted((os.path.join(pasta,n) for n in os.listdir(pasta) if re.fullmatch(r"[a-f0-9]{64}[.]png",n)), key=os.path.getmtime, reverse=True)
+        for arquivo in arquivos[50:]:
+            os.unlink(arquivo)
+    except OSError:
+        pass  # Cache indisponível não impede imprimir o DANFE validado.
+    return img
+
+
+def _salao_fiscal_renderizar(url):
     """Renderiza o DANFE oficial; nunca reconstrói ou inventa dados fiscais."""
     from PIL import ImageChops
     if not re.fullmatch(r"https://(?:api|homologacao)\.focusnfe\.com\.br/notas_fiscais_consumidor/NFe\d{44}\.html",url or ""):
@@ -4072,15 +4103,17 @@ def salao_fiscal_img(url):
         arquivo = os.path.join(pasta,"danfe.html"); png = os.path.join(pasta,"danfe.png")
         with open(arquivo,"w",encoding="utf-8") as f: f.write(cabeca+html)
         from pathlib import Path
-        resultado = subprocess.run([edge,"--headless","--disable-gpu","--no-first-run",f"--user-data-dir={pasta}/perfil",f"--screenshot={png}","--window-size=576,12000","--dump-dom","--hide-scrollbars","--virtual-time-budget=8000",Path(arquivo).as_uri()],check=True,timeout=45,capture_output=True)
-        dom = resultado.stdout.decode("utf-8",errors="replace")
-        if "data:image/png;base64," not in dom or not re.search(r"<canvas[^>]*width=[\"'](?:[1-9][0-9]{2,})",dom,re.I):
-            raise RuntimeError("QR fiscal nao foi renderizado; recibo continua pendente")
-        with Image.open(png) as im:
-            img = im.convert("RGB")
-        box = ImageChops.difference(img,Image.new("RGB",img.size,"white")).getbbox()
-        if not box or box[3]>=11900: raise RuntimeError("DANFE vazio ou excede a area; nao foi impresso")
-        return img.crop((max(0,box[0]-8),0,min(576,box[2]+8),min(12000,box[3]+20)))
+        for budget in (1500, 8000):
+            resultado = subprocess.run([edge,"--headless","--disable-gpu","--no-first-run",f"--user-data-dir={pasta}/perfil",f"--screenshot={png}","--window-size=576,12000","--dump-dom","--hide-scrollbars",f"--virtual-time-budget={budget}",Path(arquivo).as_uri()],check=True,timeout=45,capture_output=True)
+            dom = resultado.stdout.decode("utf-8",errors="replace")
+            if "data:image/png;base64," not in dom or not re.search(r"<canvas[^>]*width=[\"'](?:[1-9][0-9]{2,})",dom,re.I):
+                continue
+            with Image.open(png) as im:
+                img = im.convert("RGB")
+            box = ImageChops.difference(img,Image.new("RGB",img.size,"white")).getbbox()
+            if box and box[3]<11900:
+                return img.crop((max(0,box[0]-8),0,min(576,box[2]+8),min(12000,box[3]+20)))
+        raise RuntimeError("DANFE ou QR fiscal nao foi renderizado; recibo continua pendente")
 
 def salao_processar_recibo(pedido):
     import socket
@@ -4133,7 +4166,7 @@ def salao_recibos_poll_loop():
                             with open(tmp,"w",encoding="utf-8") as f: json.dump(impressos,f)
                             os.replace(tmp,dedup)
                         _sofia_http(base,method="POST",body={"action":"mark","ids":[pid]},secret=segredo,pc=pc)
-                        if p.get("destino") == "copa":
+                        if p.get("destino") in SALAO_DESTINOS:
                             # Durante um lote, consulte logo após o cooldown da impressora.
                             poll_rapido_ate = time.monotonic() + 15
                     except Exception as e:
@@ -4142,7 +4175,7 @@ def salao_recibos_poll_loop():
                             try: _sofia_http(base,method="POST",body={"action":"release","ids":[pid]},secret=segredo,pc=pc)
                             except Exception: pass
         except Exception as e: log(f"  SALAO fila: {e}")
-        time.sleep(1 if time.monotonic() < poll_rapido_ate else 5)
+        time.sleep(1 if time.monotonic() < poll_rapido_ate else 2)
 
 
 def sofia_poll_loop():
