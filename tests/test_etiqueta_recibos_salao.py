@@ -139,6 +139,44 @@ class Recibos(unittest.TestCase):
        patch.object(mod,'_sofia_http',return_value={'pedidos':[]}), \
        patch.object(mod.time,'sleep',side_effect=StopIteration) as dormir:
    with self.assertRaises(StopIteration):mod.salao_recibos_poll_loop()
-   dormir.assert_called_once_with(5)
+   dormir.assert_called_once_with(2)
+
+class FiscalAgil(unittest.TestCase):
+ def setUp(self):
+  self.url='https://api.focusnfe.com.br/notas_fiscais_consumidor/NFe'+'1'*44+'.html'
+ def test_reimpressao_reutiliza_imagem_validada_sem_buscar_ou_renderizar(self):
+  with TemporaryDirectory() as pasta, patch.object(mod,'PASTA_FILA',pasta), patch.object(mod,'_salao_fiscal_renderizar',return_value=mod.Image.new('RGB',(576,500),'black')) as render:
+   primeira=mod.salao_fiscal_img(self.url)
+   segunda=mod.salao_fiscal_img(self.url)
+   render.assert_called_once_with(self.url)
+   self.assertIsNone(ImageChops.difference(primeira,segunda).getbbox())
+ def test_nota_diferente_nao_reutiliza_imagem_de_outro_cliente(self):
+  with TemporaryDirectory() as pasta, patch.object(mod,'PASTA_FILA',pasta), patch.object(mod,'_salao_fiscal_renderizar',return_value=mod.Image.new('RGB',(576,500))) as render:
+   mod.salao_fiscal_img(self.url)
+   mod.salao_fiscal_img(self.url.replace('1'*44,'2'*44))
+   self.assertEqual(render.call_count,2)
+ def test_cache_corrompido_ou_vencido_exige_nova_renderizacao(self):
+  with TemporaryDirectory() as pasta, patch.object(mod,'PASTA_FILA',pasta), patch.object(mod,'_salao_fiscal_renderizar',return_value=mod.Image.new('RGB',(576,500))) as render:
+   mod.salao_fiscal_img(self.url)
+   arquivo=next(Path(pasta).rglob('*.png'))
+   arquivo.write_bytes(b'incompleto')
+   mod.salao_fiscal_img(self.url)
+   mod.os.utime(arquivo,(mod.time.time()-86401,mod.time.time()-86401))
+   mod.salao_fiscal_img(self.url)
+   self.assertEqual(render.call_count,3)
+ def test_qr_incompleto_na_tentativa_curta_usa_reserva_completa(self):
+  resposta=MagicMock();resposta.url=self.url;resposta.read.return_value=b'<html><head></head><body>Nota oficial</body></html>'
+  chamadas=[]
+  def navegador(args,**kwargs):
+   chamadas.append(args)
+   png=next(a.split('=',1)[1] for a in args if a.startswith('--screenshot='))
+   img=mod.Image.new('RGB',(576,12000),'white');img.paste('black',(10,10,500,500));img.save(png)
+   return MagicMock(stdout=b'sem QR' if len(chamadas)==1 else b'<canvas width="220"></canvas>data:image/png;base64,qr')
+  with patch.object(mod.os.path,'isfile',return_value=True), patch('urllib.request.urlopen') as fetch, patch.object(mod.subprocess,'run',side_effect=navegador):
+   fetch.return_value.__enter__.return_value=resposta
+   imagem=mod._salao_fiscal_renderizar(self.url)
+   self.assertLess(imagem.height,12000)
+   self.assertIn('--virtual-time-budget=1500',chamadas[0])
+   self.assertIn('--virtual-time-budget=8000',chamadas[1])
 
 if __name__=='__main__': unittest.main()
