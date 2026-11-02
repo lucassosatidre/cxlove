@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "245"
+VERSION = "246"
+# v246: reserva 4 mm no fim da etiqueta 100x100 e centraliza as letras pela
+# caixa real da fonte; evita cortar a tarja inferior e a ultima linha do pedido.
 # v245: reaproveita DANFE ja validado em cache local limitado; renderizacao curta
 # com reserva completa se o QR ainda nao estiver pronto; consulta ociosa a cada 2s.
 # v244 (22/10/26): recibos e DANFE do caixa salao tambem usam imagem em blocos
@@ -1813,6 +1815,7 @@ QR_MARGEM_MOD = 2     # borda clara em volta (em quadradinhos)
 QR_BORDA_DIR_PX = 0   # v210: QR colado na borda direita (cabeca da .14 tem pontos queimados no meio)
 RODAPE_MIN_1LINHA = 22  # v213: abaixo disso o rodape quebra em 2 linhas
 HORA_BORDA_DIR_PX = 6  # v212: hora do cabecalho a <1 mm da borda direita
+ETIQ_MARGEM_INFERIOR_PX = round(4 * DPI / 25.4)  # 4 mm livres antes do corte
 ETIQ_DESLOC_X_PX = 16 # v210: a .14 imprime ~2 mm pra esquerda; empurra a etiqueta da caixa pra direita
 # v216: o empurrao so vale na fila calibrada ("IP 192.168.1.14", PC do caixa). Nos PCs com a fila
 # "ELGIN L42PRO FULL" o driver ja imprime mais a direita e os 2 mm a mais cortavam a hora e o QR (25/09).
@@ -1929,7 +1932,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         fh = cf(fs)
         try:
             bb = draw.textbbox((0,0), texto, font=fh)
-            y = y_start + (h - (bb[3]-bb[1]))//2 - 2
+            y = y_start + (h - (bb[3]-bb[1]))//2 - bb[1]
         except: y = y_start + 2
         draw.text((x_ini + margem_e, y), texto, fill="white", font=fh)
 
@@ -1950,7 +1953,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         fh = cf(fs_header)
         try:
             bb = draw.textbbox((0, 0), hora_pedido, font=fh)
-            y = (h_header - (bb[3]-bb[1]))//2 - 2
+            y = (h_header - (bb[3]-bb[1]))//2 - bb[1]
             x = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
         except Exception:
             y = 2; x = LARGURA_PX - HORA_BORDA_DIR_PX - 60
@@ -2047,7 +2050,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     fs_resumo_inferior = fs_rodape + 3
     h_header_inferior = h_header + 12
     fs_header_inferior = fs_header + 2
-    y_header_inferior = ALTURA_PX - h_header_inferior
+    y_header_inferior = ALTURA_PX - ETIQ_MARGEM_INFERIOR_PX - h_header_inferior
     y_resumo_inferior = y_header_inferior - h_resumo_inferior - 3
     altura_util = max(1, y_resumo_inferior - y_conteudo - 4)
     largura_conteudo = LARGURA_PX - margem_e - margem_d
@@ -2131,7 +2134,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         fh = cf(fs_header_inferior)
         try:
             bb = draw.textbbox((0, 0), hora_pedido, font=fh)
-            yy = y_header_inferior + (h_header_inferior - (bb[3] - bb[1])) // 2 - 2
+            yy = y_header_inferior + (h_header_inferior - (bb[3] - bb[1])) // 2 - bb[1]
             xx = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
         except Exception:
             yy = y_header_inferior + 2
