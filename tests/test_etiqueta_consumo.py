@@ -22,6 +22,21 @@ PEDIDO = {'tipo':'resumo','titulo':'CONSUMO DA MESA — NÃO FISCAL','cliente':'
  {'tipo':'bebida','nome':'Água sem Gás 500ml','qty':1,'preco_total':7}]}
 
 class Consumo(unittest.TestCase):
+ def test_historico_mostra_quitado_com_taxa_real_sem_recalcular(self):
+  p={**PEDIDO,'total':0,'servico':False,'fechamento':{'total':88,'consumo':100,'servico':8,'desconto':20,'composicao_conferida':True},
+     'itens':[{'tipo':'bebida','nome':'Consumo histórico','qty':1,'preco_total':100},
+              {'tipo':'obs','nome':'Resumo antigo','resumo_fechamento':True}]}
+  blocos=mod.salao_consumo_blocos(p)
+  self.assertIn(('total','TOTAL QUITADO: R$ 88,00'),blocos)
+  self.assertIn(('subtotal','Serviço cobrado: R$ 8,00'),blocos)
+  self.assertIn(('subtotal','Desconto: R$ 20,00'),blocos)
+  self.assertNotIn('Resumo antigo',str(blocos))
+  self.assertNotIn(('total','A PAGAR: R$ 88,00'),blocos)
+ def test_historico_sem_composicao_nao_inventa_taxa(self):
+  blocos=mod.salao_consumo_blocos({**PEDIDO,'fechamento':{'total':100,'composicao_conferida':False}})
+  self.assertIn(('total','TOTAL QUITADO: R$ 100,00'),blocos)
+  self.assertFalse(any('Serviço cobrado' in t for _,t in blocos))
+  self.assertTrue(any('não disponível' in t for _,t in blocos))
  def test_blocos_preservam_itens_e_separam_observacoes(self):
   blocos=mod.salao_consumo_blocos(PEDIDO)
   self.assertEqual(sum(t=='produto' for t,_ in blocos),5)
