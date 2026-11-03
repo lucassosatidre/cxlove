@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "249"
+VERSION = "250"
 # v249: destaca o total de cada comanda e o total geral do consumo;
 # preserva a taxa geral enviada pelo Provisao, inclusive os centavos.
 # v248: consumo historico mostra total quitado, servico e desconto do fechamento,
@@ -3970,6 +3970,55 @@ def salao_recibo_linhas(pedido):
         linhas += ["--------------------------------",f"Pendente: R$ {saldo:.2f}",f"Servico: R$ {taxa:.2f}",f"A pagar: R$ {saldo+taxa:.2f}","NAO E DOCUMENTO FISCAL"]
     return linhas
 
+def salao_consumo_itens(itens):
+    """Agrupa somente produtos equivalentes da mesma comanda, sem alterar o pedido."""
+    from decimal import Decimal
+    resultado, atual = [], None
+    for original in itens:
+        if original.get("cancelado") or original.get("resumo_fechamento"):
+            continue
+        nome = str(original.get("nome") or "")
+        obs = original.get("tipo") == "obs" or (original.get("tipo") == "outro" and re.match(r"(?i)^obs:", nome))
+        if obs:
+            if nome.startswith("COMANDA:") or original.get("resumo_total_comanda") or re.match(r"(?i)^(?:Consumo da comanda|Consumo já quitado|Saldo da comanda|Serviço|Desconto|TOTAL COMANDA)\s*[:(]", nome):
+                atual = None
+                resultado.append(dict(original)); continue
+            texto = re.sub(r"(?i)^obs:\s*", "", nome).strip()
+            if atual is not None:
+                produto = str(atual["item"].get("nome") or "")
+                texto = re.sub(r"^" + re.escape(produto) + r"\s*:\s*", "", texto, flags=re.I).strip()
+                if texto.casefold() == produto.casefold() or re.fullmatch(r"(?i)(?:copos?\s*:\s*1|1\s*copo)", texto):
+                    continue
+                if texto:
+                    atual["obs"].append(texto)
+            else:
+                resultado.append({**original, "nome": texto})
+            continue
+        atual = {"item": dict(original), "obs": []}
+        resultado.append(atual)
+
+    saida = []; grupos = {}
+    for entrada in resultado:
+        if "item" not in entrada:
+            # Subtotais e cabeçalhos delimitam o agrupamento de cada comanda.
+            grupos = {}; saida.append(entrada); continue
+        item, observacoes = entrada["item"], entrada["obs"]
+        qty = Decimal(str(item.get("qty") or 1))
+        valor = Decimal(str(item["preco_total"])) if item.get("preco_total") is not None else Decimal(str(item.get("preco") or 0)) * qty
+        # Identidade técnica e autoria não mudam o produto consumido.
+        ignorados = {"qty", "preco", "preco_total", "id", "salao_item_id", "garcom_user_id", "garcom_nome", "salao_lancado_em"}
+        chave = (repr(sorted((k, repr(v)) for k, v in item.items() if k not in ignorados)), tuple(observacoes), valor / qty)
+        if chave in grupos:
+            alvo = grupos[chave]
+            alvo["qty"] = float(Decimal(str(alvo["qty"])) + qty)
+            alvo["preco_total"] = float(Decimal(str(alvo["preco_total"])) + valor)
+        else:
+            item["qty"] = float(qty); item["preco_total"] = float(valor)
+            grupos[chave] = item; saida.append(item)
+            saida.extend({"tipo": "obs", "nome": texto} for texto in observacoes)
+    return saida
+
+
 def salao_consumo_blocos(pedido):
     """Agrupa produto, sabores, valor e observações sem confundir itens vizinhos."""
     def reais(valor):
@@ -3977,10 +4026,11 @@ def salao_consumo_blocos(pedido):
     blocos = [("titulo", pedido.get("titulo") or "CONSUMO — NÃO FISCAL"),
               ("mesa", str(pedido.get("cliente") or "")),
               ("hora", _mesa_hora(pedido.get("hora")))]
-    for it in pedido.get("itens") or []:
+    comanda_vista = False
+    for it in salao_consumo_itens(pedido.get("itens") or []):
         if it.get("resumo_fechamento"):
             continue
-        if it.get("resumo_total_comanda"):
+        if it.get("resumo_total_comanda") or re.match(r"(?i)^TOTAL COMANDA(?: QUITADO)?:", str(it.get("nome") or "")):
             blocos.append(("total_comanda", str(it.get("nome") or "")))
             continue
         if it.get("cancelado"):
@@ -3988,12 +4038,14 @@ def salao_consumo_blocos(pedido):
         nome = str(it.get("nome") or "")
         if it.get("tipo") == "obs" or (it.get("tipo") == "outro" and re.match(r"(?i)^obs:", nome)):
             if nome.startswith("COMANDA:"):
-                blocos.extend([("separador", ""), ("comanda", nome)])
+                blocos.extend([("separador" if comanda_vista else "espaco", ""), ("comanda", nome)])
+                comanda_vista = True
             else:
                 blocos.append(("observacao", re.sub(r"(?i)^obs:\s*", "", nome)))
             continue
         prefixo = "PAGO · " if it.get("pago") else ""
-        blocos.extend([("separador", ""), ("produto", f"{prefixo}{it.get('qty',1)}x {nome}")])
+        quantidade = f"{float(it.get('qty') or 1):g}"
+        blocos.extend([("espaco", ""), ("produto", f"{prefixo}{quantidade}x {nome}")])
         for sabor in it.get("sabores") or []:
             blocos.append(("sabor", str(sabor)))
         valor = it.get("preco_total")
@@ -4002,7 +4054,7 @@ def salao_consumo_blocos(pedido):
         blocos.append(("valor", reais(valor)))
     fechamento = pedido.get("fechamento")
     if isinstance(fechamento, dict):
-        blocos.append(("separador", ""))
+        blocos.append(("espaco", ""))
         if fechamento.get("composicao_conferida"):
             blocos.extend([("subtotal", "Consumo: " + reais(fechamento.get("consumo"))),
                            ("subtotal", "Serviço cobrado: " + reais(fechamento.get("servico"))),
@@ -4016,7 +4068,7 @@ def salao_consumo_blocos(pedido):
         return blocos
     saldo = float(pedido.get("total") or 0)
     taxa = float(pedido["servico_valor"]) if pedido.get("servico") and pedido.get("servico_valor") is not None else round(saldo * .10, 2) if pedido.get("servico") else 0
-    blocos.append(("separador", ""))
+    blocos.append(("espaco", ""))
     if "consumo" in pedido:
         blocos.append(("subtotal", "Consumo enviado: " + reais(pedido["consumo"])))
     if "consumo_pago" in pedido:
@@ -4043,7 +4095,7 @@ def salao_consumo_img(pedido):
     medida = ImageDraw.Draw(Image.new("RGB", (576, 1), "white"))
     linhas = []
     for tipo, texto in salao_consumo_blocos(pedido):
-        if tipo == "separador":
+        if tipo in ("separador", "espaco"):
             linhas.append((tipo, "", 0)); continue
         recuo = 12 if tipo in ("sabor", "observacao") else 0
         largura = 544 - recuo
@@ -4060,12 +4112,14 @@ def salao_consumo_img(pedido):
                 atual += letra
             atual += " "
         if atual.strip(): linhas.append((tipo, atual.strip(), recuo))
-    altura = 32 + sum(32 if tipo == "separador" else estilos[tipo][0] + 12 for tipo, _, _ in linhas)
+    altura = 32 + sum(32 if tipo in ("separador", "espaco") else estilos[tipo][0] + 12 for tipo, _, _ in linhas)
     img = Image.new("RGB", (576, altura), "white")
     desenho = ImageDraw.Draw(img); y = 16
     for tipo, texto, recuo in linhas:
         if tipo == "separador":
             desenho.line((16, y + 14, 560, y + 14), fill="black", width=2); y += 32
+        elif tipo == "espaco":
+            y += 32
         else:
             bb = desenho.textbbox((0, 0), texto, font=fontes[tipo])
             desenho.text((16 + recuo, y - bb[1]), texto, font=fontes[tipo], fill="black")
