@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "246"
+VERSION = "247"
+# v247: consumo de mesa com produtos maiores em negrito, valor destacado,
+# separadores por item/comanda e totais em reais no formato brasileiro.
 # v246: reserva 4 mm no fim da etiqueta 100x100 e centraliza as letras pela
 # caixa real da fonte; evita cortar a tarja inferior e a ultima linha do pedido.
 # v245: reaproveita DANFE ja validado em cache local limitado; renderizacao curta
@@ -3964,8 +3966,94 @@ def salao_recibo_linhas(pedido):
         linhas += ["--------------------------------",f"Pendente: R$ {saldo:.2f}",f"Servico: R$ {taxa:.2f}",f"A pagar: R$ {saldo+taxa:.2f}","NAO E DOCUMENTO FISCAL"]
     return linhas
 
+def salao_consumo_blocos(pedido):
+    """Agrupa produto, sabores, valor e observações sem confundir itens vizinhos."""
+    def reais(valor):
+        return "R$ " + f"{float(valor or 0):,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    blocos = [("titulo", pedido.get("titulo") or "CONSUMO — NÃO FISCAL"),
+              ("mesa", str(pedido.get("cliente") or "")),
+              ("hora", _mesa_hora(pedido.get("hora")))]
+    for it in pedido.get("itens") or []:
+        if it.get("cancelado"):
+            continue
+        nome = str(it.get("nome") or "")
+        if it.get("tipo") == "obs" or (it.get("tipo") == "outro" and re.match(r"(?i)^obs:", nome)):
+            if nome.startswith("COMANDA:"):
+                blocos.extend([("separador", ""), ("comanda", nome)])
+            else:
+                blocos.append(("observacao", re.sub(r"(?i)^obs:\s*", "", nome)))
+            continue
+        prefixo = "PAGO · " if it.get("pago") else ""
+        blocos.extend([("separador", ""), ("produto", f"{prefixo}{it.get('qty',1)}x {nome}")])
+        for sabor in it.get("sabores") or []:
+            blocos.append(("sabor", str(sabor)))
+        valor = it.get("preco_total")
+        if valor is None:
+            valor = float(it.get("preco") or 0) * float(it.get("qty") or 1)
+        blocos.append(("valor", reais(valor)))
+    saldo = float(pedido.get("total") or 0)
+    taxa = round(saldo * .10, 2) if pedido.get("servico") else 0
+    blocos.append(("separador", ""))
+    if "consumo" in pedido:
+        blocos.append(("subtotal", "Consumo enviado: " + reais(pedido["consumo"])))
+    if "consumo_pago" in pedido:
+        blocos.append(("subtotal", "Consumo quitado: " + reais(pedido["consumo_pago"])))
+    blocos.extend([("subtotal", "Pendente: " + reais(saldo)),
+                   ("subtotal", ("Serviço (10%): " if pedido.get("servico") else "Serviço: ") + reais(taxa)),
+                   ("total", "A PAGAR: " + reais(saldo + taxa)),
+                   ("nota", "NÃO É DOCUMENTO FISCAL")])
+    return blocos
+
+
+def salao_consumo_img(pedido):
+    def fonte(tamanho, negrito=False):
+        arquivo = "arialbd.ttf" if negrito else "arial.ttf"
+        try: return ImageFont.truetype(os.path.join("C:\\Windows\\Fonts", arquivo), tamanho)
+        except Exception:
+            try: return ImageFont.truetype(arquivo, tamanho)
+            except Exception: return ImageFont.load_default(size=tamanho)
+    estilos = {"titulo": (28, True), "mesa": (38, True), "hora": (26, False),
+               "comanda": (32, True), "produto": (38, True), "sabor": (30, False),
+               "valor": (32, True), "observacao": (28, False), "subtotal": (30, False),
+               "total": (42, True), "nota": (26, False)}
+    fontes = {tipo: fonte(*estilo) for tipo, estilo in estilos.items()}
+    medida = ImageDraw.Draw(Image.new("RGB", (576, 1), "white"))
+    linhas = []
+    for tipo, texto in salao_consumo_blocos(pedido):
+        if tipo == "separador":
+            linhas.append((tipo, "", 0)); continue
+        recuo = 12 if tipo in ("sabor", "observacao") else 0
+        largura = 544 - recuo
+        atual = ""
+        # Mede pixels reais; nomes longos e observações não escapam do papel.
+        for palavra in str(texto).split():
+            tentativa = (atual + " " + palavra).strip()
+            if atual and medida.textlength(tentativa, font=fontes[tipo]) > largura:
+                linhas.append((tipo, atual, recuo)); atual = ""
+            for letra in palavra:
+                tentativa = atual + letra
+                if atual and medida.textlength(tentativa, font=fontes[tipo]) > largura:
+                    linhas.append((tipo, atual, recuo)); atual = ""
+                atual += letra
+            atual += " "
+        if atual.strip(): linhas.append((tipo, atual.strip(), recuo))
+    altura = 32 + sum(32 if tipo == "separador" else estilos[tipo][0] + 12 for tipo, _, _ in linhas)
+    img = Image.new("RGB", (576, altura), "white")
+    desenho = ImageDraw.Draw(img); y = 16
+    for tipo, texto, recuo in linhas:
+        if tipo == "separador":
+            desenho.line((16, y + 14, 560, y + 14), fill="black", width=2); y += 32
+        else:
+            bb = desenho.textbbox((0, 0), texto, font=fontes[tipo])
+            desenho.text((16 + recuo, y - bb[1]), texto, font=fontes[tipo], fill="black")
+            y += estilos[tipo][0] + 12
+    return img
+
+
 def salao_resumo_img(pedido):
     """Renderiza o envio/resumo a partir de linhas testáveis sem impressora."""
+    if pedido.get("tipo") == "resumo":
+        return salao_consumo_img(pedido)
     linhas=salao_recibo_linhas(pedido)
     if pedido.get("tipo") == "bebidas":
         def fonte(tamanho, negrito=False):
