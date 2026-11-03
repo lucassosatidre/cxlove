@@ -22,6 +22,39 @@ PEDIDO = {'tipo':'resumo','titulo':'CONSUMO DA MESA — NÃO FISCAL','cliente':'
  {'tipo':'bebida','nome':'Água sem Gás 500ml','qty':1,'preco_total':7}]}
 
 class Consumo(unittest.TestCase):
+ def test_agrupa_iguais_sem_misturar_comandas_preco_pagamento_ou_observacoes(self):
+  import copy
+  itens=[{'tipo':'obs','nome':'COMANDA: Ana'}]
+  def bebida(obs='Água: Copos: 1',preco=7,pago=False):
+   return [{'tipo':'bebida','nome':'Água','qty':1,'preco_total':preco,'pago':pago}, {'tipo':'obs','nome':obs}]
+  itens+=bebida()+bebida()+bebida('Água: sem gelo')+bebida(preco=8)+bebida(pago=True)
+  itens+=[{'tipo':'obs','nome':'Consumo da comanda: R$ 36,00'}, {'tipo':'obs','nome':'TOTAL COMANDA: R$ 39,60','resumo_total_comanda':True}, {'tipo':'obs','nome':'COMANDA: Bia'}]
+  itens+=bebida()+bebida()+bebida()
+  antes=copy.deepcopy(itens)
+  blocos=mod.salao_consumo_blocos({**PEDIDO,'itens':itens})
+  self.assertEqual(itens,antes)
+  self.assertEqual([t for tipo,t in blocos if tipo=='produto'],['2x Água','1x Água','1x Água','PAGO · 1x Água','3x Água'])
+  self.assertEqual(sum(tipo=='separador' for tipo,_ in blocos),1)
+  self.assertIn(('observacao','sem gelo'),blocos)
+  self.assertNotIn('Água: Copos: 1',str(blocos))
+  self.assertIn(('valor','R$ 14,00'),blocos)
+  self.assertIn(('valor','R$ 21,00'),blocos)
+ def test_agrupa_ultimo_item_mesmo_com_subtotais_e_preserva_sabores(self):
+  itens=[{'tipo':'obs','nome':'COMANDA: teste'},
+   {'tipo':'pizza','nome':'Pizza Grande','sabores':['Calabresa'],'qty':1,'preco_total':70},
+   {'tipo':'pizza','nome':'Pizza Grande','sabores':['Muçarela'],'qty':1,'preco_total':70},
+   {'tipo':'pizza','nome':'Pizza Grande','sabores':['Calabresa'],'qty':1,'preco_total':70},
+   {'tipo':'obs','nome':'Consumo da comanda: R$ 210,00'},
+   {'tipo':'obs','nome':'Serviço (10%): R$ 21,00'},
+   {'tipo':'obs','nome':'TOTAL COMANDA: R$ 231,00','resumo_total_comanda':True}]
+  blocos=mod.salao_consumo_blocos({**PEDIDO,'itens':itens})
+  self.assertEqual([t for tipo,t in blocos if tipo=='produto'],['2x Pizza Grande','1x Pizza Grande'])
+  self.assertIn(('sabor','Calabresa'),blocos)
+  self.assertIn(('sabor','Muçarela'),blocos)
+  self.assertIn(('total_comanda','TOTAL COMANDA: R$ 231,00'),blocos)
+  with patch.object(ImageDraw.ImageDraw,'line') as linha:
+   mod.salao_resumo_img({**PEDIDO,'itens':itens})
+  linha.assert_not_called()
  def test_total_por_comanda_em_destaque_e_soma_geral(self):
   itens=[]
   for nome,consumo,total in [('teste',26,28.6),('teste 2',29,31.9),('teste 3',29,31.9)]:
@@ -56,9 +89,10 @@ class Consumo(unittest.TestCase):
  def test_blocos_preservam_itens_e_separam_observacoes(self):
   blocos=mod.salao_consumo_blocos(PEDIDO)
   self.assertEqual(sum(t=='produto' for t,_ in blocos),5)
-  self.assertEqual(sum(t=='separador' for t,_ in blocos),7)
+  self.assertEqual(sum(t=='separador' for t,_ in blocos),0)
   pos=blocos.index(('produto','3x Coca Cola Zero 350ml'))
-  self.assertEqual(blocos[pos+1:pos+3],[('valor','R$ 30,00'),('observacao','Coca Cola Zero 350ml: Copos: 1')])
+  self.assertEqual(blocos[pos+1],('valor','R$ 30,00'))
+  self.assertFalse(any('Copos: 1' in texto for _,texto in blocos))
   self.assertIn(('total','A PAGAR: R$ 185,16'),blocos)
   self.assertIn(('subtotal','Serviço (10%): R$ 16,83'),blocos)
  def test_fontes_maiores_e_todo_texto_cabe_no_papel(self):
