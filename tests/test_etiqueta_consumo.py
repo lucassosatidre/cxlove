@@ -22,6 +22,22 @@ PEDIDO = {'tipo':'resumo','titulo':'CONSUMO DA MESA — NÃO FISCAL','cliente':'
  {'tipo':'bebida','nome':'Água sem Gás 500ml','qty':1,'preco_total':7}]}
 
 class Consumo(unittest.TestCase):
+ def test_total_por_comanda_em_destaque_e_soma_geral(self):
+  itens=[]
+  for nome,consumo,total in [('teste',26,28.6),('teste 2',29,31.9),('teste 3',29,31.9)]:
+   itens.extend([{'tipo':'obs','nome':'COMANDA: '+nome},
+    {'tipo':'bebida','nome':'Produtos desta comanda','qty':1,'preco_total':consumo},
+    {'tipo':'obs','nome':f'TOTAL COMANDA: R$ {total:.2f}'.replace('.',','),'resumo_total_comanda':True}])
+  p={**PEDIDO,'itens':itens,'total':84,'consumo':84,'servico_valor':8.4,'comandas_totalizadas':True}
+  blocos=mod.salao_consumo_blocos(p)
+  self.assertEqual([t for tipo,t in blocos if tipo=='total_comanda'],['TOTAL COMANDA: R$ 28,60','TOTAL COMANDA: R$ 31,90','TOTAL COMANDA: R$ 31,90'])
+  self.assertIn(('total','TOTAL GERAL: R$ 92,40'),blocos)
+  self.assertLess(blocos.index(('total_comanda','TOTAL COMANDA: R$ 28,60')),blocos.index(('comanda','COMANDA: teste 2')))
+  img=mod.salao_resumo_img(p)
+  self.assertLessEqual(ImageChops.invert(img.convert('L')).getbbox()[2],561)
+ def test_preserva_taxa_exata_informada_no_geral(self):
+  blocos=mod.salao_consumo_blocos({**PEDIDO,'total':10.15,'servico_valor':1.02,'comandas_totalizadas':True})
+  self.assertIn(('total','TOTAL GERAL: R$ 11,17'),blocos)
  def test_historico_mostra_quitado_com_taxa_real_sem_recalcular(self):
   p={**PEDIDO,'total':0,'servico':False,'fechamento':{'total':88,'consumo':100,'servico':8,'desconto':20,'composicao_conferida':True},
      'itens':[{'tipo':'bebida','nome':'Consumo histórico','qty':1,'preco_total':100},

@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "248"
+VERSION = "249"
+# v249: destaca o total de cada comanda e o total geral do consumo;
+# preserva a taxa geral enviada pelo Provisao, inclusive os centavos.
 # v248: consumo historico mostra total quitado, servico e desconto do fechamento,
 # sem recalcular os 10% nem apresentar o valor pago como nova cobranca.
 # v247: consumo de mesa com produtos maiores em negrito, valor destacado,
@@ -3978,6 +3980,9 @@ def salao_consumo_blocos(pedido):
     for it in pedido.get("itens") or []:
         if it.get("resumo_fechamento"):
             continue
+        if it.get("resumo_total_comanda"):
+            blocos.append(("total_comanda", str(it.get("nome") or "")))
+            continue
         if it.get("cancelado"):
             continue
         nome = str(it.get("nome") or "")
@@ -4004,12 +4009,13 @@ def salao_consumo_blocos(pedido):
                            ("subtotal", "Desconto: " + reais(fechamento.get("desconto")))])
         else:
             blocos.append(("nota", "Composição de serviço e desconto não disponível neste registro."))
-        blocos.extend([("total", "TOTAL QUITADO: " + reais(fechamento.get("total"))),
+        rotulo = "TOTAL GERAL QUITADO: " if pedido.get("comandas_totalizadas") else "TOTAL QUITADO: "
+        blocos.extend([("total", rotulo + reais(fechamento.get("total"))),
                        ("subtotal", "Saldo a pagar: R$ 0,00"),
                        ("nota", "NÃO É DOCUMENTO FISCAL")])
         return blocos
     saldo = float(pedido.get("total") or 0)
-    taxa = round(saldo * .10, 2) if pedido.get("servico") else 0
+    taxa = float(pedido["servico_valor"]) if pedido.get("servico") and pedido.get("servico_valor") is not None else round(saldo * .10, 2) if pedido.get("servico") else 0
     blocos.append(("separador", ""))
     if "consumo" in pedido:
         blocos.append(("subtotal", "Consumo enviado: " + reais(pedido["consumo"])))
@@ -4017,7 +4023,7 @@ def salao_consumo_blocos(pedido):
         blocos.append(("subtotal", "Consumo quitado: " + reais(pedido["consumo_pago"])))
     blocos.extend([("subtotal", "Pendente: " + reais(saldo)),
                    ("subtotal", ("Serviço (10%): " if pedido.get("servico") else "Serviço: ") + reais(taxa)),
-                   ("total", "A PAGAR: " + reais(saldo + taxa)),
+                   ("total", ("TOTAL GERAL: " if pedido.get("comandas_totalizadas") else "A PAGAR: ") + reais(saldo + taxa)),
                    ("nota", "NÃO É DOCUMENTO FISCAL")])
     return blocos
 
@@ -4032,7 +4038,7 @@ def salao_consumo_img(pedido):
     estilos = {"titulo": (28, True), "mesa": (38, True), "hora": (26, False),
                "comanda": (32, True), "produto": (38, True), "sabor": (30, False),
                "valor": (32, True), "observacao": (28, False), "subtotal": (30, False),
-               "total": (42, True), "nota": (26, False)}
+               "total_comanda": (34, True), "total": (42, True), "nota": (26, False)}
     fontes = {tipo: fonte(*estilo) for tipo, estilo in estilos.items()}
     medida = ImageDraw.Draw(Image.new("RGB", (576, 1), "white"))
     linhas = []
