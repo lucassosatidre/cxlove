@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "247"
+VERSION = "248"
+# v248: consumo historico mostra total quitado, servico e desconto do fechamento,
+# sem recalcular os 10% nem apresentar o valor pago como nova cobranca.
 # v247: consumo de mesa com produtos maiores em negrito, valor destacado,
 # separadores por item/comanda e totais em reais no formato brasileiro.
 # v246: reserva 4 mm no fim da etiqueta 100x100 e centraliza as letras pela
@@ -3974,6 +3976,8 @@ def salao_consumo_blocos(pedido):
               ("mesa", str(pedido.get("cliente") or "")),
               ("hora", _mesa_hora(pedido.get("hora")))]
     for it in pedido.get("itens") or []:
+        if it.get("resumo_fechamento"):
+            continue
         if it.get("cancelado"):
             continue
         nome = str(it.get("nome") or "")
@@ -3991,6 +3995,19 @@ def salao_consumo_blocos(pedido):
         if valor is None:
             valor = float(it.get("preco") or 0) * float(it.get("qty") or 1)
         blocos.append(("valor", reais(valor)))
+    fechamento = pedido.get("fechamento")
+    if isinstance(fechamento, dict):
+        blocos.append(("separador", ""))
+        if fechamento.get("composicao_conferida"):
+            blocos.extend([("subtotal", "Consumo: " + reais(fechamento.get("consumo"))),
+                           ("subtotal", "Serviço cobrado: " + reais(fechamento.get("servico"))),
+                           ("subtotal", "Desconto: " + reais(fechamento.get("desconto")))])
+        else:
+            blocos.append(("nota", "Composição de serviço e desconto não disponível neste registro."))
+        blocos.extend([("total", "TOTAL QUITADO: " + reais(fechamento.get("total"))),
+                       ("subtotal", "Saldo a pagar: R$ 0,00"),
+                       ("nota", "NÃO É DOCUMENTO FISCAL")])
+        return blocos
     saldo = float(pedido.get("total") or 0)
     taxa = round(saldo * .10, 2) if pedido.get("servico") else 0
     blocos.append(("separador", ""))
