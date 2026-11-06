@@ -4,7 +4,9 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "250"
+VERSION = "251"
+# v251: caixas com margens laterais de 3 mm e superior/inferior de 4 mm;
+# numero em destaque moderado nas duas tarjas e sabores um pouco menores.
 # v249: destaca o total de cada comanda e o total geral do consumo;
 # preserva a taxa geral enviada pelo Provisao, inclusive os centavos.
 # v248: consumo historico mostra total quitado, servico e desconto do fechamento,
@@ -1834,9 +1836,26 @@ QR_BORDA_ESQ_PX = 8   # v216: QR a 1 mm da borda esquerda
 def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
                    pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido,
                    qr_texto=None, unitario=False):
+    """Recompõe a etiqueta dentro das margens, sem cortar nem deformar o QR."""
+    lateral = round(3 * DPI / 25.4)
+    superior = round(4 * DPI / 25.4)
+    miolo = _gerar_etiqueta_conteudo(
+        numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
+        pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido,
+        qr_texto, unitario, LARGURA_PX - 2 * lateral, ALTURA_PX - superior)
+    img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
+    img.paste(miolo, (lateral, superior))
+    return img
+
+
+def _gerar_etiqueta_conteudo(numero_pedido, pizza_num, total_pizzas, display_items, total_entrega,
+                   pag_cat, pag_dados, balcao, canal, codigo_canal, nome_cliente, hora_pedido,
+                   qr_texto, unitario, largura_px, altura_px):
     """v14.4 - Rodape simetrico + N colunas adaptativas + distribuicao balanceada.
     v204: unitario=True -> o produto (pizza doce/salgada ou Pote Dip) ocupa o bloco principal;
     qr_texto -> QR no canto inferior direito (a faixa do rodape e o meio encolhem pra ele)."""
+    # Dimensões locais: não altera constantes globais nem interfere em outras threads.
+    LARGURA_PX, ALTURA_PX = largura_px, altura_px
     img = Image.new("RGB", (LARGURA_PX, ALTURA_PX), "white")
     draw = ImageDraw.Draw(img)
     margem_e = 16
@@ -1896,7 +1915,7 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
         except: lh = fs + 8
         return lh + 4
 
-    h_header = calc_h_barra(header_texto, fs_header)
+    h_header = 62
 
     # ============================================================
     # 2. Monta texto do RODAPE (simetria: teto = fs_header)
@@ -1953,19 +1972,29 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
             except Exception: dy = 0
             draw.text((x_ini + margem_e, y_start + 3 + n * passo + dy), t, fill="white", font=fh)
 
-    if hora_pedido and header_texto.endswith(" - " + hora_pedido):
-        # v212: hora encostada na borda direita (foge das linhas queimadas da cabeca da .14)
-        render_barra(header_texto[:-len(" - " + hora_pedido)], 0, h_header, fs_header)
-        fh = cf(fs_header)
-        try:
-            bb = draw.textbbox((0, 0), hora_pedido, font=fh)
-            y = (h_header - (bb[3]-bb[1]))//2 - bb[1]
-            x = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
-        except Exception:
-            y = 2; x = LARGURA_PX - HORA_BORDA_DIR_PX - 60
-        draw.text((x, y), hora_pedido, fill="white", font=fh)
-    else:
-        render_barra(header_texto, 0, h_header, fs_header)
+    def render_cabecalho(y_start, altura, teto_numero):
+        numero = f"#{num_padded}"
+        infos = partes[1:-1] if hora_pedido else partes[1:]
+        info = " · " + " · ".join(str(p) for p in infos)
+        hora = str(hora_pedido or "")
+        limite = LARGURA_PX - 2 * margem_e
+        for reducao in range(40):
+            fn = cf(max(14, teto_numero - reducao))
+            fi = cf(max(10, 28 - reducao))
+            wn, wi, wh = (draw.textlength(t, font=f) for t, f in ((numero, fn), (info, fi), (hora, fi)))
+            if wn + wi + wh + (20 if hora else 0) <= limite:
+                break
+        draw.rectangle((0, y_start, LARGURA_PX - 1, y_start + altura - 1), fill="black")
+        def escrever(t, x, f):
+            bb = draw.textbbox((0, 0), t, font=f)
+            draw.text((x - bb[0], y_start + (altura - bb[3] + bb[1]) // 2 - bb[1]),
+                      t, fill="white", font=f)
+        escrever(numero, margem_e, fn)
+        escrever(info, margem_e + wn + 8, fi)
+        if hora:
+            escrever(hora, LARGURA_PX - margem_e - wh, fi)
+
+    render_cabecalho(0, h_header, 48)
 
     # ============================================================
     # 4. Separa itens em blocos: pizzas salgadas (com sabores e bordas juntas)
@@ -2054,9 +2083,9 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     # resumo de itens/pagamento + repeticao do cabecalho do pedido.
     h_resumo_inferior = h_rodape + 10
     fs_resumo_inferior = fs_rodape + 3
-    h_header_inferior = h_header + 12
+    h_header_inferior = 48
     fs_header_inferior = fs_header + 2
-    y_header_inferior = ALTURA_PX - ETIQ_MARGEM_INFERIOR_PX - h_header_inferior
+    y_header_inferior = ALTURA_PX - ETIQ_MARGEM_INFERIOR_PX - 1 - h_header_inferior
     y_resumo_inferior = y_header_inferior - h_resumo_inferior - 3
     altura_util = max(1, y_resumo_inferior - y_conteudo - 4)
     largura_conteudo = LARGURA_PX - margem_e - margem_d
@@ -2116,16 +2145,16 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
                   fill="black", width=2)
 
         prep_principal = preparar_texto(principal_raw, largura_conteudo,
-                                        altura_principal, teto=82)
+                                        altura_principal, teto=64)
         prep_bebidas = preparar_texto(bebidas_raw, largura_conteudo,
-                                      altura_bebidas - 4, teto=58)
+                                      altura_bebidas - 4, teto=46)
         desenhar_bloco(prep_principal, margem_e, y_conteudo,
                        largura_conteudo, altura_principal)
         desenhar_bloco(prep_bebidas, margem_e, y_bebidas + 4,
                        largura_conteudo, altura_bebidas - 4)
     else:
         prep_principal = preparar_texto(principal_raw, largura_conteudo,
-                                        altura_util, teto=88)
+                                        altura_util, teto=64)
         desenhar_bloco(prep_principal, margem_e, y_conteudo,
                        largura_conteudo, altura_util)
 
@@ -2133,22 +2162,8 @@ def gerar_etiqueta(numero_pedido, pizza_num, total_pizzas, display_items, total_
     render_rodape(rodape_linhas, y_resumo_inferior, h_resumo_inferior,
                   fs_resumo_inferior, x_ini=0, x_fim=LARGURA_PX)
 
-    # Repete exatamente a linha do pedido no final.
-    if hora_pedido and header_texto.endswith(" - " + hora_pedido):
-        render_barra(header_texto[:-len(" - " + hora_pedido)],
-                     y_header_inferior, h_header_inferior, fs_header_inferior)
-        fh = cf(fs_header_inferior)
-        try:
-            bb = draw.textbbox((0, 0), hora_pedido, font=fh)
-            yy = y_header_inferior + (h_header_inferior - (bb[3] - bb[1])) // 2 - bb[1]
-            xx = LARGURA_PX - HORA_BORDA_DIR_PX - (bb[2] - bb[0]) - bb[0]
-        except Exception:
-            yy = y_header_inferior + 2
-            xx = LARGURA_PX - HORA_BORDA_DIR_PX - 60
-        draw.text((xx, yy), hora_pedido, fill="white", font=fh)
-    else:
-        render_barra(header_texto, y_header_inferior,
-                     h_header_inferior, fs_header_inferior)
+    # Repete o número com destaque moderado também na tarja inferior.
+    render_cabecalho(y_header_inferior, h_header_inferior, 44)
 
     return img
 
