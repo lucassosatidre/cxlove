@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "253"
+VERSION = "254"
 # v252: indice da caixa (1/2, 2/2...) maior nas duas tarjas, conforme previa aprovada.
 # v251: caixas com margens laterais de 3 mm e superior/inferior de 4 mm;
 # numero em destaque moderado nas duas tarjas e sabores um pouco menores.
@@ -2820,6 +2820,10 @@ def imprimir_etiqueta_producao(img, printer_name, copias=1):
     etiqueta 'espalhar em 2' quando o driver tem um tamanho de papel antigo/errado.
     Se pywin32 faltar, cai no metodo antigo (_imprimir_dib)."""
     with _print_lock:
+        # v254: o spooler aceita trabalhos mesmo com a .24 fora da rede.
+        # Nao confirmar a etiqueta nem consumir sua fila nesse caso.
+        if not _ip_responde(IP_IMPRESSORA_PRODUCAO, cache_s=0):
+            raise RuntimeError(f"impressora de producao {IP_IMPRESSORA_PRODUCAO} indisponivel na rede")
         try:
             import win32ui, win32gui, win32con
             from PIL import ImageWin
@@ -2828,11 +2832,11 @@ def imprimir_etiqueta_producao(img, printer_name, copias=1):
             for _ in range(copias):
                 _imprimir_dib(img, printer_name, CO_LOVE_LARGURA_PX, CO_LOVE_ALTURA_PX)
                 time.sleep(0.2)
-            return
+            return True
         try:
             hdc = win32ui.CreateDC(); hdc.CreatePrinterDC(printer_name)
         except Exception as e:
-            log(f"  ERRO criar DC producao: {e}"); return
+            log(f"  ERRO criar DC producao: {e}"); raise
         try:
             dm = _devmode_papel(printer_name, CO_LOVE_LARGURA_MM, CO_LOVE_ALTURA_MM)
             if dm is not None:
@@ -2861,8 +2865,10 @@ def imprimir_etiqueta_producao(img, printer_name, copias=1):
                 hdc.EndPage(); hdc.EndDoc()
                 time.sleep(0.2)
             log(f"  Impresso OK producao x{copias} ({printer_name}) area {aw}x{ah}px")
+            return True
         except Exception as e:
             log(f"  ERRO impressao producao: {e}")
+            raise
         finally:
             try: hdc.DeleteDC()
             except: pass
@@ -2880,13 +2886,14 @@ def _imprimir_dib(img, printer_name, larg, alt):
         tmp = tempfile.NamedTemporaryFile(suffix=".bmp", delete=False); tp = tmp.name; tmp.close()
         try:
             img.save(tp, "BMP")
-            subprocess.run(f'mspaint /pt "{tp}" "{printer_name}"', shell=True, capture_output=True, timeout=10)
+            subprocess.run(f'mspaint /pt "{tp}" "{printer_name}"', shell=True, capture_output=True, timeout=10, check=True)
             log("  Impresso OK (mspaint)")
         finally:
             try: time.sleep(2); os.unlink(tp)
             except: pass
     except Exception as e:
         log(f"  ERRO: {e}")
+        raise
 
 def processar_lovelabel(filepath, filename):
     try:

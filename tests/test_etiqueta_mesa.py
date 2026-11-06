@@ -4,6 +4,8 @@ import base64
 import json
 import pathlib
 import unittest
+from unittest.mock import patch, MagicMock
+import sys
 from urllib.parse import urlparse
 
 ARQUIVO = pathlib.Path(__file__).resolve().parents[1] / "etiqueta_saipos.py"
@@ -73,6 +75,38 @@ class EtiquetaMesaTest(unittest.TestCase):
         imp = MOD.mesa_processar_pendentes(PENDENTES[:1], "PC-TESTE")
         self.assertEqual(imp, 0)
         self.assertEqual([b["p_comanda"] for n, b in self.rpcs if n == "etiqueta_mesa_devolver"], [PENDENTES[0]["comanda_id"]])
+
+    def test_erro_driver_nao_confirma_e_devolve_a_comanda(self):
+        # Exercita a funcao real de impressao, nao um mock que ja levanta erro.
+        MOD.imprimir_etiqueta_producao = self._orig[1]
+        ui = MagicMock()
+        ui.CreateDC.return_value.CreatePrinterDC.side_effect = RuntimeError('driver indisponivel')
+        with patch.dict(sys.modules, {'win32ui': ui, 'win32gui': MagicMock(), 'win32con': MagicMock()}), patch.object(MOD, '_ip_responde', return_value=True), patch.object(MOD, 'sofia_evento') as evento:
+            self.assertEqual(MOD.mesa_processar_pendentes(PENDENTES[:1], 'PC-TESTE'), 0)
+            self.assertEqual([b['p_comanda'] for n, b in self.rpcs if n == 'etiqueta_mesa_devolver'], [PENDENTES[0]['comanda_id']])
+            self.assertNotIn('mesa_etiqueta_ok', [c.args[0] for c in evento.call_args_list])
+
+    def test_impressora_fora_da_rede_nao_cria_trabalho_no_spooler(self):
+        MOD.imprimir_etiqueta_producao = self._orig[1]
+        ui = MagicMock()
+        with patch.dict(sys.modules, {'win32ui': ui}), patch.object(MOD, '_ip_responde', return_value=False) as rede:
+            self.assertEqual(MOD.mesa_processar_pendentes(PENDENTES[:1], 'PC-TESTE'), 0)
+            ui.CreateDC.assert_not_called()
+            rede.assert_called_once_with(MOD.IP_IMPRESSORA_PRODUCAO, cache_s=0)
+            self.assertEqual([b['p_comanda'] for n, b in self.rpcs if n == 'etiqueta_mesa_devolver'], [PENDENTES[0]['comanda_id']])
+
+    def test_erro_durante_envio_ao_driver_tambem_devolve(self):
+        from PIL import ImageWin
+        MOD.imprimir_etiqueta_producao = self._orig[1]
+        ui = MagicMock()
+        dc = ui.CreateDC.return_value
+        dc.GetDeviceCaps.side_effect = [MOD.CO_LOVE_LARGURA_PX, MOD.CO_LOVE_ALTURA_PX]
+        dc.EndDoc.side_effect = RuntimeError('falha de spooler')
+        with patch.dict(sys.modules, {'win32ui': ui, 'win32gui': MagicMock(), 'win32con': MagicMock()}), patch.object(MOD, '_ip_responde', return_value=True), patch.object(MOD, '_devmode_papel', return_value=None), patch.object(ImageWin, 'Dib'), patch.object(MOD, 'sofia_evento') as evento:
+            self.assertEqual(MOD.mesa_processar_pendentes(PENDENTES[:1], 'PC-TESTE'), 0)
+            dc.DeleteDC.assert_called_once()
+            self.assertNotIn('mesa_etiqueta_ok', [c.args[0] for c in evento.call_args_list])
+            self.assertEqual([b['p_comanda'] for n, b in self.rpcs if n == 'etiqueta_mesa_devolver'], [PENDENTES[0]['comanda_id']])
 
     def test_desenho_usa_seq_total_do_mana(self):
         d = MOD.mesa_display_do_mana(PENDENTES[1]["items"])
