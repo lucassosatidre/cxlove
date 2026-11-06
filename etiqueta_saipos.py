@@ -4,7 +4,7 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "252"
+VERSION = "253"
 # v252: indice da caixa (1/2, 2/2...) maior nas duas tarjas, conforme previa aprovada.
 # v251: caixas com margens laterais de 3 mm e superior/inferior de 4 mm;
 # numero em destaque moderado nas duas tarjas e sabores um pouco menores.
@@ -2179,9 +2179,17 @@ def _imprimir_caixa_direto(img, ip):
     w, h = img.size
     bytes_linha = (w + 7) // 8
 
+    # v253: a L42PRO .14 posiciona o desenho cerca de 3 mm para a esquerda.
+    # O caminho direto nao passa pela compensacao do driver Windows.
+    # Move todo o campo, sem redimensionar fontes/QR nem alterar o bitmap.
+    desloc_x = round(3 * DPI / 25.4) if str(ip) == "192.168.1.14" else 0
+
     # ^GFA usa bit 1 para PRETO. No modo 1 do Pillow, bit 1 normalmente e branco;
     # por isso a limiarizacao ja sai invertida: desenho escuro -> bit 1.
     mono_invertido = img.convert("L").point(lambda p: 255 if p < 180 else 0, mode="1")
+    tinta = mono_invertido.getbbox()
+    if tinta and tinta[2] + desloc_x > w:
+        raise RuntimeError("compensacao lateral excederia a etiqueta; impressao interrompida para nao cortar conteudo")
     dados = mono_invertido.tobytes()
     esperado = bytes_linha * h
     if len(dados) != esperado:
@@ -2193,7 +2201,7 @@ def _imprimir_caixa_direto(img, ip):
         f"^PW{w}\n"
         f"^LL{h}\n"
         f"^LH0,0\n"
-        f"^FO0,0^GFA,{len(dados)},{len(dados)},{bytes_linha},{hexadecimal}^FS\n"
+        f"^FO{desloc_x},0^GFA,{len(dados)},{len(dados)},{bytes_linha},{hexadecimal}^FS\n"
         f"^XZ\n"
     ).encode("ascii")
 
@@ -2204,7 +2212,7 @@ def _imprimir_caixa_direto(img, ip):
             conexao.shutdown(socket.SHUT_WR)
         except Exception:
             pass
-    log(f"  Impresso DIRETO OK ({ip}:9100, ZPL {w}x{h}px, {len(dados)} bytes)")
+    log(f"  Impresso DIRETO OK ({ip}:9100, ZPL {w}x{h}px, deslocamento X {desloc_x}px, {len(dados)} bytes)")
     return True
 
 
