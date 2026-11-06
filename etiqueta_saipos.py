@@ -4,7 +4,8 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "251"
+VERSION = "252"
+# v252: indice da caixa (1/2, 2/2...) maior nas duas tarjas, conforme previa aprovada.
 # v251: caixas com margens laterais de 3 mm e superior/inferior de 4 mm;
 # numero em destaque moderado nas duas tarjas e sabores um pouco menores.
 # v249: destaca o total de cada comanda e o total geral do consumo;
@@ -1974,15 +1975,17 @@ def _gerar_etiqueta_conteudo(numero_pedido, pizza_num, total_pizzas, display_ite
 
     def render_cabecalho(y_start, altura, teto_numero):
         numero = f"#{num_padded}"
-        infos = partes[1:-1] if hora_pedido else partes[1:]
+        fracao = " · " + str(partes[1])
+        infos = partes[2:-1] if hora_pedido else partes[2:]
         info = " · " + " · ".join(str(p) for p in infos)
         hora = str(hora_pedido or "")
         limite = LARGURA_PX - 2 * margem_e
         for reducao in range(40):
             fn = cf(max(14, teto_numero - reducao))
+            ff = cf(max(12, (42 if teto_numero == 48 else 40) - reducao))
             fi = cf(max(10, 28 - reducao))
-            wn, wi, wh = (draw.textlength(t, font=f) for t, f in ((numero, fn), (info, fi), (hora, fi)))
-            if wn + wi + wh + (20 if hora else 0) <= limite:
+            wn, wf, wi, wh = (draw.textlength(t, font=f) for t, f in ((numero, fn), (fracao, ff), (info, fi), (hora, fi)))
+            if wn + wf + wi + wh + (36 if hora else 16) <= limite:
                 break
         draw.rectangle((0, y_start, LARGURA_PX - 1, y_start + altura - 1), fill="black")
         def escrever(t, x, f):
@@ -1990,7 +1993,8 @@ def _gerar_etiqueta_conteudo(numero_pedido, pizza_num, total_pizzas, display_ite
             draw.text((x - bb[0], y_start + (altura - bb[3] + bb[1]) // 2 - bb[1]),
                       t, fill="white", font=f)
         escrever(numero, margem_e, fn)
-        escrever(info, margem_e + wn + 8, fi)
+        escrever(fracao, margem_e + wn + 8, ff)
+        escrever(info, margem_e + wn + wf + 16, fi)
         if hora:
             escrever(hora, LARGURA_PX - margem_e - wh, fi)
 

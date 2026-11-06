@@ -19,7 +19,7 @@ class Tarjas(unittest.TestCase):
             font=kwargs.get('font');bb=draw.textbbox(xy,text,font=font)
             textos.append((text,font.size,bb))
             return original(draw,xy,text,*args,**kwargs)
-        for pagamento,dados,nome in [('PAGO_ONLINE',{},''),('DINHEIRO',{'valor':180},''),('MISTO',{'resumo':'DINHEIRO + CARTAO - CONFIRMAR PAGAMENTO'},''),('PAGO',{},'Cliente com nome de identificação bastante comprido')]:
+        for pagamento,dados,nome in [('PAGO_ONLINE',{},''),('COBRAR_DETALHE',{'resumo':'MAQ CARTAO R$163,00'},''),('DINHEIRO',{'valor':180},''),('MISTO',{'resumo':'DINHEIRO + CARTAO - CONFIRMAR PAGAMENTO'},''),('PAGO',{},'Cliente com nome de identificação bastante comprido')]:
             textos.clear()
             with patch.object(ImageDraw.ImageDraw,'text',texto):
                 img=mod.gerar_etiqueta('20',1,2,
@@ -34,9 +34,13 @@ class Tarjas(unittest.TestCase):
             x=lateral+mod.QR_BORDA_ESQ_PX;y=vertical+62+4
             self.assertIsNone(ImageChops.difference(img.crop((x,y,x+qr.width,y+qr.height)),qr).getbbox())
             self.assertEqual(sum(t=='#0020' for t,_,_ in textos),2)
+            self.assertEqual(sum(t.strip()=='· 1/2' for t,_,_ in textos),2)
+            if pagamento=='COBRAR_DETALHE':
+                self.assertTrue(any('MAQ CARTAO R$163,00' in t for t,_,_ in textos))
             self.assertTrue(all(0<=b[0] and b[2]<=img.width-2*lateral and 0<=b[1] and b[3]<=img.height-vertical for _,_,b in textos),textos)
             if pagamento=='PAGO_ONLINE':
                 self.assertEqual([s for t,s,_ in textos if t=='#0020'],[48,44])
+                self.assertEqual([s for t,s,_ in textos if t.strip()=='· 1/2'],[42,40])
                 self.assertTrue(any('Havaiana' in t and s<=62 for t,s,_ in textos))
             self.assertEqual((mod.LARGURA_PX,mod.ALTURA_PX),tamanho_original)
 
