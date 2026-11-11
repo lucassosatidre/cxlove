@@ -32,3 +32,11 @@ A reserva do Provisão deve serializar todos os trabalhos por destino físico:
 A copa mantém seu intervalo de cinco segundos; o caixa aguarda dois segundos após
 o reconhecimento de envio. A atualização do banco é publicada pelo repositório do
 Provisão; a versão do helper é distribuída por esta URL pública.
+
+## Capacidade da impressão: versão 255
+
+Recibos do salão: filas vazias consultam a cada 2, 3 e até 5 segundos. Após encontrar lote, consulta a cada segundo por 15 segundos. Em falhas de rede, espera 5/10/20/30 segundos, limitada a 30, voltando ao ritmo normal no primeiro sucesso. Etiquetas mantêm 5 segundos ociosas. Reservas, confirmação e deduplicação preservadas.
+
+Distribuição somente pela `main` deste repositório; o script deve ser idêntico ao validado no Vigia, PR 342. O cliente verifica atualizações a cada 30 minutos. Conferir a versão efetivamente recebida pelos PCs na telemetria do backend antes de atribuir economia real.
+
+Testes de cadência, recibos e disputa entre PCs usam `python -m unittest discover -s tests -p '<arquivo>'`. Dependências de teste: Pillow 13.0.0 e watchdog 7.1.0; funções Windows são simuladas nos testes de frota.
