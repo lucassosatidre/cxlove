@@ -10,9 +10,22 @@ import threading
 import time
 import unittest
 import uuid
+from types import SimpleNamespace
 
 ARQUIVO = pathlib.Path(__file__).resolve().parents[1] / "etiqueta_saipos.py"
 VENCE = 0.5
+FROTAS = []
+
+
+class PararFrota(BaseException):
+    pass
+
+
+def encerrar_frotas():
+    for frota in FROTAS:
+        frota.parar.set()
+        for thread in frota.threads: thread.join(timeout=1)
+    FROTAS.clear()
 
 
 def carregar_pc():
@@ -81,13 +94,26 @@ class Frota:
         self.impressas = []           # (pc, numero) de cada etiqueta que SAIU
         self.lock = threading.Lock()
         self.chamadas_fila = {}
+        self.parar = threading.Event()
+        self.threads = []
+        FROTAS.append(self)
 
     def ligar(self, pc, chave=True, impressora=True, modo="ok"):
         mod = carregar_pc()
+        # Outros testes trocam time.sleep no módulo global. Cada PC simulado
+        # tem relógio próprio e uma saída explícita, como o processo real.
+        mod.time = SimpleNamespace(**{n: getattr(time, n) for n in dir(time) if not n.startswith('_')})
+        def dormir(segundos):
+            if self.parar.wait(segundos): raise PararFrota()
+        mod.time.sleep = dormir
         mod.SOFIA_POLL_INTERVAL = 0.01
         mod.SOFIA_PAUSA_APOS_FALHA = 0.3
         mod.log = lambda msg: None
         mod.check_update = lambda: None
+        # Este teste mede disputa, reservas e recibos, não rasterização/fontes
+        # nem descoberta de impressoras reais. O desenho tem regressões próprias.
+        mod.gerar_etiqueta = lambda *a, **k: mod.Image.new("RGB", (8, 8), "white")
+        mod._diagnostico_impressoras = lambda: None
         mod._nome_deste_pc = lambda: pc
         mod._sofia_config = (lambda: {"url": "https://fila", "secret": "x"}) if chave else (lambda: None)
         mod._impressora_caixas_deste_pc = (lambda: "ELGIN") if impressora else (lambda: None)
@@ -103,13 +129,19 @@ class Frota:
             if modo == "quebrada":
                 return False
             if modo == "morre":
-                threading.Event().wait()   # travou no meio e nunca volta
+                self.parar.wait()   # travou até o fim do teste
+                raise PararFrota()
             with self.lock:
                 self.impressas.append(pc)
             return True
         mod.imprimir_etiqueta = imprimir
         mod._impressora_para = lambda *a, **k: None   # sem impressora de cupom no teste
-        threading.Thread(target=mod.sofia_poll_loop, daemon=True).start()
+        def executar():
+            try: mod.sofia_poll_loop()
+            except PararFrota: pass
+        thread = threading.Thread(target=executar, daemon=True)
+        self.threads.append(thread)
+        thread.start()
 
     def esperar(self, segundos=6):
         fim = time.time() + segundos
@@ -122,6 +154,7 @@ class Frota:
 
 
 class FrotaEtiquetaTest(unittest.TestCase):
+    def tearDown(self): encerrar_frotas()
     def fila_pings(self, fila, pc):
         with fila.lock:
             return list(fila.pings.get(pc, []))
@@ -175,6 +208,7 @@ class FrotaEtiquetaTest(unittest.TestCase):
 
 class LogNaNuvemTest(unittest.TestCase):
     """v203: cada impressao vira evento na nuvem (etiqueta_impressao_log) + ping do PC."""
+    def tearDown(self): encerrar_frotas()
 
     def eventos(self, fila, pc=None, evento=None):
         with fila.lock:

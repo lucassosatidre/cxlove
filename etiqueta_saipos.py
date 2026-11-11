@@ -4,7 +4,8 @@ Pizzaria Estrela da Ilha
 v14.5 - Ordem fixa na coluna direita: outros -> brotos (penultimo) -> bebidas (ultimo)
 """
 
-VERSION = "254"
+VERSION = "255"
+# v255: filas vazias desaceleram ate 5s; lotes continuam em 1s e erros usam backoff.
 # v252: indice da caixa (1/2, 2/2...) maior nas duas tarjas, conforme previa aprovada.
 # v251: caixas com margens laterais de 3 mm e superior/inferior de 4 mm;
 # numero em destaque moderado nas duas tarjas e sabores um pouco menores.
@@ -4340,13 +4341,40 @@ def salao_processar_recibo(pedido):
                  detalhe=f"{destino}; protocolo={protocolo}; blocos={len(blocos)}; bytes={sum(map(len,blocos))}; imagem={img.width}x{img.height}")
     log(f"  SALAO: enviado {pedido.get('tipo')} #{pedido.get('id')} -> {destino} ({ip}); {protocolo}")
 
+class RitmoFila:
+    """Espera limitada: poupa consultas vazias sem adiar o primeiro item mais de 5s."""
+    def __init__(self, normal=2):
+        self.normal = normal
+        self.vazias = 0
+        self.erros = 0
+        self.rapido_ate = 0
+
+    def sucesso(self, tem_pedidos):
+        self.erros = 0
+        if tem_pedidos:
+            self.vazias = 0
+            self.rapido_ate = time.monotonic() + 15
+        else:
+            self.vazias = min(3, self.vazias + 1)
+
+    def falha(self):
+        self.erros = min(4, self.erros + 1)
+
+    def pausa(self):
+        if self.erros:
+            return min(30, 5 * 2 ** (self.erros - 1))
+        if time.monotonic() < self.rapido_ate:
+            return 1
+        return max(self.normal, (2, 3, 5)[max(0, self.vazias - 1)])
+
+
 def salao_recibos_poll_loop():
     """Reserva só destinos acessíveis; dedup local durável protege falha no ACK/reinício."""
     pc = _nome_deste_pc(); dedup = os.path.join(PASTA_FILA,"salao_recibos_impressos.json")
     try:
         with open(dedup,encoding="utf-8") as f: impressos = json.load(f)
     except Exception: impressos = {}
-    poll_rapido_ate = 0
+    ritmo = RitmoFila()
     while True:
         try:
             cfg = _sofia_config()
@@ -4355,7 +4383,9 @@ def salao_recibos_poll_loop():
                 base = f"{cfg['url']}/functions/v1/sofia-print-queue?fila=salao"
                 segredo = cfg.get("secret","")
                 dados = _sofia_http(base+"&"+urllib.parse.urlencode({"destinos":','.join(destinos)}),secret=segredo,pc=pc)
-                for p in (dados or {}).get("pedidos",[]):
+                pedidos = (dados or {}).get("pedidos",[])
+                ritmo.sucesso(bool(pedidos))
+                for p in pedidos:
                     pid = p.get("id")
                     if not pid: continue
                     try:
@@ -4370,14 +4400,18 @@ def salao_recibos_poll_loop():
                         _sofia_http(base,method="POST",body={"action":"mark","ids":[pid]},secret=segredo,pc=pc)
                         if p.get("destino") in SALAO_DESTINOS:
                             # Durante um lote, consulte logo após o cooldown da impressora.
-                            poll_rapido_ate = time.monotonic() + 15
+                            ritmo.sucesso(True)
                     except Exception as e:
                         log(f"  SALAO: falha #{pid}, mantém para retentativa: {e}")
                         if pid not in impressos:
                             try: _sofia_http(base,method="POST",body={"action":"release","ids":[pid]},secret=segredo,pc=pc)
                             except Exception: pass
-        except Exception as e: log(f"  SALAO fila: {e}")
-        time.sleep(1 if time.monotonic() < poll_rapido_ate else 2)
+            else:
+                ritmo.sucesso(False)
+        except Exception as e:
+            ritmo.falha()
+            log(f"  SALAO fila: {e}")
+        time.sleep(ritmo.pausa())
 
 
 def sofia_poll_loop():
@@ -4392,6 +4426,7 @@ def sofia_poll_loop():
     impressora = None
     checou_impressora = 0
     ultimo_ping = 0
+    ritmo = RitmoFila(normal=SOFIA_POLL_INTERVAL)
     sofia_evento("iniciou", detalhe=f"python {sys.version.split()[0]}")
     while True:
         try:
@@ -4435,6 +4470,7 @@ def sofia_poll_loop():
             url = base + ("&" if "?" in base else "?") + "&".join(q)
             data = _sofia_http(url, method="GET", secret=secret, pc=pc)
             pedidos = (data or {}).get("pedidos", [])
+            ritmo.sucesso(bool(pedidos))
             if pedidos:
                 impressora = _impressora_caixas_deste_pc() or impressora   # v206: .14 caiu -> .24
                 ok_ids, falha_ids, mesa_devolver = [], [], []
@@ -4484,10 +4520,11 @@ def sofia_poll_loop():
                     pausa_ate = time.time() + SOFIA_PAUSA_APOS_FALHA
                     impressora = None   # reconfere a impressora quando voltar
         except Exception as e:
+            ritmo.falha()
             log(f"  SOFIA poll erro: {e}")
             if _sofia_avisar("poll_erro", "", cada=300):
                 sofia_evento("poll_erro", detalhe=e)
-        time.sleep(SOFIA_POLL_INTERVAL)
+        time.sleep(ritmo.pausa())
 
 # ============================================================
 # COMANDA VIRTUAL - envia o pedido pra fila do CO LOVE (alem de imprimir)
